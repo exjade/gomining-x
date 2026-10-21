@@ -790,6 +790,8 @@ export const App: React.FC = () => {
           workers={workers}
           summary={fleetSummary}
           saladBalance={saladBalance}
+          kryptexBalance={balance}
+          poolTicker={poolInfo.ticker || 'PRL'}
           history={history}
           onNavigateToTab={(tab) => {
             if (currentUser) {
@@ -921,6 +923,8 @@ export const App: React.FC = () => {
         workers={workers}
         summary={fleetSummary}
         saladBalance={saladBalance}
+        kryptexBalance={balance}
+        poolTicker={poolInfo.ticker || 'PRL'}
         history={history}
         onNavigateToTab={(tab) => setActiveTab(tab)}
       />

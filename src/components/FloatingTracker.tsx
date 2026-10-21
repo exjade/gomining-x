@@ -28,6 +28,8 @@ interface FloatingTrackerProps {
   workers: MergedGPUWorker[];
   summary: FleetSummary;
   saladBalance: SaladBalanceInfo | null;
+  kryptexBalance?: { total: number; confirmed: number; unconfirmed: number; threshold: number };
+  poolTicker?: string;
   history?: HashrateHistoryPoint[];
   onNavigateToTab?: (tab: string) => void;
 }
@@ -36,6 +38,8 @@ export const FloatingTracker: React.FC<FloatingTrackerProps> = ({
   workers = [],
   summary,
   saladBalance,
+  kryptexBalance,
+  poolTicker = 'PRL',
   history = [],
   onNavigateToTab
 }) => {
@@ -78,19 +82,29 @@ export const FloatingTracker: React.FC<FloatingTrackerProps> = ({
     (w) => w.saladStatus === 'running' && (w.isWithinWindow === false || w.performanceRatioPct < 85)
   ).length;
 
-  const totalTHs = summary?.totalHashrateTHs || 0;
-  const netUSDPerHour = summary?.hourlyNetProfitUSD || 0;
+  const totalTHs = summary?.totalHashrateTHs ?? 0;
+  const netUSDPerHour = summary?.hourlyNetProfitUSD ?? 0;
+  const marginPct = summary?.avgProfitMarginPct ?? 0;
+  const efficiencyPct = Math.max(0, Math.min(100, summary?.fleetEfficiencyPct ?? 0));
+  const benchmarkTHs = summary?.benchmarkHashrateTHs ?? 0;
 
-  // Stale rejection rate calculation
-  const totalShares = summary?.totalValidShares + (summary?.totalStaleShares || 0);
-  const staleRatePct = totalShares > 0 ? ((summary?.totalStaleShares || 0) / totalShares) * 100 : 0;
+  // Real shares calculation without NaN
+  const validShares = summary?.totalValidShares ?? 0;
+  const staleShares = summary?.totalStaleShares ?? 0;
+  const totalShares = validShares + staleShares;
+  const staleRatePct = totalShares > 0 ? (staleShares / totalShares) * 100 : 0;
 
-  // Silicon Weather Condition State
+  // Real peak hashrate strictly from verified history
+  const peakTHs = history.length > 0
+    ? Math.max(...history.map((h) => h.fleetHashrateTHs), totalTHs)
+    : totalTHs;
+
+  // Silicon Weather Condition State (100% computed from live telemetry)
   const weatherState = useMemo(() => {
     if (underperformingCount > 0) {
       return {
         label: 'Turbulencia Térmica',
-        desc: `${underperformingCount} GPU fuera de ventana óptima`,
+        desc: `${underperformingCount} GPU(s) con throttling térmico`,
         icon: CloudRain,
         color: 'text-amber-400',
         bg: 'bg-amber-500/10 border-amber-500/30'
@@ -108,37 +122,52 @@ export const FloatingTracker: React.FC<FloatingTrackerProps> = ({
     if (runningCount > 0 && netUSDPerHour >= 0) {
       return {
         label: 'Cielo Despejado',
-        desc: 'Silicio frío & rentabilidad óptima (+58%)',
+        desc: `Silicio óptimo • Margen auditado +${marginPct.toFixed(0)}%`,
         icon: Sun,
         color: 'text-[#05F292]',
         bg: 'bg-emerald-500/10 border-emerald-500/30'
       };
     }
+    if (runningCount > 0 && netUSDPerHour < 0) {
+      return {
+        label: 'Déficit Operativo',
+        desc: `Gasto Salad supera ingreso: -$${Math.abs(netUSDPerHour).toFixed(3)}/h`,
+        icon: CloudRain,
+        color: 'text-rose-400',
+        bg: 'bg-rose-500/10 border-rose-500/30'
+      };
+    }
     return {
       label: 'Clima en Espera',
-      desc: 'Flota detenida / sin consumo',
+      desc: 'Flota inactiva • Sin consumo',
       icon: CloudSun,
       color: 'text-slate-400',
       bg: 'bg-white/[0.04] border-white/[0.08]'
     };
-  }, [underperformingCount, allocatingCount, runningCount, netUSDPerHour]);
+  }, [underperformingCount, allocatingCount, runningCount, netUSDPerHour, marginPct]);
 
-  // Real micro-sparkline path generator from history (Temperature-style curve)
+  // Real micro-sparkline path generator from verified history (Zero invented points)
   const sparklinePath = useMemo(() => {
     const dataPoints = history.length >= 2 
       ? history.slice(-12).map((h) => h.fleetHashrateTHs)
-      : [totalTHs * 0.95, totalTHs * 0.98, totalTHs * 0.96, totalTHs * 1.01, totalTHs];
+      : (totalTHs > 0 ? [totalTHs, totalTHs] : []);
 
     if (dataPoints.length < 2) return '';
     const min = Math.min(...dataPoints);
     const max = Math.max(...dataPoints);
-    const range = max - min || 1;
+    const range = max - min;
     const width = 290;
     const height = 40;
     
+    // Clean straight horizontal line if hashrate is constant
+    if (range === 0) {
+      const y = totalTHs > 0 ? 18 : 36;
+      return `M 0,${y} L ${width},${y}`;
+    }
+
     const points = dataPoints.map((val, i) => {
       const x = (i / (dataPoints.length - 1)) * width;
-      const y = height - ((val - min) / range) * (height - 10) - 5;
+      const y = height - ((val - min) / range) * (height - 12) - 6;
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     });
     return `M ${points.join(' L ')}`;
@@ -449,7 +478,7 @@ export const FloatingTracker: React.FC<FloatingTrackerProps> = ({
               <Activity className="w-3 h-3 text-cyan-400" />
               <span>Curva de Rendimiento (24h)</span>
             </span>
-            <span className="text-[#05F292] font-semibold">{totalTHs.toFixed(1)} TH/s pico</span>
+            <span className="text-[#05F292] font-semibold">{peakTHs.toFixed(1)} TH/s pico</span>
           </div>
           <div className="h-9 w-full relative">
             <svg className="w-full h-full overflow-visible" viewBox="0 0 290 40" preserveAspectRatio="none">
@@ -479,19 +508,19 @@ export const FloatingTracker: React.FC<FloatingTrackerProps> = ({
           </div>
         </div>
 
-        {/* 3. Weather Conditions Grid (Presión, Humedad, Viento, Batería) */}
+        {/* 3. Weather Conditions Grid (Saldo Salad, Viento Stale, Eficiencia Silicio) */}
         <div className="grid grid-cols-3 gap-2 text-xs font-mono text-slate-300">
           {/* Condición 1: Saldo Salad */}
           <div className="p-2 rounded-xl bg-white/[0.03] border border-white/[0.06]">
             <div className="text-[9px] text-slate-400 flex items-center gap-1">
               <DollarSign className="w-3 h-3 text-amber-400" />
-              <span>SALDO</span>
+              <span>SALAD USD</span>
             </div>
             <div className="font-bold text-amber-300 text-xs mt-1">
               ${(saladBalance?.totalBalanceUSD ?? 0).toFixed(2)}
             </div>
-            <div className="text-[8px] text-slate-500 mt-0.5">
-              {(saladBalance?.hourlySpendingUSD || 0) > 0 ? `${(saladBalance?.runwayHours ?? 0).toFixed(0)}h runway` : 'Pausado'}
+            <div className="text-[8px] text-slate-500 mt-0.5 truncate">
+              {(saladBalance?.hourlySpendingUSD ?? 0) > 0 ? `${(saladBalance?.runwayHours ?? 0).toFixed(0)}h runway` : 'Pausado'}
             </div>
           </div>
 
@@ -501,11 +530,11 @@ export const FloatingTracker: React.FC<FloatingTrackerProps> = ({
               <Wind className="w-3 h-3 text-cyan-400" />
               <span>STALE</span>
             </div>
-            <div className="font-bold text-cyan-300 text-xs mt-1">
+            <div className={`font-bold text-xs mt-1 ${staleRatePct > 2 ? 'text-rose-400' : 'text-cyan-300'}`}>
               {staleRatePct.toFixed(1)}%
             </div>
-            <div className="text-[8px] text-slate-500 mt-0.5">
-              {summary?.totalStaleShares || 0} shares
+            <div className="text-[8px] text-slate-500 mt-0.5 truncate">
+              {staleShares} shares
             </div>
           </div>
 
@@ -515,14 +544,27 @@ export const FloatingTracker: React.FC<FloatingTrackerProps> = ({
               <Compass className="w-3 h-3 text-emerald-400" />
               <span>EFICIENCIA</span>
             </div>
-            <div className="font-bold text-[#05F292] text-xs mt-1">
-              {(summary?.fleetEfficiencyPct || 100).toFixed(0)}%
+            <div className={`font-bold text-xs mt-1 ${efficiencyPct >= 90 ? 'text-[#05F292]' : efficiencyPct >= 75 ? 'text-amber-400' : 'text-rose-400'}`}>
+              {efficiencyPct.toFixed(0)}%
             </div>
-            <div className="text-[8px] text-slate-500 mt-0.5">
-              vs Benchmark
+            <div className="text-[8px] text-slate-500 mt-0.5 truncate">
+              {benchmarkTHs > 0 ? `vs ${benchmarkTHs.toFixed(0)}T` : 'vs Benchmark'}
             </div>
           </div>
         </div>
+
+        {/* 3b. Pool Balance Strip (Directly synced with Kryptex Overview) */}
+        {kryptexBalance && (
+          <div className="flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-black/40 border border-white/[0.05] text-[10px] font-mono">
+            <span className="text-slate-400 flex items-center gap-1.5">
+              <span>💎 Pool {poolTicker}:</span>
+              <span className="text-white font-bold">{(kryptexBalance.total ?? 0).toFixed(4)}</span>
+            </span>
+            <span className="text-cyan-400 font-bold">
+              {((kryptexBalance.total / (kryptexBalance.threshold || 1.0)) * 100).toFixed(1)}% umbral
+            </span>
+          </div>
+        )}
 
         {/* 4. Throttling Alert Pill if applicable */}
         {underperformingCount > 0 && (
