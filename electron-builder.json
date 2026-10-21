@@ -1,0 +1,40 @@
+{
+  "appId": "com.minerx.telemetry",
+  "productName": "MinerX",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "!dist/downloads/**/*",
+    "electron/**/*",
+    "package.json",
+    "!node_modules/**/*"
+  ],
+  "asar": true,
+  "npmRebuild": false,
+  "nodeGypRebuild": false,
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      },
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "artifactName": "MinerX-Setup-v${version}.${ext}"
+  },
+  "portable": {
+    "artifactName": "MinerX-v${version}-Portable.${ext}"
+  }
+}
