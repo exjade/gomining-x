@@ -23,6 +23,7 @@ import {
 } from './data/mockFleetData';
 
 import { BASELINE_USD_PER_THS_HOUR, resolveGpuBenchmark } from './data/gpuBenchmarks';
+import { apiFetch } from './utils/apiConfig';
 import type { 
   SaladAccountConfig, 
   KryptexConfig, 
@@ -117,9 +118,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     const token = localStorage.getItem('minerx_auth_token');
     if (token) {
-      fetch('/api/auth/me', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
+      apiFetch('/api/auth/me')
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (data?.success && data.user) {
@@ -139,13 +138,7 @@ export const App: React.FC = () => {
   };
 
   const handleLogout = () => {
-    const token = localStorage.getItem('minerx_auth_token');
-    if (token) {
-      fetch('/api/auth/logout', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` }
-      }).catch(() => {});
-    }
+    apiFetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
     localStorage.removeItem('minerx_auth_token');
     localStorage.removeItem('minerx_user');
     setCurrentUser(null);
@@ -160,9 +153,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     const token = localStorage.getItem('minerx_auth_token');
     if (token) {
-      fetch('/api/config', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
+      apiFetch('/api/config')
         .then((res) => (res.ok ? res.json() : null))
         .then((cfg) => {
           if (cfg) {
@@ -183,10 +174,7 @@ export const App: React.FC = () => {
 
   const fetchSaladBalance = useCallback(async () => {
     try {
-      const token = localStorage.getItem('minerx_auth_token');
-      const res = await fetch('/api/salad/balance', {
-        headers: token ? { Authorization: `Bearer ${token}` } : {}
-      });
+      const res = await apiFetch('/api/salad/balance');
       if (res.ok) {
         const data = await res.json();
         setSaladBalance(data);
@@ -200,13 +188,9 @@ export const App: React.FC = () => {
 
   const handleUpdateAccountBalance = useCallback(async (accountId: string, newBalanceUSD: number) => {
     try {
-      const token = localStorage.getItem('minerx_auth_token');
-      const res = await fetch('/api/salad/account-balance', {
+      const res = await apiFetch('/api/salad/account-balance', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accountId, balanceUSD: newBalanceUSD })
       });
       if (res.ok) {
@@ -235,13 +219,9 @@ export const App: React.FC = () => {
 
   // Sync to backend config only on explicit user actions (User-Isolated with Bearer Auth)
   const syncBackendConfig = useCallback((accs: SaladAccountConfig[], kcfg: KryptexConfig, sett: AppSettings) => {
-    const token = localStorage.getItem('minerx_auth_token');
-    fetch('/api/config', {
+    apiFetch('/api/config', {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         saladAccounts: accs,
         kryptexConfig: kcfg,
@@ -281,13 +261,9 @@ export const App: React.FC = () => {
       // 1. Fetch SaladCloud Live Instances across all configured accounts
       if (accounts.length > 0) {
         try {
-          const token = localStorage.getItem('minerx_auth_token');
-          const saladRes = await fetch('/api/salad/all-active', {
+          const saladRes = await apiFetch('/api/salad/all-active', {
             method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              ...(token ? { Authorization: `Bearer ${token}` } : {})
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ accounts })
           });
           if (saladRes.ok) {
@@ -303,28 +279,28 @@ export const App: React.FC = () => {
       if (kryptexConfig.walletAddress) {
         try {
           // 2a. Kryptex Pool Info
-          const poolRes = await fetch(`/api/kryptex/pool?coin=${kryptexConfig.coin || 'prl'}`);
+          const poolRes = await apiFetch(`/api/kryptex/pool?coin=${kryptexConfig.coin || 'prl'}`);
           if (poolRes.ok) {
             const pData = await poolRes.json();
             setPoolInfo((prev) => ({ ...prev, ...pData }));
           }
 
           // 2b. Kryptex Active Workers
-          const workersRes = await fetch(`/api/kryptex/workers/${kryptexConfig.walletAddress}?coin=${kryptexConfig.coin || 'prl'}`);
+          const workersRes = await apiFetch(`/api/kryptex/workers/${kryptexConfig.walletAddress}?coin=${kryptexConfig.coin || 'prl'}`);
           if (workersRes.ok) {
             const wData = await workersRes.json();
             kryptexLiveWorkers = wData?.results || [];
           }
 
           // 2c. Kryptex Balance
-          const balRes = await fetch(`/api/kryptex/balance/${kryptexConfig.walletAddress}?coin=${kryptexConfig.coin || 'prl'}`);
+          const balRes = await apiFetch(`/api/kryptex/balance/${kryptexConfig.walletAddress}?coin=${kryptexConfig.coin || 'prl'}`);
           if (balRes.ok) {
             const bData = await balRes.json();
             setBalance((prev) => ({ ...prev, ...bData }));
           }
 
           // 2d. Kryptex Historical Payouts & Reward Stats (Live API)
-          const payoutsRes = await fetch(`/api/kryptex/payouts/${kryptexConfig.walletAddress}?coin=${kryptexConfig.coin || 'prl'}`);
+          const payoutsRes = await apiFetch(`/api/kryptex/payouts/${kryptexConfig.walletAddress}?coin=${kryptexConfig.coin || 'prl'}`);
           if (payoutsRes.ok) {
             const payData = await payoutsRes.json();
             setPayoutStats(payData);
@@ -600,7 +576,7 @@ export const App: React.FC = () => {
       const targetAcc = accounts.find((a) => a.id === targetWorker.accountId) || accounts[0];
       if (!targetAcc) throw new Error('No se encontró la cuenta de Salad asociada');
 
-      const res = await fetch('/api/salad/reallocate', {
+      const res = await apiFetch('/api/salad/reallocate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -641,7 +617,7 @@ export const App: React.FC = () => {
       const targetAcc = accounts.find((a) => a.id === targetWorker.accountId) || accounts[0];
       if (!targetAcc) throw new Error('No se encontró la cuenta de Salad asociada');
 
-      const res = await fetch('/api/salad/restart-instance', {
+      const res = await apiFetch('/api/salad/restart-instance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -682,7 +658,7 @@ export const App: React.FC = () => {
       const targetAcc = accounts.find((a) => a.id === targetWorker.accountId) || accounts[0];
       if (!targetAcc) throw new Error('No se encontró la cuenta de Salad asociada');
 
-      const res = await fetch('/api/salad/recreate-instance', {
+      const res = await apiFetch('/api/salad/recreate-instance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -720,7 +696,7 @@ export const App: React.FC = () => {
   // Test Salad Account connection
   const handleTestSaladAccount = async (acc: SaladAccountConfig) => {
     try {
-      const res = await fetch('/api/salad/test-account', {
+      const res = await apiFetch('/api/salad/test-account', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -745,7 +721,7 @@ export const App: React.FC = () => {
       return { success: false, message: 'Ingresa una dirección de wallet o usuario de Kryptex primero.' };
     }
     try {
-      const res = await fetch(`/api/kryptex/pool?coin=${kryptexConfig.coin || 'prl'}`);
+      const res = await apiFetch(`/api/kryptex/pool?coin=${kryptexConfig.coin || 'prl'}`);
       const data = await res.json();
       if (res.ok) {
         return {
@@ -765,7 +741,7 @@ export const App: React.FC = () => {
       return { success: false, message: 'Configura una URL de Discord o Token de Telegram primero.' };
     }
     try {
-      const res = await fetch('/api/alerts/webhook', {
+      const res = await apiFetch('/api/alerts/webhook', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

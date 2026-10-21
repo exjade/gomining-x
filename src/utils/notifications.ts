@@ -1,3 +1,5 @@
+import { apiFetch } from './apiConfig';
+
 /**
  * MinerX Native Notification & Telegram Dispatch Engine
  * Provides OS-level native desktop and mobile push notifications for GPU events,
@@ -69,7 +71,7 @@ export async function sendTelegramMessageResilient(
 
   // 1. Try Backend Proxy
   try {
-    const proxyRes = await fetch('/api/telegram/test', {
+    const proxyRes = await apiFetch('/api/telegram/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: cleanToken, chatId: cleanChatId, customMessage: text })

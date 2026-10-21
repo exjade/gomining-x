@@ -6,6 +6,23 @@
       "**/.*",
       "**/node_modules/**"
     ],
+    "redirects": [
+      {
+        "source": "/downloads/MinerX-Setup-v1.2.0.exe",
+        "destination": "/downloads/MinerX-Windows-v1.2.0.zip",
+        "type": 302
+      },
+      {
+        "source": "/downloads/MinerX-v1.2.0-Portable.exe",
+        "destination": "/downloads/MinerX-Windows-v1.2.0.zip",
+        "type": 302
+      },
+      {
+        "source": "/downloads/MinerX-Mobile-v1.2.0.apk",
+        "destination": "/downloads/MinerX-Android-v1.2.0.zip",
+        "type": 302
+      }
+    ],
     "rewrites": [
       {
         "source": "/api/**",

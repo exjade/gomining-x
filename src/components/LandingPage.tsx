@@ -16,6 +16,7 @@ import {
   LogOut,
   X
 } from 'lucide-react';
+import { apiFetch } from '../utils/apiConfig';
 
 interface LandingPageProps {
   onEnterDashboard: () => void;
@@ -47,7 +48,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
     try {
       if (authMode === 'register') {
-        const res = await fetch('/api/auth/register', {
+        const res = await apiFetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, email, password, fullName })
@@ -60,7 +61,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         onLogin(data.user, data.token);
         setShowAuthModal(false);
       } else {
-        const res = await fetch('/api/auth/login', {
+        const res = await apiFetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ usernameOrEmail: username, password })
@@ -193,21 +194,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </button>
 
             <a
-              href="/downloads/MinerX-Setup-v1.2.0.exe"
-              download="MinerX-Setup-v1.2.0.exe"
+              href="/downloads/MinerX-Windows-v1.2.0.zip"
+              download="MinerX-Windows-v1.2.0.zip"
               className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.15] text-white font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <Monitor className="w-4 h-4 text-cyan-400" />
-              <span>Descargar para Windows (.EXE)</span>
+              <span>Descargar Windows (.ZIP)</span>
             </a>
 
             <a
-              href="/downloads/MinerX-Mobile-v1.2.0.apk"
-              download="MinerX-Mobile-v1.2.0.apk"
+              href="/downloads/MinerX-Android-v1.2.0.zip"
+              download="MinerX-Android-v1.2.0.zip"
               className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.15] text-white font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <Smartphone className="w-4 h-4 text-[#05F292]" />
-              <span>Descargar Android (.APK)</span>
+              <span>Descargar Android (.ZIP)</span>
             </a>
           </div>
 
@@ -351,24 +352,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 </p>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-2">
+              <div className="flex flex-col gap-2">
                 <a
-                  href="/downloads/MinerX-Setup-v1.2.0.exe"
-                  download="MinerX-Setup-v1.2.0.exe"
-                  className="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-lg shadow-cyan-500/20"
+                  href="/downloads/MinerX-Windows-v1.2.0.zip"
+                  download="MinerX-Windows-v1.2.0.zip"
+                  className="w-full py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-lg shadow-cyan-500/20"
                 >
                   <Download className="w-4 h-4" />
-                  <span>Instalador (.EXE)</span>
+                  <span>Descargar Paquete Windows (.ZIP)</span>
                 </a>
-                <a
-                  href="/downloads/MinerX-v1.2.0-Portable.exe"
-                  download="MinerX-v1.2.0-Portable.exe"
-                  className="flex-1 py-2.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] text-white border border-white/20 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                  title="Ejecutable portátil sin instalación previa"
-                >
-                  <Download className="w-4 h-4 text-cyan-400" />
-                  <span>Portable</span>
-                </a>
+                <p className="text-[11px] text-slate-400 text-center">Incluye instalador oficial (.EXE) y versión Portable</p>
               </div>
             </div>
 
@@ -385,18 +378,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 </div>
                 <h3 className="text-lg font-bold text-white">MinerX Mobile</h3>
                 <p className="text-xs text-slate-400">
-                  Paquete APK optimizado para pantallas táctiles, con HUD flotante, notificaciones nativas y modo oscuro ahorro de batería OLED.
+                  Paquete APK firmado dual (v1 JAR + v2 APK Scheme), con HUD flotante, notificaciones nativas y soporte OLED.
                 </p>
               </div>
 
-              <a
-                href="/downloads/MinerX-Mobile-v1.2.0.apk"
-                download="MinerX-Mobile-v1.2.0.apk"
-                className="w-full py-2.5 rounded-xl bg-[#05F292] hover:bg-[#00F0FF] text-black font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow-lg shadow-[#05F292]/20"
-              >
-                <Download className="w-4 h-4" />
-                <span>Descargar Paquete .APK</span>
-              </a>
+              <div className="flex flex-col gap-2">
+                <a
+                  href="/downloads/MinerX-Android-v1.2.0.zip"
+                  download="MinerX-Android-v1.2.0.zip"
+                  className="w-full py-2.5 rounded-xl bg-[#05F292] hover:bg-[#00F0FF] text-black font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow-lg shadow-[#05F292]/20"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Descargar Paquete Android (.ZIP)</span>
+                </a>
+                <p className="text-[11px] text-slate-400 text-center">Descomprimir e instalar MinerX-Mobile-v1.2.0.apk</p>
+              </div>
             </div>
 
             {/* Web Dashboard */}

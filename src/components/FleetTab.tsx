@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { apiFetch } from '../utils/apiConfig';
 import { 
   Cpu, 
   Search, 
@@ -87,7 +88,7 @@ export const FleetTab: React.FC<FleetTabProps> = ({
       const group = w.containerGroupName || 'comfyui-video-wan25';
       const inst = w.id || w.machineId || 'node-01';
 
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/salad/logs/${encodeURIComponent(org)}/${encodeURIComponent(proj)}/${encodeURIComponent(group)}/${encodeURIComponent(inst)}`
       );
       if (res.ok) {
@@ -151,7 +152,7 @@ export const FleetTab: React.FC<FleetTabProps> = ({
     setGroupActionLoading((prev) => ({ ...prev, [grp.groupName]: true }));
     setGroupActionMessage(null);
     try {
-      const res = await fetch('/api/salad/container-group/control', {
+      const res = await apiFetch('/api/salad/container-group/control', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -189,7 +190,7 @@ export const FleetTab: React.FC<FleetTabProps> = ({
     setQuotasLoading(true);
     setQuotasOrg(targetAcc.organizationName);
     try {
-      const res = await fetch(`/api/salad/quotas?org=${encodeURIComponent(targetAcc.organizationName)}`, {
+      const res = await apiFetch(`/api/salad/quotas?org=${encodeURIComponent(targetAcc.organizationName)}`, {
         headers: { 'Salad-Api-Key': targetAcc.apiKey }
       });
       if (res.ok) {

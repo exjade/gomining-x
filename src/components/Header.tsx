@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../utils/apiConfig';
 import { 
   Activity, 
   Cpu, 
@@ -79,7 +80,7 @@ export const Header: React.FC<HeaderProps> = ({
   useEffect(() => {
     const fetchBalance = async () => {
       try {
-        const res = await fetch('/api/salad/balance');
+        const res = await apiFetch('/api/salad/balance');
         if (res.ok) {
           const data = await res.json();
           setSaladBalance(data);
@@ -107,12 +108,12 @@ export const Header: React.FC<HeaderProps> = ({
         onUpdateSaladBalance(num);
       } else {
         try {
-          await fetch('/api/salad/account-balance', {
+          await apiFetch('/api/salad/account-balance', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ balanceUSD: num })
           });
-          const res = await fetch('/api/salad/balance');
+          const res = await apiFetch('/api/salad/balance');
           if (res.ok) {
             const d = await res.json();
             setSaladBalance(d);

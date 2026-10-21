@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { apiFetch } from '../utils/apiConfig';
 import { 
   Calculator, 
   TrendingUp, 
@@ -114,7 +115,7 @@ export const EconomicsTab: React.FC<EconomicsTabProps> = ({
   // Fetch cycles from server on mount
   const fetchCycles = async () => {
     try {
-      const res = await fetch('/api/mining/cycles');
+      const res = await apiFetch('/api/mining/cycles');
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
@@ -148,7 +149,7 @@ export const EconomicsTab: React.FC<EconomicsTabProps> = ({
   const handleStartCycle = async () => {
     setIsStartingCycle(true);
     try {
-      const res = await fetch('/api/mining/cycles/start', {
+      const res = await apiFetch('/api/mining/cycles/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -237,7 +238,7 @@ export const EconomicsTab: React.FC<EconomicsTabProps> = ({
     };
 
     try {
-      const res = await fetch('/api/mining/cycles/close', {
+      const res = await apiFetch('/api/mining/cycles/close', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cycle: closedItem })

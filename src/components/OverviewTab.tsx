@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { apiFetch } from '../utils/apiConfig';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -79,7 +80,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   const [cycles, setCycles] = useState<MiningCycle[]>([]);
 
   useEffect(() => {
-    fetch('/api/mining/cycles')
+    apiFetch('/api/mining/cycles')
       .then((r) => r.json())
       .then((data) => {
         if (data.success && data.closedCycles) {
