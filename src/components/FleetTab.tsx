@@ -19,10 +19,17 @@ import {
   Zap,
   Radio,
   Server,
-  ShieldAlert
+  ShieldAlert,
+  Play,
+  Square,
+  Sliders,
+  Gauge,
+  Plus,
+  Minus,
+  ExternalLink
 } from 'lucide-react';
 import { calculateBreakEvenTHs, BASELINE_USD_PER_THS_HOUR, resolveGpuBenchmark } from '../data/gpuBenchmarks';
-import type { MergedGPUWorker, SaladAccountConfig, SaladBalanceInfo } from '../types/minerx';
+import type { MergedGPUWorker, SaladAccountConfig, SaladBalanceInfo, SaladQuotas } from '../types/minerx';
 
 interface FleetTabProps {
   workers: MergedGPUWorker[];
@@ -30,6 +37,7 @@ interface FleetTabProps {
   saladBalance?: SaladBalanceInfo | null;
   onUpdateAccountBalance?: (accountId: string, newBalanceUSD: number) => void;
   onOpenReallocate: (worker: MergedGPUWorker) => void;
+  onRefreshTelemetry?: () => void;
 }
 
 export const FleetTab: React.FC<FleetTabProps> = ({
@@ -38,11 +46,23 @@ export const FleetTab: React.FC<FleetTabProps> = ({
   saladBalance,
   onUpdateAccountBalance,
   onOpenReallocate,
+  onRefreshTelemetry,
 }) => {
   const [selectedAccount, setSelectedAccount] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+
+  // Container Group Interactive Replicas & Action State
+  const [groupReplicasInput, setGroupReplicasInput] = useState<Record<string, number>>({});
+  const [groupActionLoading, setGroupActionLoading] = useState<Record<string, boolean>>({});
+  const [groupActionMessage, setGroupActionMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // SaladCloud Quotas Modal State
+  const [showQuotasModal, setShowQuotasModal] = useState<boolean>(false);
+  const [quotasLoading, setQuotasLoading] = useState<boolean>(false);
+  const [quotasData, setQuotasData] = useState<SaladQuotas | null>(null);
+  const [quotasOrg, setQuotasOrg] = useState<string>('');
 
   // Remote Container Logs state (Streaming en Vivo)
   const [logsWorker, setLogsWorker] = useState<MergedGPUWorker | null>(null);
@@ -118,6 +138,70 @@ export const FleetTab: React.FC<FleetTabProps> = ({
     if (!isNaN(num) && num >= 0) {
       onUpdateAccountBalance(editingAccount.id, num);
       setEditingAccount(null);
+    }
+  };
+
+  const handleGroupAction = async (grp: any, action: 'start' | 'stop' | 'scale', requestedReplicas?: number) => {
+    const acc = accounts.find((a) => a.id === grp.accountId) || accounts[0];
+    if (!acc || !acc.apiKey || !acc.organizationName) {
+      setGroupActionMessage({ text: 'Configura la API Key y Organización para ejecutar acciones en SaladCloud', type: 'error' });
+      return;
+    }
+    const targetReplicas = requestedReplicas !== undefined ? requestedReplicas : (groupReplicasInput[grp.groupName] ?? grp.totalReplicas);
+    setGroupActionLoading((prev) => ({ ...prev, [grp.groupName]: true }));
+    setGroupActionMessage(null);
+    try {
+      const res = await fetch('/api/salad/container-group/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationName: grp.organizationName || acc.organizationName,
+          projectName: acc.projectName || 'default',
+          containerGroupName: grp.groupName,
+          action,
+          replicas: targetReplicas,
+          apiKey: acc.apiKey
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setGroupActionMessage({ text: data.message || `Acción '${action}' ejecutada exitosamente en SaladCloud`, type: 'success' });
+        setTimeout(() => {
+          onRefreshTelemetry?.();
+        }, 1500);
+      } else {
+        setGroupActionMessage({ text: data.message || 'Error al ejecutar comando en SaladCloud', type: 'error' });
+      }
+    } catch (err: any) {
+      setGroupActionMessage({ text: err.message || 'Error de red con SaladCloud', type: 'error' });
+    } finally {
+      setGroupActionLoading((prev) => ({ ...prev, [grp.groupName]: false }));
+    }
+  };
+
+  const handleOpenQuotas = async (acc?: SaladAccountConfig) => {
+    const targetAcc = acc || accounts[0];
+    if (!targetAcc || !targetAcc.organizationName || !targetAcc.apiKey) {
+      setGroupActionMessage({ text: 'Configura una cuenta con Organización y API Key para consultar cuotas', type: 'error' });
+      return;
+    }
+    setShowQuotasModal(true);
+    setQuotasLoading(true);
+    setQuotasOrg(targetAcc.organizationName);
+    try {
+      const res = await fetch(`/api/salad/quotas?org=${encodeURIComponent(targetAcc.organizationName)}`, {
+        headers: { 'Salad-Api-Key': targetAcc.apiKey }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setQuotasData(data.quotas);
+      } else {
+        setQuotasData(null);
+      }
+    } catch {
+      setQuotasData(null);
+    } finally {
+      setQuotasLoading(false);
     }
   };
 
@@ -296,8 +380,34 @@ export const FleetTab: React.FC<FleetTabProps> = ({
                 <span>{(saladBalance?.hourlySpendingUSD || 0) > 0 ? `${(saladBalance?.runwayHours ?? 0).toFixed(1)} hrs` : '0h (Pausa)'}</span>
               </div>
             </div>
+
+            {/* Consultar Cuotas SaladCloud Button (API Oficial) */}
+            <button
+              onClick={() => handleOpenQuotas()}
+              className="bg-gradient-to-r from-cyan-500/10 to-emerald-500/10 hover:from-cyan-500/20 hover:to-emerald-500/20 text-cyan-300 hover:text-white rounded-xl px-3.5 py-2 border border-cyan-500/30 flex items-center gap-2 text-xs font-mono-num font-semibold transition-all shadow-sm active:scale-95"
+            >
+              <Gauge className="h-4 w-4 text-cyan-400" />
+              <span>Ver Cuotas Salad</span>
+            </button>
           </div>
         </div>
+
+        {/* Banner de Feedback Acciones de Grupo SaladCloud */}
+        {groupActionMessage && (
+          <div className={`mt-3 p-3 rounded-xl border text-xs font-mono-num flex items-center justify-between animate-in fade-in ${
+            groupActionMessage.type === 'success'
+              ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300'
+              : 'bg-rose-950/40 border-rose-500/30 text-rose-300'
+          }`}>
+            <div className="flex items-center gap-2">
+              {groupActionMessage.type === 'success' ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <AlertTriangle className="h-4 w-4 text-rose-400" />}
+              <span>{groupActionMessage.text}</span>
+            </div>
+            <button onClick={() => setGroupActionMessage(null)} className="text-slate-400 hover:text-white">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Desglose de Saldo por Cuenta Salad */}
         <div className="mt-4 pt-1">
@@ -455,6 +565,71 @@ export const FleetTab: React.FC<FleetTabProps> = ({
                       <span>{grp.runningCount} GPUs facturando activamente a ${grp.runningCount > 0 ? (grp.hourlyCost / grp.runningCount).toFixed(3) : resolveGpuBenchmark(grp.gpuModel).hourlyCost.toFixed(3)}/h</span>
                     </span>
                     <span className="text-slate-500">Saldo cuenta: ${grp.accountBalanceUSD.toFixed(2)} USD</span>
+                  </div>
+
+                  {/* Control Remoto SaladCloud API: Réplicas & Start/Stop */}
+                  <div className="mt-3 pt-2.5 border-t border-white/[0.06] flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono-num">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-slate-400 uppercase">Réplicas:</span>
+                      <div className="flex items-center bg-[#06080E] border border-white/[0.1] rounded-lg p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const cur = groupReplicasInput[grp.groupName] ?? grp.totalReplicas;
+                            setGroupReplicasInput(prev => ({ ...prev, [grp.groupName]: Math.max(0, cur - 1) }));
+                          }}
+                          className="h-6 w-6 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors"
+                        >
+                          <Minus className="h-3 w-3" />
+                        </button>
+                        <span className="w-8 text-center font-bold text-white text-xs">
+                          {groupReplicasInput[grp.groupName] ?? grp.totalReplicas}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const cur = groupReplicasInput[grp.groupName] ?? grp.totalReplicas;
+                            setGroupReplicasInput(prev => ({ ...prev, [grp.groupName]: cur + 1 }));
+                          }}
+                          className="h-6 w-6 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors"
+                        >
+                          <Plus className="h-3 w-3" />
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={groupActionLoading[grp.groupName]}
+                        onClick={() => handleGroupAction(grp, 'scale')}
+                        className="px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30 text-[10px] font-bold transition-all disabled:opacity-50 flex items-center gap-1"
+                      >
+                        {groupActionLoading[grp.groupName] ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Sliders className="h-3 w-3" />}
+                        <span>Aplicar Escala</span>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={groupActionLoading[grp.groupName]}
+                        onClick={() => handleGroupAction(grp, 'start')}
+                        title="Iniciar grupo de contenedores en SaladCloud"
+                        className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold flex items-center gap-1 transition-all disabled:opacity-50"
+                      >
+                        <Play className="h-3 w-3" />
+                        <span>Iniciar</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={groupActionLoading[grp.groupName]}
+                        onClick={() => handleGroupAction(grp, 'stop')}
+                        title="Detener grupo de contenedores en SaladCloud"
+                        className="px-2.5 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-[10px] font-bold flex items-center gap-1 transition-all disabled:opacity-50"
+                      >
+                        <Square className="h-3 w-3" />
+                        <span>Detener</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1223,6 +1398,116 @@ export const FleetTab: React.FC<FleetTabProps> = ({
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* 5. MODAL DE CUOTAS Y LÍMITES SALADCLOUD (API OFICIAL) */}
+      {showQuotasModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-[#0A0D16] border border-cyan-500/30 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl">
+            <div className="p-5 border-b border-white/[0.08] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+                  <Gauge className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-display-title text-base font-bold text-white">
+                    Cuotas y Límites de SaladCloud
+                  </h3>
+                  <p className="text-xs text-slate-400 font-mono-num">
+                    Organización: <span className="text-cyan-300 font-bold">{quotasOrg}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowQuotasModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/[0.05]"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-5 max-h-[70vh] overflow-y-auto space-y-4">
+              {quotasLoading ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-3 text-slate-400">
+                  <RefreshCw className="h-6 w-6 text-cyan-400 animate-spin" />
+                  <span className="text-xs font-mono-num">Consultando cuotas en api.salad.com...</span>
+                </div>
+              ) : quotasData ? (
+                <div className="space-y-4 font-mono-num">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div className="bg-[#06080E] p-3 rounded-xl border border-white/[0.06]">
+                      <span className="text-[10px] text-slate-400 block uppercase">Grupos Contenedores</span>
+                      <span className="text-lg font-bold text-white">
+                        {quotasData.container_groups_quota ?? quotasData.container_groups_count ?? 'Ilimitado'}
+                      </span>
+                    </div>
+                    <div className="bg-[#06080E] p-3 rounded-xl border border-white/[0.06]">
+                      <span className="text-[10px] text-slate-400 block uppercase">Workloads Concurrentes</span>
+                      <span className="text-lg font-bold text-emerald-400">
+                        {quotasData.max_concurrent_workloads ?? quotasData.concurrent_workloads_quota ?? 'Estándar'}
+                      </span>
+                    </div>
+                    <div className="bg-[#06080E] p-3 rounded-xl border border-white/[0.06]">
+                      <span className="text-[10px] text-slate-400 block uppercase">Límite CPUs</span>
+                      <span className="text-lg font-bold text-cyan-300">
+                        {quotasData.cpu_quota ?? 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {quotasData.gpu_classes_quotas && quotasData.gpu_classes_quotas.length > 0 && (
+                    <div className="mt-4">
+                      <span className="text-xs font-bold uppercase text-slate-300 block mb-2">
+                        Cuotas por Clase de GPU:
+                      </span>
+                      <div className="space-y-2">
+                        {quotasData.gpu_classes_quotas.map((gq: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between p-2.5 rounded-lg bg-[#06080E] border border-white/[0.04] text-xs">
+                            <span className="text-slate-200 font-semibold">{gq.name || gq.id}</span>
+                            <span className="text-cyan-400 font-bold">Cuota: {gq.quota ?? 'Sin límite'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] text-xs text-slate-400 space-y-1">
+                    <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>Conexión autenticada con SaladCloud Container Engine</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Las cuotas son administradas por Salad Technologies. Para aumentarlas, contacta a enterprise@salad.com o desde portal.salad.com.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-10 text-center text-slate-400 text-xs">
+                  <AlertTriangle className="h-8 w-8 text-amber-400 mx-auto mb-2" />
+                  <span>No se pudieron obtener las cuotas para la organización "{quotasOrg}". Verifica que tu API Key tenga permisos administrativos.</span>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-white/[0.08] flex items-center justify-between bg-[#06080E]/60">
+              <a
+                href={`https://portal.salad.com/organizations/${encodeURIComponent(quotasOrg)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 font-mono-num transition-colors"
+              >
+                <span>Administrar en Portal SaladCloud</span>
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+              <button
+                onClick={() => setShowQuotasModal(false)}
+                className="px-4 py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.12] text-xs font-bold text-white transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       )}

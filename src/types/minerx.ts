@@ -93,6 +93,22 @@ export interface KryptexPayoutStatsRaw {
   };
 }
 
+export interface SaladQuotas {
+  container_groups_quota?: number;
+  container_groups_count?: number;
+  max_concurrent_workloads?: number;
+  cpu_quota?: number;
+  memory_quota?: number;
+  storage_quota?: number;
+  gpu_classes_quotas?: Array<{
+    id: string;
+    name: string;
+    quota: number;
+    usage?: number;
+  }>;
+  [key: string]: any;
+}
+
 export interface MergedGPUWorker {
   id: string;
   workerName: string;

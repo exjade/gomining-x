@@ -25,10 +25,60 @@ if (fs.existsSync(DIST_DIR)) {
 
 const DATA_DIR = path.join(__dirname, 'data');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
+const CYCLES_FILE = path.join(DATA_DIR, 'mining_cycles.json');
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
 
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+export interface UserAccount {
+  id: string;
+  username: string;
+  email: string;
+  passwordHash: string;
+  fullName: string;
+  createdAt: string;
+  sessionToken?: string;
+}
+
+export function readUsers(): { users: UserAccount[] } {
+  try {
+    if (fs.existsSync(USERS_FILE)) {
+      return JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8'));
+    }
+  } catch (err) {
+    console.error('Error reading users file:', err);
+  }
+  return { users: [] };
+}
+
+export function writeUsers(data: { users: UserAccount[] }) {
+  try {
+    fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error writing users file:', err);
+  }
+}
+
+export function getUserIdFromReq(req: express.Request): string {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (token) {
+    const db = readUsers();
+    const user = db.users.find((u) => u.sessionToken === token);
+    if (user) return user.id;
+  }
+  return 'usr_default_admin';
+}
+
+function getUserDataDir(userId: string): string {
+  const userDir = path.join(DATA_DIR, 'users', userId);
+  if (!fs.existsSync(userDir)) {
+    fs.mkdirSync(userDir, { recursive: true });
+  }
+  return userDir;
 }
 
 interface SavedConfig {
@@ -72,11 +122,14 @@ const DEFAULT_CONFIG: SavedConfig = {
   }
 };
 
-function readConfig(): SavedConfig {
+function readConfig(userId: string = 'usr_default_admin'): SavedConfig {
   try {
+    const userConfigFile = path.join(getUserDataDir(userId), 'config.json');
+    if (fs.existsSync(userConfigFile)) {
+      return JSON.parse(fs.readFileSync(userConfigFile, 'utf-8'));
+    }
     if (fs.existsSync(CONFIG_FILE)) {
-      const data = fs.readFileSync(CONFIG_FILE, 'utf-8');
-      return JSON.parse(data);
+      return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
     }
   } catch (err) {
     console.error('Error reading config file:', err);
@@ -84,11 +137,38 @@ function readConfig(): SavedConfig {
   return DEFAULT_CONFIG;
 }
 
-function writeConfig(cfg: SavedConfig) {
+function writeConfig(cfg: SavedConfig, userId: string = 'usr_default_admin') {
   try {
+    const userConfigFile = path.join(getUserDataDir(userId), 'config.json');
+    fs.writeFileSync(userConfigFile, JSON.stringify(cfg, null, 2), 'utf-8');
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2), 'utf-8');
   } catch (err) {
     console.error('Error writing config file:', err);
+  }
+}
+
+function readMiningCycles(userId: string = 'usr_default_admin'): any {
+  try {
+    const userCyclesFile = path.join(getUserDataDir(userId), 'mining_cycles.json');
+    if (fs.existsSync(userCyclesFile)) {
+      return JSON.parse(fs.readFileSync(userCyclesFile, 'utf-8'));
+    }
+    if (fs.existsSync(CYCLES_FILE)) {
+      return JSON.parse(fs.readFileSync(CYCLES_FILE, 'utf-8'));
+    }
+  } catch (err) {
+    console.error('Error reading mining cycles:', err);
+  }
+  return { activeCycle: null, closedCycles: [] };
+}
+
+function writeMiningCycles(data: any, userId: string = 'usr_default_admin') {
+  try {
+    const userCyclesFile = path.join(getUserDataDir(userId), 'mining_cycles.json');
+    fs.writeFileSync(userCyclesFile, JSON.stringify(data, null, 2), 'utf-8');
+    fs.writeFileSync(CYCLES_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error writing mining cycles:', err);
   }
 }
 
@@ -102,16 +182,18 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// 2. Configuration Read / Write
+// 2. Configuration Read / Write (User-Isolated)
 app.get('/api/config', (req, res) => {
-  const config = readConfig();
+  const userId = getUserIdFromReq(req);
+  const config = readConfig(userId);
   res.json(config);
 });
 
 app.post('/api/config', (req, res) => {
+  const userId = getUserIdFromReq(req);
   const newConfig = req.body;
-  writeConfig(newConfig);
-  res.json({ success: true, message: 'Configuración guardada localmente' });
+  writeConfig(newConfig, userId);
+  res.json({ success: true, message: 'Configuración guardada para tu usuario', userId });
 });
 
 // 3. Test Salad Account Connection
@@ -1090,36 +1172,33 @@ app.get('/api/history', (req, res) => {
 
 // 17. FinTech Accounting Audit & Reconciliation (Tarea 5 - Ciclos_de_minado_PERL.xlsx)
 app.get('/api/fintech/audit', (req, res) => {
-  const cfg = readConfig();
+  const userId = getUserIdFromReq(req);
+  const cfg = readConfig(userId);
   const acc = (cfg.saladAccounts || [])[0];
   const liveBal = acc?.balanceUSD !== undefined ? Number(acc.balanceUSD) : 4.50;
 
   res.json({
     capitalBolsilloUSD: 131.65,
-    capitalBolsilloMXN: 2536.72,
-    efectivoCobradoBancoMXN: 2619.62,
-    gananciaNetaRealizadaMXN: 82.90,
+    efectivoCobradoUSD: 139.86,
+    gananciaNetaRealizadaUSD: 4.43,
     roiRealBolsilloPct: 3.27,
     capitalReinvertidoUSD: 33.00,
-    capitalReinvertidoMXN: 638.15,
-    criptoEnCarteraMXN: 852.64,
-    gananciaTotalEstimadaMXN: 935.54,
+    criptoEnCarteraUSD: 45.52,
+    gananciaTotalEstimadaUSD: 49.95,
     roiTotalEstimadoPct: 36.88,
     costoTotalSaladUSD: 154.91,
-    costoTotalSaladMXN: 2900.87,
     saldoCreditoSaladUSD: liveBal,
-    tipoCambioUSDMXN: 18.73,
     operacionesLiquidadasBanco: 2,
     friccionFinancieraUSD: 6.86,
     rutas: {
       kryptexBtc: {
-        nombre: 'Kryptex (BTC) → Binance → SPEI Banco',
+        nombre: 'Kryptex (BTC) → Binance → Retiro Final',
         gastoGpuUSD: 87.64,
         recompensasGeneradasBTC: 0.00286662,
         retiradoBTC: 0.0019758,
         recibidoBinanceBTC: 0.00138619,
         usdtNetos: 115.85,
-        cobradoBancoMXN: 2084.61,
+        cobradoLiquidadoUSD: 111.30,
         estado: 'CONCILIADO Y COBRADO'
       },
       pearlDirecta: {
@@ -1128,42 +1207,23 @@ app.get('/api/fintech/audit', (req, res) => {
         recompensasGeneradasPRL: 17.9884,
         retiradoPRL: 17.4312,
         recibidoBinanceUSDT: 29.05,
-        cobradoBancoMXN: 535.01,
-        criptoEnCarteraMXN: 852.64,
+        cobradoLiquidadoUSD: 28.56,
+        criptoEnCarteraUSD: 45.52,
         estado: 'MUESTRA TEMPRANA (3 CICLOS)'
       }
     }
   });
 });
 
-// 17b. Persistent Mining Cycles Manager (Lógica Ciclos_de_minado_PERL.xlsx)
-const CYCLES_FILE = path.join(DATA_DIR, 'mining_cycles.json');
-
-function readMiningCycles(): any {
-  try {
-    if (fs.existsSync(CYCLES_FILE)) {
-      return JSON.parse(fs.readFileSync(CYCLES_FILE, 'utf-8'));
-    }
-  } catch (err) {
-    console.error('Error reading mining cycles:', err);
-  }
-  return { activeCycle: null, closedCycles: [] };
-}
-
-function writeMiningCycles(data: any) {
-  try {
-    fs.writeFileSync(CYCLES_FILE, JSON.stringify(data, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('Error writing mining cycles:', err);
-  }
-}
-
+// 17b. Persistent Mining Cycles Manager (User-Isolated)
 app.get('/api/mining/cycles', (req, res) => {
-  const data = readMiningCycles();
+  const userId = getUserIdFromReq(req);
+  const data = readMiningCycles(userId);
   res.json({ success: true, ...data });
 });
 
 app.post('/api/mining/cycles/start', (req, res) => {
+  const userId = getUserIdFromReq(req);
   const { 
     containerGroupName, 
     organizationName, 
@@ -1175,7 +1235,7 @@ app.post('/api/mining/cycles/start', (req, res) => {
     cryptoCurrency
   } = req.body;
 
-  const data = readMiningCycles();
+  const data = readMiningCycles(userId);
   const now = Date.now();
   const cycleNumber = (data.closedCycles?.length || 0) + 1;
   const cycleId = `CICLO-${String(cycleNumber).padStart(3, '0')}`;
@@ -1202,7 +1262,6 @@ app.post('/api/mining/cycles/start', (req, res) => {
     spotPriceUSD: 0.0012395,
     grossRevenueUSD: 0,
     netProfitUSD: 0,
-    netProfitMXN: 0,
     roiPct: 0,
     route: 'Kryptex',
     isProfitable: true,
@@ -1210,12 +1269,13 @@ app.post('/api/mining/cycles/start', (req, res) => {
   };
 
   data.activeCycle = activeCycle;
-  writeMiningCycles(data);
+  writeMiningCycles(data, userId);
   res.json({ success: true, activeCycle });
 });
 
 app.post('/api/mining/cycles/close', (req, res) => {
-  const data = readMiningCycles();
+  const userId = getUserIdFromReq(req);
+  const data = readMiningCycles(userId);
   const cycleToClose = req.body.cycle || data.activeCycle;
   if (!cycleToClose) {
     return res.status(400).json({ success: false, message: 'No hay ciclo activo para cerrar' });
@@ -1241,7 +1301,6 @@ app.post('/api/mining/cycles/close', (req, res) => {
     totalComputeTHh,
     grossRevenueUSD,
     netProfitUSD,
-    netProfitMXN: Number((netProfitUSD * 18.73).toFixed(2)),
     roiPct,
     status: 'CLOSED',
     isProfitable: netProfitUSD >= 0
@@ -1249,54 +1308,24 @@ app.post('/api/mining/cycles/close', (req, res) => {
 
   data.closedCycles = [closedCycle, ...(data.closedCycles || [])];
   data.activeCycle = null;
-  writeMiningCycles(data);
+  writeMiningCycles(data, userId);
 
   res.json({ success: true, closedCycle, closedCycles: data.closedCycles });
 });
 
 app.post('/api/mining/cycles/save', (req, res) => {
+  const userId = getUserIdFromReq(req);
   const { activeCycle, closedCycles } = req.body;
   const data = {
     activeCycle: activeCycle || null,
     closedCycles: closedCycles || []
   };
-  writeMiningCycles(data);
+  writeMiningCycles(data, userId);
   res.json({ success: true, message: 'Ciclos sincronizados y guardados correctamente' });
 });
 
 // =========================================================================
-// 17. USER AUTHENTICATION & SESSION PERSISTENCE (SQLite/JSON Database)
-// =========================================================================
-const USERS_FILE = path.join(DATA_DIR, 'users.json');
-
-interface UserAccount {
-  id: string;
-  username: string;
-  email: string;
-  passwordHash: string;
-  fullName: string;
-  createdAt: string;
-  sessionToken?: string;
-}
-
-function readUsers(): { users: UserAccount[] } {
-  try {
-    if (fs.existsSync(USERS_FILE)) {
-      return JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8'));
-    }
-  } catch (err) {
-    console.error('Error reading users file:', err);
-  }
-  return { users: [] };
-}
-
-function writeUsers(data: { users: UserAccount[] }) {
-  try {
-    fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('Error writing users file:', err);
-  }
-}
+// 18. USER AUTHENTICATION & SESSION PERSISTENCE
 
 // Register new user
 app.post('/api/auth/register', (req, res) => {

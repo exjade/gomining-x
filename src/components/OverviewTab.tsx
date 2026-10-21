@@ -13,7 +13,9 @@ import {
   Wallet,
   RefreshCw,
   Layers,
-  Sparkles
+  Sparkles,
+  CreditCard,
+  ExternalLink
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -33,6 +35,7 @@ import type {
   HashrateHistoryPoint, 
   KryptexBalanceRaw, 
   KryptexPoolInfo,
+  KryptexPayoutStatsRaw,
   MiningCycle
 } from '../types/minerx';
 
@@ -42,6 +45,8 @@ export interface OverviewTabProps {
   history: HashrateHistoryPoint[];
   balance: KryptexBalanceRaw;
   poolInfo: KryptexPoolInfo;
+  payoutStats?: KryptexPayoutStatsRaw | null;
+  walletAddress?: string;
   onOpenReallocate: (worker: MergedGPUWorker) => void;
   onNavigateToFleet: () => void;
   onNavigateToApis: () => void;
@@ -53,6 +58,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   history,
   balance,
   poolInfo,
+  payoutStats,
+  walletAddress,
   onOpenReallocate,
   onNavigateToFleet,
   onNavigateToApis,
@@ -894,6 +901,61 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                 {poolInfo.block_reward ? `${poolInfo.block_reward.toFixed(1)} PRL` : '-- PRL'}
               </span>
             </div>
+          </div>
+
+          {/* Kryptex Historical Payouts & Reward Stats (Live API) */}
+          <div className="mt-4 pt-4 border-t border-white/[0.08]">
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="font-rajdhani text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <CreditCard className="h-3.5 w-3.5 text-[#05F292]" />
+                Historial de Pagos Kryptex
+              </span>
+              <span className="text-[10px] font-rajdhani text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                Live Stats
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-lg bg-black/40 border border-white/[0.04] p-2.5">
+                <span className="text-[10px] text-slate-400 block uppercase font-rajdhani font-semibold">Total Pagado</span>
+                <span className="font-jetbrains font-bold text-[#05F292] text-sm tabular-nums">
+                  {(payoutStats?.paid ?? 0).toFixed(4)} <span className="text-[10px] text-slate-400 font-normal">{poolInfo.ticker || 'PRL'}</span>
+                </span>
+              </div>
+              <div className="rounded-lg bg-black/40 border border-white/[0.04] p-2.5">
+                <span className="text-[10px] text-slate-400 block uppercase font-rajdhani font-semibold">Pendiente Pago</span>
+                <span className="font-jetbrains font-bold text-cyan-300 text-sm tabular-nums">
+                  {(payoutStats?.unpaid ?? 0).toFixed(4)} <span className="text-[10px] text-slate-400 font-normal">{poolInfo.ticker || 'PRL'}</span>
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs mt-2">
+              <div className="rounded-lg bg-black/40 border border-white/[0.04] p-2">
+                <span className="text-[10px] text-slate-400 block font-rajdhani">Recompensa 7d (Semana):</span>
+                <span className="font-jetbrains font-semibold text-slate-200 tabular-nums">
+                  {(payoutStats?.reward?.week ?? 0).toFixed(4)} {poolInfo.ticker || 'PRL'}
+                </span>
+              </div>
+              <div className="rounded-lg bg-black/40 border border-white/[0.04] p-2">
+                <span className="text-[10px] text-slate-400 block font-rajdhani">Recompensa 30d (Mes):</span>
+                <span className="font-jetbrains font-semibold text-slate-200 tabular-nums">
+                  {(payoutStats?.reward?.month ?? 0).toFixed(4)} {poolInfo.ticker || 'PRL'}
+                </span>
+              </div>
+            </div>
+
+            {walletAddress && (
+              <a
+                href={`https://pool.kryptex.com/${(poolInfo.ticker || 'prl').toLowerCase()}/miner/${walletAddress}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-[11px] font-rajdhani font-bold text-slate-300 hover:text-white border border-white/[0.06] transition-all"
+              >
+                <span>Ver en Explorador Kryptex Pool</span>
+                <ExternalLink className="h-3 w-3 text-cyan-400" />
+              </a>
+            )}
           </div>
         </div>
       </div>

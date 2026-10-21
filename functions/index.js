@@ -23,8 +23,8 @@ const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json());
 
-// In-memory fallback
-let memoryConfig = {
+// In-memory fallbacks keyed per user
+const defaultTemplateConfig = {
   saladAccounts: [],
   kryptexConfig: {
     walletAddress: '',
@@ -40,13 +40,20 @@ let memoryConfig = {
     enableSoundAlerts: false,
     discordWebhookUrl: '',
     telegramBotToken: '',
-    telegramChatId: ''
+    telegramChatId: '',
+    backendUrl: ''
   }
 };
 
+let memoryConfig = {
+  "usr_default_admin": { ...defaultTemplateConfig }
+};
+
 let memoryCycles = {
-  activeCycle: null,
-  closedCycles: []
+  "usr_default_admin": {
+    activeCycle: null,
+    closedCycles: []
+  }
 };
 
 let memoryUsers = [
@@ -61,51 +68,77 @@ let memoryUsers = [
   }
 ];
 
-// Database Persistence Helpers (Firestore + Fallback)
-async function getPersistedConfig() {
+// Helper to resolve userId from Request Token
+async function getUserIdFromReq(req) {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (token) {
+    const users = await getPersistedUsers();
+    const user = users.find(u => u.sessionToken === token);
+    if (user) return user.id;
+  }
+  return "usr_default_admin";
+}
+
+// Database Persistence Helpers (Firestore User-Isolated Collections + Fallback)
+async function getPersistedConfig(userId = "usr_default_admin") {
   if (db) {
     try {
-      const doc = await db.collection("minerx_app_data").doc("config").get();
+      // 1. Isolated User Subcollection: minerx_users/{userId}/data/config
+      const doc = await db.collection("minerx_users").doc(userId).collection("data").doc("config").get();
       if (doc.exists) {
         return doc.data();
+      }
+      // 2. Legacy fallback check
+      const legacyDoc = await db.collection("minerx_app_data").doc("config").get();
+      if (legacyDoc.exists) {
+        return legacyDoc.data();
       }
     } catch (err) {
       console.warn("Firestore get config error:", err.message);
     }
   }
-  return memoryConfig;
+  return memoryConfig[userId] || memoryConfig["usr_default_admin"] || defaultTemplateConfig;
 }
 
-async function savePersistedConfig(cfg) {
-  memoryConfig = cfg;
+async function savePersistedConfig(userId, cfg) {
+  if (!memoryConfig[userId]) memoryConfig[userId] = {};
+  memoryConfig[userId] = cfg;
   if (db) {
     try {
-      await db.collection("minerx_app_data").doc("config").set(cfg, { merge: true });
+      await db.collection("minerx_users").doc(userId).collection("data").doc("config").set(cfg, { merge: true });
     } catch (err) {
       console.warn("Firestore save config error:", err.message);
     }
   }
 }
 
-async function getPersistedCycles() {
+async function getPersistedCycles(userId = "usr_default_admin") {
   if (db) {
     try {
-      const doc = await db.collection("minerx_app_data").doc("mining_cycles").get();
+      // 1. Isolated User Subcollection: minerx_users/{userId}/data/mining_cycles
+      const doc = await db.collection("minerx_users").doc(userId).collection("data").doc("mining_cycles").get();
       if (doc.exists) {
         return doc.data();
+      }
+      // 2. Legacy fallback check
+      const legacyDoc = await db.collection("minerx_app_data").doc("mining_cycles").get();
+      if (legacyDoc.exists) {
+        return legacyDoc.data();
       }
     } catch (err) {
       console.warn("Firestore get cycles error:", err.message);
     }
   }
-  return memoryCycles;
+  return memoryCycles[userId] || memoryCycles["usr_default_admin"] || { activeCycle: null, closedCycles: [] };
 }
 
-async function savePersistedCycles(cycles) {
-  memoryCycles = cycles;
+async function savePersistedCycles(userId, cycles) {
+  if (!memoryCycles[userId]) memoryCycles[userId] = { activeCycle: null, closedCycles: [] };
+  memoryCycles[userId] = cycles;
   if (db) {
     try {
-      await db.collection("minerx_app_data").doc("mining_cycles").set(cycles, { merge: true });
+      await db.collection("minerx_users").doc(userId).collection("data").doc("mining_cycles").set(cycles, { merge: true });
     } catch (err) {
       console.warn("Firestore save cycles error:", err.message);
     }
@@ -143,18 +176,20 @@ async function savePersistedUser(user) {
 }
 
 // ----------------------------------------------------
-// 1. CONFIGURATION ENDPOINTS
+// 1. CONFIGURATION ENDPOINTS (User-Isolated)
 // ----------------------------------------------------
 app.get('/api/config', async (req, res) => {
-  const cfg = await getPersistedConfig();
+  const userId = await getUserIdFromReq(req);
+  const cfg = await getPersistedConfig(userId);
   res.json(cfg);
 });
 
 app.post('/api/config', async (req, res) => {
-  const current = await getPersistedConfig();
+  const userId = await getUserIdFromReq(req);
+  const current = await getPersistedConfig(userId);
   const newConfig = { ...current, ...req.body };
-  await savePersistedConfig(newConfig);
-  res.json({ success: true, message: 'Configuración guardada en base de datos Firestore' });
+  await savePersistedConfig(userId, newConfig);
+  res.json({ success: true, message: 'Configuración guardada en Firestore para tu usuario', userId });
 });
 
 // ----------------------------------------------------
@@ -242,10 +277,11 @@ app.get('/api/auth/me', async (req, res) => {
 });
 
 // ----------------------------------------------------
-// 3. MINING CYCLES PERSISTENCE
+// 3. MINING CYCLES PERSISTENCE (User-Isolated)
 // ----------------------------------------------------
 app.get('/api/mining/cycles', async (req, res) => {
-  const data = await getPersistedCycles();
+  const userId = await getUserIdFromReq(req);
+  const data = await getPersistedCycles(userId);
   res.json({
     success: true,
     activeCycle: data.activeCycle || null,
@@ -254,8 +290,9 @@ app.get('/api/mining/cycles', async (req, res) => {
 });
 
 app.post('/api/mining/cycles/start', async (req, res) => {
+  const userId = await getUserIdFromReq(req);
   const { fleetGpuCount, totalHashrateTHs, hourlySaladCostUSD } = req.body;
-  const cyclesData = await getPersistedCycles();
+  const cyclesData = await getPersistedCycles(userId);
 
   if (cyclesData.activeCycle) {
     return res.status(400).json({ success: false, message: 'Ya existe un ciclo activo en ejecución' });
@@ -274,14 +311,15 @@ app.post('/api/mining/cycles/start', async (req, res) => {
   };
 
   cyclesData.activeCycle = newCycle;
-  await savePersistedCycles(cyclesData);
+  await savePersistedCycles(userId, cyclesData);
 
   res.json({ success: true, message: 'Nuevo ciclo de minado iniciado en base de datos', cycle: newCycle });
 });
 
 app.post('/api/mining/cycles/close', async (req, res) => {
+  const userId = await getUserIdFromReq(req);
   const { currentTotalAcceptedShares, averageHashrateTHs } = req.body;
-  const cyclesData = await getPersistedCycles();
+  const cyclesData = await getPersistedCycles(userId);
 
   if (!cyclesData.activeCycle) {
     return res.status(400).json({ success: false, message: 'No hay un ciclo activo para cerrar' });
@@ -317,7 +355,7 @@ app.post('/api/mining/cycles/close', async (req, res) => {
 
   cyclesData.closedCycles = [closed, ...(cyclesData.closedCycles || [])];
   cyclesData.activeCycle = null;
-  await savePersistedCycles(cyclesData);
+  await savePersistedCycles(userId, cyclesData);
 
   res.json({ success: true, message: 'Ciclo cerrado y auditado con éxito en Firestore', closedCycle: closed });
 });
@@ -327,7 +365,8 @@ app.post('/api/mining/cycles/close', async (req, res) => {
 // ----------------------------------------------------
 // 4a. Balance & Wallet
 app.get('/api/salad/balance', async (req, res) => {
-  const cfg = await getPersistedConfig();
+  const userId = await getUserIdFromReq(req);
+  const cfg = await getPersistedConfig(userId);
   const accounts = cfg.saladAccounts || [];
   let totalBalanceUSD = 0;
   const accountBalances = [];
@@ -404,7 +443,8 @@ app.post('/api/salad/test-account', async (req, res) => {
 // 4c. All Active Instances
 app.post('/api/salad/all-active', async (req, res) => {
   try {
-    const cfg = await getPersistedConfig();
+    const userId = await getUserIdFromReq(req);
+    const cfg = await getPersistedConfig(userId);
     const targetAccounts = (req.body.accounts && req.body.accounts.length > 0) ? req.body.accounts : cfg.saladAccounts;
     const activeInstances = [];
 
@@ -677,7 +717,8 @@ app.get('/api/kryptex/payouts/:address', async (req, res) => {
 // ----------------------------------------------------
 app.post('/api/telegram/test', async (req, res) => {
   try {
-    const cfg = await getPersistedConfig();
+    const userId = await getUserIdFromReq(req);
+    const cfg = await getPersistedConfig(userId);
     const token = req.body.botToken || req.body.token || cfg.appSettings?.telegramBotToken;
     const chatId = req.body.chatId || req.body.telegramChatId || cfg.appSettings?.telegramChatId;
     const customMessage = req.body.customMessage;
@@ -717,7 +758,8 @@ app.post('/api/telegram/test', async (req, res) => {
 
 app.post('/api/telegram/send-status', async (req, res) => {
   try {
-    const cfg = await getPersistedConfig();
+    const userId = await getUserIdFromReq(req);
+    const cfg = await getPersistedConfig(userId);
     const token = req.body.token || cfg.appSettings?.telegramBotToken;
     const chatId = req.body.chatId || cfg.appSettings?.telegramChatId;
 
