@@ -99,7 +99,6 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
       cryptoProduced: c.cryptoProduced || Number((c.grossRevenueUSD / (c.spotPriceUSD || 94500)).toFixed(6)),
       grossRevenueUSD: c.grossRevenueUSD,
       netProfitUSD: c.netProfitUSD,
-      netProfitMXN: c.netProfitMXN,
       hashrateTHs: c.averageHashrateTHs,
       durationHours: c.durationHours,
       roiPct: c.roiPct,
@@ -1101,7 +1100,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                             Cripto Generada: {data.cryptoProduced} {data.currency} (${data.grossRevenueUSD.toFixed(2)} USD)
                           </div>
                           <div className="text-[#00F0FF] font-bold border-t border-white/[0.1] pt-1">
-                            Ganancia Neta: +${data.netProfitUSD.toFixed(2)} USD (~${data.netProfitMXN} MXN)
+                            Ganancia Neta: +${data.netProfitUSD.toFixed(2)} USD
                           </div>
                         </div>
                       );
@@ -1154,7 +1153,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               +${totalCycleNetUSD.toFixed(2)} <span className="text-xs text-emerald-400">USD</span>
             </div>
             <span className="text-[10px] text-emerald-400 font-mono mt-0.5 block">
-              ~${(totalCycleNetUSD * 18.73).toFixed(2)} MXN
+              {totalCycleHours > 0 ? `+$${(totalCycleNetUSD / totalCycleHours).toFixed(3)} USD/h prom.` : 'Auditoría 100% USD'}
             </span>
           </div>
         </div>

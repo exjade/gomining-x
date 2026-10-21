@@ -281,7 +281,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
               <h3 className="text-base font-bold text-white">Ciclos & Conciliación ROI desde Cero</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Inicia y cierra ciclos de minado con persistencia total en base de datos. Compara la ganancia neta en USD y divisa local (MXN).
+                Inicia y cierra ciclos de minado con persistencia total en base de datos. Audita con precisión matemática el costo Salad vs ingreso Kryptex 100% en USD.
               </p>
             </div>
 

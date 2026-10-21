@@ -35,6 +35,7 @@ export interface AppSettings {
   discordWebhookUrl?: string;
   telegramBotToken?: string;
   telegramChatId?: string;
+  backendUrl?: string; // Optional custom backend / proxy URL
 }
 
 export interface SaladInstanceRaw {
@@ -250,7 +251,6 @@ export interface MiningCycle {
   spotPriceUSD: number;
   grossRevenueUSD: number;
   netProfitUSD: number;
-  netProfitMXN: number;
   roiPct: number;
   route: 'Kryptex' | 'PearlDirect';
   isProfitable: boolean;
@@ -264,19 +264,15 @@ export interface MiningCyclesData {
 
 export interface FintechAuditData {
   capitalBolsilloUSD: number;
-  capitalBolsilloMXN: number;
-  efectivoCobradoBancoMXN: number;
-  gananciaNetaRealizadaMXN: number;
+  efectivoCobradoUSD: number;
+  gananciaNetaRealizadaUSD: number;
   roiRealBolsilloPct: number;
   capitalReinvertidoUSD: number;
-  capitalReinvertidoMXN: number;
-  criptoEnCarteraMXN: number;
-  gananciaTotalEstimadaMXN: number;
+  criptoEnCarteraUSD: number;
+  gananciaTotalEstimadaUSD: number;
   roiTotalEstimadoPct: number;
   costoTotalSaladUSD: number;
-  costoTotalSaladMXN: number;
   saldoCreditoSaladUSD: number;
-  tipoCambioUSDMXN: number;
   operacionesLiquidadasBanco: number;
   friccionFinancieraUSD: number;
   rutas: {
@@ -287,7 +283,7 @@ export interface FintechAuditData {
       retiradoBTC: number;
       recibidoBinanceBTC: number;
       usdtNetos: number;
-      cobradoBancoMXN: number;
+      cobradoLiquidadoUSD: number;
       estado: string;
     };
     pearlDirecta: {
@@ -296,8 +292,8 @@ export interface FintechAuditData {
       recompensasGeneradasPRL: number;
       retiradoPRL: number;
       recibidoBinanceUSDT: number;
-      cobradoBancoMXN: number;
-      criptoEnCarteraMXN: number;
+      cobradoLiquidadoUSD: number;
+      criptoEnCarteraUSD: number;
       estado: string;
     };
   };

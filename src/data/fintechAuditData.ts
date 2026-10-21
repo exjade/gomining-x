@@ -9,30 +9,26 @@ import type { FintechAuditData } from '../types/minerx';
  */
 export const INITIAL_FINTECH_AUDIT: FintechAuditData = {
   capitalBolsilloUSD: 131.65,
-  capitalBolsilloMXN: 2536.72,
-  efectivoCobradoBancoMXN: 2619.62,
-  gananciaNetaRealizadaMXN: 82.90,
+  efectivoCobradoUSD: 139.86,
+  gananciaNetaRealizadaUSD: 4.43,
   roiRealBolsilloPct: 3.27,
   capitalReinvertidoUSD: 33.00,
-  capitalReinvertidoMXN: 638.15,
-  criptoEnCarteraMXN: 852.64,
-  gananciaTotalEstimadaMXN: 935.54,
+  criptoEnCarteraUSD: 45.52,
+  gananciaTotalEstimadaUSD: 49.95,
   roiTotalEstimadoPct: 36.88,
   costoTotalSaladUSD: 154.91,
-  costoTotalSaladMXN: 2900.87,
   saldoCreditoSaladUSD: 4.50,
-  tipoCambioUSDMXN: 18.73,
   operacionesLiquidadasBanco: 2,
   friccionFinancieraUSD: 6.86,
   rutas: {
     kryptexBtc: {
-      nombre: 'Kryptex (BTC) → Binance → SPEI Banco',
+      nombre: 'Kryptex (BTC) → Binance → Retiro Final',
       gastoGpuUSD: 87.64,
       recompensasGeneradasBTC: 0.00286662,
       retiradoBTC: 0.0019758,
       recibidoBinanceBTC: 0.00138619,
       usdtNetos: 115.85,
-      cobradoBancoMXN: 2084.61,
+      cobradoLiquidadoUSD: 111.30,
       estado: 'CONCILIADO Y COBRADO'
     },
     pearlDirecta: {
@@ -41,8 +37,8 @@ export const INITIAL_FINTECH_AUDIT: FintechAuditData = {
       recompensasGeneradasPRL: 17.9884,
       retiradoPRL: 17.4312,
       recibidoBinanceUSDT: 29.05,
-      cobradoBancoMXN: 535.01,
-      criptoEnCarteraMXN: 852.64,
+      cobradoLiquidadoUSD: 28.56,
+      criptoEnCarteraUSD: 45.52,
       estado: 'MUESTRA TEMPRANA (3 CICLOS)'
     }
   },

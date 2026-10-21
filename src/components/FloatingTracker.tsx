@@ -80,7 +80,6 @@ export const FloatingTracker: React.FC<FloatingTrackerProps> = ({
 
   const totalTHs = summary?.totalHashrateTHs || 0;
   const netUSDPerHour = summary?.hourlyNetProfitUSD || 0;
-  const netMXNPerHour = netUSDPerHour * 18.73;
 
   // Stale rejection rate calculation
   const totalShares = summary?.totalValidShares + (summary?.totalStaleShares || 0);
@@ -435,10 +434,10 @@ export const FloatingTracker: React.FC<FloatingTrackerProps> = ({
               <span className="text-[10px] font-normal text-slate-400">/h</span>
             </div>
             <div className="text-[10px] font-mono text-cyan-300 font-semibold mt-0.5">
-              ~${netMXNPerHour.toFixed(2)} MXN
+              ${(netUSDPerHour * 24).toFixed(2)} USD/día
             </div>
             <div className="text-[9px] text-slate-500 mt-0.5">
-              ~${(netMXNPerHour * 24).toFixed(0)} MXN/día
+              {netUSDPerHour >= 0 ? '+' : ''}${(netUSDPerHour * 720).toFixed(0)} USD/mes
             </div>
           </div>
         </div>

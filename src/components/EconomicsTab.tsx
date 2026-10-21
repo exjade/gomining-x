@@ -98,7 +98,6 @@ export const EconomicsTab: React.FC<EconomicsTabProps> = ({
   const fleetHourlyGross = fleetTotalTHs * BASELINE_USD_PER_THS_HOUR;
   const fleetHourlyNet = fleetHourlyGross - fleetHourlyCost;
   const fleetMarginPct = fleetHourlyGross > 0 ? ((fleetHourlyNet / fleetHourlyGross) * 100) : 0;
-  const fleetHourlyNetMXN = fleetHourlyNet * 18.73;
 
   // ----------------------------------------------------
   // 2. PERSISTENT MINING CYCLES STATE
@@ -196,7 +195,6 @@ export const EconomicsTab: React.FC<EconomicsTabProps> = ({
         spotPriceUSD: 94500,
         grossRevenueUSD: 0,
         netProfitUSD: 0,
-        netProfitMXN: 0,
         roiPct: 0,
         route: 'Kryptex',
         isProfitable: true
@@ -218,7 +216,6 @@ export const EconomicsTab: React.FC<EconomicsTabProps> = ({
     const totalComputeTHh = Number((durationHours * averageHashrate).toFixed(2));
     const grossRevenueUSD = Number((totalComputeTHh * BASELINE_USD_PER_THS_HOUR).toFixed(2));
     const netProfitUSD = Number((grossRevenueUSD - totalSaladCostUSD).toFixed(2));
-    const netProfitMXN = Number((netProfitUSD * 18.73).toFixed(2));
     const roiPct = totalSaladCostUSD > 0 ? Number(((netProfitUSD / totalSaladCostUSD) * 100).toFixed(1)) : 0;
 
     const closedItem: MiningCycle = {
@@ -235,7 +232,6 @@ export const EconomicsTab: React.FC<EconomicsTabProps> = ({
       cryptoProduced: Number((grossRevenueUSD / 94500).toFixed(8)),
       grossRevenueUSD,
       netProfitUSD,
-      netProfitMXN,
       roiPct,
       isProfitable: netProfitUSD > 0
     };
@@ -324,7 +320,6 @@ export const EconomicsTab: React.FC<EconomicsTabProps> = ({
   const calcTotalFrictionDeduction = calcTotalGrossRevenue * TOTAL_FINANCIAL_FRICTION_PCT;
   const calcTotalNetRevenueReal = calcTotalGrossRevenue - calcTotalFrictionDeduction;
   const calcTotalNetProfit = calcTotalNetRevenueReal - calcTotalSaladCost;
-  const calcTotalNetProfitMXN = calcTotalNetProfit * 18.73;
   const calcMarginPct = calcTotalNetRevenueReal > 0 ? ((calcTotalNetProfit / calcTotalNetRevenueReal) * 100) : 0;
 
   // Break-even hashrate per GPU con fricción auditada aplicada
@@ -348,15 +343,13 @@ export const EconomicsTab: React.FC<EconomicsTabProps> = ({
       const netRev = Number((hourlyNetRevenue * h).toFixed(2));
       const cost = Number((hourlyCost * h).toFixed(2));
       const netProfit = Number((netRev - cost).toFixed(2));
-      const netMXN = Number((netProfit * 18.73).toFixed(1));
 
       points.push({
         hour: `${h}h`,
         grossRevenue: gross,
         netRevenue: netRev,
         saladCost: cost,
-        netProfit: netProfit,
-        netMXN: netMXN
+        netProfit: netProfit
       });
     }
     return points;
@@ -585,7 +578,7 @@ export const EconomicsTab: React.FC<EconomicsTabProps> = ({
                           {netAcc >= 0 ? '+' : ''}${netAcc.toFixed(3)} USD
                         </div>
                         <div className={`text-[10px] mt-0.5 ${isPositive ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>
-                          ~${(netAcc * 18.73).toFixed(2)} MXN (-4.56% fricción)
+                          Fricción auditada: -4.56% (spread & retiro)
                         </div>
                       </div>
 
@@ -680,7 +673,7 @@ export const EconomicsTab: React.FC<EconomicsTabProps> = ({
                       : 'Flota Lista para Iniciar Ciclo de Telemetría'}
                   </h4>
                   <p className="text-xs text-slate-400">
-                    Al iniciar el ciclo, MinerX registrará con precisión matemática cada minuto consumido en SaladCloud, los shares aceptados en Kryptex y la ganancia neta en USD y MXN.
+                    Al iniciar el ciclo, MinerX registrará con precisión matemática cada minuto consumido en SaladCloud, los shares aceptados en Kryptex y la ganancia neta en USD.
                   </p>
                 </div>
               </div>
@@ -724,7 +717,7 @@ export const EconomicsTab: React.FC<EconomicsTabProps> = ({
             +${fleetHourlyNet.toFixed(4)} <span className="text-xs font-normal text-slate-400">USD/h</span>
           </div>
           <div className="text-[11px] text-cyan-300 mt-1">
-            ~${fleetHourlyNetMXN.toFixed(2)} MXN / hora neta
+            +${(fleetHourlyNet * 24).toFixed(2)} USD / día neto estimado
           </div>
         </div>
 
@@ -947,7 +940,7 @@ export const EconomicsTab: React.FC<EconomicsTabProps> = ({
                 ${calcTotalSaladCost.toFixed(2)} <span className="text-xs font-normal text-slate-400">USD</span>
               </div>
               <div className="text-[11px] text-slate-500">
-                ~${(calcTotalSaladCost * 18.73).toFixed(2)} MXN a pagar
+                ${(calcTotalSaladCost / horizonHours).toFixed(3)} USD/hora Salad
               </div>
             </div>
 
@@ -981,7 +974,7 @@ export const EconomicsTab: React.FC<EconomicsTabProps> = ({
                 {calcTotalNetProfit >= 0 ? `+$${calcTotalNetProfit.toFixed(2)}` : `-$${Math.abs(calcTotalNetProfit).toFixed(2)}`} <span className="text-xs font-normal text-slate-400">USD</span>
               </div>
               <div className={`text-[11px] font-bold ${isProfitableSelection ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {calcTotalNetProfit >= 0 ? `+$${calcTotalNetProfitMXN.toFixed(2)} MXN` : `-$${Math.abs(calcTotalNetProfitMXN).toFixed(2)} MXN`} ({calcMarginPct.toFixed(1)}% margen)
+                {calcMarginPct.toFixed(1)}% margen neto auditado
               </div>
             </div>
           </div>
@@ -1037,7 +1030,7 @@ export const EconomicsTab: React.FC<EconomicsTabProps> = ({
                           <div className="text-cyan-300">Ingreso Bruto: ${data.grossRevenue.toFixed(2)} USD</div>
                           <div className="text-amber-400">Gasto Salad: ${data.saladCost.toFixed(2)} USD</div>
                           <div className="text-[#05F292] font-bold text-sm pt-1 border-t border-white/[0.1]">
-                            Ganancia Neta: +${data.netProfit.toFixed(2)} USD (~${data.netMXN} MXN)
+                            Ganancia Neta: +${data.netProfit.toFixed(2)} USD
                           </div>
                         </div>
                       );
@@ -1273,8 +1266,8 @@ export const EconomicsTab: React.FC<EconomicsTabProps> = ({
                     <span className="text-[#05F292] font-bold">+${cycle.netProfitUSD.toFixed(2)} USD</span>
                   </div>
                   <div>
-                    <span className="text-slate-500 block text-[10px]">Neto en Pesos:</span>
-                    <span className="text-emerald-400 font-bold">+${cycle.netProfitMXN.toFixed(2)} MXN</span>
+                    <span className="text-slate-500 block text-[10px]">Retorno ROI:</span>
+                    <span className="text-emerald-400 font-bold">{cycle.roiPct}%</span>
                   </div>
                 </div>
 

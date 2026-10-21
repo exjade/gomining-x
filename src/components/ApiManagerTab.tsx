@@ -9,9 +9,12 @@ import {
   RefreshCw, 
   Send,
   Edit3,
-  ExternalLink
+  ExternalLink,
+  Bot,
+  Activity
 } from 'lucide-react';
 import type { SaladAccountConfig, KryptexConfig, AppSettings } from '../types/minerx';
+import { sendTelegramMessageResilient } from '../utils/notifications';
 
 interface ApiManagerTabProps {
   accounts: SaladAccountConfig[];
@@ -142,6 +145,8 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
     });
   };
 
+  const [sendingReport, setSendingReport] = useState(false);
+
   const handleDirectTestTelegram = async () => {
     if (!settings.telegramBotToken || !settings.telegramChatId) {
       setFeedbackMsg({
@@ -153,23 +158,61 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
     setTestingTelegram(true);
     setFeedbackMsg(null);
     try {
-      const res = await fetch('/api/telegram/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          botToken: settings.telegramBotToken,
-          chatId: settings.telegramChatId
-        })
-      });
-      const data = await res.json();
+      const pingMsg = `🚀 *[MinerX PRO Engine • Verificación Exitosa]*\n\n` +
+        `✅ ¡Tu bot de vigilancia está 100% activo!\n` +
+        `📡 *Plataforma:* Conexión activa y verificada\n` +
+        `🕒 *Hora:* ${new Date().toLocaleTimeString()} (Hora Local)\n\n` +
+        `_Recibirás notificaciones automáticas si alguna GPU se desconecta, baja de hashrate o si ocurren eventos de reasignación._`;
+
+      const res = await sendTelegramMessageResilient(
+        settings.telegramBotToken,
+        settings.telegramChatId,
+        pingMsg
+      );
       setFeedbackMsg({
-        type: data.success ? 'success' : 'error',
-        text: data.message || (data.success ? '¡Mensaje de prueba recibido en tu Telegram!' : 'Error de Telegram')
+        type: res.success ? 'success' : 'error',
+        text: res.message
       });
     } catch (e: any) {
-      setFeedbackMsg({ type: 'error', text: e.message || 'Error de conexión con el backend' });
+      setFeedbackMsg({ type: 'error', text: e.message || 'Error de conexión con Telegram' });
     } finally {
       setTestingTelegram(false);
+    }
+  };
+
+  const handleSendTelegramStatus = async () => {
+    if (!settings.telegramBotToken || !settings.telegramChatId) {
+      setFeedbackMsg({
+        type: 'error',
+        text: 'Configura primero el Bot Token y el Chat ID de Telegram.'
+      });
+      return;
+    }
+    setSendingReport(true);
+    setFeedbackMsg(null);
+    try {
+      const reportMsg = `⚡ *[MinerX PRO • Reporte Instantáneo]*\n\n` +
+        `💼 *Wallet Kryptex:* \`${kryptexConfig.walletAddress || 'Sin configurar'}\`\n` +
+        `🥗 *Cuentas SaladCloud:* \`${accounts.filter(a => a.enabled).length} cuenta(s) conectadas\`\n` +
+        `⏱️ *Umbral Inactividad:* \`${settings.maxShareInactivityMinutes} minutos\`\n` +
+        `📉 *Umbral Potencia Mínima:* \`${settings.underperformingThresholdPct}%\`\n` +
+        `💰 *Moneda Base:* \`100% USD\`\n` +
+        `🕒 *Hora de Despacho:* ${new Date().toLocaleTimeString()}\n\n` +
+        `_Reporte despachado bajo demanda desde la consola MinerX._`;
+
+      const res = await sendTelegramMessageResilient(
+        settings.telegramBotToken,
+        settings.telegramChatId,
+        reportMsg
+      );
+      setFeedbackMsg({
+        type: res.success ? 'success' : 'error',
+        text: res.message
+      });
+    } catch (e: any) {
+      setFeedbackMsg({ type: 'error', text: e.message || 'Error al enviar reporte a Telegram' });
+    } finally {
+      setSendingReport(false);
     }
   };
 
@@ -637,14 +680,24 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={handleDirectTestTelegram}
-            disabled={testingTelegram}
-            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 px-4 py-2 text-xs font-bold text-slate-950 shadow-lg hover:brightness-110 active:scale-95 transition-all self-start sm:self-auto"
-          >
-            <Send className={`h-3.5 w-3.5 ${testingTelegram ? 'animate-bounce' : ''}`} />
-            <span>{testingTelegram ? 'Enviando Ping...' : 'Probar Bot de Telegram (Ping al Móvil)'}</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            <button
+              onClick={handleDirectTestTelegram}
+              disabled={testingTelegram}
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 px-3.5 py-2 text-xs font-bold text-slate-950 shadow-lg hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+            >
+              <Send className={`h-3.5 w-3.5 ${testingTelegram ? 'animate-bounce' : ''}`} />
+              <span>{testingTelegram ? 'Enviando...' : 'Probar Conexión (Ping)'}</span>
+            </button>
+            <button
+              onClick={handleSendTelegramStatus}
+              disabled={sendingReport}
+              className="flex items-center gap-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] border border-white/[0.15] px-3.5 py-2 text-xs font-bold text-white shadow-lg active:scale-95 transition-all cursor-pointer"
+            >
+              <Activity className={`h-3.5 w-3.5 text-cyan-400 ${sendingReport ? 'animate-spin' : ''}`} />
+              <span>{sendingReport ? 'Despachando...' : 'Enviar Reporte a Telegram'}</span>
+            </button>
+          </div>
         </div>
 
         {/* Step-by-step Visual Tutorial */}
@@ -760,6 +813,45 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
             <span className="text-[10px] text-slate-500 font-mono-num block">
               Si no se recibe un share válido en {settings.maxShareInactivityMinutes < 1 ? '30 segundos' : `${settings.maxShareInactivityMinutes} minutos`}, se alertará desconexión inmediata en Telegram y en el panel.
             </span>
+          </div>
+        </div>
+        {/* Interactive Telegram Commands Cheat Sheet */}
+        <div className="rounded-xl border border-white/[0.08] bg-black/40 p-4 space-y-3">
+          <div className="flex items-center gap-2 text-xs font-bold text-white">
+            <Bot className="h-4 w-4 text-[#05F292]" />
+            <span>Comandos Interactivos de Control Remoto en Telegram</span>
+            <span className="text-[10px] text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-full font-mono">
+              Escribe directamente a tu Bot
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            Puedes consultar o controlar tu cluster 24/7 desde tu teléfono móvil enviándole cualquiera de estos comandos en el chat:
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 text-xs font-mono">
+            <div className="p-2.5 rounded-lg bg-[#0E1424] border border-white/[0.06] hover:border-[#05F292]/30 transition-all">
+              <span className="text-[#05F292] font-bold block mb-0.5">/status</span>
+              <span className="text-[11px] text-slate-400">Telemetría en vivo: TH/s, GPUs activas y $/h neto en USD.</span>
+            </div>
+            <div className="p-2.5 rounded-lg bg-[#0E1424] border border-white/[0.06] hover:border-cyan-500/30 transition-all">
+              <span className="text-cyan-300 font-bold block mb-0.5">/fleet</span>
+              <span className="text-[11px] text-slate-400">Detalle individual de cada worker, estado y último share.</span>
+            </div>
+            <div className="p-2.5 rounded-lg bg-[#0E1424] border border-white/[0.06] hover:border-amber-500/30 transition-all">
+              <span className="text-amber-300 font-bold block mb-0.5">/balance</span>
+              <span className="text-[11px] text-slate-400">Saldo Salad ($ USD) y balance en pool Kryptex (PRL).</span>
+            </div>
+            <div className="p-2.5 rounded-lg bg-[#0E1424] border border-white/[0.06] hover:border-purple-500/30 transition-all">
+              <span className="text-purple-300 font-bold block mb-0.5">/cycle</span>
+              <span className="text-[11px] text-slate-400">Ciclo activo, horas acumuladas y ganancia auditada.</span>
+            </div>
+            <div className="p-2.5 rounded-lg bg-[#0E1424] border border-white/[0.06] hover:border-blue-500/30 transition-all">
+              <span className="text-blue-300 font-bold block mb-0.5">/report</span>
+              <span className="text-[11px] text-slate-400">Auditoría contable completa y ROI sin sesgos en USD.</span>
+            </div>
+            <div className="p-2.5 rounded-lg bg-[#0E1424] border border-white/[0.06] hover:border-rose-500/30 transition-all">
+              <span className="text-rose-300 font-bold block mb-0.5">/reallocate &lt;nodo&gt;</span>
+              <span className="text-[11px] text-slate-400">Reasigna un nodo trabado directamente desde Telegram.</span>
+            </div>
           </div>
         </div>
       </div>

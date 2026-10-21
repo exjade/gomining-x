@@ -680,17 +680,20 @@ app.post('/api/telegram/test', async (req, res) => {
     const cfg = await getPersistedConfig();
     const token = req.body.botToken || req.body.token || cfg.appSettings?.telegramBotToken;
     const chatId = req.body.chatId || req.body.telegramChatId || cfg.appSettings?.telegramChatId;
+    const customMessage = req.body.customMessage;
 
     if (!token || !chatId) {
       return res.status(400).json({ success: false, message: 'Falta Bot Token o Chat ID de Telegram' });
     }
 
-    const testMsg = `🚀 *[MinerX PRO - Firebase Cloud]*\n\n` +
+    const testMsg = customMessage || (
+      `🚀 *[MinerX PRO - Firebase Cloud]*\n\n` +
       `✅ ¡Conexión verificada exitosamente!\n` +
       `🛰️ *Modo:* 100% Datos en Vivo con Persistencia Cloud\n` +
       `☁️ *Plataforma:* Firebase Hosting & Firestore 24/7\n` +
       `🕒 *Hora:* ${new Date().toLocaleTimeString()}\n\n` +
-      `_Tu bot de vigilancia está activo y te alertará si alguna GPU se desconecta o rinde por debajo del umbral de rentabilidad._`;
+      `_Tu bot de vigilancia está activo y te alertará si alguna GPU se desconecta o rinde por debajo del umbral de rentabilidad._`
+    );
 
     const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
@@ -704,9 +707,67 @@ app.post('/api/telegram/test', async (req, res) => {
 
     const data = await response.json();
     if (data.ok) {
-      return res.json({ success: true, message: '¡Mensaje de prueba recibido en tu Telegram!' });
+      return res.json({ success: true, message: '¡Mensaje recibido en tu Telegram!' });
     }
     res.status(400).json({ success: false, message: data.description || 'Error de Telegram API' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/telegram/send-status', async (req, res) => {
+  try {
+    const cfg = await getPersistedConfig();
+    const token = req.body.token || cfg.appSettings?.telegramBotToken;
+    const chatId = req.body.chatId || cfg.appSettings?.telegramChatId;
+
+    if (!token || !chatId) {
+      return res.status(400).json({ success: false, message: 'Falta Bot Token o Chat ID de Telegram' });
+    }
+
+    const { walletAddress, coin } = cfg.kryptexConfig;
+    let workersList = [];
+    if (walletAddress) {
+      try {
+        const wRes = await fetch(`https://pool.kryptex.com/${coin || 'prl'}/api/v3/miner/workers/${walletAddress}`);
+        if (wRes.ok) {
+          const wData = await wRes.json();
+          workersList = wData.results || [];
+        }
+      } catch {}
+    }
+
+    const runningCount = workersList.filter(w => w.status === 'online').length;
+    const totalHashTHs = workersList.reduce((acc, w) => acc + (w.avg_hashrate_30m ? (Number(w.avg_hashrate_30m) / 1e12) : 0), 0);
+    const hourlyCost = runningCount * 0.160;
+    const grossUSD = totalHashTHs * 0.0012395;
+    const netUSD = (grossUSD * (1 - 0.0456)) - hourlyCost;
+
+    const reportMsg = `⚡ *[MinerX PRO • Reporte Cloud]*\n\n` +
+      `🚀 *Potencia Flota:* \`${totalHashTHs.toFixed(1)} TH/s\`\n` +
+      `🟢 *GPUs en Línea:* \`${runningCount} activas\`\n` +
+      `🥗 *Costo SaladCloud:* \`$${hourlyCost.toFixed(3)} USD/h\`\n` +
+      `📈 *Ingreso Bruto:* \`$${grossUSD.toFixed(3)} USD/h\`\n` +
+      `💰 *Utilidad Neta:* \`${netUSD >= 0 ? '+' : ''}$${netUSD.toFixed(3)} USD/h\`\n` +
+      `📅 *Proyección 24h:* \`$${(netUSD * 24).toFixed(2)} USD/día\`\n` +
+      `⚖️ *Fricción:* \`4.56% auditada (Spread + SPEI)\`\n\n` +
+      `_Reporte generado desde Firebase Cloud a las ${new Date().toLocaleTimeString()}_`;
+
+    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: reportMsg,
+        parse_mode: 'Markdown'
+      })
+    });
+
+    const data = await response.json();
+    if (data.ok) {
+      return res.json({ success: true, message: '¡Reporte entregado con éxito a tu Telegram!' });
+    }
+    res.status(400).json({ success: false, message: data.description || 'Error de Telegram' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
