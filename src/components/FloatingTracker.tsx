@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-  Zap, 
-  Cpu, 
   DollarSign, 
-  TrendingUp, 
   Bell, 
   BellRing, 
   ChevronDown, 
@@ -12,8 +9,6 @@ import {
   Activity,
   Volume2,
   VolumeX,
-  Radio,
-  Clock,
   AlertTriangle,
   Sun,
   CloudRain,
