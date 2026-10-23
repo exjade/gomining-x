@@ -9,14 +9,17 @@ import {
   DollarSign, 
   AlertTriangle, 
   ArrowUpRight, 
-  ShieldCheck,
-  ShieldAlert,
-  Wallet,
-  RefreshCw,
-  Layers,
-  Sparkles,
-  CreditCard,
-  ExternalLink
+  ShieldCheck, 
+  ShieldAlert, 
+  Wallet, 
+  RefreshCw, 
+  Layers, 
+  Sparkles, 
+  CreditCard, 
+  ExternalLink,
+  Search,
+  Star,
+  CheckCircle2
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -73,6 +76,9 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   const [timeframe, setTimeframe] = useState<'hour' | 'day' | 'month'>('hour');
   // Chart visual toggle: 'hashrate' | 'cashflow'
   const [chartMode, setChartMode] = useState<'hashrate' | 'cashflow'>('hashrate');
+  // Video-clone states: Search and bottom switch toggle
+  const [searchQuery, setSearchQuery] = useState('');
+  const [fleetActiveTab, setFleetActiveTab] = useState<'all' | 'alerts'>('all');
 
   // Global fleet breakeven TH/s calculation con auditoría de fricción real (4.56% de spread Kryptex y liquidación SPEI)
   const fleetBreakevenTHs = useMemo(() => {
@@ -225,6 +231,19 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
     );
   }, [workers]);
 
+  // Filtered workers list for the video-cloned Silicio Surveillance card
+  const filteredWorkers = useMemo(() => {
+    let list = fleetActiveTab === 'alerts' ? problematicWorkers : workers;
+    if (!searchQuery.trim()) return list;
+    const q = searchQuery.toLowerCase();
+    return list.filter(
+      (w) =>
+        w.workerName.toLowerCase().includes(q) ||
+        w.gpuModel.toLowerCase().includes(q) ||
+        w.saladStatus.toLowerCase().includes(q)
+    );
+  }, [workers, problematicWorkers, fleetActiveTab, searchQuery]);
+
   // --------------------------------------------------------------------------
   // EMPTY / ZERO-STATE ONBOARDING BANNER (When no accounts or wallet connected)
   // --------------------------------------------------------------------------
@@ -364,6 +383,40 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         {/* LEFT COLUMN: 3 STACKED PASTEL KPI CARDS (4 COLS ON DESKTOP) */}
         <div className="lg:col-span-4 flex flex-col gap-4">
           
+          {/* Header & Video-Cloned Search Bar */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <div>
+                <h3 className={`font-rajdhani text-sm font-bold uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>
+                  Flota & Silicio
+                </h3>
+                <p className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                  {summary.activeMiningGPUs} nodos minando en tiempo real
+                </p>
+              </div>
+              <span className="text-[10px] font-jetbrains font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-[#05DF72] border border-emerald-500/20">
+                {summary.totalAllocatedGPUs} GPUs
+              </span>
+            </div>
+
+            <div className="relative flex items-center">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar GPUs o nodos..."
+                className={`w-full rounded-full py-2 pl-4 pr-10 text-xs font-rajdhani font-medium transition-all outline-none border ${
+                  isLight
+                    ? 'bg-white border-slate-200/90 text-slate-900 placeholder:text-slate-400 focus:border-[#05DF72]'
+                    : 'bg-[#080B11] border-white/10 text-white placeholder:text-slate-500 focus:border-[#05DF72]'
+                }`}
+              />
+              <div className="absolute right-1 flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-white">
+                <Search className="h-3 w-3" />
+              </div>
+            </div>
+          </div>
+          
           {/* KPI 1: RENTABILIDAD NETA (hourlyNetProfitUSD) */}
           <div 
             className={`relative overflow-hidden rounded-3xl border p-5 sm:p-6 transition-all duration-300 ${
@@ -426,18 +479,38 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             </div>
 
             {/* Breakdown: Gross Rev vs Rental Cost */}
-            <div className={`mt-4 pt-3 border-t grid grid-cols-2 gap-2 text-xs relative z-10 ${borderDivider}`}>
+            <div className={`mt-3 pt-2.5 border-t grid grid-cols-2 gap-2 text-xs relative z-10 ${borderDivider}`}>
               <div>
-                <span className={`text-[11px] block ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Ingreso Bruto:</span>
-                <span className={`font-jetbrains font-bold tabular-nums ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                <span className={`text-[10px] block ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Ingreso Bruto:</span>
+                <span className={`font-jetbrains font-bold tabular-nums text-xs ${isLight ? 'text-slate-900' : 'text-white'}`}>
                   +${currentGrossRevenue.toFixed(3)}
                 </span>
               </div>
               <div className="text-right">
-                <span className={`text-[11px] block ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Costo Salad:</span>
-                <span className="font-jetbrains font-bold text-rose-500 tabular-nums">
+                <span className={`text-[10px] block ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Costo Salad:</span>
+                <span className="font-jetbrains font-bold text-rose-500 tabular-nums text-xs">
                   -${currentRentalCost.toFixed(3)}
                 </span>
+              </div>
+            </div>
+
+            {/* Video-replica bottom bar: Dark Date Pill on left + Avatar rings on right */}
+            <div className="mt-3.5 pt-2.5 border-t flex items-center justify-between relative z-10 border-slate-200/60 dark:border-white/10">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 text-white px-3 py-1 text-[11px] font-rajdhani font-bold shadow-xs">
+                <span>{new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
+                <span className="text-slate-400">•</span>
+                <span className="text-[#05DF72]">ROI Positivo</span>
+              </div>
+              <div className="flex -space-x-1.5 overflow-hidden">
+                <div className="inline-flex h-6 w-6 items-center justify-center rounded-full ring-2 ring-white dark:ring-slate-900 bg-emerald-500/20 text-[#05DF72] text-[10px] font-bold">
+                  <Zap className="h-3 w-3" />
+                </div>
+                <div className="inline-flex h-6 w-6 items-center justify-center rounded-full ring-2 ring-white dark:ring-slate-900 bg-cyan-500/20 text-cyan-400 text-[10px] font-bold">
+                  <Cpu className="h-3 w-3" />
+                </div>
+                <div className="inline-flex h-6 w-6 items-center justify-center rounded-full ring-2 ring-white dark:ring-slate-900 bg-[#05DF72] text-slate-950 text-[9px] font-extrabold font-mono">
+                  {summary.activeMiningGPUs || 1}x
+                </div>
               </div>
             </div>
           </div>
@@ -506,17 +579,26 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               </div>
             </div>
 
-            {/* Secondary stats */}
-            <div className={`mt-4 pt-3 border-t flex items-center justify-between text-xs ${borderDivider}`}>
-              <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>
-                GPUs Activas: <strong className={`font-jetbrains tabular-nums ${isLight ? 'text-slate-900' : 'text-white'}`}>{summary.activeMiningGPUs}</strong> de <span className="font-jetbrains">{summary.totalAllocatedGPUs}</span>
-              </span>
-              {summary.underperformingGPUs > 0 && (
-                <span className="font-rajdhani font-bold text-amber-500 flex items-center gap-1">
-                  <AlertTriangle className="h-3 w-3" />
-                  <span className="font-jetbrains tabular-nums">{summary.underperformingGPUs}</span> Bajo TH/s
+            {/* Secondary stats & Video-replica bottom bar */}
+            <div className={`mt-3.5 pt-2.5 border-t flex items-center justify-between border-slate-200/60 dark:border-white/10`}>
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 text-white px-3 py-1 text-[11px] font-rajdhani font-bold shadow-xs">
+                <span>{summary.activeMiningGPUs} GPUs Activas</span>
+                <span className="text-slate-400">•</span>
+                <span className={efficiencyPct >= 80 ? 'text-[#05DF72]' : 'text-amber-400'}>
+                  {efficiencyPct >= 80 ? 'Saludable' : 'Alerta'}
                 </span>
-              )}
+              </div>
+              <div className="flex -space-x-1.5 overflow-hidden">
+                {workers.slice(0, 3).map((w, idx) => (
+                  <div 
+                    key={w.id || idx}
+                    title={`${w.workerName} (${w.gpuModel})`}
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-full ring-2 ring-white dark:ring-slate-900 bg-slate-800 text-white text-[9px] font-mono font-bold"
+                  >
+                    {w.gpuModel.includes('4090') ? '49' : w.gpuModel.includes('3090') ? '39' : 'GPU'}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -580,14 +662,15 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               </p>
             </div>
 
-            {/* Secondary stats */}
-            <div className={`mt-4 pt-3 border-t flex items-center justify-between text-xs relative z-10 ${borderDivider}`}>
-              <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>
-                Punto de Equilibrio:
-              </span>
-              <span className="font-jetbrains font-bold text-amber-500 tabular-nums">
-                {fleetBreakevenTHs.toFixed(1)} TH/s
-              </span>
+            {/* Secondary stats & Video-replica bottom bar */}
+            <div className={`mt-3.5 pt-2.5 border-t flex items-center justify-between text-xs relative z-10 border-slate-200/60 dark:border-white/10`}>
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 text-white px-3 py-1 text-[11px] font-rajdhani font-bold shadow-xs">
+                <span className="text-amber-400">Equilibrio: {fleetBreakevenTHs.toFixed(1)} TH/s</span>
+              </div>
+              <div className="inline-flex items-center gap-1 text-[10px] font-rajdhani font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                <CheckCircle2 className="h-3 w-3 text-[#05DF72]" />
+                <span>Kryptex PPS</span>
+              </div>
             </div>
           </div>
         </div>
@@ -595,25 +678,34 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         {/* RIGHT COLUMN: WIDE RECHARTS AREA ON TOP + 2 SIDE-BY-SIDE CARDS BELOW (8 COLS ON DESKTOP) */}
         <div className="lg:col-span-8 flex flex-col gap-4">
           
-          {/* MAIN RECHARTS AREA */}
+          {/* MAIN RECHARTS AREA ("Performance Chart" Video Clone) */}
           <div className={`rounded-3xl border p-5 sm:p-6 flex flex-col justify-between transition-all ${
             isLight ? 'bg-white border-slate-200/90 shadow-xs hover:shadow-md text-slate-900' : 'border-white/10 bg-[#080B11]/90 backdrop-blur-xl shadow-xl text-white'
           }`}>
             
-            {/* Header of Area Chart */}
+            {/* Header of Area Chart with Video-Cloned Indicators */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div>
                 <div className="flex items-center gap-2">
                   <Activity className="h-4 w-4 text-[#05DF72]" />
                   <h3 className={`font-rajdhani text-base font-bold uppercase tracking-wider ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                    {chartMode === 'hashrate' ? 'Potencia de Hashrate vs Tiempo (24h)' : 'Flujo de Caja Real (USD/h)'}
+                    Performance Chart
                   </h3>
                 </div>
-                <p className={`text-xs mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                  {chartMode === 'hashrate' 
-                    ? 'Telemetría histórica con detección visual de umbral de rentabilidad'
-                    : 'Rendimiento neto en USD por hora contra tarifa de alquiler'}
-                </p>
+                <div className="flex items-center gap-3 mt-1 text-xs">
+                  <span className="flex items-center gap-1 text-xs font-rajdhani font-semibold text-[#05DF72]">
+                    <span className="h-2 w-2 rounded-full bg-[#05DF72]"></span>
+                    Hashrate TH/s
+                  </span>
+                  <span className="flex items-center gap-1 text-xs font-rajdhani font-semibold text-cyan-500">
+                    <span className="h-2 w-2 rounded-full bg-cyan-400"></span>
+                    Ganancia Neta
+                  </span>
+                  <span className="flex items-center gap-1 text-xs font-rajdhani font-semibold text-rose-500">
+                    <span className="h-2 w-2 rounded-full bg-rose-500"></span>
+                    Costo Salad
+                  </span>
+                </div>
               </div>
 
               {/* Mode Toggle */}
@@ -840,17 +932,22 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           {/* 2 SIDE-BY-SIDE BENTO CARDS */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
             
-            {/* CARD A: VIGILANCIA SILICIO & REASIGNACIÓN INMEDIATA */}
+            {/* CARD A: VIGILANCIA SILICIO ("Homework" Video Clone) */}
             <div className={`rounded-3xl border p-5 sm:p-6 flex flex-col justify-between transition-all ${
               isLight ? 'bg-white border-slate-200/90 shadow-xs hover:shadow-md text-slate-900' : 'border-white/10 bg-[#080B11]/90 backdrop-blur-xl shadow-xl text-white'
             }`}>
               <div>
-                <div className="flex items-center justify-between gap-2 mb-4">
-                  <div className="flex items-center gap-2">
-                    <ShieldAlert className="h-4 w-4 text-amber-500" />
-                    <h3 className={`font-rajdhani text-base font-bold uppercase tracking-wider ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                      Vigilancia de Silicio
-                    </h3>
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="h-4 w-4 text-[#05DF72]" />
+                      <h3 className={`font-rajdhani text-base font-bold uppercase tracking-wider ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                        Vigilancia de Silicio
+                      </h3>
+                    </div>
+                    <p className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                      Supervisión activa de contenedores y nodos
+                    </p>
                   </div>
                   <button
                     onClick={onNavigateToFleet}
@@ -861,159 +958,244 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                   </button>
                 </div>
 
-                {problematicWorkers.length > 0 ? (
-                  <div className="space-y-3">
-                    <p className={`text-xs ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
-                      <span className="font-jetbrains font-bold text-rose-500 tabular-nums">{problematicWorkers.length}</span> nodo(s) bajo el umbral de silicio (80%):
-                    </p>
-                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                      {problematicWorkers.map((w) => (
-                        <div 
-                          key={w.id} 
-                          className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border p-3 transition-all ${
-                            isLight ? 'bg-rose-50/60 border-rose-200 text-slate-900' : 'border-rose-500/20 bg-rose-500/[0.05] text-white'
-                          }`}
-                        >
-                          <div>
+                {/* Worker List Cloned like Homework Items */}
+                <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+                  {(filteredWorkers.length > 0 ? filteredWorkers.slice(0, 4) : workers.slice(0, 4)).map((w) => {
+                    const isLowPerf = w.performanceRatioPct < 80;
+                    return (
+                      <div 
+                        key={w.id} 
+                        className={`flex items-center justify-between gap-3 rounded-2xl border p-3 transition-all ${
+                          isLowPerf
+                            ? (isLight ? 'bg-rose-50/70 border-rose-200' : 'bg-rose-500/[0.06] border-rose-500/20')
+                            : (isLight ? 'bg-slate-50 border-slate-100 hover:border-slate-200' : 'bg-[#06080D] border-white/[0.06] hover:border-white/10')
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          {/* Dark square icon tile matching video */}
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-xs">
+                            <Cpu className={`h-4 w-4 ${isLowPerf ? 'text-rose-400' : 'text-[#05DF72]'}`} />
+                          </div>
+                          <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className={`font-rajdhani font-bold text-sm ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                              <span className={`font-rajdhani font-bold text-sm truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>
                                 {w.workerName}
                               </span>
-                              <span className={`font-jetbrains text-[10px] px-1.5 py-0.5 rounded border ${
-                                isLight ? 'bg-white text-slate-600 border-slate-200' : 'bg-black/40 text-slate-400 border-white/10'
+                              <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border ${
+                                isLight ? 'bg-white text-slate-600 border-slate-200' : 'bg-white/[0.06] text-slate-300 border-white/10'
                               }`}>
                                 {w.gpuModel}
                               </span>
                             </div>
-                            <div className={`mt-1 flex items-center gap-3 text-xs font-jetbrains ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                              <span>Actual: <strong className="text-rose-500 tabular-nums">{w.currentHashrateTHs.toFixed(1)} TH/s</strong></span>
-                              <span>Esperado: <strong className={`tabular-nums ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>{w.expectedBenchmarkTHs.toFixed(1)} TH/s</strong></span>
-                              <span className="text-rose-500 font-bold tabular-nums">({w.performanceRatioPct.toFixed(0)}%)</span>
+                            <div className={`text-[11px] font-jetbrains ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                              {w.currentHashrateTHs.toFixed(1)} / {w.expectedBenchmarkTHs.toFixed(1)} TH/s
                             </div>
                           </div>
+                        </div>
 
+                        {/* Right Action / Percentage Pill */}
+                        {isLowPerf ? (
                           <button
                             onClick={() => onOpenReallocate(w)}
-                            className="self-start sm:self-auto flex items-center gap-1.5 rounded-xl bg-rose-500 hover:bg-rose-600 px-3 py-1.5 text-xs font-rajdhani font-bold text-white uppercase tracking-wider transition-all shadow-sm"
+                            className="shrink-0 flex items-center gap-1 rounded-full bg-rose-500 hover:bg-rose-600 px-2.5 py-1 text-[11px] font-rajdhani font-bold text-white uppercase tracking-wider transition-all shadow-xs"
                           >
-                            <RefreshCw className="h-3.5 w-3.5" />
-                            <span>Reasignar</span>
+                            <RefreshCw className="h-3 w-3" />
+                            <span>{w.performanceRatioPct.toFixed(0)}%</span>
                           </button>
-                        </div>
-                      ))}
+                        ) : (
+                          <div className="shrink-0 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-1 text-[11px] font-jetbrains font-bold text-[#05DF72]">
+                            {w.performanceRatioPct.toFixed(0)}%
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {workers.length === 0 && (
+                    <div className={`p-4 rounded-2xl border text-center text-xs flex flex-col items-center gap-1.5 ${
+                      isLight ? 'bg-slate-50 border-slate-100 text-slate-500' : 'bg-[#06080D] border-white/[0.04] text-slate-400'
+                    }`}>
+                      <ShieldCheck className="h-4 w-4 text-[#05DF72]" />
+                      <span>Sin trabajadores activos registrados.</span>
                     </div>
-                  </div>
-                ) : (
-                  <div className={`flex flex-col items-center justify-center p-6 text-center rounded-2xl border transition-colors ${
-                    isLight ? 'bg-slate-50 border-slate-100' : 'border-white/[0.06] bg-[#06080D]'
-                  }`}>
-                    <div className="h-9 w-9 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-[#05DF72] mb-2 shadow-sm">
-                      <ShieldCheck className="h-4.5 w-4.5" />
-                    </div>
-                    <h4 className={`font-rajdhani font-bold text-sm uppercase ${isLight ? 'text-slate-900' : 'text-white'}`}>Flota en Rendimiento Óptimo</h4>
-                    <p className={`text-xs max-w-xs mt-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                      Todas las GPUs operan entregando &gt;80% del benchmark de silicio y enviando shares estables.
-                    </p>
-                  </div>
-                )}
+                  )}
+                </div>
+              </div>
+
+              {/* Exact replica of the video's bottom capsule switch: [ Themes ] [ Amber ] */}
+              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-white/[0.06]">
+                <div className={`flex rounded-full p-1 border transition-colors ${
+                  isLight ? 'bg-slate-100 border-slate-200' : 'bg-[#06080D] border-white/10'
+                }`}>
+                  <button
+                    onClick={() => setFleetActiveTab('all')}
+                    className={`flex-1 flex items-center justify-center gap-1.5 rounded-full py-1.5 text-xs font-rajdhani font-bold transition-all ${
+                      fleetActiveTab === 'all'
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : isLight ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <span>◉ Flota Activa ({workers.length})</span>
+                  </button>
+                  <button
+                    onClick={() => setFleetActiveTab('alerts')}
+                    className={`flex-1 flex items-center justify-center gap-1.5 rounded-full py-1.5 text-xs font-rajdhani font-bold transition-all ${
+                      fleetActiveTab === 'alerts'
+                        ? 'bg-[#05DF72] text-slate-950 font-bold shadow-xs'
+                        : isLight ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <span>⚠ Alertas ({problematicWorkers.length})</span>
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* CARD B: BALANCE KRYPTEX (PRL) & PAYOUT PROGRESS */}
+            {/* CARD B: BALANCE & PAGOS KRYPTEX ("Friends Score" Video Clone) */}
             <div className={`rounded-3xl border p-5 sm:p-6 flex flex-col justify-between transition-all ${
               isLight ? 'bg-white border-slate-200/90 shadow-xs hover:shadow-md text-slate-900' : 'border-white/10 bg-[#080B11]/90 backdrop-blur-xl shadow-xl text-white'
             }`}>
               <div>
-                <div className="flex items-center justify-between gap-2 mb-4">
-                  <div className="flex items-center gap-2">
-                    <Wallet className="h-4 w-4 text-[#05DF72]" />
-                    <h3 className={`font-rajdhani text-base font-bold uppercase tracking-wider ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                      Balance Kryptex (PRL)
-                    </h3>
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Wallet className="h-4 w-4 text-[#05DF72]" />
+                      <h3 className={`font-rajdhani text-base font-bold uppercase tracking-wider ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                        Friends Score & Pool
+                      </h3>
+                    </div>
+                    <p className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                      Estadísticas y pagos de pool Kryptex
+                    </p>
                   </div>
                   <span className="font-rajdhani text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
                     PoUW Pearl
                   </span>
                 </div>
 
-                {/* Total balance in Pearl */}
-                <div className={`rounded-2xl p-4 transition-colors ${
-                  isLight ? 'bg-slate-50 border border-slate-100 text-slate-900' : 'border border-white/[0.08] bg-[#06080D] text-white'
-                }`}>
-                  <span className={`font-rajdhani text-xs font-semibold uppercase block ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                    Balance Acumulado Total
-                  </span>
-                  <div className="mt-1 flex items-baseline gap-2">
-                    <span className={`font-jetbrains text-2xl sm:text-3xl font-extrabold tabular-nums tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                      {totalMinedPRL.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
-                    </span>
-                    <span className="font-rajdhani text-xs font-bold text-[#05DF72] uppercase">
-                      {poolInfo.ticker || 'PRL'}
-                    </span>
-                  </div>
+                {/* 4 Ranked Items exactly matching video layout */}
+                <div className="space-y-2.5">
                   
-                  <div className={`mt-3 pt-3 border-t grid grid-cols-2 gap-2 text-xs ${borderDivider}`}>
-                    <div>
-                      <span className={`text-[11px] block ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Confirmado:</span>
-                      <span className="font-jetbrains font-bold text-[#05DF72] tabular-nums">
-                        {confirmedPRL.toFixed(4)} {poolInfo.ticker || 'PRL'}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <span className={`text-[11px] block ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Inmaduro:</span>
-                      <span className={`font-jetbrains font-bold tabular-nums ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
-                        {unconfirmedPRL.toFixed(4)} {poolInfo.ticker || 'PRL'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Payout Progress to Minimum Threshold */}
-                <div className="mt-4 space-y-2">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className={`font-rajdhani font-semibold uppercase ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
-                      Progreso Umbral de Pago
-                    </span>
-                    <span className="font-jetbrains font-bold text-[#05DF72] tabular-nums">
-                      {payoutProgressPct.toFixed(1)}%
-                    </span>
-                  </div>
-                  <div className={`h-2.5 w-full rounded-full overflow-hidden p-0.5 ${isLight ? 'bg-slate-100' : 'bg-white/[0.08]'}`}>
-                    <div 
-                      className="h-full rounded-full bg-[#05DF72] transition-all duration-500 shadow-sm"
-                      style={{ width: `${Math.min(100, Math.max(2, payoutProgressPct))}%` }}
-                    />
-                  </div>
-                  <div className={`flex justify-between items-center text-[11px] font-jetbrains ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                    <span>Mínimo: {payoutThreshold} {poolInfo.ticker || 'PRL'}</span>
-                    <span>Restante: {remainingPRL.toFixed(4)} {poolInfo.ticker || 'PRL'}</span>
-                  </div>
-                </div>
-
-                {/* Kryptex Historical Payouts & Reward Stats */}
-                {payoutStats && (
-                  <div className={`mt-3 pt-3 border-t text-xs ${borderDivider}`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className={`font-rajdhani text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
-                        <CreditCard className="h-3.5 w-3.5 text-[#05DF72]" />
-                        Pagos Kryptex
-                      </span>
-                      <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400">
-                        Paid: {(payoutStats.paid ?? 0).toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-1.5 text-[11px] font-jetbrains">
-                      <div className={`p-1.5 rounded-lg border ${isLight ? 'bg-slate-50 border-slate-100' : 'bg-black/30 border-white/[0.04]'}`}>
-                        <span className="text-slate-400 block text-[9px]">Semana:</span>
-                        <span className="font-bold text-[#05DF72]">{(payoutStats.reward?.week ?? 0).toFixed(2)} PRL</span>
+                  {/* Rank 1: Confirmado */}
+                  <div className={`flex items-center justify-between p-2.5 rounded-2xl border transition-colors ${
+                    isLight ? 'bg-slate-50/80 border-slate-100' : 'bg-[#06080D] border-white/[0.04]'
+                  }`}>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-white font-jetbrains text-xs font-bold">
+                        1
                       </div>
-                      <div className={`p-1.5 rounded-lg border ${isLight ? 'bg-slate-50 border-slate-100' : 'bg-black/30 border-white/[0.04]'}`}>
-                        <span className="text-slate-400 block text-[9px]">Mes:</span>
-                        <span className="font-bold text-cyan-400">{(payoutStats.reward?.month ?? 0).toFixed(2)} PRL</span>
+                      <div>
+                        <span className={`font-rajdhani text-xs font-bold block ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                          Balance Confirmado
+                        </span>
+                        <div className="flex gap-0.5 mt-0.5">
+                          {[...Array(5)].map((_, i) => (
+                            <Star key={i} className="h-2.5 w-2.5 fill-[#05DF72] text-[#05DF72]" />
+                          ))}
+                        </div>
                       </div>
                     </div>
+                    <span className="font-jetbrains text-xs font-bold text-[#05DF72] tabular-nums">
+                      {confirmedPRL.toFixed(4)} PRL
+                    </span>
                   </div>
-                )}
+
+                  {/* Rank 2: Inmaduro */}
+                  <div className={`flex items-center justify-between p-2.5 rounded-2xl border transition-colors ${
+                    isLight ? 'bg-slate-50/80 border-slate-100' : 'bg-[#06080D] border-white/[0.04]'
+                  }`}>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-white font-jetbrains text-xs font-bold">
+                        2
+                      </div>
+                      <div>
+                        <span className={`font-rajdhani text-xs font-bold block ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                          Inmaduro (Unconfirmed)
+                        </span>
+                        <div className="flex gap-0.5 mt-0.5">
+                          {[...Array(4)].map((_, i) => (
+                            <Star key={i} className="h-2.5 w-2.5 fill-cyan-400 text-cyan-400" />
+                          ))}
+                          <Star className="h-2.5 w-2.5 text-slate-400" />
+                        </div>
+                      </div>
+                    </div>
+                    <span className={`font-jetbrains text-xs font-bold tabular-nums ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                      {unconfirmedPRL.toFixed(4)} PRL
+                    </span>
+                  </div>
+
+                  {/* Rank 3: Pagos */}
+                  <div className={`flex items-center justify-between p-2.5 rounded-2xl border transition-colors ${
+                    isLight ? 'bg-slate-50/80 border-slate-100' : 'bg-[#06080D] border-white/[0.04]'
+                  }`}>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-white font-jetbrains text-xs font-bold">
+                        3
+                      </div>
+                      <div>
+                        <span className={`font-rajdhani text-xs font-bold block ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                          Total Pagado (Kryptex)
+                        </span>
+                        <div className="flex gap-0.5 mt-0.5">
+                          {[...Array(5)].map((_, i) => (
+                            <Star key={i} className="h-2.5 w-2.5 fill-[#05DF72] text-[#05DF72]" />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="font-jetbrains text-xs font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                      {(payoutStats?.paid ?? 0).toFixed(2)} PRL
+                    </span>
+                  </div>
+
+                  {/* Rank 4: Hashrate Rate */}
+                  <div className={`flex items-center justify-between p-2.5 rounded-2xl border transition-colors ${
+                    isLight ? 'bg-slate-50/80 border-slate-100' : 'bg-[#06080D] border-white/[0.04]'
+                  }`}>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-white font-jetbrains text-xs font-bold">
+                        4
+                      </div>
+                      <div>
+                        <span className={`font-rajdhani text-xs font-bold block ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                          Hashrate Pool Reportado
+                        </span>
+                        <div className="flex gap-0.5 mt-0.5">
+                          {[...Array(5)].map((_, i) => (
+                            <Star key={i} className="h-2.5 w-2.5 fill-[#05DF72] text-[#05DF72]" />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="font-jetbrains text-xs font-bold text-cyan-400 tabular-nums">
+                      {summary.totalHashrateTHs.toFixed(1)} TH/s
+                    </span>
+                  </div>
+
+                </div>
+              </div>
+
+              {/* Payout Progress at bottom of Card B */}
+              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-white/[0.06]">
+                <div className="flex justify-between items-center text-xs mb-1.5">
+                  <span className={`font-rajdhani text-[11px] font-bold uppercase ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
+                    Progreso Umbral de Pago
+                  </span>
+                  <span className="font-jetbrains font-bold text-[#05DF72] tabular-nums text-xs">
+                    {payoutProgressPct.toFixed(1)}%
+                  </span>
+                </div>
+                <div className={`h-2 w-full rounded-full overflow-hidden p-0.5 ${isLight ? 'bg-slate-100' : 'bg-white/[0.08]'}`}>
+                  <div 
+                    className="h-full rounded-full bg-[#05DF72] transition-all duration-500 shadow-xs"
+                    style={{ width: `${Math.min(100, Math.max(2, payoutProgressPct))}%` }}
+                  />
+                </div>
+                <div className={`mt-1.5 flex justify-between items-center text-[10px] font-jetbrains ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                  <span>Mínimo: {payoutThreshold} PRL</span>
+                  <span>Restante: {remainingPRL.toFixed(4)} PRL</span>
+                </div>
               </div>
 
               {walletAddress && (
@@ -1021,11 +1203,12 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                   href={`https://pool.kryptex.com/${(poolInfo.ticker || 'prl').toLowerCase()}/miner/${walletAddress}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`mt-4 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-rajdhani font-bold border transition-all ${
+                  className={`mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-xs font-rajdhani font-bold border transition-all ${
                     isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200' : 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 hover:text-white border-white/[0.06]'
                   }`}
                 >
-                  <span>Ver en Explorador Kryptex Pool</span>
+                  <CreditCard className="h-3 w-3 text-[#05DF72]" />
+                  <span>Explorador Kryptex Pool</span>
                   <ExternalLink className="h-3 w-3 text-[#05DF72]" />
                 </a>
               )}
