@@ -246,139 +246,12 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   }, [workers, problematicWorkers, fleetActiveTab, searchQuery]);
 
   // --------------------------------------------------------------------------
-  // EMPTY / ZERO-STATE ONBOARDING BANNER (When no accounts or wallet connected)
-  // --------------------------------------------------------------------------
-  if (workers.length === 0 && summary.totalAllocatedGPUs === 0) {
-    return (
-      <div className="space-y-6 pb-24 md:pb-12 animate-in fade-in duration-300">
-        {/* Tactical Onboarding Terminal */}
-        <div className={`relative overflow-hidden rounded-3xl border p-6 sm:p-8 transition-all ${
-          isLight 
-            ? 'bg-white border-slate-200/90 shadow-sm' 
-            : 'border-white/10 bg-[#080B11]/90 backdrop-blur-xl shadow-[0_12px_40px_rgba(0,0,0,0.7)]'
-        }`}>
-          <div className="absolute top-0 right-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
-          <div className="absolute bottom-0 left-0 -ml-16 -mb-16 h-64 w-64 rounded-full bg-cyan-500/10 blur-3xl pointer-events-none" />
-
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-3 w-3 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#05DF72] opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-[#05DF72]"></span>
-                </span>
-                <span className="font-rajdhani text-sm font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                  MinerX Telemetry Hub • Modo Datos en Vivo
-                </span>
-              </div>
-              <h2 className={`font-rajdhani text-2xl sm:text-3xl font-extrabold tracking-wide ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                Terminal de Control & Vigilancia de Flota
-              </h2>
-              <p className={`text-sm max-w-2xl leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
-                El sistema está listo para vigilar tus GPUs de <span className="text-emerald-600 dark:text-cyan-400 font-semibold">SaladCloud</span> y contrastar los shares válidos en el pool de <span className="text-[#05DF72] font-semibold">Kryptex (Pearl PRL)</span>. Conecta tus credenciales para activar la telemetría en tiempo real y el protector contra la lotería de silicio.
-              </p>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button
-                onClick={onNavigateToApis}
-                className="flex items-center justify-center gap-2 rounded-2xl bg-[#05DF72] px-6 py-3.5 text-sm font-rajdhani font-bold text-slate-950 uppercase tracking-wider hover:brightness-105 active:scale-95 transition-all shadow-sm"
-              >
-                <Sparkles className="h-4 w-4" />
-                <span>Conectar APIs & Wallet</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Informative Bento Quick Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className={`rounded-3xl border p-5 transition-all ${
-            isLight ? 'bg-white border-slate-200/90 shadow-sm text-slate-900' : 'border-white/10 bg-[#0C101A]/80 backdrop-blur-xl text-white'
-          }`}>
-            <div className="h-10 w-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-4">
-              <DollarSign className="h-5 w-5" />
-            </div>
-            <h3 className={`font-rajdhani text-lg font-bold uppercase ${isLight ? 'text-slate-900' : 'text-white'}`}>Protección de Capital</h3>
-            <p className={`text-xs mt-1 leading-relaxed ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-              Monitorea el costo en USD de cada contenedor de Salad contra las recompensas de Kryptex para evitar quemar capital.
-            </p>
-          </div>
-
-          <div className={`rounded-3xl border p-5 transition-all ${
-            isLight ? 'bg-white border-slate-200/90 shadow-sm text-slate-900' : 'border-white/10 bg-[#0C101A]/80 backdrop-blur-xl text-white'
-          }`}>
-            <div className="h-10 w-10 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-600 dark:text-cyan-400 mb-4">
-              <RefreshCw className="h-5 w-5" />
-            </div>
-            <h3 className={`font-rajdhani text-lg font-bold uppercase ${isLight ? 'text-slate-900' : 'text-white'}`}>Reasignación 1-Click</h3>
-            <p className={`text-xs mt-1 leading-relaxed ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-              Descarta nodos de silicio defectuosos con menos del 80% de rendimiento invocando la API oficial de SaladCloud.
-            </p>
-          </div>
-
-          <div className={`rounded-3xl border p-5 transition-all ${
-            isLight ? 'bg-white border-slate-200/90 shadow-sm text-slate-900' : 'border-white/10 bg-[#0C101A]/80 backdrop-blur-xl text-white'
-          }`}>
-            <div className="h-10 w-10 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500 mb-4">
-              <ShieldAlert className="h-5 w-5" />
-            </div>
-            <h3 className={`font-rajdhani text-lg font-bold uppercase ${isLight ? 'text-slate-900' : 'text-white'}`}>Vigilante Autónomo 24/7</h3>
-            <p className={`text-xs mt-1 leading-relaxed ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-              Alertas automáticas al instante a tu Telegram o Discord ante desconexiones o caída de hashrate sin tocar nada.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // --------------------------------------------------------------------------
-  // MAIN BENTO GRID DASHBOARD
+  // MAIN BENTO GRID DASHBOARD (Exact Replica of Reference Video Layout)
   // --------------------------------------------------------------------------
   return (
-    <div className="space-y-5 pb-24 md:pb-12 animate-in fade-in duration-300">
+    <div className="space-y-6 pb-24 md:pb-12 animate-in fade-in duration-300">
       
-      {/* 1. TOP TACTICAL HUD BAR */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
-        <div className="flex items-center gap-3">
-          <div className="flex h-2.5 w-2.5 relative">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#05DF72] opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#05DF72]"></span>
-          </div>
-          <span className={`font-rajdhani text-sm font-bold uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>
-            Telemetría de Red • <span className="text-[#05DF72]">Pearl PRL Kryptex Pool</span>
-          </span>
-          <span className={`hidden sm:inline-block text-[11px] font-jetbrains px-2 py-0.5 rounded border ${
-            isLight ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-white/[0.04] text-slate-400 border-white/10'
-          }`}>
-            Dificultad: {summary.networkDifficulty || 'Auto PPS'}
-          </span>
-        </div>
-
-        {/* Timeframe Control (1h / 24h / 30d) */}
-        <div className={`flex items-center gap-1 self-start sm:self-auto rounded-2xl p-1 shadow-inner backdrop-blur-md transition-colors ${
-          isLight ? 'border border-slate-200 bg-slate-100/90' : 'border border-white/10 bg-[#0A0D15]/90'
-        }`}>
-          {(['hour', 'day', 'month'] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTimeframe(t)}
-              className={`rounded-xl px-3 py-1 text-xs font-rajdhani font-bold transition-all ${
-                timeframe === t
-                  ? 'bg-[#05DF72] text-slate-950 font-bold shadow-sm'
-                  : isLight
-                  ? 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              {t === 'hour' ? '1 HORA' : t === 'day' ? '24 HORAS' : '30 DÍAS'}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 2. MAIN 2-COLUMN BENTO: LEFT 3 STACKED PASTEL CARDS, RIGHT WIDE CHART + 2 BENTO CARDS */}
+      {/* 1. MAIN 2-COLUMN BENTO: LEFT 3 STACKED PASTEL CARDS, RIGHT WIDE CHART + 2 BENTO CARDS */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         
         {/* LEFT COLUMN: 3 STACKED PASTEL KPI CARDS (4 COLS ON DESKTOP) */}
@@ -723,59 +596,84 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             }`}
           >
             
-            {/* Header of Area Chart with Video-Cloned Indicators */}
+            {/* Header of Area Chart with Video-Cloned Indicators & Timeframe dropdown */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div>
                 <div className="flex items-center gap-2">
                   <Activity className="h-4 w-4 text-[#05DF72]" />
-                  <h3 className={`font-rajdhani text-base font-bold uppercase tracking-wider ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                  <h3 className={`font-sans text-lg font-bold tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>
                     Performance Chart
                   </h3>
                 </div>
-                <div className="flex items-center gap-3 mt-1 text-xs">
-                  <span className="flex items-center gap-1 text-xs font-rajdhani font-semibold text-[#05DF72]">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Track results and watch your progress rise • Telemetría Pool Kryptex PRL
+                </p>
+                <div className="flex items-center gap-3 mt-2 text-xs">
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300">
                     <span className="h-2 w-2 rounded-full bg-[#05DF72]"></span>
                     Hashrate TH/s
                   </span>
-                  <span className="flex items-center gap-1 text-xs font-rajdhani font-semibold text-cyan-500">
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300">
                     <span className="h-2 w-2 rounded-full bg-cyan-400"></span>
                     Ganancia Neta
                   </span>
-                  <span className="flex items-center gap-1 text-xs font-rajdhani font-semibold text-rose-500">
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300">
                     <span className="h-2 w-2 rounded-full bg-rose-500"></span>
                     Costo Salad
                   </span>
                 </div>
               </div>
 
-              {/* Mode Toggle */}
-              <div className={`flex items-center gap-1 rounded-2xl p-1 self-start sm:self-auto transition-colors ${
-                isLight ? 'border border-slate-200 bg-slate-100' : 'border border-white/10 bg-[#06080D]'
-              }`}>
-                <button
-                  onClick={() => setChartMode('hashrate')}
-                  className={`rounded-xl px-3 py-1 text-xs font-rajdhani font-bold transition-all ${
-                    chartMode === 'hashrate'
-                      ? 'bg-[#05DF72] text-slate-950 font-bold shadow-sm'
-                      : isLight
-                      ? 'text-slate-600 hover:text-slate-900'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Hashrate (TH/s)
-                </button>
-                <button
-                  onClick={() => setChartMode('cashflow')}
-                  className={`rounded-xl px-3 py-1 text-xs font-rajdhani font-bold transition-all ${
-                    chartMode === 'cashflow'
-                      ? 'bg-[#05DF72] text-slate-950 font-bold shadow-sm'
-                      : isLight
-                      ? 'text-slate-600 hover:text-slate-900'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Flujo ($ USD/h)
-                </button>
+              {/* Timeframe & Mode Toggles matching Video Top Right */}
+              <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                <div className={`flex items-center gap-1 rounded-full p-1 border shadow-xs transition-colors ${
+                  isLight ? 'border-slate-200 bg-slate-100/90' : 'border-white/10 bg-[#06080D]'
+                }`}>
+                  <button
+                    onClick={() => setChartMode('hashrate')}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-all cursor-pointer ${
+                      chartMode === 'hashrate'
+                        ? 'bg-slate-900 text-white font-bold shadow-xs'
+                        : isLight
+                        ? 'text-slate-600 hover:text-slate-900'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    TH/s
+                  </button>
+                  <button
+                    onClick={() => setChartMode('cashflow')}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-all cursor-pointer ${
+                      chartMode === 'cashflow'
+                        ? 'bg-slate-900 text-white font-bold shadow-xs'
+                        : isLight
+                        ? 'text-slate-600 hover:text-slate-900'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    USD/h
+                  </button>
+                </div>
+
+                <div className={`flex items-center gap-1 rounded-full p-1 border shadow-xs transition-colors ${
+                  isLight ? 'border-slate-200 bg-slate-100/90' : 'border-white/10 bg-[#06080D]'
+                }`}>
+                  {(['hour', 'day', 'month'] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setTimeframe(t)}
+                      className={`rounded-full px-2.5 py-1 text-xs font-medium transition-all cursor-pointer ${
+                        timeframe === t
+                          ? 'bg-[#05DF72] text-slate-950 font-bold shadow-xs'
+                          : isLight
+                          ? 'text-slate-600 hover:text-slate-900'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {t === 'hour' ? '1H' : t === 'day' ? '24H' : '30D'}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -1332,6 +1230,82 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             </div>
           );
         })()}
+      </div>
+
+      {/* 4b. TERMINAL DE CONTROL & PILARES OPERATIVOS (Adaptado bajo el Bento Grid) */}
+      <div className={`relative overflow-hidden rounded-[28px] border p-6 sm:p-7 transition-all ${
+        isLight 
+          ? 'bg-white border-slate-200/90 shadow-xs' 
+          : 'border-white/10 bg-[#080B11]/90 backdrop-blur-xl shadow-xl'
+      }`}>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 relative z-10">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="flex h-2.5 w-2.5 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#05DF72] opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#05DF72]"></span>
+              </span>
+              <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-mono">
+                MinerX Telemetry Hub • Vigilancia Activa
+              </span>
+            </div>
+            <h3 className={`text-xl font-bold tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>
+              Terminal de Control & Vigilancia de Flota
+            </h3>
+            <p className={`text-xs max-w-2xl leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
+              Monitoreo continuo de contenedores <span className="text-emerald-600 dark:text-emerald-400 font-semibold">SaladCloud</span> y contrastación de shares en el pool de <span className="text-[#05DF72] font-semibold">Kryptex (Pearl PRL)</span> con detección de lotería de silicio.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onNavigateToApis}
+              className="flex items-center justify-center gap-2 rounded-2xl bg-[#05DF72] px-5 py-3 text-xs font-bold text-slate-950 uppercase tracking-wider hover:brightness-105 active:scale-95 transition-all shadow-sm cursor-pointer"
+            >
+              <Sparkles className="h-4 w-4" />
+              <span>Conectar APIs & Wallet</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Informative Bento Quick Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5 pt-5 border-t border-slate-100 dark:border-white/[0.08]">
+          <div className={`rounded-2xl border p-4.5 transition-all ${
+            isLight ? 'bg-slate-50/80 border-slate-200/80 text-slate-900' : 'border-white/10 bg-[#0C101A]/80 text-white'
+          }`}>
+            <div className="h-9 w-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-3">
+              <DollarSign className="h-4.5 w-4.5" />
+            </div>
+            <h4 className="font-bold text-sm">Protección de Capital</h4>
+            <p className={`text-xs mt-1 leading-relaxed ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+              Monitorea el costo en USD de cada contenedor de Salad contra las recompensas de Kryptex para evitar quemar capital.
+            </p>
+          </div>
+
+          <div className={`rounded-2xl border p-4.5 transition-all ${
+            isLight ? 'bg-slate-50/80 border-slate-200/80 text-slate-900' : 'border-white/10 bg-[#0C101A]/80 text-white'
+          }`}>
+            <div className="h-9 w-9 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-600 dark:text-cyan-400 mb-3">
+              <RefreshCw className="h-4.5 w-4.5" />
+            </div>
+            <h4 className="font-bold text-sm">Reasignación 1-Click</h4>
+            <p className={`text-xs mt-1 leading-relaxed ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+              Descarta nodos de silicio defectuosos con menos del 80% de rendimiento invocando la API oficial de SaladCloud.
+            </p>
+          </div>
+
+          <div className={`rounded-2xl border p-4.5 transition-all ${
+            isLight ? 'bg-slate-50/80 border-slate-200/80 text-slate-900' : 'border-white/10 bg-[#0C101A]/80 text-white'
+          }`}>
+            <div className="h-9 w-9 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500 mb-3">
+              <ShieldAlert className="h-4.5 w-4.5" />
+            </div>
+            <h4 className="font-bold text-sm">Vigilante Autónomo 24/7</h4>
+            <p className={`text-xs mt-1 leading-relaxed ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+              Alertas automáticas al instante a tu Telegram o Discord ante desconexiones o caída de hashrate sin tocar nada.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* 5. HISTORIAL DE PRODUCCIÓN CRIPTO POR CICLO */}

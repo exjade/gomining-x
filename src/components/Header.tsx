@@ -9,15 +9,13 @@ import {
   Layers, 
   RefreshCw, 
   Flame, 
-  Radio,
-  Wallet,
-  Check,
-  Send,
-  Copy,
-  X,
-  Sparkles,
-  Sun,
-  Moon
+  Wallet, 
+  Check, 
+  Copy, 
+  X, 
+  Sparkles, 
+  Sun, 
+  Moon 
 } from 'lucide-react';
 import type { FleetSummary, AppSettings, KryptexPoolInfo, SaladBalanceInfo } from '../types/minerx';
 
@@ -43,7 +41,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   summary,
-  settings,
+  settings: _settings,
   activeTab,
   setActiveTab,
   onRefresh,
@@ -51,7 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
   unresolvedAlertsCount,
   walletAddress,
   onUpdateWallet,
-  poolInfo,
+  poolInfo: _poolInfo,
   saladBalance: propSaladBalance,
   onUpdateSaladBalance,
   onOpenLanding,
@@ -153,140 +151,7 @@ export const Header: React.FC<HeaderProps> = ({
         ? 'border-b border-white/[0.08] bg-[#06070A]/90 text-white' 
         : 'border-b border-slate-200/80 bg-white/95 text-slate-900 shadow-xs'
     }`}>
-      {/* 1. TOP LIVE INSTITUTIONAL TELEMETRY STRIP */}
-      <div className={`px-4 py-1.5 text-[11px] transition-colors ${
-        isDarkTheme 
-          ? 'border-b border-white/[0.04] bg-white/[0.015] text-slate-400' 
-          : 'border-b border-slate-100 bg-slate-50/90 text-slate-600'
-      }`}>
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2.5 font-mono-num">
-          
-          {/* Stratum & Network status */}
-          <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
-            <div className="flex items-center gap-1.5 text-emerald-400">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400"></span>
-              </span>
-              <span className="font-semibold text-slate-200">Kryptex Pool PRL</span>
-              <span className="text-slate-600">•</span>
-              <span className="text-emerald-300 font-medium">PearlHash PoUW</span>
-            </div>
-            
-            <div className="hidden md:flex items-center gap-1.5 text-slate-300">
-              <span className="text-slate-500">Hashrate Global:</span>
-              <span className="text-cyan-400 font-semibold">
-                {poolInfo.net_hashrate ? `${(poolInfo.net_hashrate / 1e18).toFixed(2)} EH/s` : '-- EH/s'}
-              </span>
-            </div>
-
-            <div className="hidden lg:flex items-center gap-1.5 text-slate-300">
-              <span className="text-slate-500">Pool Kryptex:</span>
-              <span className="text-slate-200">
-                {poolInfo.hashrate ? `${(poolInfo.hashrate / 1e18).toFixed(2)} EH/s` : '-- EH/s'}
-              </span>
-            </div>
-
-            <div className="hidden sm:flex items-center gap-1.5 text-slate-300">
-              <span className="text-slate-500">Bloque:</span>
-              <span className="text-emerald-400 font-semibold">
-                {poolInfo.block_reward ? `${poolInfo.block_reward.toFixed(1)} PRL` : '-- PRL'}
-              </span>
-            </div>
-
-            <div className="hidden xl:flex items-center gap-1.5 text-slate-400">
-              <span className="text-slate-500">PPS+ Fee:</span>
-              <span className="text-slate-300">{poolInfo.fee !== undefined ? `${poolInfo.fee}%` : '3%'}</span>
-            </div>
-          </div>
-
-          {/* Quick Actions & Status Tools */}
-          <div className="flex items-center gap-2.5 sm:gap-3">
-            {/* Telegram Bot status indicator */}
-            {settings.telegramBotToken && settings.telegramChatId ? (
-              <div className="flex items-center gap-1 text-[11px] text-cyan-300 bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/20">
-                <Send className="h-3 w-3 text-cyan-400" />
-                <span>Telegram Bot Online</span>
-              </div>
-            ) : (
-              <button
-                onClick={() => setActiveTab('apis')}
-                className="hidden sm:flex items-center gap-1 text-[11px] text-amber-300 hover:text-amber-200 bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/30 transition-all hover:bg-amber-500/20"
-                title="Configurar bot de Telegram para recibir alertas en el móvil"
-              >
-                <Send className="h-2.5 w-2.5 text-amber-400" />
-                <span>+ Vincular Bot Telegram</span>
-              </button>
-            )}
-
-            {/* SaladCloud Real Balance & Runway Pill (Editable) */}
-            {isEditingSalad ? (
-              <form onSubmit={handleSaveSalad} className="flex items-center gap-1 bg-[#06070A] border border-cyan-400 rounded-full px-2.5 py-0.5 text-xs shadow-lg animate-in fade-in duration-200">
-                <span className="text-cyan-400 font-bold">$</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={saladInput}
-                  onChange={(e) => setSaladInput(e.target.value)}
-                  placeholder="0.00"
-                  className="w-16 bg-transparent text-xs text-white font-jetbrains focus:outline-none"
-                  autoFocus
-                />
-                <button type="submit" className="p-0.5 rounded text-emerald-400 hover:text-emerald-300 cursor-pointer" title="Guardar Saldo">
-                  <Check className="h-3.5 w-3.5" />
-                </button>
-                <button type="button" onClick={() => setIsEditingSalad(false)} className="p-0.5 rounded text-slate-400 hover:text-white cursor-pointer" title="Cancelar">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </form>
-            ) : (
-              <div 
-                onClick={() => {
-                  setSaladInput(saladBalance.totalBalanceUSD > 0 ? saladBalance.totalBalanceUSD.toString() : '');
-                  setIsEditingSalad(true);
-                }}
-                className={`flex items-center gap-2 rounded-full px-2.5 py-0.5 text-[11px] font-medium border transition-all cursor-pointer hover:border-cyan-400 group ${
-                  saladBalance.isRunwayCritical
-                    ? 'bg-rose-500/15 text-rose-300 border-rose-500/40 animate-pulse shadow-[0_0_12px_rgba(255,42,85,0.3)]'
-                    : 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20'
-                }`}
-                title="Haz clic para actualizar tu saldo real de SaladCloud"
-              >
-                <DollarSign className="h-3 w-3 text-cyan-400" />
-                <span>Salad: <strong className="font-jetbrains text-white tabular-nums">${saladBalance.totalBalanceUSD.toFixed(2)}</strong></span>
-                <span className="text-slate-600">•</span>
-                <span className={saladBalance.isRunwayCritical ? 'text-rose-400 font-bold' : 'text-slate-300'}>
-                  Runway: <strong className="font-jetbrains tabular-nums">{saladBalance.hourlySpendingUSD > 0 ? `${saladBalance.runwayHours.toFixed(1)}h` : '0h (Inactivo)'}</strong>
-                </span>
-                <span className="text-[10px] text-slate-400 group-hover:text-cyan-300 hidden sm:inline ml-0.5">✏️</span>
-              </div>
-            )}
-
-            {/* Live Mode FinTech Indicator */}
-            <div
-              className="flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-[0_0_12px_rgba(5,242,146,0.2)]"
-              title="MinerX está operando en vivo con datos reales de Kryptex y SaladCloud"
-            >
-              <Radio className="h-3 w-3 text-emerald-400 animate-pulse" />
-              <span>100% Datos en Vivo</span>
-            </div>
-
-            {/* Manual Sync Button */}
-            <button
-              onClick={onRefresh}
-              disabled={isRefreshing}
-              className="flex items-center gap-1 rounded-lg bg-white/[0.05] border border-white/[0.08] px-2.5 py-1 text-slate-300 hover:bg-white/[0.1] hover:text-white transition-all active:scale-95"
-              title="Sincronizar telemetría de red"
-            >
-              <RefreshCw className={`h-3 w-3 text-cyan-400 ${isRefreshing ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">Sync</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. MAIN HEADER & FINTECH NAVIGATION BAR (Ref: Video Clean Header) */}
+      {/* MAIN LUXURY HEADER & FINTECH NAVIGATION BAR (Ref: Video Clean Single-Tier Header) */}
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 py-3.5">
         
         {/* Left: Video-Cloned Squircle Logo Tile + "Dashboard" Title */}
@@ -359,7 +224,27 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Right: Video-Cloned Action Circles (Search, Notification Bell, User Avatar) */}
         <div className="flex items-center gap-2 sm:gap-2.5">
           {/* Quick Wallet & Salad status pill / Edit form */}
-          {isEditingWallet ? (
+          {isEditingSalad ? (
+            <form onSubmit={handleSaveSalad} className="flex items-center gap-1 bg-[#06070A] border border-[#05DF72] rounded-full px-2.5 py-1 text-xs shadow-lg animate-in fade-in duration-200">
+              <span className="text-[#05DF72] font-bold">$</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={saladInput}
+                onChange={(e) => setSaladInput(e.target.value)}
+                placeholder="0.00"
+                className="w-16 bg-transparent text-xs text-white font-mono focus:outline-none"
+                autoFocus
+              />
+              <button type="submit" className="p-0.5 rounded text-emerald-400 hover:text-emerald-300 cursor-pointer" title="Guardar Saldo">
+                <Check className="h-3.5 w-3.5" />
+              </button>
+              <button type="button" onClick={() => setIsEditingSalad(false)} className="p-0.5 rounded text-slate-400 hover:text-white cursor-pointer" title="Cancelar">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </form>
+          ) : isEditingWallet ? (
             <form onSubmit={handleSaveWallet} className="flex items-center gap-1.5 bg-[#06070A] border border-[#05DF72] rounded-full px-2.5 py-1 text-xs shadow-lg animate-in fade-in duration-200">
               <Wallet className="h-3 w-3 text-[#05DF72]" />
               <input
@@ -415,6 +300,18 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </div>
           )}
+
+          {/* Sync Telemetry Circle Button */}
+          <button
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            className={`flex h-9 w-9 items-center justify-center rounded-full border transition-all cursor-pointer ${
+              isDarkTheme ? 'bg-white/[0.04] border-white/10 text-slate-300 hover:text-white' : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
+            }`}
+            title="Sincronizar telemetría"
+          >
+            <RefreshCw className={`h-4 w-4 text-[#05DF72] ${isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
 
           {/* Theme Toggle Button */}
           {onToggleTheme && (

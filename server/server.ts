@@ -1991,12 +1991,6 @@ async function pollTelegramCommands() {
     isPollingTelegram = false;
   }
 }
-    }
-  } catch {
-  } finally {
-    isPollingTelegram = false;
-  }
-}
 
 // 18b. Autonomous Surveillance Loop
 async function runAutonomousBackgroundWatcher() {
