@@ -27,6 +27,15 @@ export interface KryptexConfig {
   status: 'connected' | 'error' | 'untested';
 }
 
+export interface VastAccountConfig {
+  apiKey: string;
+  enabled: boolean;
+  balanceUSD?: number;
+  lastTested?: string;
+  status: 'connected' | 'error' | 'untested';
+  errorMessage?: string;
+}
+
 export interface AppSettings {
   refreshIntervalSeconds: number; // default: 45s
   underperformingThresholdPct: number; // default: 80% of benchmark

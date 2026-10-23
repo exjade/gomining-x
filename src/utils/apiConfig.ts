@@ -31,12 +31,12 @@ export function getApiBaseUrl(): string {
       protocol === 'file:' ||
       origin === 'null'
     ) {
-      // Connect directly to live Firebase Cloud URL
-      return 'https://minerx-telemetry-cloud.web.app';
+      // In local Electron or mobile native environment, connect to local proxy or user-configured host
+      return 'http://localhost:3001';
     }
   }
 
-  // 3. In web browser on Firebase Hosting or Vite dev server, use relative path
+  // 3. In web browser on Vite dev server or local proxy, use relative path or local port
   return '';
 }
 
@@ -50,7 +50,8 @@ export function apiUrl(endpoint: string): string {
 }
 
 /**
- * Wrapper over fetch that injects the environment-aware base URL and auth token
+ * Wrapper over fetch that injects the environment-aware base URL and auth token.
+ * Prevents HTML SPA fallback crashes by returning a graceful JSON response if an API endpoint returns HTML.
  */
 export async function apiFetch(endpoint: string, options: RequestInit = {}): Promise<Response> {
   const url = apiUrl(endpoint);
@@ -61,8 +62,44 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}): Pro
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  return fetch(url, {
-    ...options,
-    headers,
-  });
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
+
+    const contentType = response.headers.get('content-type') || '';
+    // If an /api endpoint returned HTML (e.g. Vite or static SPA 404 index.html fallback),
+    // convert it to a structured JSON response to prevent "Unexpected token < in JSON" crashes.
+    if (contentType.includes('text/html') && (endpoint.includes('/api') || url.includes('/api'))) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'OFFLINE_OR_SPA_FALLBACK',
+          message: 'Servicio API en segundo plano no disponible o en modo local.',
+          status: response.status
+        }),
+        {
+          status: response.status >= 400 ? response.status : 503,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
+    return response;
+  } catch (netErr: any) {
+    // Network failure (e.g. server completely down or refused connection)
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: 'NETWORK_ERROR',
+        message: netErr?.message || 'Error de conexión de red.',
+        status: 0
+      }),
+      {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+  }
 }

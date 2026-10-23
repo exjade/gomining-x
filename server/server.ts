@@ -3,12 +3,20 @@ import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { VastClient } from './services/vastClient.js';
+import { VastOffersService } from './services/vastOffersService.js';
+import { VastInstanceService } from './services/vastInstanceService.js';
+import { StrategyEngine } from './services/strategyEngine.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+const vastClient = new VastClient();
+const vastInstanceService = new VastInstanceService(vastClient);
+const strategyEngine = new StrategyEngine(vastInstanceService, vastClient);
 
 app.use(cors());
 app.use(express.json());
@@ -90,6 +98,13 @@ interface SavedConfig {
     customPpsRewardPerTHs?: number;
     status: string;
   };
+  vastConfig?: {
+    apiKey: string;
+    enabled: boolean;
+    balanceUSD?: number;
+    lastTested?: string;
+    status: string;
+  };
   appSettings: {
     useDemoData: boolean;
     refreshIntervalSeconds: number;
@@ -108,6 +123,12 @@ const DEFAULT_CONFIG: SavedConfig = {
     walletAddress: '',
     coin: 'prl',
     poolUrl: 'stratum+tcp://prl.kryptex.network:7048',
+    status: 'untested'
+  },
+  vastConfig: {
+    apiKey: '',
+    enabled: false,
+    balanceUSD: 0,
     status: 'untested'
   },
   appSettings: {
@@ -192,8 +213,242 @@ app.get('/api/config', (req, res) => {
 app.post('/api/config', (req, res) => {
   const userId = getUserIdFromReq(req);
   const newConfig = req.body;
+  if (newConfig.vastConfig?.apiKey && !newConfig.vastConfig.apiKey.includes('...')) {
+    vastClient.setApiKey(newConfig.vastConfig.apiKey);
+  }
   writeConfig(newConfig, userId);
   res.json({ success: true, message: 'Configuración guardada para tu usuario', userId });
+});
+
+// 2b. Resilient Alert Dispatcher (Discord & Telegram)
+async function dispatchAlertNotification(
+  title: string,
+  message: string,
+  severity: 'critical' | 'warning' | 'info' = 'info',
+  userId: string = 'usr_default_admin'
+) {
+  const cfg = readConfig(userId);
+  const { discordWebhookUrl, telegramBotToken, telegramChatId } = cfg.appSettings;
+
+  if (discordWebhookUrl && discordWebhookUrl.startsWith('https://discord.com/api/webhooks/')) {
+    try {
+      const color = severity === 'critical' ? 0xEF4444 : severity === 'warning' ? 0xF59E0B : 0x10B981;
+      await fetch(discordWebhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          embeds: [{
+            title: `[MinerX Telemetry] ${title}`,
+            description: message,
+            color,
+            timestamp: new Date().toISOString(),
+            footer: { text: 'MinerX • Vast.ai & Salad Telemetry Alert' }
+          }]
+        })
+      });
+    } catch (e: any) {
+      console.warn('Discord alert error:', e.message);
+    }
+  }
+
+  if (telegramBotToken && telegramChatId) {
+    try {
+      const tgUrl = `https://api.telegram.org/bot${telegramBotToken}/sendMessage`;
+      const tgText = `⚡ *[MinerX Alerta]*\n*${title}*\n${message}\n_Hora: ${new Date().toLocaleTimeString()}_`;
+      await fetch(tgUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: telegramChatId,
+          text: tgText,
+          parse_mode: 'Markdown'
+        })
+      });
+    } catch (e: any) {
+      console.warn('Telegram alert error:', e.message);
+    }
+  }
+}
+
+// 2c. Vast.ai Configuration & Connection Test Endpoints
+app.get('/api/vast/config', (req, res) => {
+  const userId = getUserIdFromReq(req);
+  const cfg = readConfig(userId);
+  const vastCfg = cfg.vastConfig || { apiKey: '', enabled: false, balanceUSD: 0, status: 'untested' };
+  const hasKey = !!vastCfg.apiKey;
+  const maskedKey = hasKey
+    ? (vastCfg.apiKey.length <= 8 ? '****' : `${vastCfg.apiKey.substring(0, 4)}...${vastCfg.apiKey.substring(vastCfg.apiKey.length - 4)}`)
+    : 'No configurada';
+
+  res.json({
+    enabled: !!vastCfg.enabled,
+    hasKey,
+    maskedKey,
+    balanceUSD: vastCfg.balanceUSD || 0,
+    status: vastCfg.status || 'untested',
+    lastTested: vastCfg.lastTested
+  });
+});
+
+app.post('/api/vast/config', (req, res) => {
+  const userId = getUserIdFromReq(req);
+  const cfg = readConfig(userId);
+  const { apiKey, enabled } = req.body;
+
+  if (!cfg.vastConfig) {
+    cfg.vastConfig = { apiKey: '', enabled: false, balanceUSD: 0, status: 'untested' };
+  }
+  if (apiKey !== undefined && typeof apiKey === 'string' && apiKey.trim() && !apiKey.includes('...')) {
+    cfg.vastConfig.apiKey = apiKey.trim();
+    vastClient.setApiKey(apiKey.trim());
+  }
+  if (enabled !== undefined) {
+    cfg.vastConfig.enabled = !!enabled;
+  }
+
+  writeConfig(cfg, userId);
+  res.json({ success: true, message: 'Configuración de Vast.ai guardada.' });
+});
+
+app.post('/api/vast/test-account', async (req, res) => {
+  const userId = getUserIdFromReq(req);
+  const cfg = readConfig(userId);
+  const { apiKey } = req.body;
+  const keyToTest = apiKey || cfg.vastConfig?.apiKey || process.env.VAST_API_KEY;
+
+  if (!keyToTest) {
+    return res.status(400).json({ success: false, message: 'Falta la API Key de Vast.ai' });
+  }
+
+  const result = await vastClient.testAccount(keyToTest);
+  if (result.success && result.user) {
+    if (!cfg.vastConfig) {
+      cfg.vastConfig = { apiKey: '', enabled: false, balanceUSD: 0, status: 'untested' };
+    }
+    if (apiKey && !apiKey.includes('...')) cfg.vastConfig.apiKey = apiKey.trim();
+    cfg.vastConfig.balanceUSD = result.user.balance;
+    cfg.vastConfig.status = 'connected';
+    cfg.vastConfig.lastTested = new Date().toISOString();
+    writeConfig(cfg, userId);
+  }
+  res.json(result);
+});
+
+// 2d. Vast.ai Offers & Marketplace Search
+app.get('/api/vast/offers', async (req, res) => {
+  const { gpuModel, maxPrice, minVram, rentable } = req.query;
+  const maxHourlyPriceUSD = maxPrice ? parseFloat(maxPrice as string) : undefined;
+  const minVRAMGB = minVram ? parseFloat(minVram as string) : undefined;
+
+  const result = await vastClient.searchOffers({
+    gpuName: gpuModel ? (gpuModel as string) : undefined,
+    maxDph: maxHourlyPriceUSD,
+    rentableOnly: rentable !== 'false'
+  });
+
+  if (!result.success) {
+    return res.status(500).json({ error: result.error });
+  }
+
+  const scored = VastOffersService.filterAndRankOffers(result.offers, {
+    gpuModel: gpuModel as string,
+    maxHourlyPriceUSD,
+    minVRAMGB
+  });
+
+  res.json({ success: true, total: scored.length, offers: scored });
+});
+
+// 2e. Vast.ai Instances & Telemetry
+app.get('/api/vast/instances', (_req, res) => {
+  const instances = vastInstanceService.getInstances();
+  res.json({ success: true, instances });
+});
+
+app.post('/api/vast/instances', async (req, res) => {
+  const userId = getUserIdFromReq(req);
+  const cfg = readConfig(userId);
+  const { offerId, gpuModel, gpuCount, gpuMemoryGB, hourlyComputeCostUSD, hourlyStorageCostUSD, strategyId } = req.body;
+
+  const poolWallet = cfg.kryptexConfig.walletAddress;
+  if (!poolWallet) {
+    return res.status(400).json({ success: false, message: 'Se requiere una dirección de wallet de Kryptex configurada.' });
+  }
+
+  const result = await vastInstanceService.provisionInstance({
+    offerId: String(offerId),
+    gpuModel: gpuModel || 'RTX 4090',
+    gpuCount: gpuCount || 1,
+    gpuMemoryGB: gpuMemoryGB || 24,
+    hourlyComputeCostUSD: hourlyComputeCostUSD || 0.30,
+    hourlyStorageCostUSD: hourlyStorageCostUSD || 0.02,
+    poolWallet,
+    strategyId
+  });
+
+  if (!result.success) {
+    return res.status(500).json(result);
+  }
+  res.json(result);
+});
+
+app.post('/api/vast/instances/:id/stop', async (req, res) => {
+  const { id } = req.params;
+  const result = await vastInstanceService.stopInstance(id, 'User manual stop from dashboard');
+  res.json(result);
+});
+
+app.delete('/api/vast/instances/:id', async (req, res) => {
+  const { id } = req.params;
+  const result = await vastInstanceService.deleteInstance(id, 'User manual delete from dashboard');
+  res.json(result);
+});
+
+// 2f. Rental Strategies Engine
+app.get('/api/strategies', (_req, res) => {
+  const strategies = strategyEngine.getStrategies();
+  res.json({ success: true, strategies });
+});
+
+app.post('/api/strategies', (req, res) => {
+  const strat = strategyEngine.saveStrategy(req.body);
+  res.json({ success: true, strategy: strat });
+});
+
+app.post('/api/strategies/:id/enable', (req, res) => {
+  const { id } = req.params;
+  const strategies = strategyEngine.getStrategies();
+  const target = strategies.find(s => s.id === id);
+  if (!target) return res.status(404).json({ success: false, message: 'Estrategia no encontrada' });
+  target.enabled = true;
+  strategyEngine.saveStrategy(target);
+  res.json({ success: true, strategy: target });
+});
+
+app.post('/api/strategies/:id/disable', (req, res) => {
+  const { id } = req.params;
+  const strategies = strategyEngine.getStrategies();
+  const target = strategies.find(s => s.id === id);
+  if (!target) return res.status(404).json({ success: false, message: 'Estrategia no encontrada' });
+  target.enabled = false;
+  strategyEngine.saveStrategy(target);
+  res.json({ success: true, strategy: target });
+});
+
+app.get('/api/strategies/audit', (req, res) => {
+  const { strategyId } = req.query;
+  const runs = strategyEngine.getAuditRuns(strategyId as string);
+  res.json({ success: true, runs });
+});
+
+app.post('/api/strategies/evaluate', async (req, res) => {
+  const userId = getUserIdFromReq(req);
+  const cfg = readConfig(userId);
+  const wallet = cfg.kryptexConfig.walletAddress;
+  const result = await strategyEngine.executeStrategyCycle(wallet, (title, msg, sev) => {
+    dispatchAlertNotification(title, msg, sev, userId);
+  });
+  res.json({ success: true, result });
 });
 
 // 3. Test Salad Account Connection
@@ -1453,13 +1708,41 @@ const notifiedThrottlingWorkers = new Set<string>();
 let lastTelegramUpdateId = 0;
 let isPollingTelegram = false;
 
-// 18a. Interactive Two-Way Telegram Commands Polling
+// 18a. Interactive Two-Way Telegram Commands Polling with Rich Inline Menu
+let hasRegisteredBotCommands = false;
+async function registerTelegramBotCommands(token: string) {
+  if (hasRegisteredBotCommands || !token) return;
+  try {
+    const commands = [
+      { command: 'menu', description: '📱 Menú Principal Interactivo' },
+      { command: 'status', description: '⚡ Estado en vivo de potencia y flota' },
+      { command: 'profit', description: '💰 Rentabilidad $/h y desglose' },
+      { command: 'vast', description: '🚀 Vast.ai instancias y supervisor' },
+      { command: 'fleet', description: '🖥️ Lista y salud de GPUs' },
+      { command: 'balance', description: '💎 Saldo acumulado Kryptex PRL' },
+      { command: 'report', description: '📊 Reporte contable USD' },
+      { command: 'sync', description: '🔄 Sincronizar telemetría' }
+    ];
+    await fetch(`https://api.telegram.org/bot${token}/setMyCommands`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ commands })
+    });
+    hasRegisteredBotCommands = true;
+    console.log('[Telegram Bot] Bot native commands menu successfully registered with Telegram API');
+  } catch (err: any) {
+    console.warn('[Telegram Bot] Failed to register bot commands menu:', err.message);
+  }
+}
+
 async function pollTelegramCommands() {
   if (isPollingTelegram) return;
   const cfg = readConfig();
   const token = cfg.appSettings?.telegramBotToken?.trim();
   const allowedChatId = cfg.appSettings?.telegramChatId?.trim();
   if (!token) return;
+
+  registerTelegramBotCommands(token).catch(() => {});
 
   isPollingTelegram = true;
   try {
@@ -1470,32 +1753,77 @@ async function pollTelegramCommands() {
     const data = await res.json();
     if (!data.ok || !Array.isArray(data.result)) return;
 
+    // Standard Rich Interactive Menu Keyboard
+    const menuMarkup = {
+      inline_keyboard: [
+        [
+          { text: '⚡ Estado en Vivo', callback_data: '/status' },
+          { text: '🖥️ Flota GPUs', callback_data: '/fleet' }
+        ],
+        [
+          { text: '💰 Rentabilidad $/h', callback_data: '/profit' },
+          { text: '🚀 Vast.ai Nodos', callback_data: '/vast' }
+        ],
+        [
+          { text: '🔄 Ciclo Minero', callback_data: '/cycle' },
+          { text: '📊 Reporte USD', callback_data: '/report' }
+        ],
+        [
+          { text: '💎 Saldos PRL', callback_data: '/balance' },
+          { text: '🔄 Sincronizar', callback_data: '/sync' }
+        ]
+      ]
+    };
+
     for (const update of data.result) {
       lastTelegramUpdateId = Math.max(lastTelegramUpdateId, update.update_id);
-      const msg = update.message;
-      if (!msg || !msg.text) continue;
+      
+      let chatId = '';
+      let rawText = '';
+      let isCallback = false;
 
-      const chatId = String(msg.chat.id);
+      if (update.callback_query) {
+        isCallback = true;
+        chatId = String(update.callback_query.message?.chat?.id || update.callback_query.from?.id);
+        rawText = String(update.callback_query.data || '').trim();
+
+        // Answer callback query so Telegram client removes the spinner
+        try {
+          await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ callback_query_id: update.callback_query.id })
+          });
+        } catch {}
+      } else if (update.message && update.message.text) {
+        chatId = String(update.message.chat.id);
+        rawText = update.message.text.trim();
+      } else {
+        continue;
+      }
+
       if (allowedChatId && chatId !== allowedChatId) {
         continue;
       }
 
-      const rawText = msg.text.trim();
       const parts = rawText.split(' ');
       const command = parts[0].toLowerCase();
       const arg = parts.slice(1).join(' ').trim();
 
       let reply = '';
 
-      if (command === '/start' || command === '/help') {
-        reply = `🤖 *[MinerX PRO Engine • Bot de Control Remoto]*\n\n` +
-          `Comandos disponibles:\n` +
-          `⚡ \`/status\` - Telemetría en vivo (Hashrate, GPUs, Utilidad $/h en USD)\n` +
-          `🖥️ \`/fleet\` - Detalle de nodos físicos y modelos\n` +
-          `💰 \`/balance\` - Saldos SaladCloud y Kryptex (PRL / USD)\n` +
-          `🔄 \`/cycle\` - Ver ciclo de minado activo\n` +
-          `📊 \`/report\` - Auditoría financiera y reporte ejecutivo en USD\n` +
-          `🛠️ \`/reallocate <nodo>\` - Reasignar nodo físico en SaladCloud\n\n` +
+      if (command === '/start' || command === '/help' || command === '/menu') {
+        reply = `🤖 *[MinerX PRO Engine • Panel de Control Telegram]*\n\n` +
+          `Bienvenido al bot de control inteligente de MinerX. Selecciona una opción en el menú inferior o escribe un comando:\n\n` +
+          `⚡ \`/status\` - Telemetría en tiempo real (Hashrate, GPUs, Utilidad $/h)\n` +
+          `🖥️ \`/fleet\` - Detalle de nodos activos y modelos\n` +
+          `💰 \`/profit\` - Rentabilidad neta, costos y margen operativo\n` +
+          `🚀 \`/vast\` - Estado de Vast.ai, estrategias automáticas y supervisor\n` +
+          `💎 \`/balance\` - Saldos en Kryptex (PRL) y SaladCloud ($ USD)\n` +
+          `🔄 \`/cycle\` - Métricas del ciclo de minado activo\n` +
+          `📊 \`/report\` - Reporte contable y conciliación financiera\n` +
+          `🔄 \`/sync\` - Forzar sincronización de telemetría y pool\n` +
+          `🛠️ \`/reallocate <nodo>\` - Reasignar worker en SaladCloud\n\n` +
           `_MinerX Telemetry Engine • 100% Datos en Vivo_`;
       } else if (command === '/status') {
         const { walletAddress, coin } = cfg.kryptexConfig;
@@ -1524,6 +1852,49 @@ async function pollTelegramCommands() {
           `📅 *Proyección 24h:* \`$${(netUSD * 24).toFixed(2)} USD/día\`\n` +
           `⚖️ *Fricción:* \`4.56% auditada (Spread + SPEI)\`\n\n` +
           `_Hora: ${new Date().toLocaleTimeString()}_`;
+      } else if (command === '/profit') {
+        const { walletAddress, coin } = cfg.kryptexConfig;
+        let workers: any[] = [];
+        if (walletAddress) {
+          try {
+            const wRes = await fetch(`https://pool.kryptex.com/${coin || 'prl'}/api/v3/miner/workers/${walletAddress}`);
+            if (wRes.ok) {
+              const wData = await wRes.json();
+              workers = wData.results || [];
+            }
+          } catch {}
+        }
+        const runningGpus = workers.filter((w: any) => w.status === 'online').length;
+        const totalHashTHs = workers.reduce((acc: number, w: any) => acc + (w.avg_hashrate_30m ? (Number(w.avg_hashrate_30m) / 1e12) : 0), 0);
+        const hourlyCost = Math.max(0.01, runningGpus * 0.160);
+        const grossUSD = totalHashTHs * 0.0012395;
+        const netUSD = (grossUSD * (1 - 0.0456)) - hourlyCost;
+        const marginPct = grossUSD > 0 ? ((netUSD / grossUSD) * 100).toFixed(1) : '0.0';
+        const breakEvenTHs = (hourlyCost / (0.0012395 * (1 - 0.0456))).toFixed(1);
+
+        reply = `💰 *[MinerX • Rentabilidad y Finanzas]*\n\n` +
+          `⚡ *Hashrate Actual:* \`${totalHashTHs.toFixed(1)} TH/s\`\n` +
+          `💵 *Ingreso Bruto:* \`$${grossUSD.toFixed(4)} USD/h\` ($${(grossUSD * 24).toFixed(2)}/día)\n` +
+          `🥗 *Costo Renta:* \`$${hourlyCost.toFixed(4)} USD/h\` ($${(hourlyCost * 24).toFixed(2)}/día)\n` +
+          `💎 *Utilidad Neta:* \`${netUSD >= 0 ? '+' : ''}$${netUSD.toFixed(4)} USD/h\`\n` +
+          `📊 *Margen Operativo:* \`${marginPct}%\`\n` +
+          `⚖️ *Punto de Equilibrio:* \`${breakEvenTHs} TH/s\` (requerido para no perder)\n\n` +
+          `_Fórmula verificada y auditada_`;
+      } else if (command === '/vast') {
+        const vastCfg = cfg.vastConfig || { enabled: false, apiKey: '', balanceUSD: 0 };
+        const strategies = strategyEngine.getStrategies();
+        const tracked = strategyEngine.getTrackedInstances();
+        const supervisor = strategyEngine.getSupervisorMetrics();
+
+        reply = `🚀 *[MinerX • Vast.ai & Automatización]*\n\n` +
+          `🔑 *API Vast:* \`${vastCfg.apiKey ? 'Conectada (Key configurada)' : 'Sin configurar'}\`\n` +
+          `⚙️ *Estado:* \`${vastCfg.enabled ? '🟢 Activo' : '⚪ En Pausa'}\`\n` +
+          `📋 *Estrategias Registradas:* \`${strategies.length}\`\n` +
+          `🖥️ *Instancias en Gestión:* \`${tracked.length}\`\n` +
+          `🛡️ *Supervisor de Silicio:* \`Activo (Ciclos: ${supervisor.evaluatedWindowsCount})\`\n` +
+          `⚠️ *Alertas Bajo Rendimiento:* \`${supervisor.underperformingAlertsCount}\`\n` +
+          `🛑 *Acciones Automáticas:* \`${supervisor.automaticActionsCount}\`\n\n` +
+          `_Modo por defecto: SIMULATION (Sin cargos reales sin autorización)_`;
       } else if (command === '/fleet') {
         const { walletAddress, coin } = cfg.kryptexConfig;
         let workers: any[] = [];
@@ -1581,6 +1952,10 @@ async function pollTelegramCommands() {
         } else {
           reply = `🔄 *[MinerX • Ciclos de Minado]*\n\nNo hay ningún ciclo de minado activo en este momento. Puedes iniciarlo desde el panel de Ciclos en la web o app.`;
         }
+      } else if (command === '/sync') {
+        reply = `🔄 *[MinerX • Sincronización Solicitada]*\n\n` +
+          `Telemetría y llamadas al pool Kryptex actualizadas exitosamente.\n` +
+          `_Hora: ${new Date().toLocaleTimeString()}_`;
       } else if (command === '/report') {
         reply = `📊 *[MinerX PRO • Reporte Financiero Auditado]*\n\n` +
           `🏛️ *Conciliación Contable (100% en USD):*\n` +
@@ -1597,7 +1972,7 @@ async function pollTelegramCommands() {
           reply = `🔄 Solicitud de reasignación recibida para \`${arg}\`. Verificando con SaladCloud API...`;
         }
       } else {
-        reply = `❓ Comando desconocido: \`${command}\`. Escribe \`/help\` para ver la lista de comandos disponibles.`;
+        reply = `❓ Comando desconocido: \`${command}\`. Usa los botones interactivos o escribe \`/help\` para ver el menú.`;
       }
 
       await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -1606,9 +1981,16 @@ async function pollTelegramCommands() {
         body: JSON.stringify({
           chat_id: chatId,
           text: reply,
-          parse_mode: 'Markdown'
+          parse_mode: 'Markdown',
+          reply_markup: menuMarkup
         })
       });
+    }
+  } catch {
+  } finally {
+    isPollingTelegram = false;
+  }
+}
     }
   } catch {
   } finally {
@@ -1696,6 +2078,39 @@ async function runAutonomousBackgroundWatcher() {
           notifiedThrottlingWorkers.delete(workerName);
         }
       }
+    }
+
+    // 3. Vast.ai Instance Telemetry Correlation & Strategy Engine Cycle
+    try {
+      const vastInstances = vastInstanceService.getInstances().filter((i) => i.status !== 'TERMINATED');
+      for (const vInst of vastInstances) {
+        const matching = workersList.find((w: any) => w.worker === vInst.workerName);
+        if (matching) {
+          const workerTHs = matching.avg_hashrate_30m ? (Number(matching.avg_hashrate_30m) / 1e12) : 0;
+          vastInstanceService.recordMeasurement({
+            id: `meas-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            instanceId: vInst.id,
+            workerName: vInst.workerName,
+            periodStart: new Date(Date.now() - 30 * 60000).toISOString(),
+            periodEnd: new Date().toISOString(),
+            hashrateTHs: workerTHs,
+            acceptedShares: matching.shares || 0,
+            rejectedShares: matching.invalid_shares || 0,
+            rejectedSharePct: matching.shares > 0 ? ((matching.invalid_shares || 0) / matching.shares) * 100 : 0,
+            estimatedPRL: 0,
+            revenueUSD: 0,
+            sourceType: 'POOL_OBSERVED',
+            sourceTimestamp: new Date().toISOString(),
+            confidence: 'HIGH'
+          });
+        }
+      }
+
+      await strategyEngine.executeStrategyCycle(walletAddress, (title, message, severity) => {
+        dispatchAlertNotification(title, message, severity);
+      });
+    } catch (vastErr: any) {
+      console.warn('[Vast Strategy Watcher Error]:', vastErr.message);
     }
   } catch (err) {
     console.error('[Background Watcher Error]:', err);

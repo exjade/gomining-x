@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Layers, 
   Key, 
@@ -11,10 +11,12 @@ import {
   Edit3,
   ExternalLink,
   Bot,
-  Activity
+  Activity,
+  Server
 } from 'lucide-react';
 import type { SaladAccountConfig, KryptexConfig, AppSettings } from '../types/minerx';
 import { sendTelegramMessageResilient } from '../utils/notifications';
+import { apiFetch } from '../utils/apiConfig';
 
 interface ApiManagerTabProps {
   accounts: SaladAccountConfig[];
@@ -60,6 +62,107 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
   const [testingKryptex, setTestingKryptex] = useState(false);
   const [testingTelegram, setTestingTelegram] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Vast.ai API configuration state
+  const [vastApiKeyInput, setVastApiKeyInput] = useState('');
+  const [isEditingVastKey, setIsEditingVastKey] = useState(false);
+  const [testingVast, setTestingVast] = useState(false);
+  const [vastConfig, setVastConfig] = useState<{
+    enabled: boolean;
+    hasKey: boolean;
+    maskedKey: string;
+    balanceUSD: number;
+    status: string;
+    lastTested?: string;
+  }>({
+    enabled: false,
+    hasKey: false,
+    maskedKey: 'No configurada',
+    balanceUSD: 0,
+    status: 'untested'
+  });
+
+  const fetchVastConfig = async () => {
+    try {
+      const res = await apiFetch('/api/vast/config');
+      if (res.ok) {
+        const data = await res.json();
+        setVastConfig(data);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchVastConfig();
+  }, []);
+
+  const handleSaveVastApiKey = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!vastApiKeyInput.trim()) return;
+
+    try {
+      const res = await apiFetch('/api/vast/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: vastApiKeyInput.trim(), enabled: vastConfig.enabled })
+      });
+      if (res.ok) {
+        setFeedbackMsg({ type: 'success', text: 'API Key de Vast.ai guardada de forma segura en el servidor.' });
+        setIsEditingVastKey(false);
+        setVastApiKeyInput('');
+        await fetchVastConfig();
+      }
+    } catch {
+      setFeedbackMsg({ type: 'error', text: 'Error guardando API Key de Vast.ai.' });
+    }
+  };
+
+  const handleToggleVastEnabled = async () => {
+    const nextState = !vastConfig.enabled;
+    try {
+      await apiFetch('/api/vast/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: nextState })
+      });
+      setVastConfig((prev) => ({ ...prev, enabled: nextState }));
+      setFeedbackMsg({
+        type: 'success',
+        text: nextState
+          ? 'Integración de Vast.ai habilitada (Estrategias operan en modo Simulación por defecto).'
+          : 'Integración de Vast.ai deshabilitada.'
+      });
+    } catch {}
+  };
+
+  const handleTestVastConnection = async () => {
+    setTestingVast(true);
+    setFeedbackMsg(null);
+    try {
+      const res = await apiFetch('/api/vast/test-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: vastApiKeyInput || undefined })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setFeedbackMsg({
+          type: 'success',
+          text: `✅ ${data.message || 'Conexión exitosa con Vast.ai'}`
+        });
+        await fetchVastConfig();
+      } else {
+        setFeedbackMsg({
+          type: 'error',
+          text: `❌ Error Vast.ai: ${data.message || data.error || 'Fallo de autenticación'}`
+        });
+      }
+    } catch (err: any) {
+      setFeedbackMsg({ type: 'error', text: `❌ Error de red conectando con Vast.ai: ${err.message}` });
+    } finally {
+      setTestingVast(false);
+    }
+  };
 
   const handleCreateAccount = (e: React.FormEvent) => {
     e.preventDefault();
@@ -587,6 +690,127 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
               );
             })
           )}
+        </div>
+      </div>
+
+      {/* 2. VAST.AI OFFICIAL CLOUD API INTEGRATION */}
+      <div className="card-cyber rounded-2xl p-5 border border-[#1E2433] space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#1E2433]">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+              <Server className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-display-title text-base font-bold text-white">
+                  Vast.ai Cloud GPU API
+                </h3>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase border ${
+                  vastConfig.status === 'connected'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    : vastConfig.hasKey
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                }`}>
+                  {vastConfig.status === 'connected' ? 'Conectado' : vastConfig.hasKey ? 'Pendiente Test' : 'Sin Configurar'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                Integración oficial backend para búsqueda de ofertas, cálculo de rentabilidad y supervisión de alquileres
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleToggleVastEnabled}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                vastConfig.enabled
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                  : 'bg-white/[0.04] text-slate-400 border-white/[0.08]'
+              }`}
+            >
+              {vastConfig.enabled ? 'Habilitada' : 'Deshabilitada'}
+            </button>
+            <button
+              type="button"
+              onClick={handleTestVastConnection}
+              disabled={testingVast}
+              className="flex items-center gap-1.5 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3.5 py-1.5 text-xs font-bold text-cyan-300 hover:bg-cyan-500/20 transition-all cursor-pointer"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${testingVast ? 'animate-spin' : ''}`} />
+              <span>{testingVast ? 'Probando...' : 'Probar Conexión Vast.ai'}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono-num">
+          {/* Key status & form */}
+          <div className="md:col-span-2">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-slate-300 font-semibold flex items-center gap-1">
+                <span>Vast.ai API Key (Bearer Token):</span>
+              </label>
+              {!isEditingVastKey && (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingVastKey(true)}
+                  className="text-[10px] text-cyan-400 hover:text-cyan-300 cursor-pointer"
+                >
+                  {vastConfig.hasKey ? 'Cambiar Clave' : '+ Asignar Clave'}
+                </button>
+              )}
+            </div>
+
+            {isEditingVastKey ? (
+              <form onSubmit={handleSaveVastApiKey} className="flex items-center gap-2">
+                <input
+                  type="password"
+                  value={vastApiKeyInput}
+                  onChange={(e) => setVastApiKeyInput(e.target.value)}
+                  placeholder="vst-..."
+                  className="flex-1 rounded-lg border border-[#252E42] bg-[#090A0F] px-3 py-2 text-white placeholder-slate-600 focus:border-cyan-500 focus:outline-none"
+                  autoFocus
+                />
+                <button
+                  type="submit"
+                  className="px-3 py-2 rounded-lg bg-cyan-500 text-slate-950 font-bold hover:bg-cyan-400 transition-colors cursor-pointer"
+                >
+                  Guardar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingVastKey(false)}
+                  className="px-2 py-2 text-slate-400 hover:text-white cursor-pointer"
+                >
+                  Cancelar
+                </button>
+              </form>
+            ) : (
+              <div className="flex items-center justify-between bg-[#090A0F] border border-white/[0.08] rounded-xl px-3 py-2">
+                <span className="text-slate-400 font-mono">
+                  {vastConfig.hasKey ? vastConfig.maskedKey : 'Ninguna API Key configurada'}
+                </span>
+                <span className="text-[11px] text-slate-500">Almacenada solo en Backend</span>
+              </div>
+            )}
+            <p className="text-[10px] text-slate-500 mt-1">
+              Obtén tu API key en <a href="https://cloud.vast.ai/manage-keys/" target="_blank" rel="noreferrer" className="text-cyan-400 underline">cloud.vast.ai/manage-keys</a>. La clave nunca se expone al cliente frontend ni a los paquetes finales.
+            </p>
+          </div>
+
+          {/* Balance card */}
+          <div className="bg-[#090A0F] border border-white/[0.08] rounded-xl p-3 flex flex-col justify-between">
+            <span className="text-slate-400 text-[11px]">Saldo de Crédito Vast.ai:</span>
+            <div className="text-2xl font-bold font-mono text-cyan-400 mt-1">
+              ${(vastConfig.balanceUSD || 0).toFixed(2)} <span className="text-xs text-slate-400">USD</span>
+            </div>
+            <div className="text-[10px] text-slate-500 mt-1 flex items-center justify-between">
+              <span>Modo Inicial:</span>
+              <span className="text-emerald-400 font-bold">SIMULATION</span>
+            </div>
+          </div>
         </div>
       </div>
 

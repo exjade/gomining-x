@@ -8,7 +8,20 @@ import { ApiManagerTab } from './components/ApiManagerTab';
 import { AlertsTab } from './components/AlertsTab';
 import { ReallocateModal } from './components/ReallocateModal';
 import { LandingPage } from './components/LandingPage';
-import { FloatingTracker } from './components/FloatingTracker';
+import { FloatingHubWidget } from './components/FloatingHubWidget';
+import { AuthScreen } from './components/AuthScreen';
+import { 
+  LayoutDashboard, 
+  Cpu, 
+  TrendingUp, 
+  Layers, 
+  Bell, 
+  Flame, 
+  AppWindow, 
+  Sun, 
+  Moon, 
+  LogOut 
+} from 'lucide-react';
 
 import { 
   INITIAL_SALAD_ACCOUNTS, 
@@ -104,15 +117,23 @@ export const App: React.FC = () => {
 
   // UI View Mode (Landing Page vs Dashboard)
   const [viewMode, setViewMode] = useState<'dashboard' | 'landing'>(() => {
-    const savedToken = localStorage.getItem('minerx_auth_token');
-    const savedUser = localStorage.getItem('minerx_user');
-    if (savedToken && savedUser) {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('view') === 'landing') return 'landing';
-      return 'dashboard';
-    }
-    return 'landing';
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('view') === 'landing') return 'landing';
+    return 'dashboard';
   });
+
+  // Visual Theme: Light White & Emerald Green vs Cyber Dark
+  const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('minerx_theme_mode');
+    if (saved === 'dark' || saved === 'light') return saved;
+    return 'light'; // Default to clean modern White & Green theme
+  });
+
+  const handleToggleTheme = () => {
+    const next = themeMode === 'light' ? 'dark' : 'light';
+    setThemeMode(next);
+    localStorage.setItem('minerx_theme_mode', next);
+  };
 
   // Verify auth session on mount
   useEffect(() => {
@@ -797,136 +818,290 @@ export const App: React.FC = () => {
     setAlerts([]);
   };
 
-  // Si el usuario está en Landing Page o aún NO ha iniciado sesión, mostrar Landing Page
-  if (viewMode === 'landing' || !currentUser) {
+  // Standalone Floating Desktop Widget Mode (Electron Frameless HUD or Browser Pop-out)
+  if (typeof window !== 'undefined' && window.location.hash === '#widget') {
+    return (
+      <div 
+        className="fixed inset-0 bg-transparent flex items-start justify-center p-3 select-none overflow-hidden"
+        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+      >
+        <div style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+          <FloatingHubWidget
+            summary={fleetSummary}
+            workers={workers}
+            saladBalance={saladBalance}
+            kryptexBalance={balance}
+            poolTicker={poolInfo.ticker || 'PRL'}
+            onNavigateToTab={() => {
+              if (window.opener) {
+                try { window.opener.focus(); } catch {}
+              }
+            }}
+            onToggleTheme={handleToggleTheme}
+            isDarkTheme={themeMode === 'dark'}
+            onRefresh={() => refreshTelemetry(true)}
+            isRefreshing={isRefreshing}
+            initiallyExpanded={true}
+            isStandalone={true}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Si el usuario aún NO ha iniciado sesión, mostrar directamente la pantalla de Login / Registro
+  if (!currentUser) {
+    return (
+      <div className={`min-h-screen font-sans ${themeMode === 'light' ? 'bg-[#EDEFF8]' : 'bg-[#07090F]'}`}>
+        <AuthScreen
+          onLogin={handleLogin}
+          onOpenLanding={() => setViewMode('landing')}
+          isDarkTheme={themeMode === 'dark'}
+        />
+      </div>
+    );
+  }
+
+  // Si el usuario autenticado decide explorar la Landing Page informativa
+  if (viewMode === 'landing') {
     return (
       <>
         <LandingPage
-          onEnterDashboard={() => {
-            if (currentUser) {
-              setViewMode('dashboard');
-            }
-          }}
+          onEnterDashboard={() => setViewMode('dashboard')}
           currentUser={currentUser}
           onLogin={handleLogin}
           onLogout={handleLogout}
         />
-        <FloatingTracker
-          workers={workers}
+        <FloatingHubWidget
           summary={fleetSummary}
+          workers={workers}
           saladBalance={saladBalance}
           kryptexBalance={balance}
           poolTicker={poolInfo.ticker || 'PRL'}
-          history={history}
           onNavigateToTab={(tab) => {
-            if (currentUser) {
-              setViewMode('dashboard');
-              setActiveTab(tab);
-            }
+            setViewMode('dashboard');
+            setActiveTab(tab);
           }}
+          onToggleTheme={handleToggleTheme}
+          isDarkTheme={themeMode === 'dark'}
+          onRefresh={() => refreshTelemetry(true)}
+          isRefreshing={isRefreshing}
         />
       </>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#090A0F] text-slate-100 flex flex-col font-sans selection:bg-[#05F292]/20 selection:text-[#05F292]">
-      {/* Top Header */}
-      <Header
-        summary={fleetSummary}
-        settings={settings}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        onRefresh={() => refreshTelemetry(true)}
-        isRefreshing={isRefreshing}
-        unresolvedAlertsCount={unresolvedAlertsCount}
-        walletAddress={kryptexConfig.walletAddress}
-        onUpdateWallet={(addr) => {
-          const updated = { ...kryptexConfig, walletAddress: addr };
-          setKryptexConfig(updated);
-          syncBackendConfig(accounts, updated, settings);
-        }}
-        poolInfo={poolInfo}
-        saladBalance={saladBalance || undefined}
-        onUpdateSaladBalance={(newBal) => handleUpdateAccountBalance(accounts[0]?.id || 'salad-acc-1', newBal)}
-        onOpenLanding={() => setViewMode('landing')}
-        currentUser={currentUser}
-        onLogout={handleLogout}
-      />
+    <div className={`min-h-screen font-sans selection:bg-[#05DF72]/20 selection:text-[#05DF72] transition-colors p-2 sm:p-4 md:p-6 lg:p-7 flex items-stretch gap-4 md:gap-5 ${
+      themeMode === 'light' ? 'bg-[#EDEFF8] text-slate-900' : 'bg-[#07090F] text-slate-100'
+    }`}>
+      {/* 1. LEFT VERTICAL ICON RAIL SIDEBAR (Ref: Floating capsule sidebar with MinerX emerald branding) */}
+      <aside className={`hidden md:flex flex-col items-center justify-between w-16 lg:w-18 py-6 rounded-3xl border shadow-xl backdrop-blur-2xl transition-all ${
+        themeMode === 'light'
+          ? 'bg-white/90 border-slate-200/90 shadow-slate-300/40 text-slate-700'
+          : 'bg-[#0C101A]/90 border-white/[0.08] shadow-black/60 text-slate-400'
+      }`}>
+        {/* Brand Logo Tile */}
+        <div 
+          onClick={() => setViewMode('landing')} 
+          className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/20 via-cyan-500/10 to-slate-950 border border-emerald-500/30 shadow-[0_0_20px_rgba(5,223,114,0.2)] cursor-pointer hover:scale-105 active:scale-95 transition-all group"
+          title="MinerX Intelligence - Ver Landing Informativa"
+        >
+          <Flame className="h-5 w-5 text-[#05DF72] group-hover:scale-110 transition-transform" />
+          <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-white dark:ring-[#0C101A]" />
+        </div>
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 pt-6">
-        {activeTab === 'overview' && (
-          <OverviewTab
-            summary={fleetSummary}
-            workers={workers}
-            history={history}
-            balance={balance}
-            poolInfo={poolInfo}
-            payoutStats={payoutStats}
-            walletAddress={kryptexConfig.walletAddress}
-            onOpenReallocate={(w) => setReallocatingWorker(w)}
-            onNavigateToFleet={() => setActiveTab('fleet')}
-            onNavigateToApis={() => setActiveTab('apis')}
-          />
-        )}
+        {/* Vertical Capsule Pill Nav */}
+        <div className={`flex flex-col items-center gap-2 p-1.5 rounded-full border shadow-inner backdrop-blur-md ${
+          themeMode === 'light' ? 'bg-slate-100/90 border-slate-200' : 'bg-black/40 border-white/[0.06]'
+        }`}>
+          {[
+            { id: 'overview', icon: LayoutDashboard, title: 'Dashboard', badge: undefined },
+            { id: 'fleet', icon: Cpu, title: 'Flota GPUs', badge: fleetSummary.totalAllocatedGPUs },
+            { id: 'economics', icon: TrendingUp, title: 'Economía & ROI', badge: undefined },
+            { id: 'apis', icon: Layers, title: 'APIs & Bot', badge: undefined },
+            { id: 'alerts', icon: Bell, title: 'Alertas', badge: unresolvedAlertsCount > 0 ? unresolvedAlertsCount : undefined }
+          ].map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`relative flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200 cursor-pointer ${
+                  isActive
+                    ? 'bg-[#05DF72] text-slate-950 font-bold shadow-md shadow-emerald-500/25 scale-105'
+                    : themeMode === 'light'
+                    ? 'text-slate-600 hover:text-slate-950 hover:bg-white/80'
+                    : 'text-slate-400 hover:text-white hover:bg-white/[0.08]'
+                }`}
+                title={item.title}
+              >
+                <Icon className="h-5 w-5" />
+                {item.badge !== undefined && item.badge > 0 && (
+                  <span className={`absolute -top-0.5 -right-0.5 flex h-4 min-w-4 px-1 items-center justify-center rounded-full text-[9px] font-bold font-mono ${
+                    isActive ? 'bg-slate-950 text-[#05DF72]' : 'bg-emerald-500 text-slate-950'
+                  }`}>
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-        {activeTab === 'fleet' && (
-          <FleetTab
-            workers={workers}
-            accounts={accounts}
-            saladBalance={saladBalance}
-            onUpdateAccountBalance={handleUpdateAccountBalance}
-            onOpenReallocate={(w) => setReallocatingWorker(w)}
-            onRefreshTelemetry={() => refreshTelemetry(true)}
-          />
-        )}
-
-        {activeTab === 'economics' && (
-          <EconomicsTab
-            workers={workers}
-            summary={fleetSummary}
-            saladBalance={saladBalance}
-            balance={balance}
-            poolInfo={poolInfo}
-            accounts={accounts}
-          />
-        )}
-
-        {activeTab === 'apis' && (
-          <ApiManagerTab
-            accounts={accounts}
-            onAddAccount={handleAddAccount}
-            onUpdateAccount={handleUpdateAccount}
-            onDeleteAccount={handleDeleteAccount}
-            onToggleAccount={handleToggleAccount}
-            kryptexConfig={kryptexConfig}
-            onUpdateKryptexConfig={(cfg) => {
-              const updated = { ...kryptexConfig, ...cfg };
-              setKryptexConfig(updated);
-              syncBackendConfig(accounts, updated, settings);
+        {/* Bottom Actions: Hub Window / Theme / Logout */}
+        <div className="flex flex-col items-center gap-2.5">
+          <button
+            onClick={() => {
+              if ((window as any).electronAPI?.toggleDesktopWidget) {
+                (window as any).electronAPI.toggleDesktopWidget();
+              } else {
+                window.open('#widget', 'MinerX_HUD', 'width=360,height=520,frame=false,alwaysOnTop=true');
+              }
             }}
-            settings={settings}
-            onUpdateSettings={(st) => {
-              const updated = { ...settings, ...st };
-              setSettings(updated);
-              syncBackendConfig(accounts, kryptexConfig, updated);
-            }}
-            onTestSaladAccount={handleTestSaladAccount}
-            onTestKryptex={handleTestKryptex}
-            onTestWebhook={handleTestWebhook}
-          />
-        )}
+            className={`flex h-10 w-10 items-center justify-center rounded-2xl border transition-all cursor-pointer ${
+              themeMode === 'light'
+                ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20 hover:bg-emerald-500/20'
+                : 'bg-emerald-500/15 text-[#05DF72] border-emerald-500/30 hover:bg-emerald-500/25'
+            }`}
+            title="Abrir Hub Flotante de Escritorio"
+          >
+            <AppWindow className="h-4.5 w-4.5" />
+          </button>
 
-        {activeTab === 'alerts' && (
-          <AlertsTab
-            alerts={alerts}
-            workers={workers}
-            onClearAlerts={handleClearAlerts}
-            onOpenReallocate={(w) => setReallocatingWorker(w)}
-          />
-        )}
-      </main>
+          <button
+            onClick={handleToggleTheme}
+            className={`flex h-10 w-10 items-center justify-center rounded-2xl border transition-all cursor-pointer ${
+              themeMode === 'light'
+                ? 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
+                : 'bg-white/[0.04] border-white/[0.08] text-slate-300 hover:bg-white/[0.1] hover:text-white'
+            }`}
+            title={themeMode === 'light' ? 'Cambiar a modo Oscuro' : 'Cambiar a modo Claro'}
+          >
+            {themeMode === 'light' ? <Moon className="h-4.5 w-4.5" /> : <Sun className="h-4.5 w-4.5 text-amber-400" />}
+          </button>
+
+          <button
+            onClick={handleLogout}
+            className={`flex h-10 w-10 items-center justify-center rounded-2xl border transition-all cursor-pointer ${
+              themeMode === 'light'
+                ? 'bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100'
+                : 'bg-rose-500/10 border-rose-500/20 text-rose-400 hover:bg-rose-500/20'
+            }`}
+            title="Cerrar sesión"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
+        </div>
+      </aside>
+
+      {/* 2. MAIN ELEVATED CARD CONTAINER (Ref: White floating modern card container) */}
+      <div className={`flex-1 min-w-0 flex flex-col rounded-[28px] sm:rounded-[36px] border shadow-2xl backdrop-blur-xl overflow-hidden transition-all ${
+        themeMode === 'light'
+          ? 'bg-white/95 border-slate-200/90 shadow-slate-300/40 text-slate-900'
+          : 'bg-[#080B12]/95 border-white/[0.08] shadow-black/80 text-white'
+      }`}>
+        {/* Top Header inside the elevated card */}
+        <Header
+          summary={fleetSummary}
+          settings={settings}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          onRefresh={() => refreshTelemetry(true)}
+          isRefreshing={isRefreshing}
+          unresolvedAlertsCount={unresolvedAlertsCount}
+          walletAddress={kryptexConfig.walletAddress}
+          onUpdateWallet={(addr) => {
+            const updated = { ...kryptexConfig, walletAddress: addr };
+            setKryptexConfig(updated);
+            syncBackendConfig(accounts, updated, settings);
+          }}
+          poolInfo={poolInfo}
+          saladBalance={saladBalance || undefined}
+          onUpdateSaladBalance={(newBal) => handleUpdateAccountBalance(accounts[0]?.id || 'salad-acc-1', newBal)}
+          onOpenLanding={() => setViewMode('landing')}
+          currentUser={currentUser}
+          onLogout={handleLogout}
+          isDarkTheme={themeMode === 'dark'}
+          onToggleTheme={handleToggleTheme}
+        />
+
+        {/* Content Area */}
+        <main className="flex-1 w-full px-4 sm:px-6 md:px-8 pt-5 overflow-y-auto">
+          {activeTab === 'overview' && (
+            <OverviewTab
+              summary={fleetSummary}
+              workers={workers}
+              history={history}
+              balance={balance}
+              poolInfo={poolInfo}
+              payoutStats={payoutStats}
+              walletAddress={kryptexConfig.walletAddress}
+              onOpenReallocate={(w) => setReallocatingWorker(w)}
+              onNavigateToFleet={() => setActiveTab('fleet')}
+              onNavigateToApis={() => setActiveTab('apis')}
+              isDarkTheme={themeMode === 'dark'}
+            />
+          )}
+
+          {activeTab === 'fleet' && (
+            <FleetTab
+              workers={workers}
+              accounts={accounts}
+              saladBalance={saladBalance}
+              onUpdateAccountBalance={handleUpdateAccountBalance}
+              onOpenReallocate={(w) => setReallocatingWorker(w)}
+              onRefreshTelemetry={() => refreshTelemetry(true)}
+            />
+          )}
+
+          {activeTab === 'economics' && (
+            <EconomicsTab
+              workers={workers}
+              summary={fleetSummary}
+              saladBalance={saladBalance}
+              balance={balance}
+              poolInfo={poolInfo}
+              accounts={accounts}
+            />
+          )}
+
+          {activeTab === 'apis' && (
+            <ApiManagerTab
+              accounts={accounts}
+              onAddAccount={handleAddAccount}
+              onUpdateAccount={handleUpdateAccount}
+              onDeleteAccount={handleDeleteAccount}
+              onToggleAccount={handleToggleAccount}
+              kryptexConfig={kryptexConfig}
+              onUpdateKryptexConfig={(cfg) => {
+                const updated = { ...kryptexConfig, ...cfg };
+                setKryptexConfig(updated);
+                syncBackendConfig(accounts, updated, settings);
+              }}
+              settings={settings}
+              onUpdateSettings={(st) => {
+                const updated = { ...settings, ...st };
+                setSettings(updated);
+                syncBackendConfig(accounts, kryptexConfig, updated);
+              }}
+              onTestSaladAccount={handleTestSaladAccount}
+              onTestKryptex={handleTestKryptex}
+              onTestWebhook={handleTestWebhook}
+            />
+          )}
+
+          {activeTab === 'alerts' && (
+            <AlertsTab
+              alerts={alerts}
+              workers={workers}
+              onClearAlerts={handleClearAlerts}
+              onOpenReallocate={(w) => setReallocatingWorker(w)}
+            />
+          )}
+        </main>
+      </div>
 
       {/* Reallocate GPU Modal */}
       <ReallocateModal
@@ -946,15 +1121,18 @@ export const App: React.FC = () => {
         totalGpus={workers.length}
       />
 
-      {/* Floating Telemetry HUD Widget */}
-      <FloatingTracker
-        workers={workers}
+      {/* Floating Telemetry Hub Widget (Dynamic Island / Capsule) */}
+      <FloatingHubWidget
         summary={fleetSummary}
+        workers={workers}
         saladBalance={saladBalance}
         kryptexBalance={balance}
         poolTicker={poolInfo.ticker || 'PRL'}
-        history={history}
         onNavigateToTab={(tab) => setActiveTab(tab)}
+        onToggleTheme={handleToggleTheme}
+        isDarkTheme={themeMode === 'dark'}
+        onRefresh={() => refreshTelemetry(true)}
+        isRefreshing={isRefreshing}
       />
     </div>
   );

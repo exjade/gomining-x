@@ -14,7 +14,8 @@ import {
   Check,
   Send,
   Copy,
-  X
+  X,
+  Sparkles
 } from 'lucide-react';
 import type { FleetSummary, AppSettings, KryptexPoolInfo, SaladBalanceInfo } from '../types/minerx';
 
@@ -34,6 +35,8 @@ interface HeaderProps {
   onOpenLanding?: () => void;
   currentUser?: { id: string; username: string; email: string; fullName: string } | null;
   onLogout?: () => void;
+  isDarkTheme?: boolean;
+  onToggleTheme?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -51,7 +54,9 @@ export const Header: React.FC<HeaderProps> = ({
   onUpdateSaladBalance,
   onOpenLanding,
   currentUser,
-  onLogout
+  onLogout,
+  isDarkTheme = false,
+  onToggleTheme
 }) => {
   const [isEditingWallet, setIsEditingWallet] = useState(false);
   const [walletInput, setWalletInput] = useState(walletAddress);
@@ -141,10 +146,18 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-white/[0.08] bg-[#06070A]/90 backdrop-blur-xl transition-all">
+    <header className={`sticky top-0 z-40 w-full transition-all backdrop-blur-xl ${
+      isDarkTheme 
+        ? 'border-b border-white/[0.08] bg-[#06070A]/90 text-white' 
+        : 'border-b border-slate-200/80 bg-white/95 text-slate-900 shadow-xs'
+    }`}>
       {/* 1. TOP LIVE INSTITUTIONAL TELEMETRY STRIP */}
-      <div className="border-b border-white/[0.04] bg-white/[0.015] px-4 py-1.5 text-[11px]">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2.5 font-mono-num text-slate-400">
+      <div className={`px-4 py-1.5 text-[11px] transition-colors ${
+        isDarkTheme 
+          ? 'border-b border-white/[0.04] bg-white/[0.015] text-slate-400' 
+          : 'border-b border-slate-100 bg-slate-50/90 text-slate-600'
+      }`}>
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2.5 font-mono-num">
           
           {/* Stratum & Network status */}
           <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
@@ -282,27 +295,29 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/20 via-cyan-500/20 to-slate-900 border border-emerald-500/30 shadow-[0_0_20px_rgba(5,242,146,0.2)]">
             <Flame className="h-5 w-5 text-[#05F292]" />
-            <div className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-[#06070A]" />
+            <div className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-emerald-500" />
           </div>
 
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-display-title text-xl font-extrabold tracking-tight text-white">
-                Miner<span className="text-[#05F292]">X</span>
+              <span className={`font-display-title text-xl font-extrabold tracking-tight ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+                Miner<span className="text-[#05DF72]">X</span>
               </span>
-              <span className="rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-mono-num font-semibold text-emerald-400 border border-emerald-500/20">
+              <span className="rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-mono-num font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                 PRO FINTECH
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 hidden sm:block">
+            <p className={`text-[11px] hidden sm:block ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>
               SaladCloud GPU Farm & Kryptex Pool Intelligence
             </p>
           </div>
         </div>
 
         {/* Quick Wallet Address Bar with 1-Click Copy */}
-        <div className="flex items-center gap-2 bg-[#0C0F17] border border-white/[0.08] rounded-xl px-3 py-1.5 text-xs font-mono-num shadow-inner">
-          <Wallet className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+        <div className={`flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-mono-num shadow-inner transition-colors ${
+          isDarkTheme ? 'bg-[#0C0F17] border border-white/[0.08] text-slate-200' : 'bg-slate-100/80 border border-slate-200 text-slate-800'
+        }`}>
+          <Wallet className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
           {isEditingWallet ? (
             <form onSubmit={handleSaveWallet} className="flex items-center gap-1.5">
               <input
@@ -310,12 +325,14 @@ export const Header: React.FC<HeaderProps> = ({
                 value={walletInput}
                 onChange={(e) => setWalletInput(e.target.value)}
                 placeholder="prl1q..."
-                className="w-48 sm:w-64 bg-[#06070A] border border-cyan-500/50 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-cyan-400"
+                className={`w-48 sm:w-64 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400 ${
+                  isDarkTheme ? 'bg-[#06070A] border border-cyan-500/50 text-white' : 'bg-white border border-slate-300 text-slate-900'
+                }`}
                 autoFocus
               />
               <button
                 type="submit"
-                className="bg-emerald-500 text-slate-950 font-bold p-1 rounded-lg hover:bg-emerald-400 transition-colors"
+                className="bg-[#05DF72] text-slate-950 font-bold p-1 rounded-lg hover:bg-emerald-400 transition-colors"
                 title="Guardar Wallet"
               >
                 <Check className="h-3.5 w-3.5" />
@@ -323,10 +340,12 @@ export const Header: React.FC<HeaderProps> = ({
             </form>
           ) : (
             <div className="flex items-center gap-2">
-              <span className="text-slate-500 hidden sm:inline">Wallet:</span>
+              <span className={`${isDarkTheme ? 'text-slate-500' : 'text-slate-400'} hidden sm:inline`}>Wallet:</span>
               <span 
                 onClick={() => setIsEditingWallet(true)} 
-                className="text-slate-200 hover:text-cyan-300 cursor-pointer font-bold truncate max-w-[140px] sm:max-w-[190px]"
+                className={`cursor-pointer font-bold truncate max-w-[140px] sm:max-w-[190px] ${
+                  isDarkTheme ? 'text-slate-200 hover:text-cyan-300' : 'text-slate-800 hover:text-emerald-600'
+                }`}
                 title="Haz clic para cambiar dirección"
               >
                 {walletAddress ? `${walletAddress.substring(0, 8)}...${walletAddress.substring(walletAddress.length - 6)}` : 'Sin Wallet (Asignar)'}
@@ -335,7 +354,7 @@ export const Header: React.FC<HeaderProps> = ({
               {walletAddress && (
                 <button
                   onClick={handleCopyWallet}
-                  className="text-slate-400 hover:text-white p-0.5 rounded transition-colors"
+                  className={`p-0.5 rounded transition-colors ${isDarkTheme ? 'text-slate-400 hover:text-white' : 'text-slate-400 hover:text-slate-700'}`}
                   title="Copiar billetera completa"
                 >
                   {copiedWallet ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
@@ -344,7 +363,7 @@ export const Header: React.FC<HeaderProps> = ({
 
               <button
                 onClick={() => setIsEditingWallet(true)}
-                className="text-[10px] text-cyan-400 hover:text-cyan-300 font-semibold"
+                className="text-[10px] text-emerald-600 dark:text-cyan-400 font-semibold"
               >
                 Editar
               </button>
@@ -353,30 +372,32 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Quick KPI Ribbon (Desktop) */}
-        <div className="hidden xl:flex items-center gap-5 rounded-xl border border-white/[0.08] bg-[#0E121C]/80 px-4 py-1.5 font-mono-num shadow-sm">
+        <div className={`hidden xl:flex items-center gap-5 rounded-2xl px-4 py-2 font-mono-num shadow-xs transition-colors ${
+          isDarkTheme ? 'border border-white/[0.08] bg-[#0E121C]/80 text-white' : 'border border-slate-200 bg-slate-50/90 text-slate-900'
+        }`}>
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-slate-500">Hashrate Flota</div>
-            <div className="text-sm font-bold text-cyan-400 flex items-center gap-1">
+            <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Hashrate Flota</div>
+            <div className="text-sm font-bold text-slate-900 dark:text-cyan-400 flex items-center gap-1">
               {summary.totalHashrateTHs.toLocaleString()} <span className="text-xs text-slate-400 font-normal">TH/s</span>
             </div>
           </div>
           
-          <div className="h-6 w-[1px] bg-white/[0.08]" />
+          <div className={`h-6 w-[1px] ${isDarkTheme ? 'bg-white/[0.08]' : 'bg-slate-200'}`} />
           
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-slate-500">GPUs Minando</div>
-            <div className="text-sm font-bold text-slate-200 flex items-center gap-1">
-              <span className="text-emerald-400">{summary.activeMiningGPUs}</span>
-              <span className="text-slate-500">/</span>
-              <span>{summary.totalAllocatedGPUs}</span>
+            <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">GPUs Minando</div>
+            <div className="text-sm font-bold flex items-center gap-1">
+              <span className="text-[#05DF72]">{summary.activeMiningGPUs}</span>
+              <span className="text-slate-400">/</span>
+              <span className={isDarkTheme ? 'text-slate-300' : 'text-slate-700'}>{summary.totalAllocatedGPUs}</span>
             </div>
           </div>
 
-          <div className="h-6 w-[1px] bg-white/[0.08]" />
+          <div className={`h-6 w-[1px] ${isDarkTheme ? 'bg-white/[0.08]' : 'bg-slate-200'}`} />
 
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-slate-500">Yield Neto / hr</div>
-            <div className={`text-sm font-bold flex items-center gap-1 ${summary.hourlyNetProfitUSD >= 0 ? 'text-[#05F292]' : 'text-rose-400'}`}>
+            <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Yield Neto / hr</div>
+            <div className={`text-sm font-bold flex items-center gap-1 ${summary.hourlyNetProfitUSD >= 0 ? 'text-[#05DF72]' : 'text-rose-500'}`}>
               <TrendingUp className="h-3.5 w-3.5" />
               <span>${summary.hourlyNetProfitUSD > 0 ? '+' : ''}{summary.hourlyNetProfitUSD.toFixed(3)}</span>
             </div>
@@ -384,7 +405,9 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* FinTech Pill Navigation (Desktop) */}
-        <nav className="hidden md:flex items-center p-1 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+        <nav className={`hidden md:flex items-center p-1 rounded-2xl transition-colors ${
+          isDarkTheme ? 'bg-white/[0.03] border border-white/[0.06]' : 'bg-slate-100/90 border border-slate-200/80 shadow-xs'
+        }`}>
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -392,22 +415,26 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`relative flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                className={`relative flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all ${
                   isActive
-                    ? 'bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 text-white border border-emerald-500/40 shadow-[0_0_12px_rgba(5,242,146,0.15)]'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
+                    ? 'bg-[#05DF72] text-slate-950 font-bold shadow-md shadow-[#05DF72]/20'
+                    : isDarkTheme
+                    ? 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
                 }`}
               >
-                <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-[#05F292]' : 'text-slate-400'}`} />
+                <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-slate-950 font-bold' : isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`} />
                 <span>{tab.label}</span>
                 {tab.badge !== undefined && (
                   <span
                     className={`ml-0.5 rounded-full px-1.5 py-0.2 text-[10px] font-mono-num font-bold ${
                       tab.id === 'alerts' && unresolvedAlertsCount > 0
-                        ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse'
+                        ? 'bg-rose-500/20 text-rose-500 border border-rose-500/40 animate-pulse'
                         : isActive
-                        ? 'bg-emerald-500/30 text-emerald-200'
-                        : 'bg-white/[0.08] text-slate-300'
+                        ? 'bg-black/15 text-slate-950'
+                        : isDarkTheme
+                        ? 'bg-white/[0.08] text-slate-300'
+                        : 'bg-slate-200 text-slate-700'
                     }`}
                   >
                     {tab.badge}
@@ -418,12 +445,30 @@ export const Header: React.FC<HeaderProps> = ({
           })}
         </nav>
 
-        {/* User Session & Landing Page Link */}
+        {/* User Session, Theme Toggle & Landing Page Link */}
         <div className="flex items-center gap-2">
+          {onToggleTheme && (
+            <button
+              onClick={onToggleTheme}
+              className={`p-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer flex items-center justify-center ${
+                isDarkTheme 
+                  ? 'bg-white/[0.04] hover:bg-white/[0.08] text-amber-300 border-white/[0.08]' 
+                  : 'bg-slate-100 hover:bg-slate-200 text-[#05DF72] border-slate-200'
+              }`}
+              title={isDarkTheme ? "Cambiar a Tema Claro Esmeralda" : "Cambiar a Tema Oscuro"}
+            >
+              <Sparkles className="w-4 h-4" />
+            </button>
+          )}
+
           {onOpenLanding && (
             <button
               onClick={onOpenLanding}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/[0.08] transition-all cursor-pointer"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                isDarkTheme 
+                  ? 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/[0.08]' 
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+              }`}
               title="Descargas .EXE/.APK y Presentación"
             >
               <span>Landing & Apps</span>
@@ -431,13 +476,15 @@ export const Header: React.FC<HeaderProps> = ({
           )}
 
           {currentUser && (
-            <div className="hidden lg:flex items-center gap-2 px-2.5 py-1 rounded-xl bg-white/[0.03] border border-white/[0.06] text-xs">
-              <span className="w-2 h-2 rounded-full bg-[#05F292]" />
-              <span className="text-slate-200 font-mono text-[11px] font-medium">{currentUser.username}</span>
+            <div className={`hidden lg:flex items-center gap-2 px-2.5 py-1 rounded-xl text-xs border ${
+              isDarkTheme ? 'bg-white/[0.03] border-white/[0.06] text-white' : 'bg-slate-100 border-slate-200 text-slate-900'
+            }`}>
+              <span className="w-2 h-2 rounded-full bg-[#05DF72]" />
+              <span className="font-mono text-[11px] font-medium">{currentUser.username}</span>
               {onLogout && (
                 <button
                   onClick={onLogout}
-                  className="text-slate-400 hover:text-rose-400 p-0.5 cursor-pointer"
+                  className="text-slate-400 hover:text-rose-500 p-0.5 cursor-pointer ml-1"
                   title="Cerrar sesión"
                 >
                   <X className="w-3.5 h-3.5" />

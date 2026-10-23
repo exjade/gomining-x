@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { calculateBreakEvenTHs, BASELINE_USD_PER_THS_HOUR, resolveGpuBenchmark } from '../data/gpuBenchmarks';
 import type { MergedGPUWorker, SaladAccountConfig, SaladBalanceInfo, SaladQuotas } from '../types/minerx';
+import { VastFleetSection } from './VastFleetSection';
 
 interface FleetTabProps {
   workers: MergedGPUWorker[];
@@ -53,6 +54,7 @@ export const FleetTab: React.FC<FleetTabProps> = ({
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  const [fleetProvider, setFleetProvider] = useState<'SALAD' | 'VAST'>('SALAD');
 
   // Container Group Interactive Replicas & Action State
   const [groupReplicasInput, setGroupReplicasInput] = useState<Record<string, number>>({});
@@ -319,8 +321,46 @@ export const FleetTab: React.FC<FleetTabProps> = ({
 
   return (
     <div className="space-y-6 pb-20 md:pb-10 animate-in fade-in duration-300">
-      
-      {/* 1. SECCIÓN DE SALDO ACTUAL DE SALADCLOUD (TOTAL Y POR CUENTA) */}
+      {/* 0. SELECTOR DE PROVEEDOR DE FLOTA */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-[#080B12] p-2 rounded-2xl border border-white/[0.08]">
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setFleetProvider('SALAD')}
+            className={`px-4 py-2 rounded-xl text-xs font-mono-num font-bold transition-all flex items-center gap-2 ${
+              fleetProvider === 'SALAD'
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            <span>SaladCloud Flota ({workers.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setFleetProvider('VAST')}
+            className={`px-4 py-2 rounded-xl text-xs font-mono-num font-bold transition-all flex items-center gap-2 ${
+              fleetProvider === 'VAST'
+                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Server className="h-3.5 w-3.5" />
+            <span>Vast.ai Flota & Instancias</span>
+          </button>
+        </div>
+
+        <div className="text-[11px] font-mono-num text-slate-500 px-3 hidden sm:block">
+          {fleetProvider === 'SALAD' ? 'Supervisión de nodos SaladCloud, logs en vivo y réplicas' : 'Gestión de hardware físico Vast.ai y telemetría de worker'}
+        </div>
+      </div>
+
+      {fleetProvider === 'VAST' ? (
+        <VastFleetSection />
+      ) : (
+        <>
+          {/* 1. SECCIÓN DE SALDO ACTUAL DE SALADCLOUD (TOTAL Y POR CUENTA) */}
       <div className="fintech-card rounded-2xl p-5 border border-white/[0.08] shadow-xl relative overflow-hidden">
         <div className="absolute -top-12 -right-12 w-48 h-48 bg-gradient-to-br from-emerald-500/10 to-cyan-500/0 rounded-full blur-2xl pointer-events-none" />
         
@@ -1511,6 +1551,8 @@ export const FleetTab: React.FC<FleetTabProps> = ({
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

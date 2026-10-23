@@ -1,6 +1,7 @@
 import type {
   SaladAccountConfig,
   KryptexConfig,
+  VastAccountConfig,
   AppSettings,
   MergedGPUWorker,
   FleetSummary,
@@ -12,6 +13,13 @@ import type {
 import { BASELINE_USD_PER_THS_HOUR } from './gpuBenchmarks';
 
 export const INITIAL_SALAD_ACCOUNTS: SaladAccountConfig[] = [];
+
+export const INITIAL_VAST_CONFIG: VastAccountConfig = {
+  apiKey: '',
+  enabled: false,
+  balanceUSD: 0,
+  status: 'untested',
+};
 
 export const INITIAL_KRYPTEX_CONFIG: KryptexConfig = {
   walletAddress: '',

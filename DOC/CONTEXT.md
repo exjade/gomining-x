@@ -271,3 +271,45 @@ Para que el vigilante de Telegram opere las 24 horas del día sin necesidad de m
    El proyecto compila bajo modo estricto sin errores (`tsc -b`). Cualquier modificación en interfaces debe actualizarse de forma simétrica en `src/types/minerx.ts` y en `server/server.ts`.
 3. **Control de Estilos:**  
    Se utiliza Tailwind CSS v4 con la nueva arquitectura CSS-first (`@import "tailwindcss";` en `src/index.css`) y el plugin oficial `@tailwindcss/vite`.
+
+---
+
+## 10. Arquitectura de Integración Vast.ai y Motor de Rentabilidad Realista
+
+En cumplimiento con la especificación técnica `MinerX_CALCULADORA_RENTABILIDAD_Y_AUTOMATIZACION_VASTAI.md`, MinerX incorpora un subsistema integral desacoplado para análisis económico, marketplace GPU y automatización supervisada con Vast.ai.
+
+### 10.1 Modelo de Confianza y Procedencia de Datos (Data Provenance)
+Para evitar proyecciones irreales y proteger el capital de minería, cada dato y métrica se clasifica explícitamente según su origen (`DataTrustSource`):
+* `EXTERNAL_BENCHMARK`: Registros públicos certificados (Kryptex, Hashrate.no).
+* `OFFER_ESTIMATE`: Especificaciones y tarifas anunciadas por hosts en Vast.ai.
+* `INSTANCE_MEASURED`: Hashrate reportado localmente por el minero (`miner-log`).
+* `POOL_OBSERVED`: Hashrate y shares confirmados por el pool Stratum de Kryptex.
+* `FINANCIAL_REALIZED`: Liquidaciones bancarias y cobros reales en exchange.
+* `USER_ASSUMPTION`: Supuestos parametrizados por el operador.
+* `SIMULATED`: Proyecciones probabilísticas y análisis de sensibilidad.
+
+### 10.2 Componentes y Servicios Nuevos
+1. **Motor de Dominio Financiero (`src/services/profitabilityService.ts`):**
+   - Normalización de unidades (`TH/s`, `GH/s`, `MH/s`, `H/s`).
+   - Conversión de costos de almacenamiento mensual (`$/GB/mes`) a costo horario (`$/h`).
+   - Cálculo de margen neto, punto de equilibrio (*Break-Even*), impacto de warmup (calentamiento) y escenarios de estrés (*Conservative*, *Base*, *Optimistic*).
+2. **Calculadora Interactiva (`src/components/ProfitabilityCalculator.tsx`):**
+   - Gráficos interactivos de sensibilidad ($/h vs TH/s) con curvas de ganancia neta.
+   - Integrada en `EconomicsTab` con selector de sub-vistas sin alterar ciclos históricos.
+3. **Cliente Oficial Vast.ai y Marketplace (`server/services/vastClient.ts`, `vastOffersService.ts`):**
+   - Cliente seguro que se conecta a `https://console.vast.ai/api/v0`.
+   - Búsqueda autenticada, filtrado por modelo de GPU, precio máximo y tipo de datacenter.
+   - Algoritmo de scoring e idoneidad (0-100) para PearlHash.
+   - Enmascaramiento estricto de secretos (`vast_...xxxx`) en backend sin exponer credenciales al cliente.
+4. **Gestor de Instancias y Telemetría (`server/services/vastInstanceService.ts`):**
+   - Asignación de nombres de worker únicos e idempotentes (`vast-${gpu}-${seed}`).
+   - Verificación de estado post-acción (Stop Miner, Stop Instance, Destroy Instance).
+5. **Motor de Estrategias y Políticas de Fallo (`server/services/strategyEngine.ts`):**
+   - Modo predeterminado inquebrantable: `SIMULATION` (sin consumo de saldo sin autorización explícita).
+   - Periodo de gracia para calentamiento (*Warmup Period*).
+   - Detección de bajo rendimiento con ventanas de medición consecutivas.
+   - Políticas de acción configurables: `ALERT_ONLY`, `STOP_MINER`, `STOP_INSTANCE`, `DESTROY_INSTANCE`, `DISABLE_STRATEGY`, `STOP_AND_DISABLE`.
+   - Registro persistente de auditoría de decisiones en `server/data/vast_audit_runs.json`.
+6. **Panel de Flota Vast.ai (`src/components/VastFleetSection.tsx`):**
+   - Visualización en vivo dentro de `FleetTab` con selector por proveedor (`SaladCloud` | `Vast.ai`).
+   - Detención de minero, pausa de hardware y destrucción con confirmación de seguridad.

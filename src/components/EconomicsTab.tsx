@@ -37,6 +37,9 @@ import {
   TOTAL_FINANCIAL_FRICTION_PCT,
   VERIFIED_EXCEL_GPUS
 } from '../data/gpuBenchmarks';
+import { ProfitabilityCalculator } from './ProfitabilityCalculator';
+import { VastMarketplace } from './VastMarketplace';
+import { RentalStrategiesTab } from './RentalStrategiesTab';
 import type { VerifiedExcelGPU } from '../data/gpuBenchmarks';
 import type { 
   MergedGPUWorker, 
@@ -267,6 +270,9 @@ export const EconomicsTab: React.FC<EconomicsTabProps> = ({
     setTimeout(() => setCycleNotification(null), 5000);
   };
 
+  // Sub-view toggle: 'calculator' | 'marketplace' | 'strategies' | 'cycles'
+  const [activeEconomicsView, setActiveEconomicsView] = useState<'calculator' | 'marketplace' | 'strategies' | 'cycles'>('calculator');
+
   // ----------------------------------------------------
   // 3. INTERACTIVE SELECTABLE GPU CALCULATOR STATE
   // ----------------------------------------------------
@@ -436,9 +442,72 @@ export const EconomicsTab: React.FC<EconomicsTabProps> = ({
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* SECTION 1: LIVE AUTOMATED MINING CYCLE ENGINE                             */}
-      {/* ========================================================================= */}
+      {/* SUB-VIEW NAVIGATION BAR */}
+      <div className="flex items-center gap-2 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06] flex-wrap w-fit">
+        <button
+          type="button"
+          onClick={() => setActiveEconomicsView('calculator')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeEconomicsView === 'calculator'
+              ? 'bg-gradient-to-r from-cyan-500/20 to-emerald-500/20 text-white border border-cyan-500/40 shadow-[0_0_12px_rgba(6,182,212,0.15)]'
+              : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
+          }`}
+        >
+          <Calculator className="h-3.5 w-3.5 text-cyan-400" />
+          <span>Calculadora Avanzada</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveEconomicsView('marketplace')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeEconomicsView === 'marketplace'
+              ? 'bg-gradient-to-r from-cyan-500/20 to-emerald-500/20 text-white border border-cyan-500/40 shadow-[0_0_12px_rgba(6,182,212,0.15)]'
+              : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
+          }`}
+        >
+          <Server className="h-3.5 w-3.5 text-cyan-400" />
+          <span>Mercado Vast.ai</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveEconomicsView('strategies')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeEconomicsView === 'strategies'
+              ? 'bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 text-white border border-emerald-500/40 shadow-[0_0_12px_rgba(5,242,146,0.15)]'
+              : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
+          }`}
+        >
+          <Sliders className="h-3.5 w-3.5 text-emerald-400" />
+          <span>Estrategias Automáticas</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveEconomicsView('cycles')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeEconomicsView === 'cycles'
+              ? 'bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 text-white border border-emerald-500/40 shadow-[0_0_12px_rgba(5,242,146,0.15)]'
+              : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
+          }`}
+        >
+          <Coins className="h-3.5 w-3.5 text-[#05F292]" />
+          <span>Ciclos & Auditoría Excel (Salad)</span>
+        </button>
+      </div>
+
+      {activeEconomicsView === 'calculator' && <ProfitabilityCalculator />}
+      {activeEconomicsView === 'marketplace' && (
+        <VastMarketplace
+          onSimulateOffer={() => {
+            setActiveEconomicsView('calculator');
+          }}
+        />
+      )}
+      {activeEconomicsView === 'strategies' && <RentalStrategiesTab />}
+      {activeEconomicsView === 'cycles' && (
+        <>
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-b from-[#0F1424] to-[#0A0D17] border border-[#05F292]/30 p-5 md:p-6 shadow-xl shadow-black/40">
         <div className="absolute top-0 right-0 w-96 h-96 bg-[#05F292]/5 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-80 h-80 bg-[#00F0FF]/5 rounded-full blur-3xl pointer-events-none" />
@@ -1283,6 +1352,8 @@ export const EconomicsTab: React.FC<EconomicsTabProps> = ({
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 };
