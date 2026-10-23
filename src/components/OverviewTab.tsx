@@ -135,10 +135,6 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
     : (balance.reached_pct || 0);
   const remainingPRL = Math.max(0, payoutThreshold - totalMinedPRL);
 
-  // Is the fleet currently profitable?
-  const isNetProfitable = summary.hourlyNetProfitUSD > 0;
-  const isNearBreakeven = isNetProfitable && summary.totalHashrateTHs < (fleetBreakevenTHs * 1.15);
-
   // Dynamic values based on selected timeframe
   const currentNetProfit = useMemo(() => {
     switch (timeframe) {
@@ -151,6 +147,12 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         return summary.hourlyNetProfitUSD;
     }
   }, [timeframe, summary]);
+
+  // Is the fleet currently profitable or burning?
+  const isActivelyBurning = currentNetProfit < -0.0001;
+  const isProfitable = currentNetProfit > 0.0001;
+  const isNetProfitable = isProfitable;
+  const isNearBreakeven = isProfitable && summary.totalHashrateTHs < (fleetBreakevenTHs * 1.15);
 
   const currentGrossRevenue = useMemo(() => {
     switch (timeframe) {
@@ -299,37 +301,39 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             whileHover={{ y: -5, transition: { duration: 0.2 } }}
             className={`relative overflow-hidden rounded-[28px] border p-5 sm:p-6 transition-shadow duration-300 hover:shadow-lg ${
               isLight
-                ? 'bg-[#F1EEFC] border-purple-200/80 text-slate-900 shadow-xs'
-                : 'bg-[#141226] border-purple-500/20 text-white shadow-xl'
+                ? 'bg-[#F1EEFC] border-[#DDD5F5] text-slate-900 shadow-xs'
+                : 'bg-[#151226] border-purple-500/25 text-white shadow-xl'
             }`}
           >
             {/* Subtle Ambient Glow */}
             <div 
               className={`absolute -top-12 -right-12 h-32 w-32 rounded-full blur-2xl pointer-events-none ${
-                isNetProfitable ? 'bg-purple-500/15' : 'bg-rose-500/20'
+                isActivelyBurning ? 'bg-rose-500/20' : isProfitable ? 'bg-emerald-500/15' : 'bg-purple-500/15'
               }`} 
             />
 
             <div className="flex items-center justify-between gap-2 relative z-10">
               <div>
-                <h4 className="font-bold text-base tracking-tight text-slate-900 dark:text-white font-sans">
+                <h4 className={`font-bold text-base tracking-tight font-sans ${isLight ? 'text-slate-900' : 'text-white'}`}>
                   Rentabilidad Neta en Vivo
                 </h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                <p className={`text-xs mt-0.5 ${isLight ? 'text-slate-500' : 'text-purple-200/70'}`}>
                   Flujo neto tras costos de alquiler y fricción SPEI
                 </p>
               </div>
 
               <div 
                 className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase border ${
-                  !isNetProfitable
+                  isActivelyBurning
                     ? 'bg-rose-500/15 text-rose-500 border-rose-500/30'
                     : isNearBreakeven
                     ? 'bg-amber-500/15 text-amber-500 border-amber-500/30'
-                    : 'bg-emerald-500/15 text-emerald-700 dark:text-[#05DF72] border-emerald-500/30'
+                    : isProfitable
+                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-[#05DF72] border-emerald-500/30'
+                    : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20'
                 }`}
               >
-                {!isNetProfitable ? (
+                {isActivelyBurning ? (
                   <>
                     <TrendingDown className="h-3 w-3 text-rose-500" />
                     <span>Quema Capital</span>
@@ -339,10 +343,15 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                     <AlertTriangle className="h-3 w-3 text-amber-500" />
                     <span>Margen Ajustado</span>
                   </>
-                ) : (
+                ) : isProfitable ? (
                   <>
                     <TrendingUp className="h-3 w-3 text-[#05DF72]" />
                     <span>ROI Positivo</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="h-3 w-3 text-[#05DF72]" />
+                    <span>Flota en Espera</span>
                   </>
                 )}
               </div>
@@ -352,26 +361,26 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             <div className="mt-4 flex items-baseline gap-2 relative z-10">
               <span 
                 className={`font-jetbrains text-3xl sm:text-4xl font-extrabold tracking-tight tabular-nums ${
-                  isNetProfitable ? 'text-slate-900 dark:text-white' : 'text-rose-500'
+                  isActivelyBurning ? 'text-rose-500' : isLight ? 'text-slate-900' : 'text-white'
                 }`}
               >
-                {currentNetProfit >= 0 ? '+' : ''}${currentNetProfit.toFixed(3)}
+                {currentNetProfit > 0 ? '+' : ''}${currentNetProfit.toFixed(3)}
               </span>
-              <span className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 font-mono">
+              <span className={`text-xs font-semibold uppercase font-mono ${isLight ? 'text-slate-500' : 'text-purple-200/70'}`}>
                 USD / {timeframe === 'hour' ? 'hr' : timeframe === 'day' ? 'día' : 'mes'}
               </span>
             </div>
 
             {/* Breakdown: Gross Rev vs Rental Cost */}
-            <div className="mt-3 pt-2.5 border-t border-purple-200/60 dark:border-white/10 grid grid-cols-2 gap-2 text-xs relative z-10">
+            <div className={`mt-3 pt-2.5 border-t ${isLight ? 'border-purple-200/70' : 'border-purple-500/20'} grid grid-cols-2 gap-2 text-xs relative z-10`}>
               <div>
-                <span className="text-[10px] block text-slate-500 dark:text-slate-400">Ingreso Bruto:</span>
-                <span className="font-jetbrains font-bold tabular-nums text-xs text-slate-900 dark:text-white">
+                <span className={`text-[10px] block ${isLight ? 'text-slate-500' : 'text-purple-200/70'}`}>Ingreso Bruto:</span>
+                <span className={`font-jetbrains font-bold tabular-nums text-xs ${isLight ? 'text-slate-900' : 'text-white'}`}>
                   +${currentGrossRevenue.toFixed(3)}
                 </span>
               </div>
               <div className="text-right">
-                <span className="text-[10px] block text-slate-500 dark:text-slate-400">Costo Alquiler:</span>
+                <span className={`text-[10px] block ${isLight ? 'text-slate-500' : 'text-purple-200/70'}`}>Costo Alquiler:</span>
                 <span className="font-jetbrains font-bold text-rose-500 tabular-nums text-xs">
                   -${currentRentalCost.toFixed(3)}
                 </span>
@@ -379,11 +388,13 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             </div>
 
             {/* Video-replica bottom bar: Solid Black Pill on left + Avatar rings on right */}
-            <div className="mt-3.5 pt-2.5 border-t border-purple-200/60 dark:border-white/10 flex items-center justify-between relative z-10">
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 text-white px-3.5 py-1 text-xs font-semibold shadow-xs">
+            <div className={`mt-3.5 pt-2.5 border-t ${isLight ? 'border-purple-200/70' : 'border-purple-500/20'} flex items-center justify-between relative z-10`}>
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 dark:bg-slate-950 text-white border border-transparent dark:border-white/10 px-3.5 py-1 text-xs font-semibold shadow-xs">
                 <span>{new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
                 <span className="text-slate-400">•</span>
-                <span className="text-[#05DF72]">ROI Positivo</span>
+                <span className={isActivelyBurning ? 'text-rose-400' : 'text-[#05DF72]'}>
+                  {isActivelyBurning ? 'Costo Activo' : isProfitable ? 'ROI Positivo' : 'Modo Standby'}
+                </span>
               </div>
               <div className="flex -space-x-2 overflow-hidden">
                 <div className="inline-flex h-6.5 w-6.5 items-center justify-center rounded-full ring-2 ring-white dark:ring-slate-900 bg-emerald-500/20 text-[#05DF72] text-[10px] font-bold">
@@ -407,16 +418,16 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             whileHover={{ y: -5, transition: { duration: 0.2 } }}
             className={`relative overflow-hidden rounded-[28px] border p-5 sm:p-6 transition-shadow duration-300 hover:shadow-lg ${
               isLight 
-                ? 'bg-[#E0F2FE] border-sky-200/80 text-slate-900 shadow-xs' 
-                : 'bg-[#0B1E30] border-sky-500/20 text-white shadow-xl'
+                ? 'bg-[#E0F2FE] border-sky-200/90 text-slate-900 shadow-xs' 
+                : 'bg-[#0B1E30] border-sky-500/25 text-white shadow-xl'
             }`}
           >
             <div className="flex items-center justify-between gap-2">
               <div>
-                <h4 className="font-bold text-base tracking-tight text-slate-900 dark:text-white font-sans">
+                <h4 className={`font-bold text-base tracking-tight font-sans ${isLight ? 'text-slate-900' : 'text-white'}`}>
                   Eficiencia de Silicio & Flota
                 </h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                <p className={`text-xs mt-0.5 ${isLight ? 'text-slate-500' : 'text-sky-200/70'}`}>
                   Rendimiento real vs benchmark de silicio
                 </p>
               </div>
@@ -437,12 +448,14 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               <div>
                 <div className="flex items-baseline gap-1.5">
                   <span 
-                    className="font-jetbrains text-3xl sm:text-4xl font-extrabold tracking-tight tabular-nums text-slate-900 dark:text-white"
+                    className={`font-jetbrains text-3xl sm:text-4xl font-extrabold tracking-tight tabular-nums ${
+                      isLight ? 'text-slate-900' : 'text-white'
+                    }`}
                   >
                     {efficiencyPct.toFixed(1)}%
                   </span>
                 </div>
-                <p className="text-xs mt-1 uppercase font-semibold text-slate-500 dark:text-slate-400 font-mono">
+                <p className={`text-xs mt-1 uppercase font-semibold font-mono ${isLight ? 'text-slate-500' : 'text-sky-200/70'}`}>
                   Vs Benchmark Teórico
                 </p>
               </div>
@@ -451,15 +464,14 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               <div className="relative h-16 w-16 flex-shrink-0 flex items-center justify-center">
                 <svg className="h-full w-full -rotate-90 transform" viewBox="0 0 36 36">
                   <path
-                    className={isLight ? 'text-sky-200/80' : 'text-white/10'}
-                    strokeWidth="3.2"
-                    stroke="currentColor"
+                    stroke={isLight ? '#BAE6FD' : 'rgba(255,255,255,0.08)'}
+                    strokeWidth="3.4"
                     fill="none"
                     d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                   />
                   <path
                     stroke={efficiencyColor}
-                    strokeWidth="3.2"
+                    strokeWidth="3.4"
                     strokeDasharray="100, 100"
                     strokeDashoffset={strokeDashoffset}
                     strokeLinecap="round"
@@ -469,14 +481,14 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                   />
                 </svg>
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <Cpu className={`h-4 w-4 ${isLight ? 'text-slate-700' : 'text-slate-300'}`} />
+                  <Cpu className={`h-4 w-4 ${isLight ? 'text-slate-700' : 'text-sky-300'}`} />
                 </div>
               </div>
             </div>
 
             {/* Video-replica bottom bar: Solid Black Pill on left + Avatar rings on right */}
-            <div className="mt-3.5 pt-2.5 border-t border-sky-200/60 dark:border-white/10 flex items-center justify-between">
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 text-white px-3.5 py-1 text-xs font-semibold shadow-xs">
+            <div className={`mt-3.5 pt-2.5 border-t ${isLight ? 'border-sky-200/70' : 'border-sky-500/20'} flex items-center justify-between`}>
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 dark:bg-slate-950 text-white border border-transparent dark:border-white/10 px-3.5 py-1 text-xs font-semibold shadow-xs">
                 <span>{summary.activeMiningGPUs} GPUs Activas</span>
                 <span className="text-slate-400">•</span>
                 <span className={efficiencyPct >= 80 ? 'text-[#05DF72]' : 'text-amber-400'}>
@@ -505,8 +517,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             whileHover={{ y: -5, transition: { duration: 0.2 } }}
             className={`relative overflow-hidden rounded-[28px] border p-5 sm:p-6 transition-shadow duration-300 hover:shadow-lg flex flex-col justify-between ${
               isLight 
-                ? 'bg-[#DCFCE7] border-emerald-200/80 text-slate-900 shadow-xs' 
-                : 'bg-[#0B251A] border-emerald-500/20 text-white shadow-xl'
+                ? 'bg-[#DCFCE7] border-emerald-200/90 text-slate-900 shadow-xs' 
+                : 'bg-[#092317] border-emerald-500/25 text-white shadow-xl'
             }`}
           >
             
@@ -516,7 +528,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                 <defs>
                   <linearGradient id="kpiSparklineGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#05DF72" stopOpacity={0.8} />
-                    <stop offset="100%" stopColor="#00E5FF" stopOpacity={0.0} />
+                    <stop offset="100%" stopColor="#05DF72" stopOpacity={0.0} />
                   </linearGradient>
                 </defs>
                 {sparklineSvgPath && (
@@ -540,10 +552,10 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 
             <div className="flex items-center justify-between gap-2 relative z-10">
               <div>
-                <h4 className="font-bold text-base tracking-tight text-slate-900 dark:text-white font-sans">
+                <h4 className={`font-bold text-base tracking-tight font-sans ${isLight ? 'text-slate-900' : 'text-white'}`}>
                   Potencia Total de Minado
                 </h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                <p className={`text-xs mt-0.5 ${isLight ? 'text-slate-500' : 'text-emerald-200/70'}`}>
                   Algoritmo PearlHash • PoUW Pearl
                 </p>
               </div>
@@ -557,24 +569,26 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             {/* Primary Hashrate */}
             <div className="mt-4 relative z-10">
               <div className="flex items-baseline gap-2">
-                <span className="font-jetbrains text-3xl sm:text-4xl font-extrabold tracking-tight tabular-nums text-slate-900 dark:text-white">
+                <span className={`font-jetbrains text-3xl sm:text-4xl font-extrabold tracking-tight tabular-nums ${
+                  isLight ? 'text-slate-900' : 'text-white'
+                }`}>
                   {summary.totalHashrateTHs.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                 </span>
                 <span className="text-sm font-bold text-emerald-700 dark:text-[#05DF72] uppercase font-mono">
                   TH/s
                 </span>
               </div>
-              <p className="text-xs mt-1 uppercase font-semibold text-slate-500 dark:text-slate-400 font-mono">
-                Teórico Silicio: <span className="font-jetbrains font-bold tabular-nums text-slate-700 dark:text-slate-200">{summary.benchmarkHashrateTHs.toFixed(1)} TH/s</span>
+              <p className={`text-xs mt-1 uppercase font-semibold font-mono ${isLight ? 'text-slate-500' : 'text-emerald-200/70'}`}>
+                Teórico Silicio: <span className={`font-jetbrains font-bold tabular-nums ${isLight ? 'text-slate-700' : 'text-emerald-100'}`}>{summary.benchmarkHashrateTHs.toFixed(1)} TH/s</span>
               </p>
             </div>
 
             {/* Video-replica bottom bar: Solid Black Pill on left + Kryptex PPS on right */}
-            <div className="mt-3.5 pt-2.5 border-t border-emerald-200/60 dark:border-white/10 flex items-center justify-between text-xs relative z-10">
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 text-white px-3.5 py-1 text-xs font-semibold shadow-xs">
+            <div className={`mt-3.5 pt-2.5 border-t ${isLight ? 'border-emerald-200/70' : 'border-emerald-500/20'} flex items-center justify-between text-xs relative z-10`}>
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 dark:bg-slate-950 text-white border border-transparent dark:border-white/10 px-3.5 py-1 text-xs font-semibold shadow-xs">
                 <span className="text-amber-400">Equilibrio: {fleetBreakevenTHs.toFixed(1)} TH/s</span>
               </div>
-              <div className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 dark:text-emerald-300 bg-white/80 dark:bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20 shadow-xs">
+              <div className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 dark:text-emerald-300 bg-white/80 dark:bg-emerald-500/15 px-3 py-1 rounded-full border border-emerald-500/20 shadow-xs">
                 <CheckCircle2 className="h-3.5 w-3.5 text-[#05DF72]" />
                 <span>Kryptex PPS</span>
               </div>
@@ -592,12 +606,12 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             transition={{ duration: 0.4, delay: 0.08 }}
             whileHover={{ y: -3, transition: { duration: 0.2 } }}
             className={`rounded-[30px] border p-5 sm:p-7 flex flex-col justify-between transition-shadow duration-300 hover:shadow-lg ${
-              isLight ? 'bg-white border-slate-200/90 shadow-xs text-slate-900' : 'border-white/10 bg-[#080B11]/90 backdrop-blur-xl shadow-xl text-white'
+              isLight ? 'bg-white border-slate-200/90 shadow-xs text-slate-900' : 'border-white/10 bg-[#0B0F19] backdrop-blur-xl shadow-xl text-white'
             }`}
           >
             
             {/* Header of Area Chart with Video-Cloned Indicators & Timeframe dropdown */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
               <div>
                 <div className="flex items-center gap-2">
                   <Activity className="h-4 w-4 text-[#05DF72]" />
@@ -605,19 +619,19 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                     Performance Chart
                   </h3>
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                <p className={`text-xs mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                   Track results and watch your progress rise • Telemetría Pool Kryptex PRL
                 </p>
                 <div className="flex items-center gap-3 mt-2 text-xs">
-                  <span className="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300">
+                  <span className={`flex items-center gap-1.5 text-xs font-medium ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                     <span className="h-2 w-2 rounded-full bg-[#05DF72]"></span>
                     Hashrate TH/s
                   </span>
-                  <span className="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300">
+                  <span className={`flex items-center gap-1.5 text-xs font-medium ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                     <span className="h-2 w-2 rounded-full bg-cyan-400"></span>
                     Ganancia Neta
                   </span>
-                  <span className="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300">
+                  <span className={`flex items-center gap-1.5 text-xs font-medium ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                     <span className="h-2 w-2 rounded-full bg-rose-500"></span>
                     Costo Salad
                   </span>
@@ -625,30 +639,26 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               </div>
 
               {/* Timeframe & Mode Toggles matching Video Top Right */}
-              <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+              <div className="flex items-center gap-2 shrink-0 self-start md:self-auto">
                 <div className={`flex items-center gap-1 rounded-full p-1 border shadow-xs transition-colors ${
                   isLight ? 'border-slate-200 bg-slate-100/90' : 'border-white/10 bg-[#06080D]'
                 }`}>
                   <button
                     onClick={() => setChartMode('hashrate')}
-                    className={`rounded-full px-3 py-1 text-xs font-medium transition-all cursor-pointer ${
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-all cursor-pointer select-none ${
                       chartMode === 'hashrate'
-                        ? 'bg-slate-900 text-white font-bold shadow-xs'
-                        : isLight
-                        ? 'text-slate-600 hover:text-slate-900'
-                        : 'text-slate-400 hover:text-white'
+                        ? (isLight ? 'bg-slate-900 text-white font-bold shadow-xs' : 'bg-white text-slate-950 font-bold shadow-xs')
+                        : (isLight ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white')
                     }`}
                   >
                     TH/s
                   </button>
                   <button
                     onClick={() => setChartMode('cashflow')}
-                    className={`rounded-full px-3 py-1 text-xs font-medium transition-all cursor-pointer ${
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-all cursor-pointer select-none ${
                       chartMode === 'cashflow'
-                        ? 'bg-slate-900 text-white font-bold shadow-xs'
-                        : isLight
-                        ? 'text-slate-600 hover:text-slate-900'
-                        : 'text-slate-400 hover:text-white'
+                        ? (isLight ? 'bg-slate-900 text-white font-bold shadow-xs' : 'bg-white text-slate-950 font-bold shadow-xs')
+                        : (isLight ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white')
                     }`}
                   >
                     USD/h
@@ -662,7 +672,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                     <button
                       key={t}
                       onClick={() => setTimeframe(t)}
-                      className={`rounded-full px-2.5 py-1 text-xs font-medium transition-all cursor-pointer ${
+                      className={`rounded-full px-2.5 py-1 text-xs font-medium transition-all cursor-pointer select-none ${
                         timeframe === t
                           ? 'bg-[#05DF72] text-slate-950 font-bold shadow-xs'
                           : isLight
@@ -703,23 +713,23 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                       </linearGradient>
                     </defs>
 
-                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={isLight ? '#F1F5F9' : 'rgba(255,255,255,0.06)'} vertical={false} />
                     
                     <XAxis 
                       dataKey="time" 
-                      stroke="#64748B" 
+                      stroke={isLight ? '#94A3B8' : '#64748B'} 
                       fontSize={11} 
                       tickLine={false}
-                      axisLine={{ stroke: '#ffffff15' }}
-                      tick={{ fill: '#94A3B8', fontFamily: 'JetBrains Mono', fontSize: 10 }}
+                      axisLine={{ stroke: isLight ? '#E2E8F0' : 'rgba(255,255,255,0.1)' }}
+                      tick={{ fill: isLight ? '#64748B' : '#94A3B8', fontFamily: 'JetBrains Mono', fontSize: 10 }}
                     />
                     
                     <YAxis 
-                      stroke="#64748B" 
+                      stroke={isLight ? '#94A3B8' : '#64748B'} 
                       fontSize={11} 
                       tickLine={false}
-                      axisLine={{ stroke: '#ffffff15' }}
-                      tick={{ fill: '#94A3B8', fontFamily: 'JetBrains Mono', fontSize: 10 }}
+                      axisLine={{ stroke: isLight ? '#E2E8F0' : 'rgba(255,255,255,0.1)' }}
+                      tick={{ fill: isLight ? '#64748B' : '#94A3B8', fontFamily: 'JetBrains Mono', fontSize: 10 }}
                       unit=" T"
                     />
 
@@ -729,8 +739,10 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                           const val = Number(payload[0].value);
                           const isAbove = val >= fleetBreakevenTHs;
                           return (
-                            <div className="rounded-xl border border-white/15 bg-[#06080E]/95 p-3 backdrop-blur-xl shadow-2xl">
-                              <span className="font-jetbrains text-[10px] text-slate-400 block mb-1">
+                            <div className={`rounded-xl border p-3 backdrop-blur-xl shadow-2xl ${
+                              isLight ? 'bg-white/95 border-slate-200 text-slate-900' : 'bg-[#06080E]/95 border-white/15 text-white'
+                            }`}>
+                              <span className={`font-jetbrains text-[10px] block mb-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                                 {label}
                               </span>
                               <div className="flex items-center gap-2">
@@ -743,16 +755,16 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                                 <span 
                                   className={`text-[10px] font-rajdhani font-bold px-1.5 py-0.5 rounded border ${
                                     isAbove 
-                                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' 
-                                      : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                                      ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border-emerald-500/30' 
+                                      : 'bg-rose-500/20 text-rose-600 dark:text-rose-300 border-rose-500/30'
                                   }`}
                                 >
                                   {isAbove ? 'Ganancia' : 'Bajo Umbral'}
                                 </span>
                               </div>
-                              <div className="mt-1.5 pt-1.5 border-t border-white/10 text-[10px] text-slate-400 flex justify-between gap-3 font-jetbrains">
+                              <div className={`mt-1.5 pt-1.5 border-t ${isLight ? 'border-slate-100' : 'border-white/10'} text-[10px] flex justify-between gap-3 font-jetbrains ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                                 <span>Punto Equilibrio:</span>
-                                <span className="text-amber-300 font-bold">{fleetBreakevenTHs.toFixed(1)} TH/s</span>
+                                <span className="text-amber-500 dark:text-amber-300 font-bold">{fleetBreakevenTHs.toFixed(1)} TH/s</span>
                               </div>
                             </div>
                           );
@@ -877,7 +889,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               transition={{ duration: 0.4, delay: 0.16 }}
               whileHover={{ y: -4, transition: { duration: 0.2 } }}
               className={`rounded-[30px] border p-5 sm:p-6 flex flex-col justify-between transition-shadow duration-300 hover:shadow-lg ${
-                isLight ? 'bg-white border-slate-200/90 shadow-xs text-slate-900' : 'border-white/10 bg-[#080B11]/90 backdrop-blur-xl shadow-xl text-white'
+                isLight ? 'bg-white border-slate-200/90 shadow-xs text-slate-900' : 'border-white/10 bg-[#0B0F19] backdrop-blur-xl shadow-xl text-white'
               }`}
             >
               <div>
@@ -911,8 +923,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                         key={w.id} 
                         className={`flex items-center justify-between gap-3 rounded-2xl border p-3 transition-all ${
                           isLowPerf
-                            ? (isLight ? 'bg-rose-50/70 border-rose-200' : 'bg-rose-500/[0.06] border-rose-500/20')
-                            : (isLight ? 'bg-slate-50 border-slate-100 hover:border-slate-200' : 'bg-[#06080D] border-white/[0.06] hover:border-white/10')
+                            ? (isLight ? 'bg-rose-50/70 border-rose-200' : 'bg-rose-500/[0.08] border-rose-500/20')
+                            : (isLight ? 'bg-slate-50 border-slate-100 hover:border-slate-200' : 'bg-[#101626] border-white/[0.06] hover:border-white/10')
                         }`}
                       >
                         <div className="flex items-center gap-3 min-w-0">
@@ -941,7 +953,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                         {isLowPerf ? (
                           <button
                             onClick={() => onOpenReallocate(w)}
-                            className="shrink-0 flex items-center gap-1 rounded-full bg-rose-500 hover:bg-rose-600 px-2.5 py-1 text-[11px] font-rajdhani font-bold text-white uppercase tracking-wider transition-all shadow-xs"
+                            className="shrink-0 flex items-center gap-1 rounded-full bg-rose-500 hover:bg-rose-600 px-2.5 py-1 text-[11px] font-rajdhani font-bold text-white uppercase tracking-wider transition-all shadow-xs cursor-pointer"
                           >
                             <RefreshCw className="h-3 w-3" />
                             <span>{w.performanceRatioPct.toFixed(0)}%</span>
@@ -966,16 +978,16 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                 </div>
               </div>
 
-              {/* Exact replica of the video's bottom capsule switch: [ Themes ] [ Amber ] */}
-              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-white/[0.06]">
+              {/* Exact replica of the video's bottom capsule switch: [ All ] [ Alerts ] */}
+              <div className={`mt-4 pt-3 border-t ${isLight ? 'border-slate-100' : 'border-white/[0.06]'}`}>
                 <div className={`flex rounded-full p-1 border transition-colors ${
-                  isLight ? 'bg-slate-100 border-slate-200' : 'bg-[#06080D] border-white/10'
+                  isLight ? 'bg-slate-100 border-slate-200' : 'bg-[#070A12] border-white/10'
                 }`}>
                   <button
                     onClick={() => setFleetActiveTab('all')}
-                    className={`flex-1 flex items-center justify-center gap-1.5 rounded-full py-1.5 text-xs font-rajdhani font-bold transition-all ${
+                    className={`flex-1 flex items-center justify-center gap-1.5 rounded-full py-1.5 text-xs font-rajdhani font-bold transition-all cursor-pointer select-none ${
                       fleetActiveTab === 'all'
-                        ? 'bg-slate-900 text-white shadow-xs'
+                        ? (isLight ? 'bg-slate-900 text-white shadow-xs' : 'bg-white text-slate-950 shadow-xs')
                         : isLight ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
                     }`}
                   >
@@ -983,7 +995,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                   </button>
                   <button
                     onClick={() => setFleetActiveTab('alerts')}
-                    className={`flex-1 flex items-center justify-center gap-1.5 rounded-full py-1.5 text-xs font-rajdhani font-bold transition-all ${
+                    className={`flex-1 flex items-center justify-center gap-1.5 rounded-full py-1.5 text-xs font-rajdhani font-bold transition-all cursor-pointer select-none ${
                       fleetActiveTab === 'alerts'
                         ? 'bg-[#05DF72] text-slate-950 font-bold shadow-xs'
                         : isLight ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
@@ -1002,7 +1014,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               transition={{ duration: 0.4, delay: 0.22 }}
               whileHover={{ y: -4, transition: { duration: 0.2 } }}
               className={`rounded-[30px] border p-5 sm:p-6 flex flex-col justify-between transition-shadow duration-300 hover:shadow-lg ${
-                isLight ? 'bg-white border-slate-200/90 shadow-xs text-slate-900' : 'border-white/10 bg-[#080B11]/90 backdrop-blur-xl shadow-xl text-white'
+                isLight ? 'bg-white border-slate-200/90 shadow-xs text-slate-900' : 'border-white/10 bg-[#0B0F19] backdrop-blur-xl shadow-xl text-white'
               }`}
             >
               <div>
@@ -1028,10 +1040,12 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                   
                   {/* Rank 1: Confirmado */}
                   <div className={`flex items-center justify-between p-2.5 rounded-2xl border transition-colors ${
-                    isLight ? 'bg-slate-50/80 border-slate-100' : 'bg-[#06080D] border-white/[0.04]'
+                    isLight ? 'bg-slate-50/80 border-slate-100' : 'bg-[#101626] border-white/[0.06]'
                   }`}>
                     <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-white font-jetbrains text-xs font-bold">
+                      <div className={`flex h-8 w-8 items-center justify-center rounded-full font-jetbrains text-xs font-bold ${
+                        isLight ? 'bg-slate-900 text-white' : 'bg-white text-slate-950'
+                      }`}>
                         1
                       </div>
                       <div>
@@ -1052,10 +1066,12 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 
                   {/* Rank 2: Inmaduro */}
                   <div className={`flex items-center justify-between p-2.5 rounded-2xl border transition-colors ${
-                    isLight ? 'bg-slate-50/80 border-slate-100' : 'bg-[#06080D] border-white/[0.04]'
+                    isLight ? 'bg-slate-50/80 border-slate-100' : 'bg-[#101626] border-white/[0.06]'
                   }`}>
                     <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-white font-jetbrains text-xs font-bold">
+                      <div className={`flex h-8 w-8 items-center justify-center rounded-full font-jetbrains text-xs font-bold ${
+                        isLight ? 'bg-slate-800 text-white' : 'bg-white/10 text-slate-200'
+                      }`}>
                         2
                       </div>
                       <div>
@@ -1077,10 +1093,12 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 
                   {/* Rank 3: Pagos */}
                   <div className={`flex items-center justify-between p-2.5 rounded-2xl border transition-colors ${
-                    isLight ? 'bg-slate-50/80 border-slate-100' : 'bg-[#06080D] border-white/[0.04]'
+                    isLight ? 'bg-slate-50/80 border-slate-100' : 'bg-[#101626] border-white/[0.06]'
                   }`}>
                     <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-white font-jetbrains text-xs font-bold">
+                      <div className={`flex h-8 w-8 items-center justify-center rounded-full font-jetbrains text-xs font-bold ${
+                        isLight ? 'bg-slate-800 text-white' : 'bg-white/10 text-slate-200'
+                      }`}>
                         3
                       </div>
                       <div>
@@ -1101,10 +1119,12 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 
                   {/* Rank 4: Hashrate Rate */}
                   <div className={`flex items-center justify-between p-2.5 rounded-2xl border transition-colors ${
-                    isLight ? 'bg-slate-50/80 border-slate-100' : 'bg-[#06080D] border-white/[0.04]'
+                    isLight ? 'bg-slate-50/80 border-slate-100' : 'bg-[#101626] border-white/[0.06]'
                   }`}>
                     <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-white font-jetbrains text-xs font-bold">
+                      <div className={`flex h-8 w-8 items-center justify-center rounded-full font-jetbrains text-xs font-bold ${
+                        isLight ? 'bg-slate-800 text-white' : 'bg-white/10 text-slate-200'
+                      }`}>
                         4
                       </div>
                       <div>
@@ -1127,7 +1147,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               </div>
 
               {/* Payout Progress at bottom of Card B */}
-              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-white/[0.06]">
+              <div className={`mt-4 pt-3 border-t ${isLight ? 'border-slate-100' : 'border-white/[0.06]'}`}>
                 <div className="flex justify-between items-center text-xs mb-1.5">
                   <span className={`font-rajdhani text-[11px] font-bold uppercase ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
                     Progreso Umbral de Pago
@@ -1172,7 +1192,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 
       {/* 3. CALIDAD DE SHARES KRYPTEX */}
       <div className={`rounded-3xl border p-5 sm:p-6 transition-all ${
-        isLight ? 'bg-white border-slate-200/90 shadow-xs hover:shadow-md text-slate-900' : 'border-white/10 bg-[#080B11]/90 backdrop-blur-xl shadow-xl text-white'
+        isLight ? 'bg-white border-slate-200/90 shadow-xs hover:shadow-md text-slate-900' : 'border-white/10 bg-[#0B0F19] backdrop-blur-xl shadow-xl text-white'
       }`}>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
@@ -1188,7 +1208,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
           <div className={`rounded-2xl border p-3.5 ${
-            isLight ? 'bg-emerald-50/70 border-emerald-200' : 'border-emerald-500/20 bg-emerald-500/[0.05]'
+            isLight ? 'bg-emerald-50/70 border-emerald-200' : 'border-emerald-500/20 bg-emerald-500/[0.06]'
           }`}>
             <span className="font-rajdhani text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase block">Válidos</span>
             <span className={`font-jetbrains text-xl font-bold tabular-nums mt-1 block ${isLight ? 'text-slate-900' : 'text-white'}`}>
@@ -1196,7 +1216,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             </span>
           </div>
           <div className={`rounded-2xl border p-3.5 ${
-            isLight ? 'bg-amber-50/70 border-amber-200' : 'border-amber-500/20 bg-amber-500/[0.05]'
+            isLight ? 'bg-amber-50/70 border-amber-200' : 'border-amber-500/20 bg-amber-500/[0.06]'
           }`}>
             <span className="font-rajdhani text-[11px] font-bold text-amber-500 uppercase block">Stale</span>
             <span className={`font-jetbrains text-xl font-bold tabular-nums mt-1 block ${isLight ? 'text-slate-900' : 'text-amber-300'}`}>
@@ -1204,7 +1224,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             </span>
           </div>
           <div className={`rounded-2xl border p-3.5 ${
-            isLight ? 'bg-rose-50/70 border-rose-200' : 'border-rose-500/20 bg-rose-500/[0.05]'
+            isLight ? 'bg-rose-50/70 border-rose-200' : 'border-rose-500/20 bg-rose-500/[0.06]'
           }`}>
             <span className="font-rajdhani text-[11px] font-bold text-rose-500 uppercase block">Inválidos</span>
             <span className="font-jetbrains text-xl font-bold text-rose-500 tabular-nums mt-1 block">
@@ -1219,7 +1239,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             ? (((summary.totalStaleShares || 0) + (summary.totalInvalidShares || 0)) / totalFleetShares * 100).toFixed(2)
             : '0.00';
           return (
-            <div className="mt-4 pt-3 border-t border-slate-100 dark:border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div className={`mt-4 pt-3 border-t ${isLight ? 'border-slate-100' : 'border-white/[0.06]'} flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs`}>
               <p className={`text-[11px] leading-relaxed ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                 Valor estimado por share válido: <strong className="font-jetbrains text-[#05DF72] tabular-nums">${summary.estPayPerValidShareUSD.toFixed(7)} USD</strong>.
                 Tasa de rechazo calculada: <strong className={`font-jetbrains tabular-nums ${isLight ? 'text-slate-900' : 'text-white'}`}>{realRejectionRate}%</strong> ({summary.totalStaleShares || 0} stale de {totalFleetShares} shares totales).
@@ -1236,7 +1256,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
       <div className={`relative overflow-hidden rounded-[28px] border p-6 sm:p-7 transition-all ${
         isLight 
           ? 'bg-white border-slate-200/90 shadow-xs' 
-          : 'border-white/10 bg-[#080B11]/90 backdrop-blur-xl shadow-xl'
+          : 'border-white/10 bg-[#0B0F19] backdrop-blur-xl shadow-xl'
       }`}>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 relative z-10">
           <div className="space-y-2">
@@ -1269,9 +1289,9 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         </div>
 
         {/* Informative Bento Quick Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5 pt-5 border-t border-slate-100 dark:border-white/[0.08]">
+        <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 mt-5 pt-5 border-t ${isLight ? 'border-slate-100' : 'border-white/[0.08]'}`}>
           <div className={`rounded-2xl border p-4.5 transition-all ${
-            isLight ? 'bg-slate-50/80 border-slate-200/80 text-slate-900' : 'border-white/10 bg-[#0C101A]/80 text-white'
+            isLight ? 'bg-slate-50/80 border-slate-200/80 text-slate-900' : 'border-white/10 bg-[#101626] text-white'
           }`}>
             <div className="h-9 w-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-3">
               <DollarSign className="h-4.5 w-4.5" />
@@ -1283,7 +1303,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           </div>
 
           <div className={`rounded-2xl border p-4.5 transition-all ${
-            isLight ? 'bg-slate-50/80 border-slate-200/80 text-slate-900' : 'border-white/10 bg-[#0C101A]/80 text-white'
+            isLight ? 'bg-slate-50/80 border-slate-200/80 text-slate-900' : 'border-white/10 bg-[#101626] text-white'
           }`}>
             <div className="h-9 w-9 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-600 dark:text-cyan-400 mb-3">
               <RefreshCw className="h-4.5 w-4.5" />
@@ -1295,7 +1315,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           </div>
 
           <div className={`rounded-2xl border p-4.5 transition-all ${
-            isLight ? 'bg-slate-50/80 border-slate-200/80 text-slate-900' : 'border-white/10 bg-[#0C101A]/80 text-white'
+            isLight ? 'bg-slate-50/80 border-slate-200/80 text-slate-900' : 'border-white/10 bg-[#101626] text-white'
           }`}>
             <div className="h-9 w-9 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500 mb-3">
               <ShieldAlert className="h-4.5 w-4.5" />
@@ -1310,7 +1330,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 
       {/* 5. HISTORIAL DE PRODUCCIÓN CRIPTO POR CICLO */}
       <div className={`rounded-3xl border p-5 sm:p-6 space-y-5 transition-all ${
-        isLight ? 'bg-white border-slate-200/90 shadow-sm hover:shadow-md text-slate-900' : 'border-white/10 bg-[#080B11]/90 backdrop-blur-xl shadow-xl text-white'
+        isLight ? 'bg-white border-slate-200/90 shadow-sm hover:shadow-md text-slate-900' : 'border-white/10 bg-[#0B0F19] backdrop-blur-xl shadow-xl text-white'
       }`}>
         <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4 ${borderDivider}`}>
           <div>

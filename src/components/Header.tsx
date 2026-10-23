@@ -15,7 +15,8 @@ import {
   X, 
   Sparkles, 
   Sun, 
-  Moon 
+  Moon,
+  AppWindow 
 } from 'lucide-react';
 import type { FleetSummary, AppSettings, KryptexPoolInfo, SaladBalanceInfo } from '../types/minerx';
 
@@ -37,6 +38,7 @@ interface HeaderProps {
   onLogout?: () => void;
   isDarkTheme?: boolean;
   onToggleTheme?: () => void;
+  onOpenHub?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -56,7 +58,8 @@ export const Header: React.FC<HeaderProps> = ({
   currentUser,
   onLogout,
   isDarkTheme = false,
-  onToggleTheme
+  onToggleTheme,
+  onOpenHub
 }) => {
   const [isEditingWallet, setIsEditingWallet] = useState(false);
   const [walletInput, setWalletInput] = useState(walletAddress);
@@ -99,9 +102,9 @@ export const Header: React.FC<HeaderProps> = ({
 
   const tabs = [
     { id: 'overview', label: 'Resumen', icon: Activity },
-    { id: 'fleet', label: 'Flota GPUs', icon: Cpu, badge: summary.totalAllocatedGPUs },
-    { id: 'economics', label: 'Economía & ROI', icon: DollarSign },
-    { id: 'apis', label: 'APIs & Bot', icon: Layers },
+    { id: 'fleet', label: 'Flota', icon: Cpu, badge: summary.totalAllocatedGPUs },
+    { id: 'economics', label: 'Economía', icon: DollarSign },
+    { id: 'apis', label: 'APIs', icon: Layers },
     { id: 'alerts', label: 'Alertas', icon: Bell, badge: unresolvedAlertsCount > 0 ? unresolvedAlertsCount : undefined },
   ];
 
@@ -178,8 +181,8 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Center: Video-Cloned Pill Capsule Navigation with Framer Motion sliding pill */}
-        <nav className={`hidden md:flex items-center p-1 rounded-full border shadow-inner transition-colors ${
-          isDarkTheme ? 'bg-[#0A0D16] border-white/10' : 'bg-slate-100/90 border-slate-200/90'
+        <nav className={`hidden md:flex items-center p-1.5 rounded-full border shadow-inner transition-colors ${
+          isDarkTheme ? 'bg-[#0B0F19] border-white/10' : 'bg-slate-100/90 border-slate-200/90'
         }`}>
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
@@ -187,29 +190,31 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`relative flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
-                  isActive
-                    ? 'text-white'
-                    : isDarkTheme
-                    ? 'text-slate-400 hover:text-white'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
+                className="relative flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer select-none"
               >
                 {isActive && (
                   <motion.div
                     layoutId="header-active-pill"
-                    transition={{ type: 'spring', stiffness: 450, damping: 35 }}
-                    className="absolute inset-0 rounded-full bg-slate-900 shadow-xs"
+                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                    className={`absolute inset-0 rounded-full shadow-sm ${
+                      isDarkTheme ? 'bg-white' : 'bg-slate-900'
+                    }`}
                   />
                 )}
-                <span className="relative z-10">{tab.label}</span>
+                <span className={`relative z-10 transition-colors ${
+                  isActive
+                    ? (isDarkTheme ? 'text-slate-950 font-bold' : 'text-white font-bold')
+                    : (isDarkTheme ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900')
+                }`}>
+                  {tab.label}
+                </span>
                 {tab.badge !== undefined && tab.badge > 0 && (
                   <span
-                    className={`relative z-10 ml-0.5 rounded-full px-1.5 py-0.2 text-[9px] font-mono font-bold ${
+                    className={`relative z-10 ml-0.5 rounded-full px-1.5 py-0.2 text-[9px] font-mono font-bold transition-colors ${
                       tab.id === 'alerts' && unresolvedAlertsCount > 0
                         ? 'bg-rose-500 text-white animate-pulse'
                         : isActive
-                        ? 'bg-[#05DF72] text-slate-950'
+                        ? (isDarkTheme ? 'bg-slate-900 text-[#05DF72]' : 'bg-[#05DF72] text-slate-950')
                         : 'bg-emerald-500/20 text-[#05DF72]'
                     }`}
                   >
@@ -318,11 +323,24 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onToggleTheme}
               className={`flex h-9 w-9 items-center justify-center rounded-full border transition-all cursor-pointer ${
-                isDarkTheme ? 'bg-white/[0.04] border-white/10 text-amber-400 hover:bg-white/[0.08]' : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
+                isDarkTheme ? 'bg-white/[0.04] border-white/10 text-amber-400 hover:bg-white/[0.08]' : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
               }`}
               title={isDarkTheme ? "Cambiar a modo Claro" : "Cambiar a modo Oscuro"}
             >
-              {isDarkTheme ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4" />}
+              {isDarkTheme ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-slate-700" />}
+            </button>
+          )}
+
+          {/* Desktop Floating Hub Window Button */}
+          {onOpenHub && (
+            <button
+              onClick={onOpenHub}
+              className={`flex h-9 w-9 items-center justify-center rounded-full border transition-all cursor-pointer ${
+                isDarkTheme ? 'bg-emerald-500/10 border-emerald-500/25 text-[#05DF72] hover:bg-emerald-500/20' : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+              }`}
+              title="Abrir Hub Flotante de Escritorio"
+            >
+              <AppWindow className="h-4 w-4" />
             </button>
           )}
 

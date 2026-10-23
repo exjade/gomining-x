@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { motion } from 'framer-motion';
 import { Header } from './components/Header';
 import { MobileNav } from './components/MobileNav';
 import { OverviewTab } from './components/OverviewTab';
@@ -11,18 +10,6 @@ import { ReallocateModal } from './components/ReallocateModal';
 import { LandingPage } from './components/LandingPage';
 import { FloatingHubWidget } from './components/FloatingHubWidget';
 import { AuthScreen } from './components/AuthScreen';
-import { 
-  LayoutDashboard, 
-  Cpu, 
-  TrendingUp, 
-  Layers, 
-  Bell, 
-  Flame, 
-  AppWindow, 
-  Sun, 
-  Moon, 
-  LogOut 
-} from 'lucide-react';
 
 import { 
   INITIAL_SALAD_ACCOUNTS, 
@@ -893,119 +880,11 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen font-sans selection:bg-[#05DF72]/20 selection:text-[#05DF72] transition-colors p-2 sm:p-4 md:p-6 lg:p-7 flex items-stretch gap-4 md:gap-5 ${
+    <div className={`min-h-screen font-sans selection:bg-[#05DF72]/20 selection:text-[#05DF72] transition-colors p-2 sm:p-4 md:p-6 lg:p-8 flex justify-center items-start ${
       themeMode === 'light' ? 'bg-[#EDEFF8] text-slate-900' : 'bg-[#07090F] text-slate-100'
     }`}>
-      {/* 1. LEFT VERTICAL ICON RAIL SIDEBAR (Ref: Floating capsule sidebar with MinerX emerald branding) */}
-      <aside className={`hidden md:flex flex-col items-center justify-between w-16 lg:w-18 py-6 rounded-3xl border shadow-xl backdrop-blur-2xl transition-all ${
-        themeMode === 'light'
-          ? 'bg-white/90 border-slate-200/90 shadow-slate-300/40 text-slate-700'
-          : 'bg-[#0C101A]/90 border-white/[0.08] shadow-black/60 text-slate-400'
-      }`}>
-        {/* Brand Logo Tile */}
-        <div 
-          onClick={() => setViewMode('landing')} 
-          className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/20 via-cyan-500/10 to-slate-950 border border-emerald-500/30 shadow-[0_0_20px_rgba(5,223,114,0.2)] cursor-pointer hover:scale-105 active:scale-95 transition-all group"
-          title="MinerX Intelligence - Ver Landing Informativa"
-        >
-          <Flame className="h-5 w-5 text-[#05DF72] group-hover:scale-110 transition-transform" />
-          <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-white dark:ring-[#0C101A]" />
-        </div>
-
-        {/* Vertical Capsule Pill Nav */}
-        <div className={`flex flex-col items-center gap-2 p-1.5 rounded-full border shadow-inner backdrop-blur-md ${
-          themeMode === 'light' ? 'bg-slate-100/90 border-slate-200' : 'bg-black/40 border-white/[0.06]'
-        }`}>
-          {[
-            { id: 'overview', icon: LayoutDashboard, title: 'Dashboard', badge: undefined },
-            { id: 'fleet', icon: Cpu, title: 'Flota GPUs', badge: fleetSummary.totalAllocatedGPUs },
-            { id: 'economics', icon: TrendingUp, title: 'Economía & ROI', badge: undefined },
-            { id: 'apis', icon: Layers, title: 'APIs & Bot', badge: undefined },
-            { id: 'alerts', icon: Bell, title: 'Alertas', badge: unresolvedAlertsCount > 0 ? unresolvedAlertsCount : undefined }
-          ].map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={`relative flex h-11 w-11 items-center justify-center rounded-full transition-colors cursor-pointer ${
-                  isActive
-                    ? 'text-slate-950 font-bold'
-                    : themeMode === 'light'
-                    ? 'text-slate-600 hover:text-slate-950 hover:bg-white/80'
-                    : 'text-slate-400 hover:text-white hover:bg-white/[0.08]'
-                }`}
-                title={item.title}
-              >
-                {isActive && (
-                  <motion.div
-                    layoutId="sidebar-active-pill"
-                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                    className="absolute inset-0 rounded-full bg-[#05DF72] shadow-md shadow-emerald-500/25"
-                  />
-                )}
-                <Icon className="relative z-10 h-5 w-5" />
-                {item.badge !== undefined && item.badge > 0 && (
-                  <span className={`absolute -top-0.5 -right-0.5 z-20 flex h-4 min-w-4 px-1 items-center justify-center rounded-full text-[9px] font-bold font-mono ${
-                    isActive ? 'bg-slate-950 text-[#05DF72]' : 'bg-emerald-500 text-slate-950'
-                  }`}>
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Bottom Actions: Hub Window / Theme / Logout */}
-        <div className="flex flex-col items-center gap-2.5">
-          <button
-            onClick={() => {
-              if ((window as any).electronAPI?.toggleDesktopWidget) {
-                (window as any).electronAPI.toggleDesktopWidget();
-              } else {
-                window.open('#widget', 'MinerX_HUD', 'width=360,height=520,frame=false,alwaysOnTop=true');
-              }
-            }}
-            className={`flex h-10 w-10 items-center justify-center rounded-2xl border transition-all cursor-pointer ${
-              themeMode === 'light'
-                ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20 hover:bg-emerald-500/20'
-                : 'bg-emerald-500/15 text-[#05DF72] border-emerald-500/30 hover:bg-emerald-500/25'
-            }`}
-            title="Abrir Hub Flotante de Escritorio"
-          >
-            <AppWindow className="h-4.5 w-4.5" />
-          </button>
-
-          <button
-            onClick={handleToggleTheme}
-            className={`flex h-10 w-10 items-center justify-center rounded-2xl border transition-all cursor-pointer ${
-              themeMode === 'light'
-                ? 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
-                : 'bg-white/[0.04] border-white/[0.08] text-slate-300 hover:bg-white/[0.1] hover:text-white'
-            }`}
-            title={themeMode === 'light' ? 'Cambiar a modo Oscuro' : 'Cambiar a modo Claro'}
-          >
-            {themeMode === 'light' ? <Moon className="h-4.5 w-4.5" /> : <Sun className="h-4.5 w-4.5 text-amber-400" />}
-          </button>
-
-          <button
-            onClick={handleLogout}
-            className={`flex h-10 w-10 items-center justify-center rounded-2xl border transition-all cursor-pointer ${
-              themeMode === 'light'
-                ? 'bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100'
-                : 'bg-rose-500/10 border-rose-500/20 text-rose-400 hover:bg-rose-500/20'
-            }`}
-            title="Cerrar sesión"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
-        </div>
-      </aside>
-
-      {/* 2. MAIN ELEVATED CARD CONTAINER (Ref: White floating modern card container) */}
-      <div className={`flex-1 min-w-0 flex flex-col rounded-[28px] sm:rounded-[36px] border shadow-2xl backdrop-blur-xl overflow-hidden transition-all ${
+      {/* MAIN ELEVATED CARD CONTAINER (Ref: White floating modern card container from video) */}
+      <div className={`w-full max-w-7xl flex flex-col rounded-[28px] sm:rounded-[36px] border shadow-2xl backdrop-blur-xl overflow-hidden transition-all ${
         themeMode === 'light'
           ? 'bg-white/95 border-slate-200/90 shadow-slate-300/40 text-slate-900'
           : 'bg-[#080B12]/95 border-white/[0.08] shadow-black/80 text-white'
@@ -1033,6 +912,13 @@ export const App: React.FC = () => {
           onLogout={handleLogout}
           isDarkTheme={themeMode === 'dark'}
           onToggleTheme={handleToggleTheme}
+          onOpenHub={() => {
+            if ((window as any).electronAPI?.toggleDesktopWidget) {
+              (window as any).electronAPI.toggleDesktopWidget();
+            } else {
+              window.open('#widget', 'MinerX_HUD', 'width=360,height=520,frame=false,alwaysOnTop=true');
+            }
+          }}
         />
 
         {/* Content Area */}
