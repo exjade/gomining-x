@@ -141,23 +141,27 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onOpenLanding, 
           <div className="h-14 w-14 rounded-2xl bg-slate-900 flex items-center justify-center text-[#05DF72] shadow-md border border-slate-800">
             <Zap className="h-7 w-7 fill-[#05DF72]" />
           </div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight font-rajdhani uppercase pt-1">
+          <h1 className={`text-2xl font-extrabold tracking-tight font-rajdhani uppercase pt-1 ${
+            isDarkTheme ? 'text-white' : 'text-slate-900'
+          }`}>
             MinerX <span className="text-[#05DF72]">PRO</span>
           </h1>
-          <p className="text-xs text-slate-500 font-medium">
+          <p className={`text-xs font-medium ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>
             Terminal de Telemetría Kryptex PRL & Flota SaladCloud
           </p>
         </div>
 
         {/* Tab Switcher (Iniciar Sesión / Crear Cuenta) */}
-        <div className="flex rounded-2xl bg-slate-100 p-1 border border-slate-200/70">
+        <div className={`flex rounded-2xl p-1 border ${
+          isDarkTheme ? 'bg-white/[0.04] border-white/10' : 'bg-slate-100 border-slate-200/70'
+        }`}>
           <button
             type="button"
             onClick={() => { setAuthMode('login'); setError(null); }}
-            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all font-rajdhani uppercase ${
+            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all font-rajdhani uppercase cursor-pointer ${
               authMode === 'login'
-                ? 'bg-slate-900 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'bg-slate-900 text-white shadow-sm ring-1 ring-[#05DF72]/40'
+                : isDarkTheme ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             Iniciar Sesión
@@ -165,10 +169,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onOpenLanding, 
           <button
             type="button"
             onClick={() => { setAuthMode('register'); setError(null); }}
-            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all font-rajdhani uppercase ${
+            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all font-rajdhani uppercase cursor-pointer ${
               authMode === 'register'
                 ? 'bg-[#05DF72] text-slate-950 font-bold shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
+                : isDarkTheme ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             Crear Cuenta
@@ -177,7 +181,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onOpenLanding, 
 
         {/* Error Alert */}
         {error && (
-          <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 text-xs flex items-center gap-2">
+          <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs flex items-center gap-2">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
           </div>
@@ -187,7 +191,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onOpenLanding, 
         <form onSubmit={handleSubmit} className="space-y-3.5">
           {authMode === 'register' && (
             <div>
-              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1 font-rajdhani">
+              <label className={`text-[11px] font-bold uppercase tracking-wider block mb-1 font-rajdhani ${
+                isDarkTheme ? 'text-slate-300' : 'text-slate-600'
+              }`}>
                 Nombre Completo
               </label>
               <div className="relative">
@@ -198,14 +204,20 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onOpenLanding, 
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Ej. Roman Miner"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#05DF72]/40 transition-all"
+                  className={`w-full pl-10 pr-4 py-2.5 rounded-2xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#05DF72]/40 transition-all ${
+                    isDarkTheme 
+                      ? 'bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 focus:bg-white/[0.08]' 
+                      : 'bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:bg-white'
+                  }`}
                 />
               </div>
             </div>
           )}
 
           <div>
-            <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1 font-rajdhani">
+            <label className={`text-[11px] font-bold uppercase tracking-wider block mb-1 font-rajdhani ${
+              isDarkTheme ? 'text-slate-300' : 'text-slate-600'
+            }`}>
               Usuario o Correo
             </label>
             <div className="relative">
@@ -216,14 +228,20 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onOpenLanding, 
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder={authMode === 'register' ? 'usuario o email' : 'admin o tu correo'}
-                className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#05DF72]/40 transition-all"
+                className={`w-full pl-10 pr-4 py-2.5 rounded-2xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#05DF72]/40 transition-all ${
+                  isDarkTheme 
+                    ? 'bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 focus:bg-white/[0.08]' 
+                    : 'bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:bg-white'
+                }`}
               />
             </div>
           </div>
 
           {authMode === 'register' && (
             <div>
-              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1 font-rajdhani">
+              <label className={`text-[11px] font-bold uppercase tracking-wider block mb-1 font-rajdhani ${
+                isDarkTheme ? 'text-slate-300' : 'text-slate-600'
+              }`}>
                 Correo Electrónico (Opcional)
               </label>
               <div className="relative">
@@ -233,14 +251,20 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onOpenLanding, 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="usuario@ejemplo.com"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#05DF72]/40 transition-all"
+                  className={`w-full pl-10 pr-4 py-2.5 rounded-2xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#05DF72]/40 transition-all ${
+                    isDarkTheme 
+                      ? 'bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 focus:bg-white/[0.08]' 
+                      : 'bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:bg-white'
+                  }`}
                 />
               </div>
             </div>
           )}
 
           <div>
-            <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1 font-rajdhani">
+            <label className={`text-[11px] font-bold uppercase tracking-wider block mb-1 font-rajdhani ${
+              isDarkTheme ? 'text-slate-300' : 'text-slate-600'
+            }`}>
               Contraseña
             </label>
             <div className="relative">
@@ -251,12 +275,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onOpenLanding, 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-10 pr-10 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#05DF72]/40 transition-all"
+                className={`w-full pl-10 pr-10 py-2.5 rounded-2xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#05DF72]/40 transition-all ${
+                  isDarkTheme 
+                    ? 'bg-white/[0.05] border border-white/10 text-white placeholder-slate-500 focus:bg-white/[0.08]' 
+                    : 'bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:bg-white'
+                }`}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -281,11 +309,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onOpenLanding, 
         </form>
 
         {/* Quick Demo Access Button */}
-        <div className="pt-2 border-t border-slate-100 flex flex-col items-center gap-2">
+        <div className={`pt-2 border-t flex flex-col items-center gap-2 ${
+          isDarkTheme ? 'border-white/10' : 'border-slate-100'
+        }`}>
           <button
             type="button"
             onClick={handleQuickDemoLogin}
-            className="w-full py-2.5 px-3 rounded-2xl bg-slate-100 hover:bg-slate-200/80 text-slate-700 font-bold text-xs font-rajdhani uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all"
+            className={`w-full py-2.5 px-3 rounded-2xl font-bold text-xs font-rajdhani uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              isDarkTheme 
+                ? 'bg-white/[0.06] hover:bg-white/[0.1] text-slate-200' 
+                : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700'
+            }`}
           >
             <Sparkles className="h-3.5 w-3.5 text-[#05DF72]" />
             <span>Acceso Rápido Administrador (1-Click)</span>
@@ -295,7 +329,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onOpenLanding, 
             <button
               type="button"
               onClick={onOpenLanding}
-              className="text-[11px] text-slate-400 hover:text-slate-700 font-medium transition-colors mt-1"
+              className="text-[11px] text-slate-400 hover:text-emerald-500 font-medium transition-colors mt-1 cursor-pointer"
             >
               Ver página de inicio y descargas web
             </button>

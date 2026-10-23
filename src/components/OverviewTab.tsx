@@ -417,37 +417,43 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             </div>
           </div>
           
-          {/* KPI 1: RENTABILIDAD NETA (hourlyNetProfitUSD) */}
+          {/* KPI 1: RENTABILIDAD NETA (hourlyNetProfitUSD) - Video Clone: "Speak with Confidence" (Pastel Violet) */}
           <div 
-            className={`relative overflow-hidden rounded-3xl border p-5 sm:p-6 transition-all duration-300 ${
+            className={`relative overflow-hidden rounded-[26px] border p-5 sm:p-6 transition-all duration-300 hover:shadow-md ${
               isLight
-                ? (isNetProfitable ? 'bg-gradient-to-br from-[#E8FAF0] via-[#F4FCF7] to-white border-emerald-200/80 shadow-xs hover:shadow-md text-slate-900' : 'bg-gradient-to-br from-[#FFF1F2] via-[#FFF8F8] to-white border-rose-300 shadow-xs text-slate-900')
-                : (isNetProfitable ? 'bg-gradient-to-br from-[#0B1E17]/95 via-[#07130F]/95 to-[#050B0E]/95 border-emerald-500/30 shadow-xl text-white' : 'bg-gradient-to-br from-[#1C0D11]/95 via-[#13070A]/95 to-[#050B0E]/95 border-rose-500/30 shadow-xl text-white')
+                ? 'bg-[#F1EEFC] border-purple-200/80 text-slate-900 shadow-xs'
+                : 'bg-[#141226] border-purple-500/20 text-white shadow-xl'
             }`}
           >
             {/* Subtle Ambient Glow */}
             <div 
               className={`absolute -top-12 -right-12 h-32 w-32 rounded-full blur-2xl pointer-events-none ${
-                isNetProfitable ? 'bg-emerald-500/15' : 'bg-rose-500/20'
+                isNetProfitable ? 'bg-purple-500/15' : 'bg-rose-500/20'
               }`} 
             />
 
             <div className="flex items-center justify-between gap-2 relative z-10">
-              <span className={`font-rajdhani text-xs font-bold uppercase tracking-wider ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
-                Rentabilidad Neta ({timeframe === 'hour' ? '1h' : timeframe === 'day' ? '24h' : '30d'})
-              </span>
+              <div>
+                <h4 className="font-bold text-base tracking-tight text-slate-900 dark:text-white font-sans">
+                  Rentabilidad Neta en Vivo
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Flujo neto tras costos de alquiler y fricción SPEI
+                </p>
+              </div>
+
               <div 
-                className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-rajdhani font-extrabold uppercase border ${
+                className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase border ${
                   !isNetProfitable
-                    ? 'bg-rose-500/15 text-[#FF2A55] border-rose-500/30'
+                    ? 'bg-rose-500/15 text-rose-500 border-rose-500/30'
                     : isNearBreakeven
                     ? 'bg-amber-500/15 text-amber-500 border-amber-500/30'
-                    : 'bg-emerald-500/15 text-[#05DF72] border-emerald-500/30'
+                    : 'bg-emerald-500/15 text-emerald-700 dark:text-[#05DF72] border-emerald-500/30'
                 }`}
               >
                 {!isNetProfitable ? (
                   <>
-                    <TrendingDown className="h-3 w-3" />
+                    <TrendingDown className="h-3 w-3 text-rose-500" />
                     <span>Quema Capital</span>
                   </>
                 ) : isNearBreakeven ? (
@@ -457,76 +463,82 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                   </>
                 ) : (
                   <>
-                    <TrendingUp className="h-3 w-3" />
+                    <TrendingUp className="h-3 w-3 text-[#05DF72]" />
                     <span>ROI Positivo</span>
                   </>
                 )}
               </div>
             </div>
 
-            {/* Primary Value with font-jetbrains */}
-            <div className="mt-3 flex items-baseline gap-2 relative z-10">
+            {/* Primary Value with bold tabular font */}
+            <div className="mt-4 flex items-baseline gap-2 relative z-10">
               <span 
                 className={`font-jetbrains text-3xl sm:text-4xl font-extrabold tracking-tight tabular-nums ${
-                  isNetProfitable ? 'text-[#05DF72]' : 'text-[#FF2A55]'
+                  isNetProfitable ? 'text-slate-900 dark:text-white' : 'text-rose-500'
                 }`}
               >
                 {currentNetProfit >= 0 ? '+' : ''}${currentNetProfit.toFixed(3)}
               </span>
-              <span className={`font-rajdhani text-xs font-semibold uppercase ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+              <span className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 font-mono">
                 USD / {timeframe === 'hour' ? 'hr' : timeframe === 'day' ? 'día' : 'mes'}
               </span>
             </div>
 
             {/* Breakdown: Gross Rev vs Rental Cost */}
-            <div className={`mt-3 pt-2.5 border-t grid grid-cols-2 gap-2 text-xs relative z-10 ${borderDivider}`}>
+            <div className="mt-3 pt-2.5 border-t border-purple-200/60 dark:border-white/10 grid grid-cols-2 gap-2 text-xs relative z-10">
               <div>
-                <span className={`text-[10px] block ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Ingreso Bruto:</span>
-                <span className={`font-jetbrains font-bold tabular-nums text-xs ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                <span className="text-[10px] block text-slate-500 dark:text-slate-400">Ingreso Bruto:</span>
+                <span className="font-jetbrains font-bold tabular-nums text-xs text-slate-900 dark:text-white">
                   +${currentGrossRevenue.toFixed(3)}
                 </span>
               </div>
               <div className="text-right">
-                <span className={`text-[10px] block ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Costo Salad:</span>
+                <span className="text-[10px] block text-slate-500 dark:text-slate-400">Costo Alquiler:</span>
                 <span className="font-jetbrains font-bold text-rose-500 tabular-nums text-xs">
                   -${currentRentalCost.toFixed(3)}
                 </span>
               </div>
             </div>
 
-            {/* Video-replica bottom bar: Dark Date Pill on left + Avatar rings on right */}
-            <div className="mt-3.5 pt-2.5 border-t flex items-center justify-between relative z-10 border-slate-200/60 dark:border-white/10">
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 text-white px-3 py-1 text-[11px] font-rajdhani font-bold shadow-xs">
+            {/* Video-replica bottom bar: Solid Black Pill on left + Avatar rings on right */}
+            <div className="mt-3.5 pt-2.5 border-t border-purple-200/60 dark:border-white/10 flex items-center justify-between relative z-10">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 text-white px-3.5 py-1 text-xs font-semibold shadow-xs">
                 <span>{new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
                 <span className="text-slate-400">•</span>
                 <span className="text-[#05DF72]">ROI Positivo</span>
               </div>
-              <div className="flex -space-x-1.5 overflow-hidden">
-                <div className="inline-flex h-6 w-6 items-center justify-center rounded-full ring-2 ring-white dark:ring-slate-900 bg-emerald-500/20 text-[#05DF72] text-[10px] font-bold">
-                  <Zap className="h-3 w-3" />
+              <div className="flex -space-x-2 overflow-hidden">
+                <div className="inline-flex h-6.5 w-6.5 items-center justify-center rounded-full ring-2 ring-white dark:ring-slate-900 bg-emerald-500/20 text-[#05DF72] text-[10px] font-bold">
+                  <Zap className="h-3 w-3 fill-[#05DF72]" />
                 </div>
-                <div className="inline-flex h-6 w-6 items-center justify-center rounded-full ring-2 ring-white dark:ring-slate-900 bg-cyan-500/20 text-cyan-400 text-[10px] font-bold">
+                <div className="inline-flex h-6.5 w-6.5 items-center justify-center rounded-full ring-2 ring-white dark:ring-slate-900 bg-cyan-500/20 text-cyan-400 text-[10px] font-bold">
                   <Cpu className="h-3 w-3" />
                 </div>
-                <div className="inline-flex h-6 w-6 items-center justify-center rounded-full ring-2 ring-white dark:ring-slate-900 bg-[#05DF72] text-slate-950 text-[9px] font-extrabold font-mono">
+                <div className="inline-flex h-6.5 w-6.5 items-center justify-center rounded-full ring-2 ring-white dark:ring-slate-900 bg-slate-900 text-white text-[9px] font-extrabold font-mono">
                   {summary.activeMiningGPUs || 1}x
                 </div>
               </div>
             </div>
           </div>
 
-          {/* KPI 2: EFICIENCIA DE FLOTA (fleetEfficiencyPct) */}
-          <div className={`relative overflow-hidden rounded-3xl border p-5 sm:p-6 transition-all duration-300 ${
+          {/* KPI 2: EFICIENCIA DE FLOTA - Video Clone: "Master the Basics" (Pastel Sky Blue) */}
+          <div className={`relative overflow-hidden rounded-[26px] border p-5 sm:p-6 transition-all duration-300 hover:shadow-md ${
             isLight 
-              ? 'bg-gradient-to-br from-[#EEF7FF] via-[#F6FAFF] to-white border-sky-200/80 shadow-xs hover:shadow-md text-slate-900' 
-              : 'bg-gradient-to-br from-[#0B1829]/95 via-[#08111D]/95 to-[#050B0E]/95 border-sky-500/30 shadow-xl text-white'
+              ? 'bg-[#E0F2FE] border-sky-200/80 text-slate-900 shadow-xs' 
+              : 'bg-[#0B1E30] border-sky-500/20 text-white shadow-xl'
           }`}>
             <div className="flex items-center justify-between gap-2">
-              <span className={`font-rajdhani text-xs font-bold uppercase tracking-wider ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
-                Eficiencia de Flota
-              </span>
+              <div>
+                <h4 className="font-bold text-base tracking-tight text-slate-900 dark:text-white font-sans">
+                  Eficiencia de Silicio & Flota
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Rendimiento real vs benchmark de silicio
+                </p>
+              </div>
+
               <span 
-                className="text-[10px] font-rajdhani font-bold px-2 py-0.5 rounded-full border"
+                className="text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase"
                 style={{
                   color: efficiencyColor,
                   backgroundColor: `${efficiencyColor}18`,
@@ -537,17 +549,16 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               </span>
             </div>
 
-            <div className="mt-3 flex items-center justify-between gap-4">
+            <div className="mt-4 flex items-center justify-between gap-4">
               <div>
                 <div className="flex items-baseline gap-1.5">
                   <span 
-                    className="font-jetbrains text-3xl sm:text-4xl font-extrabold tracking-tight tabular-nums"
-                    style={{ color: efficiencyColor }}
+                    className="font-jetbrains text-3xl sm:text-4xl font-extrabold tracking-tight tabular-nums text-slate-900 dark:text-white"
                   >
                     {efficiencyPct.toFixed(1)}%
                   </span>
                 </div>
-                <p className={`font-rajdhani text-xs mt-1 uppercase font-semibold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                <p className="text-xs mt-1 uppercase font-semibold text-slate-500 dark:text-slate-400 font-mono">
                   Vs Benchmark Teórico
                 </p>
               </div>
@@ -556,7 +567,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               <div className="relative h-16 w-16 flex-shrink-0 flex items-center justify-center">
                 <svg className="h-full w-full -rotate-90 transform" viewBox="0 0 36 36">
                   <path
-                    className={isLight ? 'text-slate-200' : 'text-white/10'}
+                    className={isLight ? 'text-sky-200/80' : 'text-white/10'}
                     strokeWidth="3.2"
                     stroke="currentColor"
                     fill="none"
@@ -574,26 +585,26 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                   />
                 </svg>
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <Cpu className={`h-4 w-4 ${isLight ? 'text-slate-600' : 'text-slate-300'}`} />
+                  <Cpu className={`h-4 w-4 ${isLight ? 'text-slate-700' : 'text-slate-300'}`} />
                 </div>
               </div>
             </div>
 
-            {/* Secondary stats & Video-replica bottom bar */}
-            <div className={`mt-3.5 pt-2.5 border-t flex items-center justify-between border-slate-200/60 dark:border-white/10`}>
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 text-white px-3 py-1 text-[11px] font-rajdhani font-bold shadow-xs">
+            {/* Video-replica bottom bar: Solid Black Pill on left + Avatar rings on right */}
+            <div className="mt-3.5 pt-2.5 border-t border-sky-200/60 dark:border-white/10 flex items-center justify-between">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 text-white px-3.5 py-1 text-xs font-semibold shadow-xs">
                 <span>{summary.activeMiningGPUs} GPUs Activas</span>
                 <span className="text-slate-400">•</span>
                 <span className={efficiencyPct >= 80 ? 'text-[#05DF72]' : 'text-amber-400'}>
                   {efficiencyPct >= 80 ? 'Saludable' : 'Alerta'}
                 </span>
               </div>
-              <div className="flex -space-x-1.5 overflow-hidden">
+              <div className="flex -space-x-2 overflow-hidden">
                 {workers.slice(0, 3).map((w, idx) => (
                   <div 
                     key={w.id || idx}
                     title={`${w.workerName} (${w.gpuModel})`}
-                    className="inline-flex h-6 w-6 items-center justify-center rounded-full ring-2 ring-white dark:ring-slate-900 bg-slate-800 text-white text-[9px] font-mono font-bold"
+                    className="inline-flex h-6.5 w-6.5 items-center justify-center rounded-full ring-2 ring-white dark:ring-slate-900 bg-slate-800 text-white text-[9px] font-mono font-bold"
                   >
                     {w.gpuModel.includes('4090') ? '49' : w.gpuModel.includes('3090') ? '39' : 'GPU'}
                   </div>
@@ -602,11 +613,11 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             </div>
           </div>
 
-          {/* KPI 3: POTENCIA TOTAL (totalHashrateTHs) */}
-          <div className={`relative overflow-hidden rounded-3xl border p-5 sm:p-6 transition-all duration-300 flex flex-col justify-between ${
+          {/* KPI 3: POTENCIA TOTAL - Video Clone: "Sound Like a Native" (Pastel Mint Green) */}
+          <div className={`relative overflow-hidden rounded-[26px] border p-5 sm:p-6 transition-all duration-300 hover:shadow-md flex flex-col justify-between ${
             isLight 
-              ? 'bg-gradient-to-br from-[#E6F9F2] via-[#F2FDF8] to-white border-teal-200/80 shadow-xs hover:shadow-md text-slate-900' 
-              : 'bg-gradient-to-br from-[#0A1F1B]/95 via-[#071613]/95 to-[#050B0E]/95 border-teal-500/30 shadow-xl text-white'
+              ? 'bg-[#DCFCE7] border-emerald-200/80 text-slate-900 shadow-xs' 
+              : 'bg-[#0B251A] border-emerald-500/20 text-white shadow-xl'
           }`}>
             
             {/* Background SVG Sparkline Fluid Effect */}
@@ -638,37 +649,43 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             </div>
 
             <div className="flex items-center justify-between gap-2 relative z-10">
-              <span className={`font-rajdhani text-xs font-bold uppercase tracking-wider ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
-                Potencia Total de Minado
-              </span>
-              <div className="flex items-center gap-1 text-[10px] font-rajdhani font-bold text-[#05DF72] bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
-                <Zap className="h-3 w-3 fill-[#05DF72]" />
+              <div>
+                <h4 className="font-bold text-base tracking-tight text-slate-900 dark:text-white font-sans">
+                  Potencia Total de Minado
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Algoritmo PearlHash • PoUW Pearl
+                </p>
+              </div>
+
+              <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-800 dark:text-[#05DF72] bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                <Zap className="h-3 w-3 fill-[#05DF72] text-[#05DF72]" />
                 <span>PearlHash</span>
               </div>
             </div>
 
             {/* Primary Hashrate */}
-            <div className="mt-3 relative z-10">
+            <div className="mt-4 relative z-10">
               <div className="flex items-baseline gap-2">
-                <span className={`font-jetbrains text-3xl sm:text-4xl font-extrabold tracking-tight tabular-nums ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                <span className="font-jetbrains text-3xl sm:text-4xl font-extrabold tracking-tight tabular-nums text-slate-900 dark:text-white">
                   {summary.totalHashrateTHs.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                 </span>
-                <span className="font-rajdhani text-sm font-bold text-[#05DF72] uppercase">
+                <span className="text-sm font-bold text-emerald-700 dark:text-[#05DF72] uppercase font-mono">
                   TH/s
                 </span>
               </div>
-              <p className={`font-rajdhani text-xs mt-1 uppercase font-semibold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                Teórico Silicio: <span className={`font-jetbrains font-bold tabular-nums ${isLight ? 'text-slate-700' : 'text-slate-200'}`}>{summary.benchmarkHashrateTHs.toFixed(1)} TH/s</span>
+              <p className="text-xs mt-1 uppercase font-semibold text-slate-500 dark:text-slate-400 font-mono">
+                Teórico Silicio: <span className="font-jetbrains font-bold tabular-nums text-slate-700 dark:text-slate-200">{summary.benchmarkHashrateTHs.toFixed(1)} TH/s</span>
               </p>
             </div>
 
-            {/* Secondary stats & Video-replica bottom bar */}
-            <div className={`mt-3.5 pt-2.5 border-t flex items-center justify-between text-xs relative z-10 border-slate-200/60 dark:border-white/10`}>
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 text-white px-3 py-1 text-[11px] font-rajdhani font-bold shadow-xs">
+            {/* Video-replica bottom bar: Solid Black Pill on left + Kryptex PPS on right */}
+            <div className="mt-3.5 pt-2.5 border-t border-emerald-200/60 dark:border-white/10 flex items-center justify-between text-xs relative z-10">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 text-white px-3.5 py-1 text-xs font-semibold shadow-xs">
                 <span className="text-amber-400">Equilibrio: {fleetBreakevenTHs.toFixed(1)} TH/s</span>
               </div>
-              <div className="inline-flex items-center gap-1 text-[10px] font-rajdhani font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
-                <CheckCircle2 className="h-3 w-3 text-[#05DF72]" />
+              <div className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 dark:text-emerald-300 bg-white/80 dark:bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20 shadow-xs">
+                <CheckCircle2 className="h-3.5 w-3.5 text-[#05DF72]" />
                 <span>Kryptex PPS</span>
               </div>
             </div>

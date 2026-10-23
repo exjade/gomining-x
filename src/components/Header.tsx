@@ -4,7 +4,6 @@ import {
   Activity, 
   Cpu, 
   DollarSign, 
-  TrendingUp, 
   Bell, 
   Layers, 
   RefreshCw, 
@@ -15,7 +14,9 @@ import {
   Send,
   Copy,
   X,
-  Sparkles
+  Sparkles,
+  Sun,
+  Moon
 } from 'lucide-react';
 import type { FleetSummary, AppSettings, KryptexPoolInfo, SaladBalanceInfo } from '../types/minerx';
 
@@ -284,157 +285,59 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* 2. MAIN HEADER & FINTECH NAVIGATION BAR */}
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:py-3.5">
+      {/* 2. MAIN HEADER & FINTECH NAVIGATION BAR (Ref: Video Clean Header) */}
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 py-3.5">
         
-        {/* Brand Identity & Version */}
-        <div 
-          onClick={onOpenLanding}
-          className={`flex items-center gap-3 ${onOpenLanding ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''}`}
-          title={onOpenLanding ? "Ver Landing Page & Descargas (.EXE / .APK)" : undefined}
-        >
-          <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/20 via-cyan-500/20 to-slate-900 border border-emerald-500/30 shadow-[0_0_20px_rgba(5,242,146,0.2)]">
-            <Flame className="h-5 w-5 text-[#05F292]" />
-            <div className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-emerald-500" />
+        {/* Left: Video-Cloned Squircle Logo Tile + "Dashboard" Title */}
+        <div className="flex items-center gap-3">
+          <div 
+            onClick={onOpenLanding}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-[#05DF72] shadow-sm hover:scale-105 active:scale-95 transition-all cursor-pointer"
+            title={onOpenLanding ? "Ver Landing Page & Descargas (.EXE / .APK)" : "MinerX Telemetry Hub"}
+          >
+            <Flame className="h-5 w-5 fill-[#05DF72]" />
           </div>
 
           <div>
             <div className="flex items-center gap-2">
-              <span className={`font-display-title text-xl font-extrabold tracking-tight ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
-                Miner<span className="text-[#05DF72]">X</span>
+              <h1 className={`text-xl sm:text-2xl font-bold tracking-tight font-sans ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+                {activeTab === 'overview' ? 'Dashboard' : activeTab === 'fleet' ? 'Flota GPUs' : activeTab === 'economics' ? 'Calculadora' : activeTab === 'apis' ? 'APIs & Bot' : 'Alertas'}
+              </h1>
+              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-[#05DF72] border border-emerald-500/20">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#05DF72] animate-pulse"></span>
+                <span>PoUW</span>
               </span>
-              <span className="rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-mono-num font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                PRO FINTECH
-              </span>
-            </div>
-            <p className={`text-[11px] hidden sm:block ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>
-              SaladCloud GPU Farm & Kryptex Pool Intelligence
-            </p>
-          </div>
-        </div>
-
-        {/* Quick Wallet Address Bar with 1-Click Copy */}
-        <div className={`flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-mono-num shadow-inner transition-colors ${
-          isDarkTheme ? 'bg-[#0C0F17] border border-white/[0.08] text-slate-200' : 'bg-slate-100/80 border border-slate-200 text-slate-800'
-        }`}>
-          <Wallet className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-          {isEditingWallet ? (
-            <form onSubmit={handleSaveWallet} className="flex items-center gap-1.5">
-              <input
-                type="text"
-                value={walletInput}
-                onChange={(e) => setWalletInput(e.target.value)}
-                placeholder="prl1q..."
-                className={`w-48 sm:w-64 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400 ${
-                  isDarkTheme ? 'bg-[#06070A] border border-cyan-500/50 text-white' : 'bg-white border border-slate-300 text-slate-900'
-                }`}
-                autoFocus
-              />
-              <button
-                type="submit"
-                className="bg-[#05DF72] text-slate-950 font-bold p-1 rounded-lg hover:bg-emerald-400 transition-colors"
-                title="Guardar Wallet"
-              >
-                <Check className="h-3.5 w-3.5" />
-              </button>
-            </form>
-          ) : (
-            <div className="flex items-center gap-2">
-              <span className={`${isDarkTheme ? 'text-slate-500' : 'text-slate-400'} hidden sm:inline`}>Wallet:</span>
-              <span 
-                onClick={() => setIsEditingWallet(true)} 
-                className={`cursor-pointer font-bold truncate max-w-[140px] sm:max-w-[190px] ${
-                  isDarkTheme ? 'text-slate-200 hover:text-cyan-300' : 'text-slate-800 hover:text-emerald-600'
-                }`}
-                title="Haz clic para cambiar dirección"
-              >
-                {walletAddress ? `${walletAddress.substring(0, 8)}...${walletAddress.substring(walletAddress.length - 6)}` : 'Sin Wallet (Asignar)'}
-              </span>
-              
-              {walletAddress && (
-                <button
-                  onClick={handleCopyWallet}
-                  className={`p-0.5 rounded transition-colors ${isDarkTheme ? 'text-slate-400 hover:text-white' : 'text-slate-400 hover:text-slate-700'}`}
-                  title="Copiar billetera completa"
-                >
-                  {copiedWallet ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
-                </button>
-              )}
-
-              <button
-                onClick={() => setIsEditingWallet(true)}
-                className="text-[10px] text-emerald-600 dark:text-cyan-400 font-semibold"
-              >
-                Editar
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Quick KPI Ribbon (Desktop) */}
-        <div className={`hidden xl:flex items-center gap-5 rounded-2xl px-4 py-2 font-mono-num shadow-xs transition-colors ${
-          isDarkTheme ? 'border border-white/[0.08] bg-[#0E121C]/80 text-white' : 'border border-slate-200 bg-slate-50/90 text-slate-900'
-        }`}>
-          <div>
-            <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Hashrate Flota</div>
-            <div className="text-sm font-bold text-slate-900 dark:text-cyan-400 flex items-center gap-1">
-              {summary.totalHashrateTHs.toLocaleString()} <span className="text-xs text-slate-400 font-normal">TH/s</span>
-            </div>
-          </div>
-          
-          <div className={`h-6 w-[1px] ${isDarkTheme ? 'bg-white/[0.08]' : 'bg-slate-200'}`} />
-          
-          <div>
-            <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">GPUs Minando</div>
-            <div className="text-sm font-bold flex items-center gap-1">
-              <span className="text-[#05DF72]">{summary.activeMiningGPUs}</span>
-              <span className="text-slate-400">/</span>
-              <span className={isDarkTheme ? 'text-slate-300' : 'text-slate-700'}>{summary.totalAllocatedGPUs}</span>
-            </div>
-          </div>
-
-          <div className={`h-6 w-[1px] ${isDarkTheme ? 'bg-white/[0.08]' : 'bg-slate-200'}`} />
-
-          <div>
-            <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Yield Neto / hr</div>
-            <div className={`text-sm font-bold flex items-center gap-1 ${summary.hourlyNetProfitUSD >= 0 ? 'text-[#05DF72]' : 'text-rose-500'}`}>
-              <TrendingUp className="h-3.5 w-3.5" />
-              <span>${summary.hourlyNetProfitUSD > 0 ? '+' : ''}{summary.hourlyNetProfitUSD.toFixed(3)}</span>
             </div>
           </div>
         </div>
 
-        {/* FinTech Pill Navigation (Desktop) */}
-        <nav className={`hidden md:flex items-center p-1 rounded-2xl transition-colors ${
-          isDarkTheme ? 'bg-white/[0.03] border border-white/[0.06]' : 'bg-slate-100/90 border border-slate-200/80 shadow-xs'
+        {/* Center: Video-Cloned Pill Capsule Navigation */}
+        <nav className={`hidden md:flex items-center p-1 rounded-full border shadow-inner transition-colors ${
+          isDarkTheme ? 'bg-[#0A0D16] border-white/10' : 'bg-slate-100/90 border-slate-200/90'
         }`}>
           {tabs.map((tab) => {
-            const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`relative flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                className={`relative flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
                   isActive
-                    ? 'bg-[#05DF72] text-slate-950 font-bold shadow-md shadow-[#05DF72]/20'
+                    ? 'bg-slate-900 text-white shadow-xs'
                     : isDarkTheme
-                    ? 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
+                    ? 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
                 }`}
               >
-                <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-slate-950 font-bold' : isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`} />
                 <span>{tab.label}</span>
-                {tab.badge !== undefined && (
+                {tab.badge !== undefined && tab.badge > 0 && (
                   <span
-                    className={`ml-0.5 rounded-full px-1.5 py-0.2 text-[10px] font-mono-num font-bold ${
+                    className={`ml-0.5 rounded-full px-1.5 py-0.2 text-[9px] font-mono font-bold ${
                       tab.id === 'alerts' && unresolvedAlertsCount > 0
-                        ? 'bg-rose-500/20 text-rose-500 border border-rose-500/40 animate-pulse'
+                        ? 'bg-rose-500 text-white animate-pulse'
                         : isActive
-                        ? 'bg-black/15 text-slate-950'
-                        : isDarkTheme
-                        ? 'bg-white/[0.08] text-slate-300'
-                        : 'bg-slate-200 text-slate-700'
+                        ? 'bg-[#05DF72] text-slate-950'
+                        : 'bg-emerald-500/20 text-[#05DF72]'
                     }`}
                   >
                     {tab.badge}
@@ -445,53 +348,116 @@ export const Header: React.FC<HeaderProps> = ({
           })}
         </nav>
 
-        {/* User Session, Theme Toggle & Landing Page Link */}
-        <div className="flex items-center gap-2">
+        {/* Right: Video-Cloned Action Circles (Search, Notification Bell, User Avatar) */}
+        <div className="flex items-center gap-2 sm:gap-2.5">
+          {/* Quick Wallet & Salad status pill / Edit form */}
+          {isEditingWallet ? (
+            <form onSubmit={handleSaveWallet} className="flex items-center gap-1.5 bg-[#06070A] border border-[#05DF72] rounded-full px-2.5 py-1 text-xs shadow-lg animate-in fade-in duration-200">
+              <Wallet className="h-3 w-3 text-[#05DF72]" />
+              <input
+                type="text"
+                value={walletInput}
+                onChange={(e) => setWalletInput(e.target.value)}
+                placeholder="prl1q..."
+                className="w-32 bg-transparent text-xs text-white font-mono focus:outline-none"
+                autoFocus
+              />
+              <button type="submit" className="p-0.5 rounded text-emerald-400 hover:text-emerald-300 cursor-pointer" title="Guardar Wallet">
+                <Check className="h-3.5 w-3.5" />
+              </button>
+              <button type="button" onClick={() => setIsEditingWallet(false)} className="p-0.5 rounded text-slate-400 hover:text-white cursor-pointer" title="Cancelar">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </form>
+          ) : (
+            <div className={`hidden lg:flex items-center gap-2 rounded-full px-3 py-1 text-xs font-mono border transition-colors ${
+              isDarkTheme ? 'bg-white/[0.03] border-white/10 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-700'
+            }`}>
+              <Wallet className="h-3.5 w-3.5 text-[#05DF72]" />
+              <span 
+                onClick={() => {
+                  setWalletInput(walletAddress || '');
+                  setIsEditingWallet(true);
+                }} 
+                className="cursor-pointer truncate max-w-[120px] font-semibold hover:text-[#05DF72]"
+                title="Click para editar wallet"
+              >
+                {walletAddress ? `${walletAddress.substring(0, 6)}...${walletAddress.substring(walletAddress.length - 4)}` : 'Asignar Wallet'}
+              </span>
+              {walletAddress && (
+                <button 
+                  type="button" 
+                  onClick={handleCopyWallet} 
+                  className="text-slate-400 hover:text-emerald-400 cursor-pointer" 
+                  title={copiedWallet ? "Copiado!" : "Copiar wallet"}
+                >
+                  {copiedWallet ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                </button>
+              )}
+              <span className="text-slate-400">•</span>
+              <span 
+                onClick={() => {
+                  setSaladInput(saladBalance.totalBalanceUSD > 0 ? saladBalance.totalBalanceUSD.toString() : '');
+                  setIsEditingSalad(true);
+                }}
+                className="cursor-pointer font-bold text-[#05DF72] hover:underline"
+                title="Click para actualizar saldo Salad"
+              >
+                ${saladBalance.totalBalanceUSD.toFixed(2)}
+              </span>
+            </div>
+          )}
+
+          {/* Theme Toggle Button */}
           {onToggleTheme && (
             <button
               onClick={onToggleTheme}
-              className={`p-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer flex items-center justify-center ${
-                isDarkTheme 
-                  ? 'bg-white/[0.04] hover:bg-white/[0.08] text-amber-300 border-white/[0.08]' 
-                  : 'bg-slate-100 hover:bg-slate-200 text-[#05DF72] border-slate-200'
+              className={`flex h-9 w-9 items-center justify-center rounded-full border transition-all cursor-pointer ${
+                isDarkTheme ? 'bg-white/[0.04] border-white/10 text-amber-400 hover:bg-white/[0.08]' : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
               }`}
-              title={isDarkTheme ? "Cambiar a Tema Claro Esmeralda" : "Cambiar a Tema Oscuro"}
+              title={isDarkTheme ? "Cambiar a modo Claro" : "Cambiar a modo Oscuro"}
             >
-              <Sparkles className="w-4 h-4" />
+              {isDarkTheme ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4" />}
             </button>
           )}
 
-          {onOpenLanding && (
-            <button
-              onClick={onOpenLanding}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                isDarkTheme 
-                  ? 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/[0.08]' 
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
-              }`}
-              title="Descargas .EXE/.APK y Presentación"
-            >
-              <span>Landing & Apps</span>
-            </button>
-          )}
+          {/* Search Button Circle */}
+          <button
+            onClick={() => setActiveTab('fleet')}
+            className={`flex h-9 w-9 items-center justify-center rounded-full border transition-all cursor-pointer ${
+              isDarkTheme ? 'bg-white/[0.04] border-white/10 text-slate-300 hover:text-white' : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
+            }`}
+            title="Buscar en Flota"
+          >
+            <Sparkles className="h-4 w-4 text-[#05DF72]" />
+          </button>
 
-          {currentUser && (
-            <div className={`hidden lg:flex items-center gap-2 px-2.5 py-1 rounded-xl text-xs border ${
-              isDarkTheme ? 'bg-white/[0.03] border-white/[0.06] text-white' : 'bg-slate-100 border-slate-200 text-slate-900'
-            }`}>
-              <span className="w-2 h-2 rounded-full bg-[#05DF72]" />
-              <span className="font-mono text-[11px] font-medium">{currentUser.username}</span>
-              {onLogout && (
-                <button
-                  onClick={onLogout}
-                  className="text-slate-400 hover:text-rose-500 p-0.5 cursor-pointer ml-1"
-                  title="Cerrar sesión"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          )}
+          {/* Notification Bell Circle */}
+          <button
+            onClick={() => setActiveTab('alerts')}
+            className={`relative flex h-9 w-9 items-center justify-center rounded-full border transition-all cursor-pointer ${
+              isDarkTheme ? 'bg-white/[0.04] border-white/10 text-slate-300 hover:text-white' : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
+            }`}
+            title="Ver Alertas"
+          >
+            <Bell className="h-4 w-4" />
+            {unresolvedAlertsCount > 0 && (
+              <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900 animate-ping"></span>
+            )}
+            {unresolvedAlertsCount > 0 && (
+              <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900"></span>
+            )}
+          </button>
+
+          {/* User Profile Avatar Circle with Status */}
+          <div 
+            onClick={onLogout}
+            className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-900 text-white text-xs font-bold ring-2 ring-[#05DF72]/40 cursor-pointer shadow-xs hover:ring-[#05DF72] transition-all"
+            title={currentUser ? `Conectado como ${currentUser.username} (Click para salir)` : 'Sesión Activa'}
+          >
+            <span>{currentUser?.username ? currentUser.username.substring(0, 2).toUpperCase() : 'MX'}</span>
+            <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-[#05DF72] ring-2 ring-white dark:ring-slate-900"></span>
+          </div>
         </div>
       </div>
     </header>
