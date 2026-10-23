@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { Header } from './components/Header';
 import { MobileNav } from './components/MobileNav';
 import { OverviewTab } from './components/OverviewTab';
@@ -928,18 +929,25 @@ export const App: React.FC = () => {
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`relative flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200 cursor-pointer ${
+                className={`relative flex h-11 w-11 items-center justify-center rounded-full transition-colors cursor-pointer ${
                   isActive
-                    ? 'bg-[#05DF72] text-slate-950 font-bold shadow-md shadow-emerald-500/25 scale-105'
+                    ? 'text-slate-950 font-bold'
                     : themeMode === 'light'
                     ? 'text-slate-600 hover:text-slate-950 hover:bg-white/80'
                     : 'text-slate-400 hover:text-white hover:bg-white/[0.08]'
                 }`}
                 title={item.title}
               >
-                <Icon className="h-5 w-5" />
+                {isActive && (
+                  <motion.div
+                    layoutId="sidebar-active-pill"
+                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                    className="absolute inset-0 rounded-full bg-[#05DF72] shadow-md shadow-emerald-500/25"
+                  />
+                )}
+                <Icon className="relative z-10 h-5 w-5" />
                 {item.badge !== undefined && item.badge > 0 && (
-                  <span className={`absolute -top-0.5 -right-0.5 flex h-4 min-w-4 px-1 items-center justify-center rounded-full text-[9px] font-bold font-mono ${
+                  <span className={`absolute -top-0.5 -right-0.5 z-20 flex h-4 min-w-4 px-1 items-center justify-center rounded-full text-[9px] font-bold font-mono ${
                     isActive ? 'bg-slate-950 text-[#05DF72]' : 'bg-emerald-500 text-slate-950'
                   }`}>
                     {item.badge}

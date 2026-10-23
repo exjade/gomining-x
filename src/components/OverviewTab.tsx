@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { apiFetch } from '../utils/apiConfig';
 import { 
   TrendingUp, 
@@ -418,8 +419,12 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           </div>
           
           {/* KPI 1: RENTABILIDAD NETA (hourlyNetProfitUSD) - Video Clone: "Speak with Confidence" (Pastel Violet) */}
-          <div 
-            className={`relative overflow-hidden rounded-[26px] border p-5 sm:p-6 transition-all duration-300 hover:shadow-md ${
+          <motion.div 
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: 0.05 }}
+            whileHover={{ y: -5, transition: { duration: 0.2 } }}
+            className={`relative overflow-hidden rounded-[28px] border p-5 sm:p-6 transition-shadow duration-300 hover:shadow-lg ${
               isLight
                 ? 'bg-[#F1EEFC] border-purple-200/80 text-slate-900 shadow-xs'
                 : 'bg-[#141226] border-purple-500/20 text-white shadow-xl'
@@ -519,14 +524,20 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                 </div>
               </div>
             </div>
-          </div>
+          </motion.div>
 
           {/* KPI 2: EFICIENCIA DE FLOTA - Video Clone: "Master the Basics" (Pastel Sky Blue) */}
-          <div className={`relative overflow-hidden rounded-[26px] border p-5 sm:p-6 transition-all duration-300 hover:shadow-md ${
-            isLight 
-              ? 'bg-[#E0F2FE] border-sky-200/80 text-slate-900 shadow-xs' 
-              : 'bg-[#0B1E30] border-sky-500/20 text-white shadow-xl'
-          }`}>
+          <motion.div 
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: 0.1 }}
+            whileHover={{ y: -5, transition: { duration: 0.2 } }}
+            className={`relative overflow-hidden rounded-[28px] border p-5 sm:p-6 transition-shadow duration-300 hover:shadow-lg ${
+              isLight 
+                ? 'bg-[#E0F2FE] border-sky-200/80 text-slate-900 shadow-xs' 
+                : 'bg-[#0B1E30] border-sky-500/20 text-white shadow-xl'
+            }`}
+          >
             <div className="flex items-center justify-between gap-2">
               <div>
                 <h4 className="font-bold text-base tracking-tight text-slate-900 dark:text-white font-sans">
@@ -611,14 +622,20 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                 ))}
               </div>
             </div>
-          </div>
+          </motion.div>
 
           {/* KPI 3: POTENCIA TOTAL - Video Clone: "Sound Like a Native" (Pastel Mint Green) */}
-          <div className={`relative overflow-hidden rounded-[26px] border p-5 sm:p-6 transition-all duration-300 hover:shadow-md flex flex-col justify-between ${
-            isLight 
-              ? 'bg-[#DCFCE7] border-emerald-200/80 text-slate-900 shadow-xs' 
-              : 'bg-[#0B251A] border-emerald-500/20 text-white shadow-xl'
-          }`}>
+          <motion.div 
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: 0.15 }}
+            whileHover={{ y: -5, transition: { duration: 0.2 } }}
+            className={`relative overflow-hidden rounded-[28px] border p-5 sm:p-6 transition-shadow duration-300 hover:shadow-lg flex flex-col justify-between ${
+              isLight 
+                ? 'bg-[#DCFCE7] border-emerald-200/80 text-slate-900 shadow-xs' 
+                : 'bg-[#0B251A] border-emerald-500/20 text-white shadow-xl'
+            }`}
+          >
             
             {/* Background SVG Sparkline Fluid Effect */}
             <div className="absolute right-0 bottom-2 w-44 h-16 opacity-35 pointer-events-none">
@@ -689,16 +706,22 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                 <span>Kryptex PPS</span>
               </div>
             </div>
-          </div>
+          </motion.div>
         </div>
 
         {/* RIGHT COLUMN: WIDE RECHARTS AREA ON TOP + 2 SIDE-BY-SIDE CARDS BELOW (8 COLS ON DESKTOP) */}
         <div className="lg:col-span-8 flex flex-col gap-4">
           
           {/* MAIN RECHARTS AREA ("Performance Chart" Video Clone) */}
-          <div className={`rounded-3xl border p-5 sm:p-6 flex flex-col justify-between transition-all ${
-            isLight ? 'bg-white border-slate-200/90 shadow-xs hover:shadow-md text-slate-900' : 'border-white/10 bg-[#080B11]/90 backdrop-blur-xl shadow-xl text-white'
-          }`}>
+          <motion.div 
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.08 }}
+            whileHover={{ y: -3, transition: { duration: 0.2 } }}
+            className={`rounded-[30px] border p-5 sm:p-7 flex flex-col justify-between transition-shadow duration-300 hover:shadow-lg ${
+              isLight ? 'bg-white border-slate-200/90 shadow-xs text-slate-900' : 'border-white/10 bg-[#080B11]/90 backdrop-blur-xl shadow-xl text-white'
+            }`}
+          >
             
             {/* Header of Area Chart with Video-Cloned Indicators */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -944,15 +967,21 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                 )}
               </ResponsiveContainer>
             </div>
-          </div>
+          </motion.div>
 
           {/* 2 SIDE-BY-SIDE BENTO CARDS */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
             
             {/* CARD A: VIGILANCIA SILICIO ("Homework" Video Clone) */}
-            <div className={`rounded-3xl border p-5 sm:p-6 flex flex-col justify-between transition-all ${
-              isLight ? 'bg-white border-slate-200/90 shadow-xs hover:shadow-md text-slate-900' : 'border-white/10 bg-[#080B11]/90 backdrop-blur-xl shadow-xl text-white'
-            }`}>
+            <motion.div 
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.16 }}
+              whileHover={{ y: -4, transition: { duration: 0.2 } }}
+              className={`rounded-[30px] border p-5 sm:p-6 flex flex-col justify-between transition-shadow duration-300 hover:shadow-lg ${
+                isLight ? 'bg-white border-slate-200/90 shadow-xs text-slate-900' : 'border-white/10 bg-[#080B11]/90 backdrop-blur-xl shadow-xl text-white'
+              }`}
+            >
               <div>
                 <div className="flex items-center justify-between gap-2 mb-3">
                   <div>
@@ -1066,12 +1095,18 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                   </button>
                 </div>
               </div>
-            </div>
+            </motion.div>
 
             {/* CARD B: BALANCE & PAGOS KRYPTEX ("Friends Score" Video Clone) */}
-            <div className={`rounded-3xl border p-5 sm:p-6 flex flex-col justify-between transition-all ${
-              isLight ? 'bg-white border-slate-200/90 shadow-xs hover:shadow-md text-slate-900' : 'border-white/10 bg-[#080B11]/90 backdrop-blur-xl shadow-xl text-white'
-            }`}>
+            <motion.div 
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.22 }}
+              whileHover={{ y: -4, transition: { duration: 0.2 } }}
+              className={`rounded-[30px] border p-5 sm:p-6 flex flex-col justify-between transition-shadow duration-300 hover:shadow-lg ${
+                isLight ? 'bg-white border-slate-200/90 shadow-xs text-slate-900' : 'border-white/10 bg-[#080B11]/90 backdrop-blur-xl shadow-xl text-white'
+              }`}
+            >
               <div>
                 <div className="flex items-center justify-between gap-2 mb-3">
                   <div>
@@ -1229,7 +1264,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                   <ExternalLink className="h-3 w-3 text-[#05DF72]" />
                 </a>
               )}
-            </div>
+            </motion.div>
 
           </div>
 

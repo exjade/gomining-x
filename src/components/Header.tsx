@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { apiFetch } from '../utils/apiConfig';
 import { 
   Activity, 
@@ -311,7 +312,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Center: Video-Cloned Pill Capsule Navigation */}
+        {/* Center: Video-Cloned Pill Capsule Navigation with Framer Motion sliding pill */}
         <nav className={`hidden md:flex items-center p-1 rounded-full border shadow-inner transition-colors ${
           isDarkTheme ? 'bg-[#0A0D16] border-white/10' : 'bg-slate-100/90 border-slate-200/90'
         }`}>
@@ -321,18 +322,25 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`relative flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                className={`relative flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
                   isActive
-                    ? 'bg-slate-900 text-white shadow-xs'
+                    ? 'text-white'
                     : isDarkTheme
-                    ? 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+                    ? 'text-slate-400 hover:text-white'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <span>{tab.label}</span>
+                {isActive && (
+                  <motion.div
+                    layoutId="header-active-pill"
+                    transition={{ type: 'spring', stiffness: 450, damping: 35 }}
+                    className="absolute inset-0 rounded-full bg-slate-900 shadow-xs"
+                  />
+                )}
+                <span className="relative z-10">{tab.label}</span>
                 {tab.badge !== undefined && tab.badge > 0 && (
                   <span
-                    className={`ml-0.5 rounded-full px-1.5 py-0.2 text-[9px] font-mono font-bold ${
+                    className={`relative z-10 ml-0.5 rounded-full px-1.5 py-0.2 text-[9px] font-mono font-bold ${
                       tab.id === 'alerts' && unresolvedAlertsCount > 0
                         ? 'bg-rose-500 text-white animate-pulse'
                         : isActive
