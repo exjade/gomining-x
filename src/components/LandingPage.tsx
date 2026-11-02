@@ -245,8 +245,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </button>
 
             <a
-              href="/downloads/MinerX-Windows-v1.2.1.zip"
-              download="MinerX-Windows-v1.2.1.zip"
+              href="/downloads/MinerX-Windows-v1.2.2.zip"
+              download="MinerX-Windows-v1.2.2.zip"
               className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.15] text-white font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <Monitor className="w-4 h-4 text-cyan-400" />
@@ -254,8 +254,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </a>
 
             <a
-              href="/downloads/MinerX-Android-v1.2.1.zip"
-              download="MinerX-Android-v1.2.1.zip"
+              href="/downloads/MinerX-Android-v1.2.2.zip"
+              download="MinerX-Android-v1.2.2.zip"
               className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.15] text-white font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <Smartphone className="w-4 h-4 text-[#05F292]" />
@@ -405,8 +405,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
               <div className="flex flex-col gap-2">
                 <a
-                  href="/downloads/MinerX-Windows-v1.2.1.zip"
-                  download="MinerX-Windows-v1.2.1.zip"
+                  href="/downloads/MinerX-Windows-v1.2.2.zip"
+                  download="MinerX-Windows-v1.2.2.zip"
                   className="w-full py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-lg shadow-cyan-500/20"
                 >
                   <Download className="w-4 h-4" />
@@ -429,20 +429,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 </div>
                 <h3 className="text-lg font-bold text-white">MinerX Mobile</h3>
                 <p className="text-xs text-slate-400">
-                  Paquete APK firmado dual (v1 JAR + v2 APK Scheme), con HUD flotante, notificaciones nativas y soporte OLED.
+                  Paquete APK firmado dual (v1 JAR + v2 APK Scheme), con Modo Isla Dinámica, widget flotante PiP en pantalla y notificaciones en vivo.
                 </p>
               </div>
 
               <div className="flex flex-col gap-2">
                 <a
-                  href="/downloads/MinerX-Android-v1.2.1.zip"
-                  download="MinerX-Android-v1.2.1.zip"
+                  href="/downloads/MinerX-Android-v1.2.2.zip"
+                  download="MinerX-Android-v1.2.2.zip"
                   className="w-full py-2.5 rounded-xl bg-[#05F292] hover:bg-[#00F0FF] text-black font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow-lg shadow-[#05F292]/20"
                 >
                   <Download className="w-4 h-4" />
                   <span>Descargar Paquete Android (.ZIP)</span>
                 </a>
-                <p className="text-[11px] text-slate-400 text-center">Descomprimir e instalar MinerX-Mobile-v1.2.1.apk</p>
+                <p className="text-[11px] text-slate-400 text-center">Descomprimir e instalar MinerX-Mobile-v1.2.2.apk</p>
               </div>
             </div>
 

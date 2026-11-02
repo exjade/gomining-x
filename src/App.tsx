@@ -822,6 +822,55 @@ export const App: React.FC = () => {
     setAlerts([]);
   };
 
+  // Android & Mobile Picture-in-Picture Mode State
+  const [isPiP, setIsPiP] = useState(false);
+  useEffect(() => {
+    const handlePiP = (e: any) => {
+      setIsPiP(!!e.detail?.isPiP);
+    };
+    window.addEventListener('pipmodechange', handlePiP);
+    return () => window.removeEventListener('pipmodechange', handlePiP);
+  }, []);
+
+  // Picture-in-Picture Floating Mode (External Android Mobile Screen Widget)
+  if (isPiP) {
+    const totalTHs = fleetSummary.totalHashrateTHs || 0;
+    const netUSD = fleetSummary.hourlyNetProfitUSD || 0;
+    const runningCount = workers.filter((w) => w.isMining || w.saladStatus === 'running').length;
+    const totalCount = workers.length;
+
+    return (
+      <div className="fixed inset-0 bg-[#06080E] text-white flex flex-col justify-between p-3 select-none overflow-hidden border border-emerald-500/40">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-[#05DF72] animate-pulse" />
+            <span className="font-rajdhani font-black text-xs uppercase tracking-wider text-white">MinerX ⚡ LIVE</span>
+          </div>
+          <span className="text-[10px] font-mono text-slate-300 bg-white/10 px-2 py-0.5 rounded-full">
+            {runningCount}/{totalCount} GPUs
+          </span>
+        </div>
+
+        <div className="flex items-baseline justify-between my-auto">
+          <div className="flex items-baseline gap-1">
+            <span className="font-mono text-2xl sm:text-3xl font-extrabold text-[#05DF72] leading-none">
+              {totalTHs.toFixed(1)}
+            </span>
+            <span className="text-xs font-mono text-slate-400">TH/s</span>
+          </div>
+          <div className={`font-mono font-bold text-sm ${netUSD >= 0 ? 'text-[#05DF72]' : 'text-rose-500'}`}>
+            {netUSD >= 0 ? '+' : ''}${netUSD.toFixed(3)}/h
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 border-t border-white/10 pt-1">
+          <span>Salad: ${(saladBalance?.totalBalanceUSD ?? 0).toFixed(2)}</span>
+          <span className="text-emerald-400 font-semibold">{poolInfo.ticker || 'PRL'} Pool</span>
+        </div>
+      </div>
+    );
+  }
+
   // Standalone Floating Desktop Widget Mode (Electron Frameless HUD or Browser Pop-out)
   if (typeof window !== 'undefined' && window.location.hash === '#widget') {
     return (
@@ -896,11 +945,11 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen font-sans selection:bg-[#05DF72]/20 selection:text-[#05DF72] transition-colors p-2 sm:p-4 md:p-6 lg:p-8 flex justify-center items-start ${
+    <div className={`min-h-screen font-sans selection:bg-[#05DF72]/20 selection:text-[#05DF72] transition-colors p-0 sm:p-3 md:p-6 lg:p-8 flex justify-center items-start ${
       themeMode === 'light' ? 'bg-[#EDEFF8] text-slate-900' : 'bg-[#07090F] text-slate-100'
     }`}>
-      {/* MAIN ELEVATED CARD CONTAINER (Ref: White floating modern card container from video) */}
-      <div className={`w-full max-w-7xl flex flex-col rounded-[28px] sm:rounded-[36px] border shadow-2xl overflow-hidden transition-all ${
+      {/* MAIN ELEVATED CARD CONTAINER (Edge-to-edge on mobile, elevated card on desktop) */}
+      <div className={`w-full max-w-7xl flex flex-col rounded-none sm:rounded-[32px] md:rounded-[36px] border-0 sm:border shadow-none sm:shadow-2xl overflow-hidden transition-all ${
         themeMode === 'light'
           ? 'bg-white/95 border-slate-200/90 shadow-slate-300/40 text-slate-900'
           : 'bg-[#080B12]/95 border-white/[0.08] shadow-black/80 text-white'
@@ -937,8 +986,8 @@ export const App: React.FC = () => {
           }}
         />
 
-        {/* Content Area */}
-        <main className="flex-1 w-full px-4 sm:px-6 md:px-8 pt-5 overflow-y-auto">
+        {/* Content Area - Generous bottom padding (pb-28) ensures MobileNav never covers content */}
+        <main className="flex-1 w-full px-3 sm:px-6 md:px-8 pt-3 sm:pt-5 pb-28 md:pb-8 overflow-y-auto">
           {activeTab === 'overview' && (
             <OverviewTab
               summary={fleetSummary}

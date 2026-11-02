@@ -342,16 +342,16 @@ export const Header: React.FC<HeaderProps> = ({
               className={`flex h-9 w-9 items-center justify-center rounded-full border transition-all cursor-pointer ${
                 isDarkTheme ? 'bg-emerald-500/10 border-emerald-500/25 text-[#05DF72] hover:bg-emerald-500/20' : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
               }`}
-              title="Abrir Hub Flotante de Escritorio"
+              title="Abrir Hub Flotante / Widget"
             >
               <AppWindow className="h-4 w-4" />
             </button>
           )}
 
-          {/* Search Button Circle */}
+          {/* Search Button Circle (Desktop/Tablet) */}
           <button
             onClick={() => setActiveTab('fleet')}
-            className={`flex h-9 w-9 items-center justify-center rounded-full border transition-all cursor-pointer ${
+            className={`hidden sm:flex h-9 w-9 items-center justify-center rounded-full border transition-all cursor-pointer ${
               isDarkTheme ? 'bg-white/[0.04] border-white/10 text-slate-300 hover:text-white' : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
             }`}
             title="Buscar en Flota"
@@ -359,10 +359,10 @@ export const Header: React.FC<HeaderProps> = ({
             <Sparkles className="h-4 w-4 text-[#05DF72]" />
           </button>
 
-          {/* Notification Bell Circle */}
+          {/* Notification Bell Circle (Desktop/Tablet, on mobile handled by MobileNav) */}
           <button
             onClick={() => setActiveTab('alerts')}
-            className={`relative flex h-9 w-9 items-center justify-center rounded-full border transition-all cursor-pointer ${
+            className={`hidden md:flex relative h-9 w-9 items-center justify-center rounded-full border transition-all cursor-pointer ${
               isDarkTheme ? 'bg-white/[0.04] border-white/10 text-slate-300 hover:text-white' : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
             }`}
             title="Ver Alertas"

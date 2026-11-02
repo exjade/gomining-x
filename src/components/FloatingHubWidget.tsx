@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Zap,
@@ -11,7 +11,12 @@ import {
   Cpu,
   ExternalLink,
   Activity,
-  X
+  X,
+  GripHorizontal,
+  Smartphone,
+  Pin,
+  Move,
+  PictureInPicture
 } from 'lucide-react';
 import {
   AreaChart,
@@ -55,6 +60,43 @@ export const FloatingHubWidget: React.FC<FloatingHubWidgetProps> = ({
 }) => {
   const [isExpanded, setIsExpanded] = useState(initiallyExpanded);
 
+  // Widget Mode: 'island' (docked at the top like Dynamic Island) or 'floating' (freely draggable anywhere)
+  // Default on mobile devices (< 768px) is 'island' so it never blocks the bottom menu!
+  const [hubMode, setHubMode] = useState<'island' | 'floating'>(() => {
+    if (isStandalone) return 'floating';
+    try {
+      const saved = localStorage.getItem('minerx_hub_mode_v4');
+      if (saved === 'island' || saved === 'floating') return saved;
+    } catch {}
+    return (typeof window !== 'undefined' && window.innerWidth < 768) ? 'island' : 'floating';
+  });
+
+  // Position for Free Floating Draggable Pill (Persistent in localStorage)
+  const [position, setPosition] = useState<{ x: number; y: number }>(() => {
+    try {
+      const saved = localStorage.getItem('minerx_hub_coords_v4');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
+          return parsed;
+        }
+      }
+    } catch {}
+    // Safe default: On mobile, bottom-right ABOVE the MobileNav (84px from bottom)
+    if (typeof window !== 'undefined') {
+      const isMobile = window.innerWidth < 768;
+      return {
+        x: Math.max(16, window.innerWidth - 300),
+        y: isMobile ? Math.max(80, window.innerHeight - 150) : Math.max(80, window.innerHeight - 90)
+      };
+    }
+    return { x: 20, y: 200 };
+  });
+
+  const [isDragging, setIsDragging] = useState(false);
+  const [isNearIslandZone, setIsNearIslandZone] = useState(false);
+  const dragRef = useRef<{ startX: number; startY: number; initX: number; initY: number } | null>(null);
+
   // 100% REAL DATA EXTRACTION (NO HARDCODED NUMBERS)
   const totalTHs = typeof summary?.totalHashrateTHs === 'number' ? summary.totalHashrateTHs : 0;
   const benchmarkTHs = typeof summary?.benchmarkHashrateTHs === 'number' ? summary.benchmarkHashrateTHs : 0;
@@ -81,7 +123,36 @@ export const FloatingHubWidget: React.FC<FloatingHubWidgetProps> = ({
         { val: totalTHs, net: netProfitUSD }
       ];
 
-  // Handler for Desktop Floating Window
+  // Save mode preference
+  const toggleHubMode = (newMode: 'island' | 'floating') => {
+    setHubMode(newMode);
+    try {
+      localStorage.setItem('minerx_hub_mode_v4', newMode);
+    } catch {}
+  };
+
+  // Handler for Android Picture-in-Picture Mode (External Floating Phone Screen Widget)
+  const handleTriggerAndroidPiP = () => {
+    const win = window as any;
+    if (win.AndroidPiP?.enterPiP) {
+      const ok = win.AndroidPiP.enterPiP();
+      if (ok) return;
+    }
+
+    // Also send an ongoing mobile notification with live telemetry
+    sendNativeNotification('MinerX ⚡ Telemetría en Vivo', {
+      body: `${totalTHs.toFixed(1)} TH/s | +$${netProfitUSD.toFixed(3)}/h | ${runningCount}/${totalCount} GPUs Activas`,
+      silent: true,
+      tag: 'minerx-live-telemetry'
+    });
+
+    // If running in Desktop / Electron
+    if (win.electronAPI?.toggleDesktopWidget) {
+      win.electronAPI.toggleDesktopWidget();
+    }
+  };
+
+  // Handler for Desktop Floating Window (Electron or Browser Pop-out)
   const handleLaunchDesktopWidget = () => {
     const win = window as any;
     if (win.electronAPI?.toggleDesktopWidget) {
@@ -103,35 +174,158 @@ export const FloatingHubWidget: React.FC<FloatingHubWidgetProps> = ({
     });
   };
 
+  // Dragging logic for 'floating' mode
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (isStandalone) return;
+    // Don't drag if user clicked a button or interactive child
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('a') || target.closest('input')) return;
+
+    setIsDragging(true);
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initX: position.x,
+      initY: position.y
+    };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isDragging || !dragRef.current) return;
+    const dx = e.clientX - dragRef.current.startX;
+    const dy = e.clientY - dragRef.current.startY;
+
+    const screenW = window.innerWidth;
+    const screenH = window.innerHeight;
+    const widgetW = isExpanded ? 330 : 260;
+    const widgetH = isExpanded ? 360 : 44;
+
+    const newX = Math.max(8, Math.min(screenW - widgetW - 8, dragRef.current.initX + dx));
+    const newY = Math.max(8, Math.min(screenH - widgetH - 8, dragRef.current.initY + dy));
+
+    // If dragged into the top 60px, indicate snap to Dynamic Island!
+    if (newY < 65) {
+      setIsNearIslandZone(true);
+    } else {
+      setIsNearIslandZone(false);
+    }
+
+    setPosition({ x: newX, y: newY });
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (!isDragging) return;
+    setIsDragging(false);
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {}
+
+    // If dropped near the top edge, snap to Dynamic Island mode!
+    if (isNearIslandZone) {
+      toggleHubMode('island');
+      setIsNearIslandZone(false);
+      return;
+    }
+
+    try {
+      localStorage.setItem('minerx_hub_coords_v4', JSON.stringify(position));
+    } catch {}
+    dragRef.current = null;
+  };
+
+  // Determine container positioning style based on mode
+  const containerStyle: React.CSSProperties = useMemo(() => {
+    if (isStandalone) {
+      return { position: 'relative', width: '340px' };
+    }
+
+    if (hubMode === 'island') {
+      // Anchored cleanly at the top center of the phone screen (under the camera notch)
+      return {
+        position: 'fixed',
+        top: 'max(8px, env(safe-area-inset-top, 8px))',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 9999,
+        maxWidth: 'calc(100vw - 20px)'
+      };
+    }
+
+    // Floating Mode: positioned at free coordinates (x, y)
+    return {
+      position: 'fixed',
+      left: `${position.x}px`,
+      top: `${position.y}px`,
+      zIndex: 9999,
+      maxWidth: 'calc(100vw - 20px)',
+      touchAction: 'none'
+    };
+  }, [isStandalone, hubMode, position]);
+
   return (
     <div
-      style={isStandalone ? { position: 'relative', width: '340px' } : { position: 'fixed', right: '20px', bottom: '20px', zIndex: 9999 }}
+      style={containerStyle}
       className="select-none font-sans"
+      onPointerDown={hubMode === 'floating' ? handlePointerDown : undefined}
+      onPointerMove={hubMode === 'floating' ? handlePointerMove : undefined}
+      onPointerUp={hubMode === 'floating' ? handlePointerUp : undefined}
+      onPointerCancel={hubMode === 'floating' ? handlePointerUp : undefined}
     >
+      {/* Visual snap feedback when dragging near top */}
+      {isNearIslandZone && (
+        <div className="absolute -top-7 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-[#05DF72] text-slate-950 text-[10px] font-bold shadow-lg whitespace-nowrap animate-pulse">
+          Soltar para anclar en Isla del Teléfono 🏝️
+        </div>
+      )}
+
       <AnimatePresence>
         {!isExpanded && !isStandalone ? (
-          /* COLLAPSED FLOATING CAPSULE (Dynamic Floating Pill in Emerald Green) */
+          /* ========================================================================= */
+          /* COLLAPSED HUD CAPSULE (Dynamic Island Pill or Floating Draggable Capsule)  */
+          /* ========================================================================= */
           <motion.div
-            initial={{ scale: 0.85, opacity: 0, y: 15 }}
+            initial={{ scale: 0.88, opacity: 0, y: hubMode === 'island' ? -10 : 15 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.85, opacity: 0 }}
-            whileHover={{ scale: 1.03, y: -2 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={() => setIsExpanded(true)}
-            className="flex items-center gap-3 px-3.5 py-2 rounded-full bg-white/95 dark:bg-[#0F172A]/95 backdrop-blur-2xl border border-slate-200/90 dark:border-white/[0.12] shadow-[0_12px_35px_rgba(5,223,114,0.15)] cursor-pointer group transition-all"
+            exit={{ scale: 0.88, opacity: 0 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className={`flex items-center gap-2.5 px-3 py-1.5 rounded-full backdrop-blur-2xl transition-all cursor-pointer shadow-[0_10px_30px_rgba(0,0,0,0.35)] border ${
+              hubMode === 'island'
+                ? 'bg-[#06080E]/95 text-white border-white/[0.16] ring-1 ring-emerald-500/20'
+                : isDarkTheme
+                ? 'bg-[#0A0E1A]/95 text-white border-white/[0.14] ring-1 ring-[#05DF72]/15'
+                : 'bg-white/95 text-slate-900 border-slate-200/90 shadow-slate-300/40'
+            }`}
           >
+            {/* Drag Handle (Visible in Floating Mode) */}
+            {hubMode === 'floating' && (
+              <div 
+                className="text-slate-400 hover:text-[#05DF72] cursor-grab active:cursor-grabbing p-0.5"
+                title="Arrastrar píldora por la pantalla"
+              >
+                <GripHorizontal className="h-3.5 w-3.5" />
+              </div>
+            )}
+
             {/* Glowing Tech Green Pulse Badge */}
-            <div className="relative flex items-center justify-center">
+            <div 
+              onClick={() => setIsExpanded(true)}
+              className="relative flex items-center justify-center shrink-0 cursor-pointer"
+            >
               <span className="h-6 w-6 rounded-full bg-emerald-500/15 flex items-center justify-center text-[#05DF72]">
                 <Zap className="h-3.5 w-3.5 fill-[#05DF72]" />
               </span>
-              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-[#05DF72] ring-2 ring-white dark:ring-[#0F172A] animate-pulse" />
+              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-[#05DF72] ring-2 ring-black animate-pulse" />
             </div>
 
-            {/* Live Metrics */}
-            <div className="flex items-center gap-2 font-mono">
+            {/* Live Metrics: Hashrate, Net Yield & GPUs */}
+            <div 
+              onClick={() => setIsExpanded(true)}
+              className="flex items-center gap-2 font-mono cursor-pointer"
+            >
               <div className="flex flex-col">
-                <span className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
+                <span className="text-xs font-bold leading-tight">
                   {totalTHs.toFixed(1)} <span className="text-[10px] text-slate-400 font-normal">TH/s</span>
                 </span>
                 <span className={`text-[10px] font-bold -mt-0.5 ${netProfitUSD >= 0 ? 'text-[#05DF72]' : 'text-rose-500'}`}>
@@ -139,38 +333,67 @@ export const FloatingHubWidget: React.FC<FloatingHubWidgetProps> = ({
                 </span>
               </div>
 
-              <div className="h-4 w-[1px] bg-slate-200 dark:bg-white/[0.1] mx-0.5" />
+              <div className="h-4 w-[1px] bg-white/[0.12] mx-0.5" />
 
-              <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-300">
-                {runningCount}/{totalCount} GPUs
+              <span className="text-[10px] font-semibold text-slate-300">
+                {runningCount}/{totalCount} <span className="hidden xs:inline">GPUs</span>
               </span>
             </div>
 
-            {/* Expand Indicator */}
-            <div className="h-5 w-5 rounded-full bg-slate-100 dark:bg-white/[0.06] flex items-center justify-center text-slate-400 group-hover:text-[#05DF72] transition-colors">
-              <ChevronUp className="h-3 w-3" />
+            {/* Quick Mode Pin / Expand Chevron */}
+            <div className="flex items-center gap-1 pl-0.5">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleHubMode(hubMode === 'island' ? 'floating' : 'island');
+                }}
+                className={`p-1 rounded-full transition-colors cursor-pointer ${
+                  hubMode === 'island' 
+                    ? 'text-[#05DF72] hover:bg-emerald-500/20' 
+                    : 'text-slate-400 hover:text-[#05DF72] hover:bg-white/[0.08]'
+                }`}
+                title={hubMode === 'island' ? 'Cambiar a Píldora Flotante Libre' : 'Anclar en la Isla del Teléfono'}
+              >
+                {hubMode === 'island' ? <Smartphone className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsExpanded(true)}
+                className="h-5 w-5 rounded-full bg-white/[0.08] flex items-center justify-center text-slate-300 hover:text-[#05DF72] transition-colors cursor-pointer"
+                title="Expandir telemetría"
+              >
+                {hubMode === 'island' ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
+              </button>
             </div>
           </motion.div>
         ) : (
-          /* EXPANDED MICRO-BENTO FLOATING HUB */
+          /* ========================================================================= */
+          /* EXPANDED MICRO-BENTO FLOATING HUB                                         */
+          /* ========================================================================= */
           <motion.div
-            initial={{ scale: 0.92, opacity: 0, y: 10 }}
+            initial={{ scale: 0.94, opacity: 0, y: hubMode === 'island' ? -8 : 10 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.92, opacity: 0, y: 10 }}
+            exit={{ scale: 0.94, opacity: 0, y: hubMode === 'island' ? -8 : 10 }}
             transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-            className="w-[330px] rounded-[26px] bg-white/95 dark:bg-[#0D1322]/95 backdrop-blur-2xl border border-slate-200/90 dark:border-white/[0.12] p-3.5 shadow-[0_20px_50px_rgba(0,0,0,0.18)] space-y-2.5 text-slate-800 dark:text-slate-100"
+            className={`w-[330px] rounded-[26px] backdrop-blur-2xl p-3.5 shadow-[0_25px_60px_rgba(0,0,0,0.5)] space-y-2.5 border transition-all ${
+              isDarkTheme || hubMode === 'island'
+                ? 'bg-[#080B14]/95 border-white/[0.14] text-white'
+                : 'bg-white/95 border-slate-200/90 text-slate-900 shadow-slate-300/40'
+            }`}
           >
-            {/* Top Bar */}
-            <div className="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-white/[0.06]">
+            {/* Top Bar with Mode Controls & External Launcher */}
+            <div className="flex items-center justify-between pb-1.5 border-b border-white/[0.08] dark:border-white/[0.08]">
               <div className="flex items-center gap-2">
-                <div className="h-6 w-6 rounded-lg bg-slate-900 flex items-center justify-center text-[#05DF72]">
+                <div className="h-6 w-6 rounded-lg bg-slate-900 border border-[#05DF72]/30 flex items-center justify-center text-[#05DF72]">
                   <Zap className="h-3.5 w-3.5 fill-[#05DF72]" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-extrabold text-slate-900 dark:text-white uppercase font-rajdhani tracking-wide flex items-center gap-1.5 leading-none">
+                  <h4 className="text-xs font-extrabold uppercase font-rajdhani tracking-wide flex items-center gap-1.5 leading-none">
                     MinerX Hub
-                    <span className="text-[8px] px-1 py-0.2 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-[#05DF72] border border-emerald-500/20 font-mono">
-                      LIVE
+                    <span className="text-[8px] px-1 py-0.2 rounded-full bg-emerald-500/10 text-[#05DF72] border border-emerald-500/20 font-mono">
+                      {hubMode === 'island' ? 'ISLA DOCK' : 'FLOTANTE'}
                     </span>
                   </h4>
                   <span className="text-[9px] text-[#05DF72] font-mono leading-tight">Telemetría en Vivo</span>
@@ -178,17 +401,56 @@ export const FloatingHubWidget: React.FC<FloatingHubWidgetProps> = ({
               </div>
 
               <div className="flex items-center gap-1">
+                {/* Switch between Island and Floating Mode */}
                 {!isStandalone && (
                   <button
+                    type="button"
+                    onClick={() => toggleHubMode(hubMode === 'island' ? 'floating' : 'island')}
+                    title={hubMode === 'island' ? 'Cambiar a modo Flotante Libre' : 'Anclar en la Isla Superior del Teléfono'}
+                    className={`h-6 px-2 rounded-full text-[10px] font-bold font-mono flex items-center gap-1 transition-colors border ${
+                      hubMode === 'island'
+                        ? 'bg-emerald-500/15 border-emerald-500/30 text-[#05DF72]'
+                        : 'bg-white/[0.06] border-white/10 text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    {hubMode === 'island' ? (
+                      <>
+                        <Smartphone className="h-3 w-3" />
+                        <span>Isla</span>
+                      </>
+                    ) : (
+                      <>
+                        <Move className="h-3 w-3" />
+                        <span>Libre</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {/* External Mobile / Desktop Widget Trigger */}
+                <button
+                  type="button"
+                  onClick={handleTriggerAndroidPiP}
+                  title="Flotar en la pantalla del teléfono (Widget externo PiP)"
+                  className="h-6 w-6 rounded-full bg-white/[0.06] hover:bg-[#05DF72]/20 flex items-center justify-center text-slate-300 hover:text-[#05DF72] transition-colors"
+                >
+                  <PictureInPicture className="h-3 w-3" />
+                </button>
+
+                {!isStandalone && (
+                  <button
+                    type="button"
                     onClick={handleLaunchDesktopWidget}
-                    title="Abrir como ventana flotante en escritorio"
-                    className="h-6 w-6 rounded-full hover:bg-slate-100 dark:hover:bg-white/[0.06] flex items-center justify-center text-slate-400 hover:text-[#05DF72] transition-colors"
+                    title="Abrir como ventana flotante en escritorio de PC"
+                    className="h-6 w-6 rounded-full bg-white/[0.06] hover:bg-white/[0.1] flex items-center justify-center text-slate-400 hover:text-[#05DF72] transition-colors"
                   >
                     <ExternalLink className="h-3 w-3" />
                   </button>
                 )}
+
                 {isStandalone ? (
                   <button
+                    type="button"
                     onClick={() => {
                       const win = window as any;
                       if (win.electronAPI?.closeWindow) win.electronAPI.closeWindow();
@@ -201,11 +463,12 @@ export const FloatingHubWidget: React.FC<FloatingHubWidgetProps> = ({
                   </button>
                 ) : (
                   <button
+                    type="button"
                     onClick={() => setIsExpanded(false)}
-                    className="h-6 w-6 rounded-full hover:bg-slate-100 dark:hover:bg-white/[0.06] flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors"
+                    className="h-6 w-6 rounded-full bg-white/[0.06] hover:bg-white/[0.1] flex items-center justify-center text-slate-300 hover:text-white transition-colors cursor-pointer"
                     title="Minimizar hub"
                   >
-                    <ChevronDown className="h-3.5 w-3.5" />
+                    {hubMode === 'island' ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                   </button>
                 )}
               </div>
@@ -213,9 +476,11 @@ export const FloatingHubWidget: React.FC<FloatingHubWidgetProps> = ({
 
             {/* Micro Bento KPI Grid */}
             <div className="grid grid-cols-2 gap-2 font-mono">
-              <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-[#151E30] border border-slate-100 dark:border-white/[0.04]">
+              <div className={`p-2.5 rounded-2xl border ${
+                isDarkTheme || hubMode === 'island' ? 'bg-[#121828] border-white/[0.06]' : 'bg-slate-50 border-slate-200/90'
+              }`}>
                 <span className="text-[9px] text-slate-400 uppercase block font-semibold">Potencia Pool</span>
-                <div className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">
+                <div className="text-sm font-bold mt-0.5">
                   {totalTHs.toFixed(1)} <span className="text-[9px] font-normal text-slate-400">TH/s</span>
                 </div>
                 <span className="text-[9px] text-[#05DF72] font-semibold block mt-0.5 truncate">
@@ -223,26 +488,30 @@ export const FloatingHubWidget: React.FC<FloatingHubWidgetProps> = ({
                 </span>
               </div>
 
-              <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-[#151E30] border border-slate-100 dark:border-white/[0.04]">
+              <div className={`p-2.5 rounded-2xl border ${
+                isDarkTheme || hubMode === 'island' ? 'bg-[#121828] border-white/[0.06]' : 'bg-slate-50 border-slate-200/90'
+              }`}>
                 <span className="text-[9px] text-slate-400 uppercase block font-semibold">Utilidad Neta</span>
                 <div className={`text-sm font-bold mt-0.5 ${netProfitUSD >= 0 ? 'text-[#05DF72]' : 'text-rose-500'}`}>
                   {netProfitUSD >= 0 ? '+' : ''}${netProfitUSD.toFixed(3)}
                   <span className="text-[9px] font-normal text-slate-400">/h</span>
                 </div>
-                <span className="text-[9px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                <span className="text-[9px] text-slate-400 block mt-0.5">
                   ${dailyProfitUSD.toFixed(2)} USD/día
                 </span>
               </div>
             </div>
 
             {/* Sparkline Hashrate Area Chart */}
-            <div className="p-2 rounded-2xl bg-slate-50 dark:bg-[#151E30] border border-slate-100 dark:border-white/[0.04] space-y-1">
+            <div className={`p-2 rounded-2xl border space-y-1 ${
+              isDarkTheme || hubMode === 'island' ? 'bg-[#121828] border-white/[0.06]' : 'bg-slate-50 border-slate-200/90'
+            }`}>
               <div className="flex items-center justify-between text-[9px] font-mono px-1">
                 <span className="text-slate-400 flex items-center gap-1">
                   <Activity className="h-2.5 w-2.5 text-[#05DF72]" />
                   <span>Curva Hashrate en Vivo</span>
                 </span>
-                <span className="font-bold text-slate-700 dark:text-slate-300">
+                <span className="font-bold text-[#05DF72]">
                   {totalTHs.toFixed(1)} TH/s
                 </span>
               </div>
@@ -272,28 +541,30 @@ export const FloatingHubWidget: React.FC<FloatingHubWidgetProps> = ({
             </div>
 
             {/* Financial Details Strip (Salad & Kryptex) */}
-            <div className="grid grid-cols-2 gap-1.5 text-[9px] font-mono p-2 rounded-2xl bg-slate-50/80 dark:bg-[#151E30]/70 border border-slate-100 dark:border-white/[0.04]">
+            <div className={`grid grid-cols-2 gap-1.5 text-[9px] font-mono p-2 rounded-2xl border ${
+              isDarkTheme || hubMode === 'island' ? 'bg-[#121828] border-white/[0.06]' : 'bg-slate-50 border-slate-200/90'
+            }`}>
               <div>
                 <span className="text-slate-400 block">Salad Saldo:</span>
-                <span className="font-bold text-slate-800 dark:text-slate-200">
+                <span className="font-bold text-[#05DF72]">
                   ${saladTotalUSD.toFixed(2)} USD
                 </span>
               </div>
               <div>
                 <span className="text-slate-400 block">Balance Kryptex:</span>
-                <span className="font-bold text-[#05DF72]">
+                <span className="font-bold">
                   {prlTotal.toFixed(4)} {poolTicker}
                 </span>
               </div>
               <div className="mt-0.5">
                 <span className="text-slate-400 block">Ingreso Bruto:</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                <span className="font-semibold text-slate-300">
                   +${grossRevenueUSD.toFixed(3)}/h
                 </span>
               </div>
               <div className="mt-0.5">
                 <span className="text-slate-400 block">Costo Alquiler:</span>
-                <span className="font-semibold text-rose-500">
+                <span className="font-semibold text-rose-400">
                   -${saladCostUSD.toFixed(3)}/h
                 </span>
               </div>
@@ -301,21 +572,22 @@ export const FloatingHubWidget: React.FC<FloatingHubWidgetProps> = ({
 
             {/* Kryptex Shares & Online Hardware Row */}
             <div className="flex items-center justify-between p-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-mono">
-              <span className="text-slate-700 dark:text-slate-300 flex items-center gap-1 font-semibold">
+              <span className="text-slate-200 flex items-center gap-1 font-semibold">
                 <Cpu className="h-3 w-3 text-[#05DF72]" />
                 <span>{runningCount}/{totalCount} GPUs Activas</span>
               </span>
-              <span className="font-bold text-slate-800 dark:text-slate-200">
-                <span className="text-[#05DF72]">{validShares.toLocaleString()}</span> v / <span className="text-amber-500">{staleShares}</span> s
+              <span className="font-bold">
+                <span className="text-[#05DF72]">{validShares.toLocaleString()}</span> v / <span className="text-amber-400">{staleShares}</span> s
               </span>
             </div>
 
             {/* Quick Action Buttons */}
             <div className="grid grid-cols-4 gap-1.5 pt-0.5 text-[11px] font-rajdhani font-bold uppercase">
               <button
+                type="button"
                 onClick={onRefresh}
                 disabled={isRefreshing}
-                className="py-1.5 px-2 rounded-xl bg-slate-100 dark:bg-white/[0.06] hover:bg-slate-200 dark:hover:bg-white/[0.1] text-slate-800 dark:text-slate-200 flex items-center justify-center gap-1 transition-all"
+                className="py-1.5 px-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] text-white flex items-center justify-center gap-1 transition-all cursor-pointer"
                 title="Sincronizar telemetría"
               >
                 <RefreshCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin text-[#05DF72]' : ''}`} />
@@ -323,8 +595,9 @@ export const FloatingHubWidget: React.FC<FloatingHubWidgetProps> = ({
               </button>
 
               <button
+                type="button"
                 onClick={onToggleTheme}
-                className="py-1.5 px-2 rounded-xl bg-slate-100 dark:bg-white/[0.06] hover:bg-slate-200 dark:hover:bg-white/[0.1] text-slate-800 dark:text-slate-200 flex items-center justify-center gap-1 transition-all"
+                className="py-1.5 px-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] text-white flex items-center justify-center gap-1 transition-all cursor-pointer"
                 title={isDarkTheme ? 'Cambiar a modo Claro' : 'Cambiar a modo Oscuro'}
               >
                 <Sparkles className="h-3 w-3 text-[#05DF72]" />
@@ -332,11 +605,12 @@ export const FloatingHubWidget: React.FC<FloatingHubWidgetProps> = ({
               </button>
 
               <button
+                type="button"
                 onClick={() => {
                   onNavigateToTab('fleet');
                   if (!isStandalone) setIsExpanded(false);
                 }}
-                className="py-1.5 px-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white flex items-center justify-center gap-1 transition-all shadow-xs"
+                className="py-1.5 px-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white border border-white/10 flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer"
                 title="Ver lista de GPUs"
               >
                 <Layers className="h-3 w-3 text-[#05DF72]" />
@@ -344,11 +618,12 @@ export const FloatingHubWidget: React.FC<FloatingHubWidgetProps> = ({
               </button>
 
               <button
+                type="button"
                 onClick={() => {
                   onNavigateToTab('economics');
                   if (!isStandalone) setIsExpanded(false);
                 }}
-                className="py-1.5 px-2 rounded-xl bg-[#05DF72] hover:bg-[#00E599] text-slate-950 flex items-center justify-center gap-1 transition-all shadow-xs"
+                className="py-1.5 px-2 rounded-xl bg-[#05DF72] hover:bg-[#00E599] text-slate-950 flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer"
                 title="Calculadora y ROI"
               >
                 <TrendingUp className="h-3 w-3" />
