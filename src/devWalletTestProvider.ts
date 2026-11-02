@@ -1,14 +1,17 @@
-export type WalletTestMode = 'connect-reject' | 'connect-pending' | 'payment-reject' | 'payment-success'
+export type WalletTestMode = 'connect-success' | 'connect-reject' | 'connect-pending' | 'payment-reject' | 'payment-success'
+export type WalletTestWallet = 'metamask' | 'trustwallet'
 
 const testAddress = '0x1111111111111111111111111111111111111111'
 const fakeTransactionHash = `0x${'a'.repeat(64)}`
 
 /** Local-only EIP-1193 fixture for repeatable UI checks. It never broadcasts. */
-export function installDevWalletTestProvider(mode: WalletTestMode) {
+export function installDevWalletTestProvider(mode: WalletTestMode, wallet: WalletTestWallet = 'metamask') {
   const listeners = new Map<string, Set<(...args: unknown[]) => void>>()
   let authorized = false
   const provider = {
-    isMetaMask: true,
+    isMetaMask: wallet === 'metamask',
+    isTrust: wallet === 'trustwallet',
+    isTrustWallet: wallet === 'trustwallet',
     async request({ method }: { method: string; params?: unknown[] }) {
       if (method === 'eth_accounts') return authorized ? [testAddress] : []
       if (method === 'eth_requestAccounts') {
@@ -36,7 +39,11 @@ export function installDevWalletTestProvider(mode: WalletTestMode) {
       listeners.get(event)?.delete(listener)
     },
   }
-  Object.defineProperty(window, 'ethereum', { configurable: true, value: provider })
+  if (wallet === 'trustwallet') {
+    Object.defineProperty(window, 'trustwallet', { configurable: true, value: { ethereum: provider } })
+  } else {
+    Object.defineProperty(window, 'ethereum', { configurable: true, value: provider })
+  }
   Object.defineProperty(window, '__goMiningWalletTestMode', { configurable: true, value: mode })
 }
 

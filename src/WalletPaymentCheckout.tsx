@@ -78,7 +78,9 @@ export function WalletPaymentCheckout({
   const [receipt, setReceipt] = useState<PaymentReceipt | null>(null)
   const [nativePaymentUrl, setNativePaymentUrl] = useState('')
   const [now, setNow] = useState(Date.now())
+  const [mobileHandoffReturn, setMobileHandoffReturn] = useState(false)
   const closedRef = useRef(false)
+  const mobileConnectIntentHandledRef = useRef(false)
   const onCloseRef = useRef(onClose)
   const onPaidRef = useRef(onPaid)
 
@@ -120,18 +122,46 @@ export function WalletPaymentCheckout({
   const mobileAppLink = mobile && selectedWallet && mobileTargetIsPublicHttps(resumeUrl)
     ? getMobileWalletLaunchUrl(walletId, resumeUrl, networkId)
     : null
-  const shouldOpenWalletApp = Boolean(mobile && mobileAppLink && !hasWalletBrowserProvider(walletId) && !connectionCompatible)
+  const shouldOpenWalletApp = Boolean(mobile && !mobileHandoffReturn && mobileAppLink && !hasWalletBrowserProvider(walletId) && !connectionCompatible)
   const mobileSolflareNativeAvailable = Boolean(mobile && walletId === 'solflare' && mobileTargetIsPublicHttps(resumeUrl))
   const mobilePhantomNativeAvailable = Boolean(mobile && walletId === 'phantom' && mobileTargetIsPublicHttps(resumeUrl))
   const mobilePhantomNativeNeedsHttps = Boolean(mobile && walletId === 'phantom' && !hasWalletBrowserProvider('phantom') && !mobileTargetIsPublicHttps(resumeUrl))
   const metaMaskMobileNeedsHttps = Boolean(mobile && walletId === 'metamask' && !hasWalletBrowserProvider(walletId) && !mobileTargetIsPublicHttps(resumeUrl))
-  const mobileWalletUnavailable = Boolean(mobile && !mobileAppLink && !hasWalletBrowserProvider(walletId) && !connectionCompatible && !mobileSolflareNativeAvailable && !mobilePhantomNativeAvailable && (walletId !== 'metamask' || metaMaskMobileNeedsHttps))
+  const mobileWalletUnavailable = Boolean((mobile && !mobileAppLink && !hasWalletBrowserProvider(walletId) && !connectionCompatible && !mobileSolflareNativeAvailable && !mobilePhantomNativeAvailable && (walletId !== 'metamask' || metaMaskMobileNeedsHttps)) || (mobileHandoffReturn && !hasWalletBrowserProvider(walletId) && !connectionCompatible))
   const closeCheckout = useCallback((requestPending = Boolean(walletRequestPending || session.connectingWallet), closeNotice?: string) => {
     if (closedRef.current) return
     closedRef.current = true
     if (session.connectingWallet) session.cancelConnect()
     onCloseRef.current(requestPending, closeNotice)
   }, [session.cancelConnect, session.connectingWallet, walletRequestPending])
+
+  useEffect(() => {
+    if (!mobile || mobileConnectIntentHandledRef.current) return
+    const returnUrl = new URL(window.location.href)
+    const requestedWallet = returnUrl.searchParams.get('gmWalletConnect')
+    if (!requestedWallet) return
+
+    mobileConnectIntentHandledRef.current = true
+    returnUrl.searchParams.delete('gmWalletConnect')
+    window.history.replaceState(window.history.state, '', `${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`)
+    setMobileHandoffReturn(true)
+
+    if (requestedWallet !== walletId) {
+      setError('La solicitud móvil no coincide con la wallet seleccionada. Vuelve a elegirla antes de conectar.')
+      return
+    }
+    if (!hasWalletBrowserProvider(walletId)) {
+      setError(`La app abrió esta página, pero no expuso el proveedor de ${selectedWallet?.name ?? 'la wallet'}. Ábrela desde el navegador interno de esa wallet y vuelve a intentar.`)
+      return
+    }
+
+    setError('')
+    void session.connect(walletId, networkId, resumeUrl).then((result) => {
+      if (result === 'rejected') closeCheckout(false, 'Cancelaste la conexión en tu wallet. No se envió ningún pago.')
+    }).catch((cause: unknown) => {
+      setError(cause instanceof Error ? cause.message : 'No se pudo completar la conexión en la app de wallet.')
+    })
+  }, [closeCheckout, mobile, networkId, resumeUrl, selectedWallet?.name, session.connect, walletId])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -366,7 +396,7 @@ export function WalletPaymentCheckout({
         {mobile && !mobileAppLink && !hasWalletBrowserProvider(walletId) && walletId !== 'metamask' && walletId !== 'solflare' && walletId !== 'phantom' && <p className="wallet-payment-origin-note">Esta wallet no tiene un enlace móvil directo desde el checkout. Abre el dominio HTTPS de la réplica en el navegador interno de {selectedWallet?.name ?? 'la wallet'}.</p>}
         {mobile && walletId === 'metamask' && !hasWalletBrowserProvider(walletId) && !metaMaskMobileNeedsHttps && <p className="wallet-payment-origin-note">MetaMask Connect abrirá la aplicación MetaMask para autorizar la conexión y volver a este checkout. Conectar no firma ni envía el pago.</p>}
         {mobile && walletId === 'metamask' && !hasWalletBrowserProvider(walletId) && !metaMaskMobileNeedsHttps && <p className="wallet-payment-origin-note">Se solicitará la conexión en la app MetaMask. Después vuelve a esta pestaña; la compra y la cotización se conservarán. Si MetaMask queda abierta, regresa con el selector de aplicaciones del teléfono y revisa su actividad antes de volver a intentarlo.</p>}
-        {mobile && walletId === 'metamask' && mobileTargetUsesNgrokFreeDomain(resumeUrl) && <p className="wallet-payment-origin-note wallet-payment-origin-warning">Este dominio ngrok gratuito muestra un aviso intermedio que MetaMask no puede omitir al volver. Para probar la conexión y conservar este checkout, abre el mismo flujo en el enlace HTTPS temporal sin aviso que aparece en la guía del proyecto.</p>}
+        {mobile && mobileTargetUsesNgrokFreeDomain(resumeUrl) && <p className="wallet-payment-origin-note wallet-payment-origin-warning">Este dominio ngrok gratuito muestra un aviso intermedio que puede interrumpir la apertura o el regreso desde la wallet. Para probar Connect en móvil, usa el enlace HTTPS temporal sin aviso de la guía o el dominio oficial.</p>}
         {mobile && walletId === 'solflare' && !hasWalletBrowserProvider(walletId) && mobileSolflareNativeAvailable && <p className="wallet-payment-origin-note">Solflare abrirá su aplicación con una solicitud cifrada y regresará a este checkout. Al pagar, revisarás la transacción y aprobarás el envío en la propia wallet.</p>}
         {mobile && walletId === 'solflare' && !hasWalletBrowserProvider(walletId) && !mobileSolflareNativeAvailable && <p className="wallet-payment-origin-note">Solflare necesita un dominio HTTPS público para abrir su aplicación y regresar a esta página. Una dirección local como localhost no se puede abrir desde el teléfono.</p>}
         {mobile && walletId === 'phantom' && !hasWalletBrowserProvider(walletId) && mobilePhantomNativeAvailable && <p className="wallet-payment-origin-note">Phantom abrirá su aplicación mediante una solicitud cifrada y regresará a este checkout. Al pagar, revisarás y aprobarás USDT SPL en Phantom.</p>}
@@ -402,7 +432,7 @@ function getLocalWalletTestMode() {
   if (typeof window === 'undefined' || !import.meta.env.DEV) return ''
   if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') return ''
   const requested = new URLSearchParams(window.location.search).get('gmWalletTest') ?? ''
-  return ['connect-reject', 'connect-pending', 'payment-reject', 'payment-success'].includes(requested) ? requested : ''
+  return ['connect-success', 'connect-reject', 'connect-pending', 'payment-reject', 'payment-success'].includes(requested) ? requested : ''
 }
 
 function transactionExplorer(networkId: PaymentNetworkId, hash: string) {

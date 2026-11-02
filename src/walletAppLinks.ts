@@ -80,6 +80,7 @@ export function buildCheckoutResumeUrl(target: string, checkout: {
   walletId: WalletId
 }) {
   const url = new URL(target)
+  url.searchParams.delete('gmWalletConnect')
   url.searchParams.set('gmPay', '1')
   url.searchParams.set('gmPayProduct', checkout.productName)
   url.searchParams.set('gmPayAmount', String(checkout.amount))
@@ -91,7 +92,11 @@ export function buildCheckoutResumeUrl(target: string, checkout: {
 
 export function getMobileWalletLaunchUrl(walletId: WalletId, target: string, networkId: PaymentNetworkId) {
   const url = new URL(target)
-  const encodedTarget = encodeURIComponent(url.toString())
+  const walletBrowserUrl = (id: WalletId) => {
+    const destination = new URL(url)
+    destination.searchParams.set('gmWalletConnect', id)
+    return destination
+  }
 
   switch (walletId) {
     // MetaMask mobile is handled by @metamask/connect-evm. Its connect flow
@@ -107,7 +112,7 @@ export function getMobileWalletLaunchUrl(walletId: WalletId, target: string, net
     case 'phantom': return null
     case 'coinbase': {
       const link = new URL('https://go.cb-w.com/dapp')
-      link.searchParams.set('cb_url', url.toString())
+      link.searchParams.set('cb_url', walletBrowserUrl(walletId).toString())
       return link.toString()
     }
     case 'trustwallet': {
@@ -116,10 +121,13 @@ export function getMobileWalletLaunchUrl(walletId: WalletId, target: string, net
         // These IDs follow its documented SLIP-44 network values.
         bnb: 714, bitcoin: 0, ethereum: 60, tron: 195, solana: 501, polygon: 966,
       }
-      return `https://link.trustwallet.com/open_url?coin_id=${coinId[networkId]}&url=${encodedTarget}`
+      const link = new URL('https://link.trustwallet.com/open_url')
+      link.searchParams.set('coin_id', String(coinId[networkId]))
+      link.searchParams.set('url', walletBrowserUrl(walletId).toString())
+      return link.toString()
     }
     case 'tronlink': {
-      const request = { url: url.toString(), action: 'open', protocol: 'TronLink', version: '1.0' }
+      const request = { url: walletBrowserUrl(walletId).toString(), action: 'open', protocol: 'TronLink', version: '1.0' }
       return `tronlinkoutside://pull.activity?param=${encodeURIComponent(JSON.stringify(request))}`
     }
     default:

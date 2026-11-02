@@ -42,10 +42,12 @@ async function startApplication() {
     const isLoopback = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     if (isLoopback) {
       const requestedWalletTest = new URLSearchParams(window.location.search).get('gmWalletTest')
-      const walletTestModes = ['connect-reject', 'connect-pending', 'payment-reject', 'payment-success'] as const
+      const requestedWallet = new URLSearchParams(window.location.search).get('gmWalletTestWallet')
+      const walletTestModes = ['connect-success', 'connect-reject', 'connect-pending', 'payment-reject', 'payment-success'] as const
       if (walletTestModes.some((mode) => mode === requestedWalletTest)) {
         const { installDevWalletTestProvider } = await import('./devWalletTestProvider')
-        installDevWalletTestProvider(requestedWalletTest as typeof walletTestModes[number])
+        const wallet = requestedWallet === 'trustwallet' ? 'trustwallet' : 'metamask'
+        installDevWalletTestProvider(requestedWalletTest as typeof walletTestModes[number], wallet)
       }
     }
   }

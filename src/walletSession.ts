@@ -526,7 +526,7 @@ export function useWalletSession(): WalletSession {
           // during the app switch, a fresh page load can restore the SDK session.
           metaMaskConnectAttempted = true
           try { window.localStorage.setItem('gm:metamask-connect-used', '1') } catch { /* restore is unavailable when storage is disabled */ }
-          const result = await metaMaskClient.connect({ chainIds: [metaMaskChainId(network)] })
+          const result = await metaMaskClient.connect({ chainIds: [metaMaskChainId(network)], forceRequest: true })
           if (!isCurrentAttempt()) { await metaMaskClient.disconnect().catch(() => undefined); return 'failed' }
           provider = metaMaskClient.getProvider() as unknown as EvmProvider
           address = result.accounts[0] ?? ''

@@ -111,7 +111,7 @@ function App() {
       for (const key of ['gmPay', 'gmPayProduct', 'gmPayAmount', 'gmPayCurrency', 'gmPayNetwork', 'gmPayWallet']) params.delete(key)
       if (params.get('modal') === 'paywall-create') params.delete('modal')
     }
-    for (const key of ['gmSolflareCallback', 'gmSolflareState', 'data', 'nonce', 'solflare_encryption_public_key', 'errorCode', 'errorMessage']) params.delete(key)
+    for (const key of ['gmWalletConnect', 'gmSolflareCallback', 'gmSolflareState', 'gmPhantomCallback', 'gmPhantomState', 'data', 'nonce', 'solflare_encryption_public_key', 'phantom_encryption_public_key', 'errorCode', 'errorMessage']) params.delete(key)
     if (params.toString() !== location.search.replace(/^\?/, '')) navigate({ pathname: location.pathname, search: params.size ? `?${params.toString()}` : '', hash: location.hash }, { replace: true })
     if (notice) setToast(notice)
     else if (requestPending) setToast('Cerraste el checkout. La solicitud puede seguir abierta en tu wallet; revisa su actividad antes de intentar pagar de nuevo.')
