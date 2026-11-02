@@ -1,0 +1,7 @@
+{
+  "browser": {"mode": "launch", "executable_path": "C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe", "headless": true},
+  "start_url": {"url": "http://127.0.0.1:5173/data-centers/operations", "query": []},
+  "environment": {"viewport": {"width": 768, "height": 1024, "device_scale_factor": 1}, "locale": "es-MX", "timezone": "America/Ojinaga", "color_scheme": "dark", "reduced_motion": "reduce", "service_workers": "block"},
+  "actions": [{"step_id": "wait-for-tablet-mobile-list", "action": "wait_for", "locator": {"kind": "css", "selector": ".pool-payout-mobile-list"}, "state": "visible", "timeout_ms": 30000}],
+  "capture": {"after_each_step": [], "at_end": ["screenshot", "dom", "accessibility", "url"], "events": [], "network": {"request_body": false, "response_body": false, "header_values": false}}
+}

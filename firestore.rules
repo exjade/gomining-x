@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function validDemoSnapshot() {
+      return request.resource.data.keys().hasAll([
+          'schemaVersion', 'mode', 'balance', 'miners', 'workers',
+          'workerActivationMode', 'pendingMinerOrders', 'subscription',
+          'receipts', 'presaleTokens', 'updatedAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'schemaVersion', 'mode', 'balance', 'miners', 'workers',
+          'workerActivationMode', 'pendingMinerOrders', 'subscription',
+          'receipts', 'presaleTokens', 'updatedAt'
+        ])
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.mode == 'demo'
+        && request.resource.data.balance is number
+        && request.resource.data.balance >= 0
+        && request.resource.data.balance <= 1000000000
+        && request.resource.data.miners is list
+        && request.resource.data.miners.size() <= 100
+        && request.resource.data.workers is list
+        && request.resource.data.workers.size() <= 100
+        && request.resource.data.pendingMinerOrders is list
+        && request.resource.data.pendingMinerOrders.size() <= 100
+        && request.resource.data.receipts is list
+        && request.resource.data.receipts.size() <= 50
+        && request.resource.data.presaleTokens is number
+        && request.resource.data.presaleTokens >= 0
+        && request.resource.data.workerActivationMode in ['automatic', 'manual']
+        && (request.resource.data.subscription == null || request.resource.data.subscription is map)
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    // Client access is limited to its own non-financial demo snapshot.
+    match /users/{uid}/demoState/{docId} {
+      allow read: if isOwner(uid) && docId == 'current';
+      allow create, update: if isOwner(uid) && docId == 'current' && validDemoSnapshot();
+      allow delete: if false;
+    }
+
+    // Orders, wallets, payment proofs, miners, rewards and operator data stay server-only.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

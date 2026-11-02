@@ -1,0 +1,339 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { PAYMENT_DESTINATIONS, type PaymentNetworkId } from './paymentDestinations'
+import { CryptoIcon, type CryptoSymbol } from './CryptoIcon'
+import { QuoteDetailsSkeleton } from './Skeletons'
+import { fetchPaymentQuote, formatAssetAmount, formatCatalogPrice, formatUsd, type PaymentCurrency, type PaymentQuote } from './paymentQuote'
+import type { ConnectedWallet, WalletId, WalletSession } from './walletSession'
+import { buildCheckoutResumeUrl, getWalletAppDappLink, hasWalletBrowserProvider, isMobileBrowser, mobileTargetIsPublicHttps } from './walletAppLinks'
+
+export type PaymentReceipt = {
+  id: string
+  productName: string
+  quote: PaymentQuote
+  sender: string
+  transactionHash: string
+  sourceStatus: 'submitted'
+  bridgeStatus: 'pending' | 'not-applicable'
+  sentAt: number
+}
+
+const networks: Array<{ id: PaymentNetworkId; label: string }> = [
+  { id: 'bnb', label: 'BNB Chain · BNB' },
+  { id: 'bitcoin', label: 'Bitcoin · BTC' },
+  { id: 'ethereum', label: 'Ethereum · ETH' },
+  { id: 'tron', label: 'TRON · TRX' },
+  { id: 'solana', label: 'Solana · USDT SPL' },
+  { id: 'polygon', label: 'Polygon · POL' },
+]
+
+const walletOptions: Record<PaymentNetworkId, Array<{ id: WalletId; name: string }>> = {
+  bnb: [{ id: 'metamask', name: 'MetaMask' }, { id: 'coinbase', name: 'Coinbase Wallet' }, { id: 'trustwallet', name: 'Trust Wallet' }],
+  bitcoin: [{ id: 'unisat', name: 'UniSat' }],
+  ethereum: [{ id: 'metamask', name: 'MetaMask' }, { id: 'coinbase', name: 'Coinbase Wallet' }, { id: 'trustwallet', name: 'Trust Wallet' }],
+  tron: [{ id: 'tronlink', name: 'TronLink' }],
+  solana: [{ id: 'solflare', name: 'Solflare' }, { id: 'phantom', name: 'Phantom' }],
+  polygon: [{ id: 'metamask', name: 'MetaMask' }, { id: 'coinbase', name: 'Coinbase Wallet' }, { id: 'trustwallet', name: 'Trust Wallet' }],
+}
+
+const initialWallet: Record<PaymentNetworkId, WalletId> = {
+  bnb: 'metamask', bitcoin: 'unisat', ethereum: 'metamask', tron: 'tronlink', solana: 'solflare', polygon: 'metamask',
+}
+
+export function WalletPaymentCheckout({
+  productName,
+  amount,
+  currency,
+  session,
+  initialNetworkId,
+  initialWalletId,
+  onClose,
+  onPaid,
+}: {
+  productName: string
+  amount: number
+  currency: PaymentCurrency
+  session: WalletSession
+  initialNetworkId?: PaymentNetworkId
+  initialWalletId?: WalletId
+  onClose: (requestPending?: boolean, notice?: string) => void
+  onPaid: (receipt: PaymentReceipt) => void
+}) {
+  const [networkId, setNetworkId] = useState<PaymentNetworkId>(() => initialNetworkId ?? networkForConnection(session.connection))
+  const [walletId, setWalletId] = useState<WalletId>(() => {
+    const network = initialNetworkId ?? networkForConnection(session.connection)
+    const preferredWallet = initialWalletId ?? session.connection?.id
+    return preferredWallet && walletOptions[network].some((option) => option.id === preferredWallet)
+      ? preferredWallet
+      : initialWallet[network]
+  })
+  const [quote, setQuote] = useState<PaymentQuote | null>(null)
+  const [loadingQuote, setLoadingQuote] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [walletRequestPending, setWalletRequestPending] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [receipt, setReceipt] = useState<PaymentReceipt | null>(null)
+  const [now, setNow] = useState(Date.now())
+  const closedRef = useRef(false)
+  const onCloseRef = useRef(onClose)
+
+  useEffect(() => { onCloseRef.current = onClose }, [onClose])
+
+  const refreshQuote = useCallback(async () => {
+    setLoadingQuote(true)
+    setError('')
+    try {
+      setQuote(await fetchPaymentQuote(amount, currency, networkId))
+    } catch (cause) {
+      setQuote(null)
+      setError(cause instanceof Error ? cause.message : 'No se pudo obtener la cotización.')
+    } finally {
+      setLoadingQuote(false)
+    }
+  }, [amount, currency, networkId])
+
+  useEffect(() => { void refreshQuote() }, [refreshQuote])
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+  useEffect(() => {
+    const compatible = walletOptions[networkId]
+    if (!compatible.some((option) => option.id === walletId)) setWalletId(initialWallet[networkId])
+  }, [networkId, walletId])
+
+  const connected = session.connection
+  const selectedWallet = walletOptions[networkId].find((option) => option.id === walletId)
+  const connectionCompatible = Boolean(connected && connected.id === walletId)
+  const quoteFresh = Boolean(quote && now < quote.expiresAt)
+  const selfPayment = Boolean(connectionCompatible && connected && quote && sameWalletAddress(connected.address, quote.recipient))
+  const mobile = isMobileBrowser()
+  const resumeUrl = typeof window === 'undefined' ? '' : buildCheckoutResumeUrl(window.location.href, { productName, amount, currency, networkId, walletId })
+  const mobileAppLink = mobile && selectedWallet && mobileTargetIsPublicHttps(resumeUrl)
+    ? getWalletAppDappLink(walletId, resumeUrl, networkId)
+    : null
+  const shouldOpenWalletApp = Boolean(mobile && mobileAppLink && !hasWalletBrowserProvider(walletId) && !connectionCompatible)
+  const mobileWalletUnavailable = Boolean(mobile && !mobileAppLink && !hasWalletBrowserProvider(walletId) && !connectionCompatible)
+  const closeCheckout = useCallback((requestPending = walletRequestPending, closeNotice?: string) => {
+    if (closedRef.current) return
+    closedRef.current = true
+    onCloseRef.current(requestPending, closeNotice)
+  }, [walletRequestPending])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeCheckout()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [closeCheckout])
+
+  const chooseNetwork = (value: PaymentNetworkId) => {
+    setNetworkId(value)
+    setQuote(null)
+    setNotice('')
+    setError('')
+  }
+
+  const requestPayment = async () => {
+    if (closedRef.current || !connected || connected.id !== walletId || !quote || sending) return
+    if (sameWalletAddress(connected.address, quote.recipient)) {
+      setError('La wallet conectada es también el destino receptor. Conecta otra cuenta para pagar; no se envió nada.')
+      return
+    }
+    setSending(true)
+    setError('')
+    setNotice('')
+    try {
+      const fresh = await fetchPaymentQuote(amount, currency, networkId)
+      // The quote request can take several seconds. If the buyer closed the
+      // checkout while it was refreshing, do not open a wallet prompt later.
+      if (closedRef.current) return
+      const rateMoved = Math.abs(fresh.assetUsd - quote.assetUsd) / quote.assetUsd > 0.001
+      const freshAmount = Number(fresh.amount)
+      const currentAmount = Number(quote.amount)
+      const amountMoved = !Number.isFinite(freshAmount) || !Number.isFinite(currentAmount) || currentAmount <= 0
+        || Math.abs(freshAmount - currentAmount) / currentAmount > 0.001
+      const fxMoved = fresh.usdMxnRate !== quote.usdMxnRate
+      if (Date.now() >= quote.expiresAt || amountMoved || rateMoved || fxMoved) {
+        setQuote(fresh)
+        setNotice('La cotización se actualizó. Revisa el nuevo importe y vuelve a pulsar para abrir tu wallet.')
+        return
+      }
+      // Keep the displayed amount and receipt aligned with the exact quote
+      // used for the transaction. Sub-0.1% market movement is small enough to
+      // use the refreshed amount; the wallet still shows the final amount and gas.
+      setQuote(fresh)
+      setWalletRequestPending(true)
+      const transactionHash = await connected.sendPayment(fresh)
+      const destination = PAYMENT_DESTINATIONS.find((item) => item.id === networkId)!
+      const paymentReceipt: PaymentReceipt = {
+        id: `PAY-${Date.now().toString(36).toUpperCase()}`,
+        productName,
+        quote: fresh,
+        sender: connected.address,
+        transactionHash,
+        sourceStatus: 'submitted',
+        bridgeStatus: destination.route === 'solflare-bridge' ? 'pending' : 'not-applicable',
+        sentAt: Date.now(),
+      }
+      if (!closedRef.current) setReceipt(paymentReceipt)
+      // Closing the page cannot cancel a wallet RPC already in progress. If it
+      // eventually succeeds, keep the returned hash in the parent session.
+      onPaid(paymentReceipt)
+    } catch (cause) {
+      if (closedRef.current) return
+      if (isWalletRequestRejected(cause)) {
+        closeCheckout(false, 'Cancelaste la solicitud en tu wallet. No se envió ningún pago.')
+        return
+      }
+      setError(walletErrorMessage(cause))
+    } finally {
+      if (!closedRef.current) {
+        setWalletRequestPending(false)
+        setSending(false)
+      }
+    }
+  }
+
+  return <div className="modal-backdrop wallet-payment-backdrop" role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) closeCheckout() }}>
+    <section className="purchase-modal wallet-payment-dialog" role="dialog" aria-modal="true" aria-labelledby="wallet-payment-title">
+      <button className="modal-close" type="button" aria-label="Cerrar pago" onClick={() => closeCheckout()}>×</button>
+      {receipt ? <PaymentReceiptView receipt={receipt} productName={productName} onClose={() => closeCheckout(false)} /> : <>
+        <p className="eyebrow">CHECKOUT · CONNECT WALLET</p>
+        <h2 id="wallet-payment-title">Pagar {productName}</h2>
+        <p className="purchase-muted">El precio del catálogo conserva su moneda. La cantidad cripto se calcula con el precio público del activo y, para MXN, el tipo de cambio de referencia más reciente.</p>
+
+        <label className="field-label payment-network-field">Red y activo de pago
+          <span className="payment-network-preview"><span className="payment-network-icons"><CryptoIcon symbol={networkId === 'solana' ? 'SOL' : networkAsset(networkId)} size="md" />{networkId === 'solana' && <CryptoIcon symbol="USDT" size="sm" />}</span><span><strong>{networks.find((network) => network.id === networkId)?.label}</strong><small>{networkId === 'solana' ? 'USDT SPL · red Solana' : `Pago de origen en ${networkAsset(networkId)}`}</small></span></span>
+          <select value={networkId} onChange={(event) => chooseNetwork(event.target.value as PaymentNetworkId)}>{networks.map((network) => <option value={network.id} key={network.id}>{network.label}</option>)}</select>
+        </label>
+        <label className="field-label">Wallet para esta red<select value={walletId} onChange={(event) => setWalletId(event.target.value as WalletId)}>{walletOptions[networkId].map((wallet) => <option value={wallet.id} key={wallet.id}>{wallet.name}</option>)}</select></label>
+
+        <div className="wallet-payment-quote" aria-live="polite">
+          <div className="wallet-payment-quote-total"><span>Precio del catálogo</span><strong>{formatCatalogPrice(amount, currency)}</strong></div>
+          {loadingQuote && !quote && <QuoteDetailsSkeleton />}
+          {loadingQuote && quote && <p className="quote-refreshing" role="status"><i /> Actualizando cotización…</p>}
+          {quote && <>
+            {quote.catalogCurrency === 'MXN' && <div className="wallet-payment-quote-main"><span>Equivalente de cálculo</span><strong>{formatUsd(quote.catalogUsd)}</strong></div>}
+            <div className="wallet-payment-quote-main"><span>Enviar</span><strong className="wallet-payment-amount"><CryptoIcon symbol={quote.asset as CryptoSymbol} size="sm" />{formatAssetAmount(quote.amount, quote.asset)}</strong></div>
+            <dl>
+              <div><dt>Precio de {quote.asset}</dt><dd>{formatUsd(quote.assetUsd)} · {quote.quoteSource}</dd></div>
+              {quote.usdMxnRate && quote.fxDate && <div><dt>Tipo de cambio de referencia</dt><dd>1 USD = {quote.usdMxnRate.toFixed(4)} MXN · {quote.fxDate}</dd></div>}
+              {quote.bridgeFeeRate > 0 && <><div><dt>Comisión Bridge estimada</dt><dd>{formatUsd(quote.estimatedBridgeFeeUsd)} · 1%</dd></div><div><dt>USDT neto estimado</dt><dd>{formatUsd(quote.expectedNetUsd)}</dd></div></>}
+              {quote.networkId === 'solana' && <div><dt>Conversión</dt><dd>USDT SPL directo · sin Bridge</dd></div>}
+              <div><dt>Gas de red</dt><dd>Lo calcula y muestra tu wallet antes de aprobar</dd></div>
+              <div><dt>Destino</dt><dd><code>{quote.recipient}</code></dd></div>
+              <div><dt>Cotización actualizada</dt><dd>{new Date(quote.updatedAt).toLocaleTimeString('es-MX')} · {quoteFresh ? 'válida 30 s' : 'vencida · actualiza antes de pagar'}</dd></div>
+            </dl>
+          </>}
+        </div>
+
+        {networkId !== 'solana' && <div className="simulation-warning"><span>i</span><span>El 1% de Bridge y el importe neto son estimaciones. La ruta puede tener hasta 5% de slippage; mínimos, liquidez y gas cambian. Esta pantalla no confirma la llegada final del USDT.</span></div>}
+        {networkId === 'solana' && <div className="simulation-warning"><span>i</span><span>Solo se envía USDT SPL al destino indicado. Si la cuenta receptora no tiene su token account, la transacción puede pagar su creación con SOL; la wallet mostrará el costo.</span></div>}
+
+        {connected && !connectionCompatible && <div className="wallet-payment-mismatch">Está conectada {connected.name}. Para esta red conecta {selectedWallet?.name}.</div>}
+        {connectionCompatible && quote && <div className="wallet-payment-sender"><span>Remitente conectado</span><code>{(connected as ConnectedWallet).address}</code></div>}
+        {selfPayment && <div className="wallet-payment-mismatch" role="alert">Esta misma dirección es la receptora del pago. Conecta una cuenta de comprador distinta; enviar desde aquí sería pagarte a ti mismo y gastarías gas sin completar una compra.</div>}
+        {notice && <div className="inline-feedback" role="status">{notice}</div>}
+        {error && <div className="wallet-error" role="alert">{error}</div>}
+        {session.error && <div className="wallet-error" role="alert">{session.error}</div>}
+        {walletRequestPending && <div className="wallet-request-pending" role="status">La wallet tiene una solicitud abierta. Puedes cerrar esta pantalla; eso no cancela la aprobación pendiente. Revisa la actividad de tu wallet antes de volver a intentar.</div>}
+
+        <div className="wallet-payment-actions">
+          {!connectionCompatible ? shouldOpenWalletApp && mobileAppLink
+            ? <a className="button button-primary" href={mobileAppLink}>Abrir {selectedWallet?.name} y conectar <span>↗</span></a>
+            : <button className="button button-primary" type="button" disabled={Boolean(session.connectingWallet) || !selectedWallet || mobileWalletUnavailable} onClick={() => selectedWallet && void session.connect(selectedWallet.id)}>{session.connectingWallet ? 'Conectando…' : mobileWalletUnavailable ? `${selectedWallet?.name ?? 'Wallet'} no disponible aquí` : `Conectar ${selectedWallet?.name ?? 'wallet'}`}</button>
+            : <button className="button button-primary" type="button" disabled={!quoteFresh || loadingQuote || sending || selfPayment} onClick={() => void requestPayment()}>{sending ? walletRequestPending ? 'Espera la wallet…' : 'Actualizando importe…' : `Pagar ${quote ? formatAssetAmount(quote.amount, quote.asset) : ''}`}</button>}
+          <button className="button button-secondary" type="button" disabled={loadingQuote || sending} onClick={() => void refreshQuote()}>Actualizar cotización</button>
+          <button className="button button-quiet" type="button" onClick={() => closeCheckout()}>{walletRequestPending ? 'Cerrar pantalla' : 'Cancelar'}</button>
+        </div>
+        {!connected && <p className="wallet-payment-origin-note">Cada sitio pide permiso por separado. Si conectaste la wallet en GoMining, conéctala aquí una vez; después se reutiliza en compras y recargas. En celular, abre esta compra dentro de la app de wallet y conecta desde su navegador.</p>}
+        {mobile && !mobileAppLink && !hasWalletBrowserProvider(walletId) && <p className="wallet-payment-origin-note">Esta wallet no tiene un enlace móvil directo desde el checkout. Abre el dominio HTTPS de la réplica en el navegador interno de {selectedWallet?.name ?? 'la wallet'}.</p>}
+        {connectionCompatible && <p className="wallet-payment-approval-note">Al pulsar Pagar se abrirá {connected?.name}. Revisa red, destino, importe y gas en la wallet. La transferencia solo ocurre si la apruebas.</p>}
+      </>}
+    </section>
+  </div>
+}
+
+function PaymentReceiptView({ receipt, productName, onClose }: { receipt: PaymentReceipt; productName: string; onClose: () => void }) {
+  const explorer = transactionExplorer(receipt.quote.networkId, receipt.transactionHash)
+  return <>
+    <div className="purchase-success-mark">✓</div><p className="eyebrow">RECIBO DE TRANSFERENCIA</p>
+    <h2 id="wallet-payment-title">Transferencia enviada desde la wallet</h2>
+    <p className="purchase-muted">{productName} · {formatCatalogPrice(receipt.quote.catalogValue, receipt.quote.catalogCurrency)} · referencia {receipt.id}</p>
+    <div className="receipt-lines">
+      <div className="receipt-line"><span>Importe de origen</span><strong>{formatAssetAmount(receipt.quote.amount, receipt.quote.asset)}</strong></div>
+      <div className="receipt-line"><span>Remitente</span><strong><code>{receipt.sender}</code></strong></div>
+      <div className="receipt-line"><span>Destino · {receipt.quote.networkName}</span><strong><code>{receipt.quote.recipient}</code></strong></div>
+      <div className="receipt-line"><span>Estado de origen</span><strong>Enviada · confirmación no verificada</strong></div>
+      <div className="receipt-line"><span>Conversión Bridge</span><strong>{receipt.bridgeStatus === 'pending' ? 'Pendiente · no verificada' : 'No aplica · USDT SPL directo'}</strong></div>
+    </div>
+    <div className="wallet-payment-hash"><span>Hash de la transferencia</span><code>{receipt.transactionHash}</code>{explorer && <a href={explorer} target="_blank" rel="noreferrer">Abrir explorador ↗</a>}</div>
+    <div className="simulation-warning"><span>i</span><span>El hash lo devolvió la wallet. Esta réplica no verifica confirmaciones, no asocia el depósito a una orden y no activa ni entrega el minero o suscripción. En redes Bridge, verifica el resultado final en Solflare.</span></div>
+    <div className="purchase-modal-actions"><button className="button button-primary" type="button" onClick={onClose}>Cerrar recibo <span>✓</span></button></div>
+  </>
+}
+
+function transactionExplorer(networkId: PaymentNetworkId, hash: string) {
+  const url: Partial<Record<PaymentNetworkId, string>> = {
+    bnb: `https://bscscan.com/tx/${encodeURIComponent(hash)}`,
+    bitcoin: `https://mempool.space/tx/${encodeURIComponent(hash)}`,
+    ethereum: `https://etherscan.io/tx/${encodeURIComponent(hash)}`,
+    tron: `https://tronscan.org/#/transaction/${encodeURIComponent(hash)}`,
+    solana: `https://solscan.io/tx/${encodeURIComponent(hash)}`,
+    polygon: `https://polygonscan.com/tx/${encodeURIComponent(hash)}`,
+  }
+  return url[networkId]
+}
+
+function networkForConnection(connection: ConnectedWallet | null): PaymentNetworkId {
+  if (!connection) return 'bnb'
+  if (connection.id === 'solflare' || connection.id === 'phantom') return 'solana'
+  if (connection.id === 'tronlink') return 'tron'
+  if (connection.id === 'unisat') return 'bitcoin'
+  if (connection.network.includes('BNB Chain')) return 'bnb'
+  if (connection.network.includes('Polygon')) return 'polygon'
+  return 'ethereum'
+}
+
+function walletErrorMessage(error: unknown) {
+  const message = typeof error === 'string' ? error : error instanceof Error ? error.message : 'No se pudo enviar la transacción.'
+  if (/rejected|declined|denied|user canceled|user cancelled|confirmation declined/i.test(message)) return 'Rechazaste o cancelaste en la wallet. No se creó un recibo de pago.'
+  return message || 'No se pudo enviar la transacción.'
+}
+
+function isWalletRequestRejected(error: unknown) {
+  if (typeof error === 'string') return /user rejected|rejected by user|user denied|user cancelled|user canceled|transaction cancelled|transaction canceled/i.test(error)
+  if (!error || typeof error !== 'object') return false
+  const visited = new Set<object>()
+  const pending: unknown[] = [error]
+  const rejectionCode = /^(?:4001|ACTION_REJECTED|TRANSACTION_CANCELLED|USER_REJECTED|USER_REJECTED_REQUEST)$/i
+  const rejectionMessage = /user rejected|rejected by user|user denied|user cancelled|user canceled|transaction cancelled|transaction canceled|confirmation declined|denied transaction signature/i
+  while (pending.length > 0) {
+    const value = pending.pop()
+    if (typeof value === 'string') {
+      if (rejectionMessage.test(value)) return true
+      continue
+    }
+    if (!value || typeof value !== 'object' || visited.has(value)) continue
+    visited.add(value)
+    const candidate = value as { code?: unknown; message?: unknown; reason?: unknown; cause?: unknown; data?: unknown; originalError?: unknown }
+    if ((typeof candidate.code === 'number' && candidate.code === 4001)
+      || (typeof candidate.code === 'string' && rejectionCode.test(candidate.code))) return true
+    pending.push(candidate.message, candidate.reason, candidate.cause, candidate.data, candidate.originalError)
+  }
+  return false
+}
+
+function sameWalletAddress(first: string, second: string) {
+  const isEvmAddress = /^0x/i.test(first) && /^0x/i.test(second)
+  return isEvmAddress ? first.toLowerCase() === second.toLowerCase() : first === second
+}
+
+function networkAsset(networkId: PaymentNetworkId): CryptoSymbol {
+  const assets: Record<PaymentNetworkId, CryptoSymbol> = {
+    bnb: 'BNB', bitcoin: 'BTC', ethereum: 'ETH', tron: 'TRX', solana: 'USDT', polygon: 'POL',
+  }
+  return assets[networkId]
+}
