@@ -123,6 +123,22 @@ export const App: React.FC = () => {
     localStorage.setItem('minerx_theme_mode', next);
   };
 
+  // Synchronize theme class on root HTML and body elements
+  useEffect(() => {
+    const root = document.documentElement;
+    if (themeMode === 'dark') {
+      root.classList.add('dark');
+      root.classList.remove('light');
+      document.body.classList.add('dark-theme');
+      document.body.classList.remove('light-theme');
+    } else {
+      root.classList.add('light');
+      root.classList.remove('dark');
+      document.body.classList.add('light-theme');
+      document.body.classList.remove('dark-theme');
+    }
+  }, [themeMode]);
+
   // Verify auth session on mount
   useEffect(() => {
     const token = localStorage.getItem('minerx_auth_token');
@@ -884,7 +900,7 @@ export const App: React.FC = () => {
       themeMode === 'light' ? 'bg-[#EDEFF8] text-slate-900' : 'bg-[#07090F] text-slate-100'
     }`}>
       {/* MAIN ELEVATED CARD CONTAINER (Ref: White floating modern card container from video) */}
-      <div className={`w-full max-w-7xl flex flex-col rounded-[28px] sm:rounded-[36px] border shadow-2xl backdrop-blur-xl overflow-hidden transition-all ${
+      <div className={`w-full max-w-7xl flex flex-col rounded-[28px] sm:rounded-[36px] border shadow-2xl overflow-hidden transition-all ${
         themeMode === 'light'
           ? 'bg-white/95 border-slate-200/90 shadow-slate-300/40 text-slate-900'
           : 'bg-[#080B12]/95 border-white/[0.08] shadow-black/80 text-white'
@@ -947,6 +963,7 @@ export const App: React.FC = () => {
               onUpdateAccountBalance={handleUpdateAccountBalance}
               onOpenReallocate={(w) => setReallocatingWorker(w)}
               onRefreshTelemetry={() => refreshTelemetry(true)}
+              isDarkTheme={themeMode === 'dark'}
             />
           )}
 
@@ -958,6 +975,7 @@ export const App: React.FC = () => {
               balance={balance}
               poolInfo={poolInfo}
               accounts={accounts}
+              isDarkTheme={themeMode === 'dark'}
             />
           )}
 
@@ -983,6 +1001,7 @@ export const App: React.FC = () => {
               onTestSaladAccount={handleTestSaladAccount}
               onTestKryptex={handleTestKryptex}
               onTestWebhook={handleTestWebhook}
+              isDarkTheme={themeMode === 'dark'}
             />
           )}
 
@@ -992,6 +1011,7 @@ export const App: React.FC = () => {
               workers={workers}
               onClearAlerts={handleClearAlerts}
               onOpenReallocate={(w) => setReallocatingWorker(w)}
+              isDarkTheme={themeMode === 'dark'}
             />
           )}
         </main>
@@ -1005,6 +1025,7 @@ export const App: React.FC = () => {
         onConfirmReallocate={handleConfirmReallocate}
         onConfirmRestart={handleConfirmRestart}
         onConfirmRecreate={handleConfirmRecreate}
+        isDarkTheme={themeMode === 'dark'}
       />
 
       {/* Bottom Navigation for Mobile Smartphones */}
@@ -1013,6 +1034,7 @@ export const App: React.FC = () => {
         setActiveTab={setActiveTab}
         unresolvedAlertsCount={unresolvedAlertsCount}
         totalGpus={workers.length}
+        isDarkTheme={themeMode === 'dark'}
       />
 
       {/* Floating Telemetry Hub Widget (Dynamic Island / Capsule) */}

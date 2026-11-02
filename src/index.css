@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
   :root {
     --font-mono: 'JetBrains Mono', monospace;
@@ -9,9 +11,29 @@
 
   body {
     font-family: var(--font-sans);
+    min-height: 100vh;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+
+  /* Light Theme (Default or when .light / not .dark is active) */
+  :root:not(.dark) body,
+  html:not(.dark) body,
+  html.light body,
+  body.light-theme {
+    background-color: #EDEFF8;
+    color: #0F172A;
+    background-image: 
+      radial-gradient(circle at 15% 5%, rgba(5, 223, 114, 0.06) 0%, transparent 45%),
+      radial-gradient(circle at 85% 10%, rgba(14, 165, 233, 0.05) 0%, transparent 40%),
+      radial-gradient(circle at 50% 90%, rgba(99, 102, 241, 0.04) 0%, transparent 50%);
+    background-attachment: fixed;
+  }
+
+  /* Dark Cyber Theme */
+  html.dark body,
+  body.dark-theme {
     background-color: #06070A;
     color: #E2E8F0;
-    min-height: 100vh;
     background-image: 
       radial-gradient(circle at 15% 5%, rgba(0, 229, 255, 0.04) 0%, transparent 45%),
       radial-gradient(circle at 85% 10%, rgba(5, 242, 146, 0.05) 0%, transparent 40%),
@@ -24,15 +46,34 @@
     width: 6px;
     height: 6px;
   }
-  ::-webkit-scrollbar-track {
+  
+  html.dark ::-webkit-scrollbar-track,
+  body.dark-theme ::-webkit-scrollbar-track {
     background: #06070A;
   }
-  ::-webkit-scrollbar-thumb {
+  html:not(.dark) ::-webkit-scrollbar-track,
+  body.light-theme ::-webkit-scrollbar-track {
+    background: #EDEFF8;
+  }
+
+  html.dark ::-webkit-scrollbar-thumb,
+  body.dark-theme ::-webkit-scrollbar-thumb {
     background: #181C26;
     border-radius: 9999px;
   }
-  ::-webkit-scrollbar-thumb:hover {
+  html:not(.dark) ::-webkit-scrollbar-thumb,
+  body.light-theme ::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 9999px;
+  }
+
+  html.dark ::-webkit-scrollbar-thumb:hover,
+  body.dark-theme ::-webkit-scrollbar-thumb:hover {
     background: #262D3D;
+  }
+  html:not(.dark) ::-webkit-scrollbar-thumb:hover,
+  body.light-theme ::-webkit-scrollbar-thumb:hover {
+    background: #94A3B8;
   }
 }
 
@@ -50,45 +91,108 @@
   letter-spacing: 0.02em;
 }
 
-/* Ultra-Crisp FinTech Card */
+/* Ultra-Crisp FinTech Card - Dark vs Light Responsive */
+html.dark .fintech-card,
+body.dark-theme .fintech-card,
 .fintech-card {
   background: linear-gradient(180deg, rgba(14, 18, 27, 0.85) 0%, rgba(9, 12, 18, 0.95) 100%);
   border: 1px solid rgba(255, 255, 255, 0.07);
   box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.6), inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(16px);
+  color: #F8FAFC;
 }
 
-.fintech-card:hover {
+html:not(.dark) .fintech-card,
+html.light .fintech-card,
+body.light-theme .fintech-card {
+  background: #FFFFFF;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(16px);
+  color: #0F172A;
+}
+
+html.dark .fintech-card:hover,
+body.dark-theme .fintech-card:hover {
   border-color: rgba(255, 255, 255, 0.12);
+}
+
+html:not(.dark) .fintech-card:hover,
+html.light .fintech-card:hover,
+body.light-theme .fintech-card:hover {
+  border-color: rgba(203, 213, 225, 1);
 }
 
 .fintech-card-interactive {
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.fintech-card-interactive:hover {
+html.dark .fintech-card-interactive:hover,
+body.dark-theme .fintech-card-interactive:hover {
   transform: translateY(-2px);
   border-color: rgba(5, 242, 146, 0.3);
   box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.7), 0 0 24px -4px rgba(5, 242, 146, 0.12), inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
 }
 
+html:not(.dark) .fintech-card-interactive:hover,
+html.light .fintech-card-interactive:hover,
+body.light-theme .fintech-card-interactive:hover {
+  transform: translateY(-2px);
+  border-color: rgba(5, 223, 114, 0.4);
+  box-shadow: 0 14px 30px -4px rgba(15, 23, 42, 0.08), 0 0 18px -2px rgba(5, 223, 114, 0.12), inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+}
+
+/* Card Subtle (Secondary Cards) */
+html.dark .fintech-card-subtle,
+body.dark-theme .fintech-card-subtle,
 .fintech-card-subtle {
   background: rgba(13, 16, 24, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.05);
   box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+  color: #E2E8F0;
+}
+
+html:not(.dark) .fintech-card-subtle,
+html.light .fintech-card-subtle,
+body.light-theme .fintech-card-subtle {
+  background: #F8FAFC;
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.8);
+  color: #1E293B;
 }
 
 /* Legacy alias for backwards compatibility */
+html.dark .card-cyber,
+body.dark-theme .card-cyber,
 .card-cyber {
   background: linear-gradient(180deg, rgba(14, 18, 27, 0.85) 0%, rgba(9, 12, 18, 0.95) 100%);
   border: 1px solid rgba(255, 255, 255, 0.07);
   box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.6), inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(16px);
+  color: #F8FAFC;
 }
 
-.card-cyber-hover:hover {
+html:not(.dark) .card-cyber,
+html.light .card-cyber,
+body.light-theme .card-cyber {
+  background: #FFFFFF;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(16px);
+  color: #0F172A;
+}
+
+html.dark .card-cyber-hover:hover,
+body.dark-theme .card-cyber-hover:hover {
   border-color: rgba(0, 229, 255, 0.3);
   box-shadow: 0 12px 32px -4px rgba(0, 229, 255, 0.1), inset 0 1px 0 0 rgba(0, 229, 255, 0.15);
+}
+
+html:not(.dark) .card-cyber-hover:hover,
+html.light .card-cyber-hover:hover,
+body.light-theme .card-cyber-hover:hover {
+  border-color: rgba(5, 223, 114, 0.4);
+  box-shadow: 0 12px 28px -4px rgba(15, 23, 42, 0.08), 0 0 16px -2px rgba(5, 223, 114, 0.15);
 }
 
 /* Glowing Accent Shadows */

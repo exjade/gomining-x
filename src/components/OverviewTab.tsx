@@ -836,12 +836,14 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                       content={({ active, payload, label }) => {
                         if (active && payload && payload.length) {
                           return (
-                            <div className="rounded-xl border border-white/15 bg-[#06080E]/95 p-3 backdrop-blur-xl shadow-2xl font-jetbrains">
-                              <span className="text-[10px] text-slate-400 block mb-1">{label}</span>
+                            <div className={`rounded-xl border p-3 backdrop-blur-xl shadow-2xl font-jetbrains ${
+                              isLight ? 'bg-white/95 border-slate-200 text-slate-900 shadow-slate-300' : 'bg-[#06080E]/95 border-white/15 text-white'
+                            }`}>
+                              <span className={`text-[10px] block mb-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>{label}</span>
                               {payload.map((entry, idx) => (
                                 <div key={idx} className="flex justify-between gap-4 text-xs py-0.5">
                                   <span style={{ color: entry.color }}>{entry.name}:</span>
-                                  <span className="font-bold text-white tabular-nums">${Number(entry.value).toFixed(3)}/h</span>
+                                  <span className={`font-bold tabular-nums ${isLight ? 'text-slate-900' : 'text-white'}`}>${Number(entry.value).toFixed(3)}/h</span>
                                 </div>
                               ))}
                             </div>

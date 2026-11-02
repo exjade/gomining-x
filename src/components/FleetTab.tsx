@@ -40,6 +40,7 @@ interface FleetTabProps {
   onUpdateAccountBalance?: (accountId: string, newBalanceUSD: number) => void;
   onOpenReallocate: (worker: MergedGPUWorker) => void;
   onRefreshTelemetry?: () => void;
+  isDarkTheme?: boolean;
 }
 
 export const FleetTab: React.FC<FleetTabProps> = ({
@@ -49,7 +50,9 @@ export const FleetTab: React.FC<FleetTabProps> = ({
   onUpdateAccountBalance,
   onOpenReallocate,
   onRefreshTelemetry,
+  isDarkTheme = false,
 }) => {
+  const isLight = !isDarkTheme;
   const [selectedAccount, setSelectedAccount] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -322,28 +325,34 @@ export const FleetTab: React.FC<FleetTabProps> = ({
   return (
     <div className="space-y-6 pb-20 md:pb-10 animate-in fade-in duration-300">
       {/* 0. SELECTOR DE PROVEEDOR DE FLOTA */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-[#080B12] p-2 rounded-2xl border border-white/[0.08]">
+      <div className={`flex flex-wrap items-center justify-between gap-3 p-2 rounded-2xl border transition-all ${
+        isLight ? 'bg-white border-slate-200/90 shadow-sm' : 'bg-[#080B12] border-white/[0.08]'
+      }`}>
         <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={() => setFleetProvider('SALAD')}
-            className={`px-4 py-2 rounded-xl text-xs font-mono-num font-bold transition-all flex items-center gap-2 ${
+            className={`px-4 py-2 rounded-xl text-xs font-mono-num font-bold transition-all flex items-center gap-2 cursor-pointer ${
               fleetProvider === 'SALAD'
-                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-sm'
-                : 'text-slate-400 hover:text-white'
+                ? isLight 
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 shadow-sm' 
+                  : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-sm'
+                : isLight ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
             }`}
           >
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            <span className="h-2 w-2 rounded-full bg-emerald-500" />
             <span>SaladCloud Flota ({workers.length})</span>
           </button>
 
           <button
             type="button"
             onClick={() => setFleetProvider('VAST')}
-            className={`px-4 py-2 rounded-xl text-xs font-mono-num font-bold transition-all flex items-center gap-2 ${
+            className={`px-4 py-2 rounded-xl text-xs font-mono-num font-bold transition-all flex items-center gap-2 cursor-pointer ${
               fleetProvider === 'VAST'
-                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 shadow-sm'
-                : 'text-slate-400 hover:text-white'
+                ? isLight 
+                  ? 'bg-cyan-50 text-cyan-700 border border-cyan-300 shadow-sm' 
+                  : 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 shadow-sm'
+                : isLight ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
             }`}
           >
             <Server className="h-3.5 w-3.5" />
@@ -351,35 +360,43 @@ export const FleetTab: React.FC<FleetTabProps> = ({
           </button>
         </div>
 
-        <div className="text-[11px] font-mono-num text-slate-500 px-3 hidden sm:block">
+        <div className={`text-[11px] font-mono-num px-3 hidden sm:block ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
           {fleetProvider === 'SALAD' ? 'Supervisión de nodos SaladCloud, logs en vivo y réplicas' : 'Gestión de hardware físico Vast.ai y telemetría de worker'}
         </div>
       </div>
 
       {fleetProvider === 'VAST' ? (
-        <VastFleetSection />
+        <VastFleetSection isDarkTheme={isDarkTheme} />
       ) : (
         <>
           {/* 1. SECCIÓN DE SALDO ACTUAL DE SALADCLOUD (TOTAL Y POR CUENTA) */}
-      <div className="fintech-card rounded-2xl p-5 border border-white/[0.08] shadow-xl relative overflow-hidden">
+      <div className={`rounded-2xl p-5 border shadow-xl relative overflow-hidden transition-all ${
+        isLight ? 'bg-white border-slate-200/90 shadow-slate-200/50 text-slate-900' : 'fintech-card border-white/[0.08] text-white'
+      }`}>
         <div className="absolute -top-12 -right-12 w-48 h-48 bg-gradient-to-br from-emerald-500/10 to-cyan-500/0 rounded-full blur-2xl pointer-events-none" />
         
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
+        <div className={`flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b ${
+          isLight ? 'border-slate-100' : 'border-white/[0.06]'
+        }`}>
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 border border-emerald-500/30 text-emerald-400 shadow-inner">
+            <div className={`flex h-11 w-11 items-center justify-center rounded-xl border shadow-inner ${
+              isLight ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 border-emerald-500/30 text-emerald-400'
+            }`}>
               <Wallet className="h-5 w-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-display-title text-base font-bold text-white tracking-wide">
+                <h3 className={`font-display-title text-base font-bold tracking-wide ${isLight ? 'text-slate-900' : 'text-white'}`}>
                   Saldo y Facturación SaladCloud
                 </h3>
-                <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-mono-num font-semibold text-emerald-400 border border-emerald-500/20">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-mono-num font-semibold border ${
+                  isLight ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                }`}>
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   Sincronizado
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className={`text-xs mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                 Control de balance total consolidado y desglose individual por organización con cálculo de runway
               </p>
             </div>
@@ -387,37 +404,41 @@ export const FleetTab: React.FC<FleetTabProps> = ({
 
           {/* Saldo Total Consolidado */}
           <div className="flex flex-wrap items-center gap-3">
-            <div className="bg-[#080B12] rounded-xl px-4 py-2 border border-white/[0.08]">
-              <span className="text-[10px] font-mono-num text-slate-400 block uppercase tracking-wider">
+            <div className={`rounded-xl px-4 py-2 border transition-all ${
+              isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#080B12] border-white/[0.08]'
+            }`}>
+              <span className={`text-[10px] font-mono-num block uppercase tracking-wider ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                 Saldo Total Flota
               </span>
-              <div className="font-display-title text-xl font-bold text-white flex items-center gap-1">
-                <span className="text-emerald-400">$</span>
+              <div className={`font-display-title text-xl font-bold flex items-center gap-1 ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                <span className="text-emerald-500">$</span>
                 <span>{(saladBalance?.totalBalanceUSD ?? 0).toFixed(2)}</span>
-                <span className="text-xs font-normal text-slate-400">USD</span>
+                <span className={`text-xs font-normal ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>USD</span>
               </div>
             </div>
 
-            <div className="bg-[#080B12] rounded-xl px-4 py-2 border border-white/[0.08]">
-              <span className="text-[10px] font-mono-num text-slate-400 block uppercase tracking-wider">
+            <div className={`rounded-xl px-4 py-2 border transition-all ${
+              isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#080B12] border-white/[0.08]'
+            }`}>
+              <span className={`text-[10px] font-mono-num block uppercase tracking-wider ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                 Gasto Consolidado
               </span>
-              <div className="font-mono-num text-base font-bold text-slate-200">
+              <div className={`font-mono-num text-base font-bold ${isLight ? 'text-slate-900' : 'text-slate-200'}`}>
                 ${(saladBalance?.hourlySpendingUSD ?? 0).toFixed(3)}
-                <span className="text-[10px] text-slate-400 font-normal"> /hr</span>
+                <span className={`text-[10px] font-normal ${isLight ? 'text-slate-500' : 'text-slate-400'}`}> /hr</span>
               </div>
             </div>
 
-            <div className={`rounded-xl px-4 py-2 border ${
+            <div className={`rounded-xl px-4 py-2 border transition-all ${
               (saladBalance?.hourlySpendingUSD || 0) > 0 && (saladBalance?.runwayHours ?? 999) < 24
-                ? 'bg-rose-950/20 border-rose-500/30 text-rose-300'
-                : 'bg-[#080B12] border-white/[0.08] text-slate-200'
+                ? isLight ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-rose-950/20 border-rose-500/30 text-rose-300'
+                : isLight ? 'bg-slate-50 border-slate-200 text-slate-800' : 'bg-[#080B12] border-white/[0.08] text-slate-200'
             }`}>
-              <span className="text-[10px] font-mono-num text-slate-400 block uppercase tracking-wider">
+              <span className={`text-[10px] font-mono-num block uppercase tracking-wider ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                 Runway Estimado
               </span>
               <div className="font-mono-num text-base font-bold flex items-center gap-1.5">
-                <Clock className="h-4 w-4 text-cyan-400" />
+                <Clock className={`h-4 w-4 ${isLight ? 'text-cyan-600' : 'text-cyan-400'}`} />
                 <span>{(saladBalance?.hourlySpendingUSD || 0) > 0 ? `${(saladBalance?.runwayHours ?? 0).toFixed(1)} hrs` : '0h (Pausa)'}</span>
               </div>
             </div>
@@ -425,9 +446,13 @@ export const FleetTab: React.FC<FleetTabProps> = ({
             {/* Consultar Cuotas SaladCloud Button (API Oficial) */}
             <button
               onClick={() => handleOpenQuotas()}
-              className="bg-gradient-to-r from-cyan-500/10 to-emerald-500/10 hover:from-cyan-500/20 hover:to-emerald-500/20 text-cyan-300 hover:text-white rounded-xl px-3.5 py-2 border border-cyan-500/30 flex items-center gap-2 text-xs font-mono-num font-semibold transition-all shadow-sm active:scale-95"
+              className={`rounded-xl px-3.5 py-2 border flex items-center gap-2 text-xs font-mono-num font-semibold transition-all shadow-sm active:scale-95 cursor-pointer ${
+                isLight 
+                  ? 'bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border-cyan-200' 
+                  : 'bg-gradient-to-r from-cyan-500/10 to-emerald-500/10 hover:from-cyan-500/20 hover:to-emerald-500/20 text-cyan-300 hover:text-white border-cyan-500/30'
+              }`}
             >
-              <Gauge className="h-4 w-4 text-cyan-400" />
+              <Gauge className="h-4 w-4 text-cyan-500" />
               <span>Ver Cuotas Salad</span>
             </button>
           </div>
@@ -452,8 +477,10 @@ export const FleetTab: React.FC<FleetTabProps> = ({
 
         {/* Desglose de Saldo por Cuenta Salad */}
         <div className="mt-4 pt-1">
-          <div className="text-[11px] font-mono-num uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-1.5">
-            <Layers className="h-3.5 w-3.5 text-cyan-400" />
+          <div className={`text-[11px] font-mono-num uppercase tracking-wider mb-2.5 flex items-center gap-1.5 ${
+            isLight ? 'text-slate-600' : 'text-slate-400'
+          }`}>
+            <Layers className="h-3.5 w-3.5 text-cyan-500" />
             <span>Desglose de Saldo por Cuenta ({accounts.length})</span>
           </div>
 
@@ -468,16 +495,24 @@ export const FleetTab: React.FC<FleetTabProps> = ({
               return (
                 <div 
                   key={acc.id}
-                  className="rounded-xl border border-white/[0.07] bg-[#0A0D16] p-3.5 flex flex-col justify-between hover:border-cyan-500/30 transition-all group"
+                  className={`rounded-xl border p-3.5 flex flex-col justify-between transition-all group ${
+                    isLight 
+                      ? 'bg-slate-50/80 border-slate-200/90 hover:border-cyan-500 hover:bg-white shadow-xs' 
+                      : 'bg-[#0A0D16] border-white/[0.07] hover:border-cyan-500/30'
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <div className="font-bold text-sm text-white flex items-center gap-1.5">
-                        <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                      <div className={`font-bold text-sm flex items-center gap-1.5 ${
+                        isLight ? 'text-slate-900' : 'text-white'
+                      }`}>
+                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
                         {acc.accountName || 'Cuenta Salad'}
                       </div>
-                      <div className="text-[11px] font-mono-num text-slate-400 mt-0.5">
-                        Org: <span className="text-cyan-300 font-semibold">{acc.organizationName}</span>
+                      <div className={`text-[11px] font-mono-num mt-0.5 ${
+                        isLight ? 'text-slate-500' : 'text-slate-400'
+                      }`}>
+                        Org: <span className={`font-semibold ${isLight ? 'text-cyan-700' : 'text-cyan-300'}`}>{acc.organizationName}</span>
                       </div>
                     </div>
 
@@ -490,39 +525,47 @@ export const FleetTab: React.FC<FleetTabProps> = ({
                         });
                         setBalanceInput(balanceVal.toString());
                       }}
-                      className="p-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] text-slate-400 hover:text-white hover:border-cyan-400/40 hover:bg-white/[0.06] transition-all"
+                      className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                        isLight 
+                          ? 'border-slate-200 bg-white text-slate-500 hover:text-slate-900 hover:border-cyan-500 hover:bg-slate-50' 
+                          : 'border-white/[0.06] bg-white/[0.03] text-slate-400 hover:text-white hover:border-cyan-400/40 hover:bg-white/[0.06]'
+                      }`}
                       title="Actualizar saldo de esta cuenta"
                     >
                       <Edit3 className="h-3.5 w-3.5" />
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 mt-3 pt-2.5 border-t border-white/[0.04] text-[11px] font-mono-num">
+                  <div className={`grid grid-cols-3 gap-2 mt-3 pt-2.5 border-t text-[11px] font-mono-num ${
+                    isLight ? 'border-slate-200/80' : 'border-white/[0.04]'
+                  }`}>
                     <div>
-                      <span className="text-[10px] text-slate-500 block">Saldo</span>
-                      <span className="font-bold text-emerald-400 text-xs">
+                      <span className={`text-[10px] block ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>Saldo</span>
+                      <span className="font-bold text-emerald-500 text-xs">
                         ${balanceVal.toFixed(2)}
                       </span>
                     </div>
 
                     <div>
-                      <span className="text-[10px] text-slate-500 block">Consumo</span>
-                      <span className="text-slate-300">
+                      <span className={`text-[10px] block ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>Consumo</span>
+                      <span className={isLight ? 'text-slate-800' : 'text-slate-300'}>
                         ${spendingVal.toFixed(3)}/h
                       </span>
                     </div>
 
                     <div className="text-right">
-                      <span className="text-[10px] text-slate-500 block">Runway</span>
-                      <span className={runwayVal < 24 ? 'text-rose-400 font-bold' : 'text-cyan-300'}>
+                      <span className={`text-[10px] block ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>Runway</span>
+                      <span className={runwayVal < 24 ? 'text-rose-500 font-bold' : isLight ? 'text-cyan-700' : 'text-cyan-300'}>
                         {runwayVal.toFixed(0)} hrs
                       </span>
                     </div>
                   </div>
 
-                  <div className="mt-2 text-[10px] font-mono-num text-slate-400 flex items-center justify-between">
-                    <span>Nodos activos: <strong className="text-white">{activeCount} GPUs</strong></span>
-                    <span className="text-slate-500">Proyecto: {acc.projectName || 'default'}</span>
+                  <div className={`mt-2 text-[10px] font-mono-num flex items-center justify-between ${
+                    isLight ? 'text-slate-600' : 'text-slate-400'
+                  }`}>
+                    <span>Nodos activos: <strong className={isLight ? 'text-slate-950 font-bold' : 'text-white'}>{activeCount} GPUs</strong></span>
+                    <span className={isLight ? 'text-slate-500' : 'text-slate-500'}>Proyecto: {acc.projectName || 'default'}</span>
                   </div>
                 </div>
               );
@@ -547,83 +590,99 @@ export const FleetTab: React.FC<FleetTabProps> = ({
               {containerGroupsBreakdown.map((grp) => (
                 <div
                   key={grp.groupName}
-                  className="rounded-xl border border-white/[0.08] bg-[#080B12] p-4 flex flex-col justify-between hover:border-emerald-500/30 transition-all shadow-md"
+                  className={`rounded-xl border p-4 flex flex-col justify-between transition-all shadow-md ${
+                    isLight 
+                      ? 'bg-slate-50/80 border-slate-200/90 hover:border-emerald-500 hover:bg-white' 
+                      : 'bg-[#080B12] border-white/[0.08] hover:border-emerald-500/30'
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-display-title font-bold text-white text-sm">
+                        <span className={`font-display-title font-bold text-sm ${
+                          isLight ? 'text-slate-900' : 'text-white'
+                        }`}>
                           {grp.groupName}
                         </span>
-                        <span className="rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-mono-num text-[10px] px-2 py-0.5">
+                        <span className={`rounded-md font-mono-num text-[10px] px-2 py-0.5 border ${
+                          isLight ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                        }`}>
                           {grp.gpuModel}
                         </span>
                       </div>
-                      <div className="text-[11px] text-slate-400 font-mono-num mt-0.5">
-                        Org: <span className="text-cyan-300">{grp.organizationName}</span> • Replicas: <strong className="text-white">{grp.totalReplicas}</strong> ({grp.runningCount} activas | {grp.allocatingCount} en asignación)
+                      <div className={`text-[11px] font-mono-num mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                        Org: <span className={isLight ? 'text-cyan-700 font-semibold' : 'text-cyan-300'}>{grp.organizationName}</span> • Replicas: <strong className={isLight ? 'text-slate-950 font-bold' : 'text-white'}>{grp.totalReplicas}</strong> ({grp.runningCount} activas | {grp.allocatingCount} en asignación)
                       </div>
                     </div>
 
                     <div className="text-right">
-                      <span className="text-[10px] font-mono-num text-slate-500 block uppercase">Ponderado Gasto</span>
-                      <span className="font-mono-num text-xs font-bold text-emerald-400">
+                      <span className={`text-[10px] font-mono-num block uppercase ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>Ponderado Gasto</span>
+                      <span className="font-mono-num text-xs font-bold text-emerald-500">
                         {grp.weightPct}% Flota
                       </span>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 my-3 py-2.5 border-y border-white/[0.04] text-[11px] font-mono-num">
+                  <div className={`grid grid-cols-2 sm:grid-cols-4 gap-2.5 my-3 py-2.5 border-y text-[11px] font-mono-num ${
+                    isLight ? 'border-slate-200/80' : 'border-white/[0.04]'
+                  }`}>
                     <div>
-                      <span className="text-[10px] text-slate-500 block">Consumo Grupo:</span>
-                      <span className="text-slate-200 font-bold">${grp.hourlyCost.toFixed(3)}/h</span>
+                      <span className={`text-[10px] block ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>Consumo Grupo:</span>
+                      <span className={`font-bold ${isLight ? 'text-slate-900' : 'text-slate-200'}`}>${grp.hourlyCost.toFixed(3)}/h</span>
                     </div>
 
                     <div>
-                      <span className="text-[10px] text-slate-500 block">Runway Grupo:</span>
-                      <span className={grp.groupRunwayHours < 24 ? 'text-amber-400 font-bold' : 'text-cyan-300'}>
+                      <span className={`text-[10px] block ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>Runway Grupo:</span>
+                      <span className={grp.groupRunwayHours < 24 ? 'text-amber-500 font-bold' : isLight ? 'text-cyan-700 font-semibold' : 'text-cyan-300'}>
                         {grp.groupRunwayHours.toFixed(1)} hrs
                       </span>
                     </div>
 
                     <div>
-                      <span className="text-[10px] text-slate-500 block">Potencia Salad Logs:</span>
-                      <span className="text-[#05F292] font-bold">
+                      <span className={`text-[10px] block ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>Potencia Salad Logs:</span>
+                      <span className="text-[#05DF72] font-bold">
                         {grp.saladLogHashrateTHs > 0 ? `${grp.saladLogHashrateTHs} TH/s` : 'Sin lectura'}
                       </span>
                     </div>
 
                     <div className="text-right sm:text-left">
-                      <span className="text-[10px] text-slate-500 block">Eficiencia Silicio:</span>
-                      <span className={grp.efficiencyPct >= 95 ? 'text-emerald-400 font-bold' : grp.efficiencyPct >= 80 ? 'text-cyan-300' : 'text-amber-400'}>
+                      <span className={`text-[10px] block ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>Eficiencia Silicio:</span>
+                      <span className={grp.efficiencyPct >= 95 ? 'text-emerald-500 font-bold' : grp.efficiencyPct >= 80 ? (isLight ? 'text-cyan-700' : 'text-cyan-300') : 'text-amber-500'}>
                         {grp.efficiencyPct}% ({grp.benchmarkTHs} TH/s)
                       </span>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between text-[10px] font-mono-num text-slate-400">
+                  <div className={`flex items-center justify-between text-[10px] font-mono-num ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                     <span className="flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                      <span>{grp.runningCount} GPUs facturando activamente a ${grp.runningCount > 0 ? (grp.hourlyCost / grp.runningCount).toFixed(3) : resolveGpuBenchmark(grp.gpuModel).hourlyCost.toFixed(3)}/h</span>
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      <span>{grp.runningCount} GPUs facturando a ${grp.runningCount > 0 ? (grp.hourlyCost / grp.runningCount).toFixed(3) : resolveGpuBenchmark(grp.gpuModel).hourlyCost.toFixed(3)}/h</span>
                     </span>
-                    <span className="text-slate-500">Saldo cuenta: ${grp.accountBalanceUSD.toFixed(2)} USD</span>
+                    <span className={isLight ? 'text-slate-500' : 'text-slate-500'}>Saldo: ${grp.accountBalanceUSD.toFixed(2)} USD</span>
                   </div>
 
                   {/* Control Remoto SaladCloud API: Réplicas & Start/Stop */}
-                  <div className="mt-3 pt-2.5 border-t border-white/[0.06] flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono-num">
+                  <div className={`mt-3 pt-2.5 border-t flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono-num ${
+                    isLight ? 'border-slate-200/80' : 'border-white/[0.06]'
+                  }`}>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-slate-400 uppercase">Réplicas:</span>
-                      <div className="flex items-center bg-[#06080E] border border-white/[0.1] rounded-lg p-0.5">
+                      <span className={`text-[10px] uppercase ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Réplicas:</span>
+                      <div className={`flex items-center border rounded-lg p-0.5 ${
+                        isLight ? 'bg-white border-slate-300 shadow-xs' : 'bg-[#06080E] border-white/[0.1]'
+                      }`}>
                         <button
                           type="button"
                           onClick={() => {
                             const cur = groupReplicasInput[grp.groupName] ?? grp.totalReplicas;
                             setGroupReplicasInput(prev => ({ ...prev, [grp.groupName]: Math.max(0, cur - 1) }));
                           }}
-                          className="h-6 w-6 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors"
+                          className={`h-6 w-6 rounded flex items-center justify-center transition-colors cursor-pointer ${
+                            isLight ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-100' : 'text-slate-400 hover:text-white hover:bg-white/[0.08]'
+                          }`}
                         >
                           <Minus className="h-3 w-3" />
                         </button>
-                        <span className="w-8 text-center font-bold text-white text-xs">
+                        <span className={`w-8 text-center font-bold text-xs ${isLight ? 'text-slate-900' : 'text-white'}`}>
                           {groupReplicasInput[grp.groupName] ?? grp.totalReplicas}
                         </span>
                         <button
@@ -632,7 +691,9 @@ export const FleetTab: React.FC<FleetTabProps> = ({
                             const cur = groupReplicasInput[grp.groupName] ?? grp.totalReplicas;
                             setGroupReplicasInput(prev => ({ ...prev, [grp.groupName]: cur + 1 }));
                           }}
-                          className="h-6 w-6 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors"
+                          className={`h-6 w-6 rounded flex items-center justify-center transition-colors cursor-pointer ${
+                            isLight ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-100' : 'text-slate-400 hover:text-white hover:bg-white/[0.08]'
+                          }`}
                         >
                           <Plus className="h-3 w-3" />
                         </button>
@@ -642,7 +703,11 @@ export const FleetTab: React.FC<FleetTabProps> = ({
                         type="button"
                         disabled={groupActionLoading[grp.groupName]}
                         onClick={() => handleGroupAction(grp, 'scale')}
-                        className="px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30 text-[10px] font-bold transition-all disabled:opacity-50 flex items-center gap-1"
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all disabled:opacity-50 flex items-center gap-1 cursor-pointer ${
+                          isLight 
+                            ? 'bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-200' 
+                            : 'bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30'
+                        }`}
                       >
                         {groupActionLoading[grp.groupName] ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Sliders className="h-3 w-3" />}
                         <span>Aplicar Escala</span>
@@ -655,7 +720,11 @@ export const FleetTab: React.FC<FleetTabProps> = ({
                         disabled={groupActionLoading[grp.groupName]}
                         onClick={() => handleGroupAction(grp, 'start')}
                         title="Iniciar grupo de contenedores en SaladCloud"
-                        className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold flex items-center gap-1 transition-all disabled:opacity-50"
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all disabled:opacity-50 cursor-pointer ${
+                          isLight 
+                            ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                            : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30'
+                        }`}
                       >
                         <Play className="h-3 w-3" />
                         <span>Iniciar</span>
@@ -665,7 +734,11 @@ export const FleetTab: React.FC<FleetTabProps> = ({
                         disabled={groupActionLoading[grp.groupName]}
                         onClick={() => handleGroupAction(grp, 'stop')}
                         title="Detener grupo de contenedores en SaladCloud"
-                        className="px-2.5 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-[10px] font-bold flex items-center gap-1 transition-all disabled:opacity-50"
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all disabled:opacity-50 cursor-pointer ${
+                          isLight 
+                            ? 'bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200' 
+                            : 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30'
+                        }`}
                       >
                         <Square className="h-3 w-3" />
                         <span>Detener</span>
@@ -682,86 +755,104 @@ export const FleetTab: React.FC<FleetTabProps> = ({
       {/* 2. RESUMEN DE CAPACIDAD DE GPUS DE LA FLOTA & POTENCIAS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Total GPUs Solicitadas */}
-        <div className="fintech-card rounded-2xl p-4 border border-white/[0.08]">
+        <div className={`rounded-2xl p-4 border transition-all ${
+          isLight ? 'bg-white border-slate-200/90 shadow-sm text-slate-900' : 'fintech-card border-white/[0.08] text-white'
+        }`}>
           <div className="flex items-center justify-between text-slate-400 mb-1">
-            <span className="text-xs font-mono-num uppercase tracking-wider">Capacidad Total Flota</span>
-            <Cpu className="h-4 w-4 text-cyan-400" />
+            <span className={`text-xs font-mono-num uppercase tracking-wider ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Capacidad Total Flota</span>
+            <Cpu className="h-4 w-4 text-cyan-500" />
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="font-display-title text-2xl font-bold text-white">
+            <span className={`font-display-title text-2xl font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>
               {totalReplicas}
             </span>
-            <span className="text-xs font-mono-num text-slate-400">GPUs Contratadas</span>
+            <span className={`text-xs font-mono-num ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>GPUs Contratadas</span>
           </div>
-          <div className="text-[11px] font-mono-num text-slate-500 mt-1">
+          <div className={`text-[11px] font-mono-num mt-1 ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
             Replicas activas en SaladCloud Engine
           </div>
         </div>
 
         {/* GPUs Activas Minando (Running) */}
-        <div className="fintech-card rounded-2xl p-4 border border-emerald-500/20 bg-emerald-950/10">
-          <div className="flex items-center justify-between text-emerald-400 mb-1">
+        <div className={`rounded-2xl p-4 border transition-all ${
+          isLight 
+            ? 'bg-emerald-50/70 border-emerald-200 text-slate-900 shadow-sm' 
+            : 'fintech-card border-emerald-500/20 bg-emerald-950/10 text-white'
+        }`}>
+          <div className="flex items-center justify-between text-emerald-500 mb-1">
             <span className="text-xs font-mono-num uppercase tracking-wider">Minando en Vivo</span>
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="font-display-title text-2xl font-bold text-emerald-300">
+            <span className={`font-display-title text-2xl font-bold ${isLight ? 'text-emerald-700' : 'text-emerald-300'}`}>
               {runningCount}
             </span>
-            <span className="text-xs font-mono-num text-emerald-400/80">GPUs Operativas</span>
+            <span className={`text-xs font-mono-num ${isLight ? 'text-emerald-600' : 'text-emerald-400/80'}`}>GPUs Operativas</span>
           </div>
-          <div className="text-[11px] font-mono-num text-slate-400 mt-1">
+          <div className={`text-[11px] font-mono-num mt-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
             Enviando telemetría y cómputo continuo
           </div>
         </div>
 
         {/* GPUs en Aprovisionamiento (Allocating) */}
-        <div className="fintech-card rounded-2xl p-4 border border-cyan-500/20 bg-cyan-950/10">
-          <div className="flex items-center justify-between text-cyan-400 mb-1">
+        <div className={`rounded-2xl p-4 border transition-all ${
+          isLight 
+            ? 'bg-cyan-50/70 border-cyan-200 text-slate-900 shadow-sm' 
+            : 'fintech-card border-cyan-500/20 bg-cyan-950/10 text-white'
+        }`}>
+          <div className="flex items-center justify-between text-cyan-600 mb-1">
             <span className="text-xs font-mono-num uppercase tracking-wider">En Asignación</span>
-            <RefreshCw className="h-3.5 w-3.5 text-cyan-400 animate-spin" />
+            <RefreshCw className="h-3.5 w-3.5 text-cyan-500 animate-spin" />
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="font-display-title text-2xl font-bold text-cyan-300">
+            <span className={`font-display-title text-2xl font-bold ${isLight ? 'text-cyan-800' : 'text-cyan-300'}`}>
               {allocatingCount}
             </span>
-            <span className="text-xs font-mono-num text-cyan-400/80">GPUs Allocating</span>
+            <span className={`text-xs font-mono-num ${isLight ? 'text-cyan-700' : 'text-cyan-400/80'}`}>GPUs Allocating</span>
           </div>
-          <div className="text-[11px] font-mono-num text-slate-400 mt-1">
+          <div className={`text-[11px] font-mono-num mt-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
             Salad buscando hardware físico ($0/h)
           </div>
         </div>
 
         {/* Potencia Salad Logs vs Kryptex Pool */}
-        <div className="fintech-card rounded-2xl p-4 border border-white/[0.08]">
+        <div className={`rounded-2xl p-4 border transition-all ${
+          isLight ? 'bg-white border-slate-200/90 shadow-sm text-slate-900' : 'fintech-card border-white/[0.08] text-white'
+        }`}>
           <div className="flex items-center justify-between text-slate-400 mb-1">
-            <span className="text-xs font-mono-num uppercase tracking-wider">Potencia Medida</span>
-            <Radio className="h-4 w-4 text-[#05F292]" />
+            <span className={`text-xs font-mono-num uppercase tracking-wider ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Potencia Medida</span>
+            <Radio className="h-4 w-4 text-[#05DF72]" />
           </div>
           <div className="flex items-baseline gap-1.5">
-            <span className="font-display-title text-xl font-bold text-[#05F292]">
+            <span className="font-display-title text-xl font-bold text-[#05DF72]">
               {totalSaladLogHashTHs}
             </span>
-            <span className="text-xs font-mono-num text-slate-400">TH/s (Salad Logs)</span>
+            <span className={`text-xs font-mono-num ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>TH/s (Salad Logs)</span>
           </div>
-          <div className="text-[11px] font-mono-num text-slate-400 mt-1 flex items-center justify-between">
+          <div className={`text-[11px] font-mono-num mt-1 flex items-center justify-between ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
             <span>Pool Kryptex:</span>
-            <strong className="text-cyan-300">{poolReportedHashTHs} TH/s</strong>
+            <strong className={isLight ? 'text-cyan-700 font-bold' : 'text-cyan-300'}>{poolReportedHashTHs} TH/s</strong>
           </div>
         </div>
       </div>
 
       {/* 3. FILTROS & BÚSQUEDA */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 fintech-card rounded-2xl p-4">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 rounded-2xl p-4 border transition-all ${
+        isLight ? 'bg-white border-slate-200/90 shadow-sm' : 'fintech-card border-white/[0.08]'
+      }`}>
         {/* Search */}
         <div className="relative">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar worker, GPU o machine ID..."
-            className="w-full rounded-xl border border-white/[0.08] bg-[#080B12] pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400 transition-all font-mono-num"
+            className={`w-full rounded-xl border pl-9 pr-3 py-2 text-xs transition-all font-mono-num focus:outline-none ${
+              isLight 
+                ? 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-[#05DF72]' 
+                : 'bg-[#080B12] border-white/[0.08] text-white placeholder-slate-500 focus:border-cyan-400'
+            }`}
           />
         </div>
 
@@ -770,7 +861,11 @@ export const FleetTab: React.FC<FleetTabProps> = ({
           <select
             value={selectedAccount}
             onChange={(e) => setSelectedAccount(e.target.value)}
-            className="w-full rounded-xl border border-white/[0.08] bg-[#080B12] px-3 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none transition-colors"
+            className={`w-full rounded-xl border px-3 py-2 text-xs transition-colors focus:outline-none ${
+              isLight 
+                ? 'bg-white border-slate-200 text-slate-800 focus:border-[#05DF72]' 
+                : 'bg-[#080B12] border-white/[0.08] text-white focus:border-cyan-400'
+            }`}
           >
             <option value="ALL">Todas las Cuentas Salad ({accounts.length})</option>
             {accounts.map((acc) => (
@@ -786,7 +881,11 @@ export const FleetTab: React.FC<FleetTabProps> = ({
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
-            className="w-full rounded-xl border border-white/[0.08] bg-[#080B12] px-3 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none transition-colors"
+            className={`w-full rounded-xl border px-3 py-2 text-xs transition-colors focus:outline-none ${
+              isLight 
+                ? 'bg-white border-slate-200 text-slate-800 focus:border-[#05DF72]' 
+                : 'bg-[#080B12] border-white/[0.08] text-white focus:border-cyan-400'
+            }`}
           >
             <option value="ALL">Todas las GPUs ({totalReplicas})</option>
             <option value="RUNNING">Minando Activas ({runningCount})</option>
@@ -797,17 +896,21 @@ export const FleetTab: React.FC<FleetTabProps> = ({
         </div>
 
         {/* View Switcher */}
-        <div className="flex items-center justify-between rounded-xl bg-[#080B12] px-2 py-1 border border-white/[0.08]">
-          <span className="text-xs font-mono-num text-slate-400 pl-2">
+        <div className={`flex items-center justify-between rounded-xl px-2 py-1 border transition-all ${
+          isLight ? 'bg-slate-100 border-slate-200' : 'bg-[#080B12] border-white/[0.08]'
+        }`}>
+          <span className={`text-xs font-mono-num pl-2 ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
             Vista:
           </span>
           <div className="flex items-center gap-1">
             <button
               onClick={() => setViewMode('grid')}
-              className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
+              className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer ${
                 viewMode === 'grid'
-                  ? 'bg-gradient-to-r from-emerald-500/25 to-cyan-500/25 text-white border border-emerald-500/40'
-                  : 'text-slate-400 hover:text-white'
+                  ? isLight 
+                    ? 'bg-white text-slate-950 font-bold shadow-xs' 
+                    : 'bg-gradient-to-r from-emerald-500/25 to-cyan-500/25 text-white border border-emerald-500/40'
+                  : isLight ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
               }`}
             >
               <LayoutGrid className="h-3 w-3" />
@@ -815,10 +918,12 @@ export const FleetTab: React.FC<FleetTabProps> = ({
             </button>
             <button
               onClick={() => setViewMode('table')}
-              className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
+              className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer ${
                 viewMode === 'table'
-                  ? 'bg-gradient-to-r from-emerald-500/25 to-cyan-500/25 text-white border border-emerald-500/40'
-                  : 'text-slate-400 hover:text-white'
+                  ? isLight 
+                    ? 'bg-white text-slate-950 font-bold shadow-xs' 
+                    : 'bg-gradient-to-r from-emerald-500/25 to-cyan-500/25 text-white border border-emerald-500/40'
+                  : isLight ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
               }`}
             >
               <Table className="h-3 w-3" />
@@ -871,50 +976,62 @@ export const FleetTab: React.FC<FleetTabProps> = ({
               return (
                 <div 
                   key={worker.id}
-                  className="fintech-card rounded-2xl p-5 border border-cyan-500/25 bg-cyan-950/10 flex flex-col justify-between"
+                  className={`rounded-2xl p-5 border flex flex-col justify-between transition-all ${
+                    isLight 
+                      ? 'border-cyan-200 bg-cyan-50/70 shadow-sm text-slate-900' 
+                      : 'fintech-card border-cyan-500/25 bg-cyan-950/10 text-white'
+                  }`}
                 >
                   <div>
                     <div className="flex items-start justify-between gap-2 mb-3">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="h-2.5 w-2.5 rounded-full bg-cyan-400 animate-spin" />
-                          <span className="font-mono-num font-bold text-sm text-white">
+                          <span className="h-2.5 w-2.5 rounded-full bg-cyan-500 animate-spin" />
+                          <span className={`font-mono-num font-bold text-sm ${isLight ? 'text-slate-900' : 'text-white'}`}>
                             {worker.workerName}
                           </span>
                         </div>
-                        <div className="text-[11px] text-slate-400 mt-0.5">
-                          {worker.accountName} • Grupo: <span className="text-cyan-300">{worker.containerGroupName}</span>
+                        <div className={`text-[11px] mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                          {worker.accountName} • Grupo: <span className={isLight ? 'text-cyan-700 font-semibold' : 'text-cyan-300'}>{worker.containerGroupName}</span>
                         </div>
                       </div>
 
-                      <span className="rounded-lg bg-cyan-500/10 px-2.5 py-0.5 text-[11px] font-mono-num font-bold text-cyan-300 border border-cyan-500/20">
+                      <span className={`rounded-lg px-2.5 py-0.5 text-[11px] font-mono-num font-bold border ${
+                        isLight ? 'bg-cyan-100 text-cyan-800 border-cyan-200' : 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20'
+                      }`}>
                         {worker.gpuModel}
                       </span>
                     </div>
 
-                    <div className="rounded-xl bg-[#080B12]/80 border border-cyan-500/20 p-3 my-3">
-                      <div className="flex items-center gap-2 text-cyan-400 text-xs font-semibold mb-1">
+                    <div className={`rounded-xl border p-3 my-3 ${
+                      isLight ? 'bg-white border-cyan-200 text-slate-800 shadow-xs' : 'bg-[#080B12]/80 border-cyan-500/20 text-slate-300'
+                    }`}>
+                      <div className={`flex items-center gap-2 text-xs font-semibold mb-1 ${isLight ? 'text-cyan-700' : 'text-cyan-400'}`}>
                         <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                         <span>En Aprovisionamiento (Allocating)</span>
                       </div>
-                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                      <p className={`text-[11px] leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                         SaladCloud está buscando un nodo físico con GPU disponible en la red distribuida. No hay costo de facturación ($0.00/h) hasta que la máquina inicie.
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 text-xs font-mono-num text-slate-400 py-2 border-t border-white/[0.04]">
+                    <div className={`grid grid-cols-2 gap-2 text-xs font-mono-num py-2 border-t ${
+                      isLight ? 'border-slate-200/80 text-slate-600' : 'border-white/[0.04] text-slate-400'
+                    }`}>
                       <div>
-                        <span className="text-[10px] text-slate-500 block">Costo Actual:</span>
-                        <span className="text-emerald-400 font-bold">$0.000 /hr</span>
+                        <span className={`text-[10px] block ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>Costo Actual:</span>
+                        <span className="text-emerald-500 font-bold">$0.000 /hr</span>
                       </div>
                       <div className="text-right">
-                        <span className="text-[10px] text-slate-500 block">Ventana Esperada:</span>
-                        <span className="text-slate-300">{targetMin}-{targetMax} TH/s</span>
+                        <span className={`text-[10px] block ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>Ventana Esperada:</span>
+                        <span className={isLight ? 'text-slate-800 font-semibold' : 'text-slate-300'}>{targetMin}-{targetMax} TH/s</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="pt-2 text-[10px] font-mono-num text-cyan-400/80 flex items-center justify-between border-t border-white/[0.04]">
+                  <div className={`pt-2 text-[10px] font-mono-num flex items-center justify-between border-t ${
+                    isLight ? 'border-slate-200/80 text-cyan-700' : 'border-white/[0.04] text-cyan-400/80'
+                  }`}>
                     <span>Prioridad: {worker.saladPriority}</span>
                     <span>Modo Auto-Attach</span>
                   </div>
@@ -925,12 +1042,12 @@ export const FleetTab: React.FC<FleetTabProps> = ({
             return (
               <div
                 key={worker.id}
-                className={`fintech-card rounded-2xl p-5 transition-all flex flex-col justify-between border ${
+                className={`rounded-2xl p-5 transition-all flex flex-col justify-between border ${
                   isDead
-                    ? 'border-rose-500/50 bg-rose-950/15'
+                    ? isLight ? 'border-rose-300 bg-rose-50/70 shadow-sm text-slate-900' : 'border-rose-500/50 bg-rose-950/15 fintech-card text-white'
                     : isOutOfWindow
-                    ? 'border-amber-500/60 bg-amber-950/20 ring-1 ring-amber-500/30'
-                    : 'fintech-card-interactive border-white/[0.08]'
+                    ? isLight ? 'border-amber-300 bg-amber-50/70 shadow-sm text-slate-900 ring-1 ring-amber-300' : 'border-amber-500/60 bg-amber-950/20 fintech-card text-white ring-1 ring-amber-500/30'
+                    : isLight ? 'bg-white border-slate-200/90 shadow-sm text-slate-900 hover:border-emerald-400' : 'fintech-card fintech-card-interactive border-white/[0.08] text-white'
                 }`}
               >
                 <div>
@@ -941,20 +1058,22 @@ export const FleetTab: React.FC<FleetTabProps> = ({
                         <span className={`h-2.5 w-2.5 rounded-full ${
                           isDead ? 'bg-rose-500' : isOutOfWindow ? 'bg-amber-400 animate-ping' : 'bg-[#05F292]'
                         }`} />
-                        <span className="font-mono-num font-bold text-sm text-white">
+                        <span className={`font-mono-num font-bold text-sm ${isLight ? 'text-slate-900' : 'text-white'}`}>
                           {worker.workerName}
                         </span>
                       </div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">
-                        {worker.accountName} • <span className="font-mono-num text-slate-500">ID: {worker.machineId.slice(0, 10)}...</span>
+                      <div className={`text-[11px] mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                        {worker.accountName} • <span className={`font-mono-num ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>ID: {worker.machineId.slice(0, 10)}...</span>
                       </div>
                     </div>
 
                     <div className="flex flex-col items-end gap-1">
-                      <span className="rounded-lg bg-white/[0.05] px-2.5 py-0.5 text-[11px] font-mono-num font-bold text-cyan-300 border border-white/[0.08]">
+                      <span className={`rounded-lg px-2.5 py-0.5 text-[11px] font-mono-num font-bold border ${
+                        isLight ? 'bg-cyan-50 text-cyan-800 border-cyan-200' : 'bg-white/[0.05] text-cyan-300 border border-white/[0.08]'
+                      }`}>
                         {worker.gpuModel}
                       </span>
-                      <span className="text-[10px] text-slate-500 font-mono-num">
+                      <span className={`text-[10px] font-mono-num ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
                         {worker.vramGB}GB VRAM
                       </span>
                     </div>
@@ -981,30 +1100,34 @@ export const FleetTab: React.FC<FleetTabProps> = ({
                           </div>
                         )}
 
-                        <div className="rounded-xl bg-[#080B12] p-3 border border-white/[0.06] my-2.5 space-y-2">
+                        <div className={`rounded-xl p-3 border my-2.5 space-y-2 ${
+                          isLight ? 'bg-slate-50 border-slate-200/90' : 'bg-[#080B12] border-white/[0.06]'
+                        }`}>
                           <div className="flex justify-between items-center text-xs font-mono-num">
-                            <span className="text-slate-400 flex items-center gap-1.5">
-                              <Zap className="h-3.5 w-3.5 text-[#05F292]" />
+                            <span className={`flex items-center gap-1.5 ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                              <Zap className="h-3.5 w-3.5 text-[#05DF72]" />
                               <span>Potencia Log Salad:</span>
                             </span>
-                            <span className={`font-display-title text-base font-bold ${isUnderBreakEven ? 'text-rose-400' : 'text-[#05F292]'}`}>
+                            <span className={`font-display-title text-base font-bold ${isUnderBreakEven ? 'text-rose-500' : 'text-[#05DF72]'}`}>
                               {saladLogHash > 0 ? `${saladLogHash} TH/s` : 'Sin lectura'}
                             </span>
                           </div>
 
-                          <div className="flex justify-between items-center text-[11px] font-mono-num text-slate-400 pt-1 border-t border-white/[0.04]">
+                          <div className={`flex justify-between items-center text-[11px] font-mono-num pt-1 border-t ${
+                            isLight ? 'border-slate-200 text-slate-600' : 'border-white/[0.04] text-slate-400'
+                          }`}>
                             <span>Punto de Equilibrio (Break-Even):</span>
-                            <span className="text-amber-300 font-semibold">{breakEvenTHs} TH/s</span>
+                            <span className={isLight ? 'text-amber-600 font-bold' : 'text-amber-300 font-semibold'}>{breakEvenTHs} TH/s</span>
                           </div>
 
-                          <div className="flex justify-between items-center text-[11px] font-mono-num text-slate-400">
+                          <div className={`flex justify-between items-center text-[11px] font-mono-num ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                             <span>Pool Kryptex (Ref):</span>
-                            <span className="text-cyan-300 font-semibold">{kryptexHash} TH/s</span>
+                            <span className={isLight ? 'text-cyan-700 font-semibold' : 'text-cyan-300 font-semibold'}>{kryptexHash} TH/s</span>
                           </div>
 
-                          <div className="flex justify-between items-center text-[11px] font-mono-num text-slate-400">
+                          <div className={`flex justify-between items-center text-[11px] font-mono-num ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                             <span>Ventana Objetivo:</span>
-                            <span className="text-slate-300 font-semibold">[{targetMin} - {targetMax} TH/s]</span>
+                            <span className={`font-semibold ${isLight ? 'text-slate-900' : 'text-slate-300'}`}>[{targetMin} - {targetMax} TH/s]</span>
                           </div>
                         </div>
                       </>
@@ -1142,10 +1265,14 @@ export const FleetTab: React.FC<FleetTabProps> = ({
         </div>
       ) : (
         /* DENSE TABLE VIEW */
-        <div className="fintech-card rounded-2xl overflow-hidden border border-white/[0.08] shadow-2xl">
+        <div className={`rounded-2xl overflow-hidden border shadow-xl transition-all ${
+          isLight ? 'bg-white border-slate-200/90 shadow-slate-200/50' : 'fintech-card border-white/[0.08]'
+        }`}>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs font-mono-num">
-              <thead className="bg-[#090C12] text-slate-400 border-b border-white/[0.08] text-[11px] uppercase tracking-wider">
+              <thead className={`border-b text-[11px] uppercase tracking-wider transition-colors ${
+                isLight ? 'bg-slate-100 text-slate-700 border-slate-200' : 'bg-[#090C12] text-slate-400 border-white/[0.08]'
+              }`}>
                 <tr>
                   <th className="py-3.5 px-4 font-semibold">Worker / Nodo</th>
                   <th className="py-3.5 px-4 font-semibold">GPU & Prioridad</th>
@@ -1158,7 +1285,7 @@ export const FleetTab: React.FC<FleetTabProps> = ({
                   <th className="py-3.5 px-4 font-semibold text-right">Acción</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.04]">
+              <tbody className={`divide-y ${isLight ? 'divide-slate-100' : 'divide-white/[0.04]'}`}>
                 {filteredWorkers.map((worker) => {
                   const isAllocating = worker.saladStatus === 'allocating';
                   const isRunning = worker.saladStatus === 'running';
@@ -1173,23 +1300,29 @@ export const FleetTab: React.FC<FleetTabProps> = ({
                   return (
                     <tr 
                       key={worker.id}
-                      className={`hover:bg-white/[0.02] transition-colors ${
-                        isDead ? 'bg-rose-950/15' : isOutOfWindow ? 'bg-amber-950/15' : isAllocating ? 'bg-cyan-950/10' : ''
+                      className={`transition-colors ${
+                        isDead 
+                          ? isLight ? 'bg-rose-50/70 hover:bg-rose-50' : 'bg-rose-950/15 hover:bg-rose-900/20' 
+                          : isOutOfWindow 
+                          ? isLight ? 'bg-amber-50/70 hover:bg-amber-50' : 'bg-amber-950/15 hover:bg-amber-900/20' 
+                          : isAllocating 
+                          ? isLight ? 'bg-cyan-50/50 hover:bg-cyan-50' : 'bg-cyan-950/10 hover:bg-cyan-900/20' 
+                          : isLight ? 'hover:bg-slate-50' : 'hover:bg-white/[0.02]'
                       }`}
                     >
                       <td className="py-3.5 px-4">
-                        <div className="font-bold text-white flex items-center gap-2">
+                        <div className={`font-bold flex items-center gap-2 ${isLight ? 'text-slate-900' : 'text-white'}`}>
                           <span className={`h-2 w-2 rounded-full ${
                             isDead ? 'bg-rose-500' : isOutOfWindow ? 'bg-amber-400' : isAllocating ? 'bg-cyan-400 animate-spin' : 'bg-[#05F292]'
                           }`} />
                           {worker.workerName}
                         </div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">{worker.accountName}</div>
+                        <div className={`text-[10px] mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>{worker.accountName}</div>
                       </td>
 
                       <td className="py-3.5 px-4">
-                        <div className="text-cyan-300 font-semibold">{worker.gpuModel}</div>
-                        <div className="text-[10px] text-slate-400">{worker.saladPriority}</div>
+                        <div className={`font-semibold ${isLight ? 'text-cyan-800' : 'text-cyan-300'}`}>{worker.gpuModel}</div>
+                        <div className={`text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>{worker.saladPriority}</div>
                       </td>
 
                       <td className="py-3.5 px-4">
@@ -1199,46 +1332,46 @@ export const FleetTab: React.FC<FleetTabProps> = ({
                         <div className="text-[10px] text-slate-500">Log contenedor</div>
                       </td>
 
-                      <td className="py-3.5 px-4 text-cyan-300">
+                      <td className={`py-3.5 px-4 font-semibold ${isLight ? 'text-cyan-800' : 'text-cyan-300'}`}>
                         {isAllocating ? 'N/A' : `${kryptexHash} TH/s`}
                       </td>
 
                       <td className="py-3.5 px-4">
                         <span className={`rounded-md px-2 py-0.5 font-bold text-[10px] border ${
                           isAllocating
-                            ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20'
+                            ? isLight ? 'bg-cyan-100 text-cyan-800 border-cyan-200' : 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20'
                             : isOutOfWindow 
-                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' 
-                            : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            ? isLight ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-amber-500/20 text-amber-300 border-amber-500/40' 
+                            : isLight ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                         }`}>
                           {isAllocating ? 'EN COLA' : isOutOfWindow ? 'FUERA DE VENTANA' : `[${targetMin}-${targetMax}] TH/s`}
                         </span>
                       </td>
 
-                      <td className="py-3.5 px-4 text-slate-300">
+                      <td className={`py-3.5 px-4 ${isLight ? 'text-slate-700 font-semibold' : 'text-slate-300'}`}>
                         ${worker.hourlySaladCost.toFixed(3)}/h
                       </td>
 
                       <td className="py-3.5 px-4">
-                        <span className={`font-bold ${worker.hourlyNetProfit >= 0 ? 'text-[#05F292]' : 'text-rose-400'}`}>
+                        <span className={`font-bold ${worker.hourlyNetProfit >= 0 ? 'text-[#05DF72]' : 'text-rose-500'}`}>
                           ${worker.hourlyNetProfit > 0 ? '+' : ''}{worker.hourlyNetProfit.toFixed(3)}/h
                         </span>
                       </td>
 
                       <td className="py-3.5 px-4">
                         {isAllocating ? (
-                          <span className="text-cyan-300 text-[11px] font-semibold flex items-center gap-1">
-                            <RefreshCw className="h-3 w-3 animate-spin" />
+                          <span className={`text-[11px] font-semibold flex items-center gap-1 ${isLight ? 'text-cyan-700' : 'text-cyan-300'}`}>
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                             Allocating
                           </span>
                         ) : isOutOfWindow ? (
-                          <span className="text-amber-400 text-[11px] font-semibold flex items-center gap-1">
-                            <AlertTriangle className="h-3 w-3" />
+                          <span className={`text-[11px] font-semibold flex items-center gap-1 ${isLight ? 'text-amber-700' : 'text-amber-400'}`}>
+                            <AlertTriangle className="h-3.5 w-3.5" />
                             Anomalía
                           </span>
                         ) : (
-                          <span className="text-emerald-400 text-[11px] font-semibold flex items-center gap-1">
-                            <CheckCircle2 className="h-3 w-3" />
+                          <span className={`text-[11px] font-semibold flex items-center gap-1 ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>
+                            <CheckCircle2 className="h-3.5 w-3.5" />
                             Óptimo
                           </span>
                         )}
@@ -1248,14 +1381,22 @@ export const FleetTab: React.FC<FleetTabProps> = ({
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => handleOpenLogs(worker)}
-                            className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-2.5 py-1 text-xs text-slate-300 hover:text-white hover:border-cyan-400/40 transition-all flex items-center gap-1"
+                            className={`rounded-lg border px-2.5 py-1 text-xs transition-all flex items-center gap-1 cursor-pointer ${
+                              isLight 
+                                ? 'border-slate-200 bg-slate-50 text-slate-700 hover:text-slate-950 hover:bg-slate-100 hover:border-cyan-400' 
+                                : 'border-white/[0.08] bg-white/[0.04] text-slate-300 hover:text-white hover:border-cyan-400/40'
+                            }`}
                           >
-                            <Terminal className="h-3 w-3 text-cyan-400" />
+                            <Terminal className={`h-3 w-3 ${isLight ? 'text-cyan-700' : 'text-cyan-400'}`} />
                             <span>Logs</span>
                           </button>
                           <button
                             onClick={() => onOpenReallocate(worker)}
-                            className="rounded-lg px-2.5 py-1 text-xs font-semibold bg-white/[0.04] text-slate-300 hover:text-white border border-white/[0.06] hover:border-cyan-400/40 transition-all"
+                            className={`rounded-lg px-2.5 py-1 text-xs font-semibold border transition-all cursor-pointer ${
+                              isLight 
+                                ? 'bg-slate-100 text-slate-700 hover:text-slate-950 border-slate-200 hover:bg-slate-200' 
+                                : 'bg-white/[0.04] text-slate-300 hover:text-white border-white/[0.06] hover:border-cyan-400/40'
+                            }`}
                           >
                             Reasignar
                           </button>
@@ -1272,18 +1413,26 @@ export const FleetTab: React.FC<FleetTabProps> = ({
 
       {/* MODAL PARA ACTUALIZAR SALDO DE CUENTA SALAD */}
       {editingAccount && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md bg-[#0C101A] rounded-2xl border border-white/10 shadow-2xl p-6">
-            <div className="flex items-center justify-between pb-4 border-b border-white/[0.08] mb-4">
+        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${
+          isLight ? 'bg-slate-900/40 backdrop-blur-xs' : 'bg-black/85 backdrop-blur-md'
+        } animate-in fade-in duration-200`}>
+          <div className={`relative w-full max-w-md rounded-2xl border shadow-2xl p-6 ${
+            isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-[#0C101A] border-white/10 text-white'
+          }`}>
+            <div className={`flex items-center justify-between pb-4 border-b mb-4 ${
+              isLight ? 'border-slate-200' : 'border-white/[0.08]'
+            }`}>
               <div className="flex items-center gap-2">
-                <Wallet className="h-5 w-5 text-emerald-400" />
-                <h3 className="font-display-title text-base font-bold text-white">
+                <Wallet className="h-5 w-5 text-emerald-500" />
+                <h3 className={`font-display-title text-base font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>
                   Actualizar Saldo de SaladCloud
                 </h3>
               </div>
               <button
                 onClick={() => setEditingAccount(null)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg"
+                className={`p-1 rounded-lg transition-colors ${
+                  isLight ? 'text-slate-400 hover:text-slate-700 hover:bg-slate-100' : 'text-slate-400 hover:text-white hover:bg-white/[0.05]'
+                }`}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -1291,20 +1440,24 @@ export const FleetTab: React.FC<FleetTabProps> = ({
 
             <form onSubmit={handleSaveBalance} className="space-y-4">
               <div>
-                <label className="text-xs text-slate-400 block mb-1">
+                <label className={`text-xs block mb-1 font-medium ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                   Cuenta / Organización
                 </label>
-                <div className="font-mono-num text-sm text-cyan-300 bg-[#06080D] px-3 py-2 rounded-xl border border-white/[0.06]">
+                <div className={`font-mono-num text-sm px-3 py-2 rounded-xl border ${
+                  isLight 
+                    ? 'text-cyan-800 bg-slate-50 border-slate-200 font-semibold' 
+                    : 'text-cyan-300 bg-[#06080D] border-white/[0.06]'
+                }`}>
                   {editingAccount.name}
                 </div>
               </div>
 
               <div>
-                <label className="text-xs text-slate-400 block mb-1">
+                <label className={`text-xs block mb-1 font-medium ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                   Saldo Actual en USD (visto en portal.salad.com)
                 </label>
                 <div className="relative">
-                  <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-emerald-400" />
+                  <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-emerald-500" />
                   <input
                     type="number"
                     step="0.01"
@@ -1312,12 +1465,16 @@ export const FleetTab: React.FC<FleetTabProps> = ({
                     value={balanceInput}
                     onChange={(e) => setBalanceInput(e.target.value)}
                     placeholder="Ej. 0.00"
-                    className="w-full rounded-xl border border-white/[0.1] bg-[#06080D] pl-9 pr-3 py-2 text-sm text-white font-mono-num focus:border-emerald-400 focus:outline-none transition-all"
+                    className={`w-full rounded-xl border pl-9 pr-3 py-2 text-sm font-mono-num focus:outline-none transition-all ${
+                      isLight 
+                        ? 'border-slate-300 bg-white text-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500' 
+                        : 'border-white/[0.1] bg-[#06080D] text-white focus:border-emerald-400'
+                    }`}
                     required
                     autoFocus
                   />
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1">
+                <p className={`text-[11px] mt-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                   Este valor se reflejará de inmediato en los cálculos de runway y alertas del dashboard.
                 </p>
               </div>
@@ -1326,7 +1483,11 @@ export const FleetTab: React.FC<FleetTabProps> = ({
                 <button
                   type="button"
                   onClick={() => setEditingAccount(null)}
-                  className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white transition-all"
+                  className={`rounded-xl border px-4 py-2 text-xs font-semibold transition-all ${
+                    isLight 
+                      ? 'border-slate-200 bg-slate-100 text-slate-700 hover:text-slate-950 hover:bg-slate-200' 
+                      : 'border-white/[0.08] bg-white/[0.04] text-slate-300 hover:text-white'
+                  }`}
                 >
                   Cancelar
                 </button>
@@ -1344,7 +1505,9 @@ export const FleetTab: React.FC<FleetTabProps> = ({
 
       {/* REMOTE TERMINAL LOGS MODAL (STREAMING EN TIEMPO REAL) */}
       {logsWorker && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${
+          isLight ? 'bg-slate-900/40 backdrop-blur-xs' : 'bg-black/85 backdrop-blur-md'
+        } animate-in fade-in duration-200`}>
           <div className="relative w-full max-w-3xl bg-[#06080D] rounded-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col max-h-[85vh]">
             
             {/* Modal Header */}
@@ -1445,25 +1608,37 @@ export const FleetTab: React.FC<FleetTabProps> = ({
 
       {/* 5. MODAL DE CUOTAS Y LÍMITES SALADCLOUD (API OFICIAL) */}
       {showQuotasModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-[#0A0D16] border border-cyan-500/30 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl">
-            <div className="p-5 border-b border-white/[0.08] flex items-center justify-between">
+        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${
+          isLight ? 'bg-slate-900/40 backdrop-blur-xs' : 'bg-black/80 backdrop-blur-sm'
+        } animate-in fade-in duration-200`}>
+          <div className={`rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl border ${
+            isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-[#0A0D16] border-cyan-500/30 text-white'
+          }`}>
+            <div className={`p-5 border-b flex items-center justify-between ${
+              isLight ? 'border-slate-200 bg-slate-50' : 'border-white/[0.08] bg-[#0C101A]'
+            }`}>
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+                <div className={`p-2 rounded-xl border ${
+                  isLight 
+                    ? 'bg-cyan-50 border-cyan-200 text-cyan-700' 
+                    : 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400'
+                }`}>
                   <Gauge className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="font-display-title text-base font-bold text-white">
+                  <h3 className={`font-display-title text-base font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>
                     Cuotas y Límites de SaladCloud
                   </h3>
-                  <p className="text-xs text-slate-400 font-mono-num">
-                    Organización: <span className="text-cyan-300 font-bold">{quotasOrg}</span>
+                  <p className={`text-xs font-mono-num ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                    Organización: <span className={isLight ? 'text-cyan-700 font-bold' : 'text-cyan-300 font-bold'}>{quotasOrg}</span>
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setShowQuotasModal(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/[0.05]"
+                className={`p-1.5 rounded-lg transition-colors ${
+                  isLight ? 'text-slate-400 hover:text-slate-700 hover:bg-slate-200' : 'text-slate-400 hover:text-white hover:bg-white/[0.05]'
+                }`}
               >
                 <X className="h-5 w-5" />
               </button>
@@ -1471,28 +1646,34 @@ export const FleetTab: React.FC<FleetTabProps> = ({
 
             <div className="p-5 max-h-[70vh] overflow-y-auto space-y-4">
               {quotasLoading ? (
-                <div className="py-12 flex flex-col items-center justify-center gap-3 text-slate-400">
-                  <RefreshCw className="h-6 w-6 text-cyan-400 animate-spin" />
+                <div className={`py-12 flex flex-col items-center justify-center gap-3 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                  <RefreshCw className="h-6 w-6 text-cyan-500 animate-spin" />
                   <span className="text-xs font-mono-num">Consultando cuotas en api.salad.com...</span>
                 </div>
               ) : quotasData ? (
                 <div className="space-y-4 font-mono-num">
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    <div className="bg-[#06080E] p-3 rounded-xl border border-white/[0.06]">
-                      <span className="text-[10px] text-slate-400 block uppercase">Grupos Contenedores</span>
-                      <span className="text-lg font-bold text-white">
+                    <div className={`p-3 rounded-xl border ${
+                      isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#06080E] border-white/[0.06]'
+                    }`}>
+                      <span className={`text-[10px] block uppercase ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Grupos Contenedores</span>
+                      <span className={`text-lg font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>
                         {quotasData.container_groups_quota ?? quotasData.container_groups_count ?? 'Ilimitado'}
                       </span>
                     </div>
-                    <div className="bg-[#06080E] p-3 rounded-xl border border-white/[0.06]">
-                      <span className="text-[10px] text-slate-400 block uppercase">Workloads Concurrentes</span>
-                      <span className="text-lg font-bold text-emerald-400">
+                    <div className={`p-3 rounded-xl border ${
+                      isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#06080E] border-white/[0.06]'
+                    }`}>
+                      <span className={`text-[10px] block uppercase ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Workloads Concurrentes</span>
+                      <span className={`text-lg font-bold ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>
                         {quotasData.max_concurrent_workloads ?? quotasData.concurrent_workloads_quota ?? 'Estándar'}
                       </span>
                     </div>
-                    <div className="bg-[#06080E] p-3 rounded-xl border border-white/[0.06]">
-                      <span className="text-[10px] text-slate-400 block uppercase">Límite CPUs</span>
-                      <span className="text-lg font-bold text-cyan-300">
+                    <div className={`p-3 rounded-xl border ${
+                      isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#06080E] border-white/[0.06]'
+                    }`}>
+                      <span className={`text-[10px] block uppercase ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Límite CPUs</span>
+                      <span className={`text-lg font-bold ${isLight ? 'text-cyan-700' : 'text-cyan-300'}`}>
                         {quotasData.cpu_quota ?? 'N/A'}
                       </span>
                     </div>
@@ -1500,51 +1681,67 @@ export const FleetTab: React.FC<FleetTabProps> = ({
 
                   {quotasData.gpu_classes_quotas && quotasData.gpu_classes_quotas.length > 0 && (
                     <div className="mt-4">
-                      <span className="text-xs font-bold uppercase text-slate-300 block mb-2">
+                      <span className={`text-xs font-bold uppercase block mb-2 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                         Cuotas por Clase de GPU:
                       </span>
                       <div className="space-y-2">
                         {quotasData.gpu_classes_quotas.map((gq: any, idx: number) => (
-                          <div key={idx} className="flex items-center justify-between p-2.5 rounded-lg bg-[#06080E] border border-white/[0.04] text-xs">
-                            <span className="text-slate-200 font-semibold">{gq.name || gq.id}</span>
-                            <span className="text-cyan-400 font-bold">Cuota: {gq.quota ?? 'Sin límite'}</span>
+                          <div key={idx} className={`flex items-center justify-between p-2.5 rounded-lg border text-xs ${
+                            isLight 
+                              ? 'bg-slate-50 border-slate-200 text-slate-800' 
+                              : 'bg-[#06080E] border-white/[0.04] text-slate-200'
+                          }`}>
+                            <span className="font-semibold">{gq.name || gq.id}</span>
+                            <span className={isLight ? 'text-cyan-700 font-bold' : 'text-cyan-400 font-bold'}>Cuota: {gq.quota ?? 'Sin límite'}</span>
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
 
-                  <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] text-xs text-slate-400 space-y-1">
-                    <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+                  <div className={`p-3 rounded-xl border text-xs space-y-1 ${
+                    isLight 
+                      ? 'bg-emerald-50/70 border-emerald-200 text-slate-700' 
+                      : 'bg-white/[0.02] border-white/[0.06] text-slate-400'
+                  }`}>
+                    <div className={`flex items-center gap-1.5 font-semibold ${isLight ? 'text-emerald-800' : 'text-emerald-400'}`}>
                       <CheckCircle2 className="h-3.5 w-3.5" />
                       <span>Conexión autenticada con SaladCloud Container Engine</span>
                     </div>
-                    <p className="text-[11px] text-slate-500">
+                    <p className={`text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-500'}`}>
                       Las cuotas son administradas por Salad Technologies. Para aumentarlas, contacta a enterprise@salad.com o desde portal.salad.com.
                     </p>
                   </div>
                 </div>
               ) : (
-                <div className="py-10 text-center text-slate-400 text-xs">
-                  <AlertTriangle className="h-8 w-8 text-amber-400 mx-auto mb-2" />
+                <div className={`py-10 text-center text-xs ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                  <AlertTriangle className="h-8 w-8 text-amber-500 mx-auto mb-2" />
                   <span>No se pudieron obtener las cuotas para la organización "{quotasOrg}". Verifica que tu API Key tenga permisos administrativos.</span>
                 </div>
               )}
             </div>
 
-            <div className="p-4 border-t border-white/[0.08] flex items-center justify-between bg-[#06080E]/60">
+            <div className={`p-4 border-t flex items-center justify-between ${
+              isLight ? 'border-slate-200 bg-slate-50' : 'border-white/[0.08] bg-[#06080E]/60'
+            }`}>
               <a
                 href={`https://portal.salad.com/organizations/${encodeURIComponent(quotasOrg)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 font-mono-num transition-colors"
+                className={`flex items-center gap-1.5 text-xs font-mono-num transition-colors ${
+                  isLight ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'
+                }`}
               >
                 <span>Administrar en Portal SaladCloud</span>
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
               <button
                 onClick={() => setShowQuotasModal(false)}
-                className="px-4 py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.12] text-xs font-bold text-white transition-colors"
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+                  isLight 
+                    ? 'bg-slate-200 hover:bg-slate-300 text-slate-800' 
+                    : 'bg-white/[0.08] hover:bg-white/[0.12] text-white'
+                }`}
               >
                 Cerrar
               </button>

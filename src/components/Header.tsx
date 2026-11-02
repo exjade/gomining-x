@@ -230,7 +230,9 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-2 sm:gap-2.5">
           {/* Quick Wallet & Salad status pill / Edit form */}
           {isEditingSalad ? (
-            <form onSubmit={handleSaveSalad} className="flex items-center gap-1 bg-[#06070A] border border-[#05DF72] rounded-full px-2.5 py-1 text-xs shadow-lg animate-in fade-in duration-200">
+            <form onSubmit={handleSaveSalad} className={`flex items-center gap-1 border border-[#05DF72] rounded-full px-2.5 py-1 text-xs shadow-lg animate-in fade-in duration-200 ${
+              isDarkTheme ? 'bg-[#06070A] text-white' : 'bg-white text-slate-900 shadow-slate-200'
+            }`}>
               <span className="text-[#05DF72] font-bold">$</span>
               <input
                 type="number"
@@ -239,31 +241,33 @@ export const Header: React.FC<HeaderProps> = ({
                 value={saladInput}
                 onChange={(e) => setSaladInput(e.target.value)}
                 placeholder="0.00"
-                className="w-16 bg-transparent text-xs text-white font-mono focus:outline-none"
+                className={`w-16 bg-transparent text-xs font-mono focus:outline-none ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}
                 autoFocus
               />
-              <button type="submit" className="p-0.5 rounded text-emerald-400 hover:text-emerald-300 cursor-pointer" title="Guardar Saldo">
+              <button type="submit" className="p-0.5 rounded text-emerald-500 hover:text-emerald-400 cursor-pointer" title="Guardar Saldo">
                 <Check className="h-3.5 w-3.5" />
               </button>
-              <button type="button" onClick={() => setIsEditingSalad(false)} className="p-0.5 rounded text-slate-400 hover:text-white cursor-pointer" title="Cancelar">
+              <button type="button" onClick={() => setIsEditingSalad(false)} className={`p-0.5 rounded cursor-pointer ${isDarkTheme ? 'text-slate-400 hover:text-white' : 'text-slate-400 hover:text-slate-700'}`} title="Cancelar">
                 <X className="h-3.5 w-3.5" />
               </button>
             </form>
           ) : isEditingWallet ? (
-            <form onSubmit={handleSaveWallet} className="flex items-center gap-1.5 bg-[#06070A] border border-[#05DF72] rounded-full px-2.5 py-1 text-xs shadow-lg animate-in fade-in duration-200">
+            <form onSubmit={handleSaveWallet} className={`flex items-center gap-1.5 border border-[#05DF72] rounded-full px-2.5 py-1 text-xs shadow-lg animate-in fade-in duration-200 ${
+              isDarkTheme ? 'bg-[#06070A] text-white' : 'bg-white text-slate-900 shadow-slate-200'
+            }`}>
               <Wallet className="h-3 w-3 text-[#05DF72]" />
               <input
                 type="text"
                 value={walletInput}
                 onChange={(e) => setWalletInput(e.target.value)}
                 placeholder="prl1q..."
-                className="w-32 bg-transparent text-xs text-white font-mono focus:outline-none"
+                className={`w-32 bg-transparent text-xs font-mono focus:outline-none ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}
                 autoFocus
               />
-              <button type="submit" className="p-0.5 rounded text-emerald-400 hover:text-emerald-300 cursor-pointer" title="Guardar Wallet">
+              <button type="submit" className="p-0.5 rounded text-emerald-500 hover:text-emerald-400 cursor-pointer" title="Guardar Wallet">
                 <Check className="h-3.5 w-3.5" />
               </button>
-              <button type="button" onClick={() => setIsEditingWallet(false)} className="p-0.5 rounded text-slate-400 hover:text-white cursor-pointer" title="Cancelar">
+              <button type="button" onClick={() => setIsEditingWallet(false)} className={`p-0.5 rounded cursor-pointer ${isDarkTheme ? 'text-slate-400 hover:text-white' : 'text-slate-400 hover:text-slate-700'}`} title="Cancelar">
                 <X className="h-3.5 w-3.5" />
               </button>
             </form>

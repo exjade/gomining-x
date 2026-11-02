@@ -15,10 +15,12 @@ import type { GpuInstance } from '../types/vast';
 import { resolveGpuBenchmark } from '../data/gpuBenchmarks';
 
 interface VastFleetSectionProps {
+  isDarkTheme?: boolean;
   onNavigateToMarketplace?: () => void;
 }
 
-export const VastFleetSection: React.FC<VastFleetSectionProps> = ({ onNavigateToMarketplace }) => {
+export const VastFleetSection: React.FC<VastFleetSectionProps> = ({ isDarkTheme = false, onNavigateToMarketplace }) => {
+  const isLight = !isDarkTheme;
   const [instances, setInstances] = useState<GpuInstance[]>([]);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
@@ -139,25 +141,39 @@ export const VastFleetSection: React.FC<VastFleetSectionProps> = ({ onNavigateTo
   return (
     <div className="space-y-6">
       {/* 1. Header Banner & KPIs */}
-      <div className="fintech-card rounded-2xl p-5 border border-white/[0.08] shadow-xl relative overflow-hidden">
-        <div className="absolute -top-12 -right-12 w-48 h-48 bg-gradient-to-br from-cyan-500/10 to-blue-500/0 rounded-full blur-2xl pointer-events-none" />
+      <div className={`rounded-2xl p-5 border shadow-xl relative overflow-hidden transition-all ${
+        isLight ? 'bg-white border-slate-200 text-slate-900 shadow-slate-200/50' : 'fintech-card border-white/[0.08] text-white'
+      }`}>
+        {!isLight && (
+          <div className="absolute -top-12 -right-12 w-48 h-48 bg-gradient-to-br from-cyan-500/10 to-blue-500/0 rounded-full blur-2xl pointer-events-none" />
+        )}
 
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
+        <div className={`flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b ${
+          isLight ? 'border-slate-200' : 'border-white/[0.06]'
+        }`}>
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400 shadow-inner">
+            <div className={`flex h-11 w-11 items-center justify-center rounded-xl border shadow-inner ${
+              isLight
+                ? 'bg-cyan-50 border-cyan-200 text-cyan-700'
+                : 'bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border-cyan-500/30 text-cyan-400'
+            }`}>
               <Server className="h-5 w-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-display-title text-base font-bold text-white tracking-wide">
+                <h3 className={`font-display-title text-base font-bold tracking-wide ${isLight ? 'text-slate-900' : 'text-white'}`}>
                   Flota de Instancias Vast.ai
                 </h3>
-                <span className="flex items-center gap-1 rounded-full bg-cyan-500/10 px-2 py-0.5 text-[10px] font-mono-num font-semibold text-cyan-400 border border-cyan-500/20">
-                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-mono-num font-semibold border ${
+                  isLight
+                    ? 'bg-cyan-50 text-cyan-800 border-cyan-200'
+                    : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'
+                }`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${isLight ? 'bg-cyan-600' : 'bg-cyan-400'} animate-pulse`} />
                   API Oficial v0
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className={`text-xs mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                 Control de ciclo de vida de instancias, verificación post-acción y sincronización con Kryptex Stratum
               </p>
             </div>
@@ -167,7 +183,11 @@ export const VastFleetSection: React.FC<VastFleetSectionProps> = ({ onNavigateTo
             <button
               onClick={() => handleAction('all', 'sync')}
               disabled={loading}
-              className="bg-[#080B12] hover:bg-white/[0.05] text-cyan-400 rounded-xl px-3 py-2 border border-cyan-500/30 text-xs font-mono-num font-semibold flex items-center gap-1.5 transition-all"
+              className={`rounded-xl px-3 py-2 border text-xs font-mono-num font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                isLight
+                  ? 'bg-slate-100 hover:bg-slate-200 text-cyan-800 border-slate-300'
+                  : 'bg-[#080B12] hover:bg-white/[0.05] text-cyan-400 border-cyan-500/30'
+              }`}
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
               <span>Sincronizar Telemetría</span>
@@ -426,68 +446,89 @@ export const VastFleetSection: React.FC<VastFleetSectionProps> = ({ onNavigateTo
 
       {/* 3. Modal para Crear Instancia Simulada */}
       {showSimModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[#0A0D16] border border-cyan-500/30 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 space-y-4 font-mono-num">
-            <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
+        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${
+          isLight ? 'bg-slate-900/40 backdrop-blur-xs' : 'bg-black/80 backdrop-blur-sm'
+        } animate-in fade-in`}>
+          <div className={`rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 space-y-4 font-mono-num border ${
+            isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-[#0A0D16] border-cyan-500/30 text-white'
+          }`}>
+            <div className={`flex items-center justify-between pb-3 border-b ${
+              isLight ? 'border-slate-200' : 'border-white/[0.08]'
+            }`}>
               <div className="flex items-center gap-2">
-                <Cpu className="h-5 w-5 text-cyan-400" />
-                <h4 className="font-bold text-white text-sm">Nueva Instancia Simulada</h4>
+                <Cpu className="h-5 w-5 text-cyan-500" />
+                <h4 className={`font-bold text-sm ${isLight ? 'text-slate-900' : 'text-white'}`}>Nueva Instancia Simulada</h4>
               </div>
-              <button onClick={() => setShowSimModal(false)} className="text-slate-400 hover:text-white">
+              <button
+                onClick={() => setShowSimModal(false)}
+                className={`p-1 rounded-lg transition-colors ${
+                  isLight ? 'text-slate-400 hover:text-slate-700 hover:bg-slate-100' : 'text-slate-400 hover:text-white hover:bg-white/[0.05]'
+                }`}
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <p className="text-xs text-slate-400">
+            <p className={`text-xs ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
               Crea una instancia en modo simulación para verificar telemetría, monitoreo de bajo rendimiento y automatizaciones sin costos reales en Vast.ai.
             </p>
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="text-slate-400 block mb-1">Modelo de GPU:</label>
+                <label className={`block mb-1 ${isLight ? 'text-slate-700' : 'text-slate-400'}`}>Modelo de GPU:</label>
                 <input
                   type="text"
                   value={simGpuModel}
                   onChange={(e) => setSimGpuModel(e.target.value)}
-                  className="w-full bg-[#06080E] border border-white/[0.1] rounded-lg px-3 py-1.5 text-white"
+                  className={`w-full rounded-lg px-3 py-1.5 transition-all border focus:outline-none ${
+                    isLight ? 'bg-slate-50 border-slate-300 text-slate-900 focus:border-cyan-600' : 'bg-[#06080E] border-white/[0.1] text-white focus:border-cyan-400'
+                  }`}
                 />
               </div>
 
               <div>
-                <label className="text-slate-400 block mb-1">Costo Cómputo ($/h):</label>
+                <label className={`block mb-1 ${isLight ? 'text-slate-700' : 'text-slate-400'}`}>Costo Cómputo ($/h):</label>
                 <input
                   type="number"
                   step="0.01"
                   value={simHourlyCost}
                   onChange={(e) => setSimHourlyCost(parseFloat(e.target.value) || 0)}
-                  className="w-full bg-[#06080E] border border-white/[0.1] rounded-lg px-3 py-1.5 text-white"
+                  className={`w-full rounded-lg px-3 py-1.5 transition-all border focus:outline-none ${
+                    isLight ? 'bg-slate-50 border-slate-300 text-slate-900 focus:border-cyan-600' : 'bg-[#06080E] border-white/[0.1] text-white focus:border-cyan-400'
+                  }`}
                 />
               </div>
 
               <div>
-                <label className="text-slate-400 block mb-1">Hashrate Simulado (TH/s):</label>
+                <label className={`block mb-1 ${isLight ? 'text-slate-700' : 'text-slate-400'}`}>Hashrate Simulado (TH/s):</label>
                 <input
                   type="number"
                   step="1"
                   value={simHashrate}
                   onChange={(e) => setSimHashrate(parseFloat(e.target.value) || 0)}
-                  className="w-full bg-[#06080E] border border-white/[0.1] rounded-lg px-3 py-1.5 text-white"
+                  className={`w-full rounded-lg px-3 py-1.5 transition-all border focus:outline-none ${
+                    isLight ? 'bg-slate-50 border-slate-300 text-slate-900 focus:border-cyan-600' : 'bg-[#06080E] border-white/[0.1] text-white focus:border-cyan-400'
+                  }`}
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/[0.08]">
+            <div className={`flex items-center justify-end gap-2 pt-3 border-t ${
+              isLight ? 'border-slate-200' : 'border-white/[0.08]'
+            }`}>
               <button
                 type="button"
                 onClick={() => setShowSimModal(false)}
-                className="px-4 py-2 rounded-xl text-slate-400 hover:text-white text-xs font-bold"
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+                  isLight ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-100' : 'text-slate-400 hover:text-white'
+                }`}
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={handleCreateSimulated}
-                className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-600 text-black text-xs font-bold"
+                className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-600 text-black text-xs font-bold shadow-sm"
               >
                 Crear Instancia
               </button>

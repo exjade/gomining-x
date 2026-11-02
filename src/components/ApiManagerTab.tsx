@@ -19,6 +19,7 @@ import { sendTelegramMessageResilient } from '../utils/notifications';
 import { apiFetch } from '../utils/apiConfig';
 
 interface ApiManagerTabProps {
+  isDarkTheme?: boolean;
   accounts: SaladAccountConfig[];
   onAddAccount: (acc: Omit<SaladAccountConfig, 'id' | 'status'>) => void;
   onUpdateAccount?: (acc: SaladAccountConfig) => void;
@@ -34,6 +35,7 @@ interface ApiManagerTabProps {
 }
 
 export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
+  isDarkTheme = true,
   accounts,
   onAddAccount,
   onUpdateAccount,
@@ -46,6 +48,7 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
   onTestSaladAccount,
   onTestKryptex
 }) => {
+  const isLight = !isDarkTheme;
   // New account form state
   const [showAddForm, setShowAddForm] = useState(false);
   const [newAccName, setNewAccName] = useState('');
@@ -322,28 +325,40 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
   return (
     <div className="space-y-6 pb-20 md:pb-8">
       {/* 1. Header & Live vs Simulation Toggle */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 card-cyber rounded-2xl p-5 border border-[#2A334A]">
+      <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl p-5 border ${
+        isLight 
+          ? 'bg-white border-slate-200 text-slate-900 shadow-sm' 
+          : 'card-cyber border-[#2A334A] text-white'
+      }`}>
         <div>
-          <h2 className="font-display-title text-xl font-bold text-white flex items-center gap-2.5">
+          <h2 className={`font-display-title text-xl font-bold flex items-center gap-2.5 ${isLight ? 'text-slate-900' : 'text-white'}`}>
             Gestión Centralizada de APIs
-            <span className="rounded-full bg-cyan-500/10 px-2.5 py-0.5 text-xs font-mono-num font-semibold text-cyan-400 border border-cyan-500/20">
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-mono-num font-semibold border ${
+              isLight 
+                ? 'bg-cyan-50 text-cyan-800 border-cyan-200' 
+                : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'
+            }`}>
               SaladCloud & Kryptex
             </span>
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className={`text-xs mt-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
             Conecta tus credenciales de SaladCloud y tu wallet de Kryptex para monitorear tu cluster en tiempo real
           </p>
         </div>
 
         {/* Global Live FinTech Mode Indicator */}
-        <div className="flex items-center gap-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3.5 py-2 self-start sm:self-auto">
+        <div className={`flex items-center gap-2.5 rounded-xl px-3.5 py-2 self-start sm:self-auto border ${
+          isLight 
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+            : 'bg-emerald-500/10 border-emerald-500/30'
+        }`}>
           <span className="relative flex h-2.5 w-2.5">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400"></span>
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
           </span>
           <div className="text-left">
-            <span className="text-[11px] font-bold text-emerald-300 block">100% Datos en Vivo</span>
-            <span className="text-[10px] text-slate-400 font-mono-num">Sin simulación • Kryptex & Salad Real</span>
+            <span className={`text-[11px] font-bold block ${isLight ? 'text-emerald-800' : 'text-emerald-300'}`}>100% Datos en Vivo</span>
+            <span className={`text-[10px] font-mono-num ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Sin simulación • Kryptex & Salad Real</span>
           </div>
         </div>
       </div>
@@ -352,28 +367,34 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
         <div
           className={`rounded-xl p-3 text-xs font-mono-num flex items-center gap-2 border animate-in fade-in duration-200 ${
             feedbackMsg.type === 'success'
-              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-              : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+              ? isLight ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+              : isLight ? 'bg-rose-50 border-rose-300 text-rose-800' : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
           }`}
         >
           {feedbackMsg.type === 'success' ? (
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+            <CheckCircle2 className={`h-4 w-4 shrink-0 ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`} />
           ) : (
-            <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+            <AlertCircle className={`h-4 w-4 shrink-0 ${isLight ? 'text-rose-600' : 'text-rose-400'}`} />
           )}
           <span>{feedbackMsg.text}</span>
         </div>
       )}
 
       {/* 2. SALADCLOUD MULTI-ACCOUNT SECTION */}
-      <div className="card-cyber rounded-2xl p-5 border border-[#1E2433] space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#1E2433]">
+      <div className={`rounded-2xl p-5 border space-y-4 ${
+        isLight 
+          ? 'bg-white border-slate-200 text-slate-900 shadow-sm' 
+          : 'card-cyber border-[#1E2433] text-white'
+      }`}>
+        <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b ${
+          isLight ? 'border-slate-200' : 'border-[#1E2433]'
+        }`}>
           <div>
-            <h3 className="font-display-title text-base font-bold text-white flex items-center gap-2">
-              <Layers className="h-5 w-5 text-cyan-400" />
+            <h3 className={`font-display-title text-base font-bold flex items-center gap-2 ${isLight ? 'text-slate-900' : 'text-white'}`}>
+              <Layers className={`h-5 w-5 ${isLight ? 'text-cyan-600' : 'text-cyan-400'}`} />
               Cuentas de SaladCloud ({accounts.length})
             </h3>
-            <p className="text-xs text-slate-400">
+            <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
               Vigila todas tus GPUs alquiladas en tiempo real y gestiona la asignación de contenedores
             </p>
           </div>
@@ -383,7 +404,7 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
               setEditingAcc(null);
               setShowAddForm(!showAddForm);
             }}
-            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 px-3.5 py-2 text-xs font-bold text-slate-950 shadow-md hover:brightness-110 active:scale-95 transition-all self-start sm:self-auto"
+            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 px-3.5 py-2 text-xs font-bold text-slate-950 shadow-md hover:brightness-110 active:scale-95 transition-all self-start sm:self-auto cursor-pointer"
           >
             <Plus className="h-4 w-4" />
             <span>Agregar Cuenta Salad</span>
@@ -391,27 +412,39 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
         </div>
 
         {/* Essential SaladCloud Organization Guidance Banner */}
-        <div className="rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-[#14120B] to-[#0C0E16] p-4 text-xs space-y-2">
-          <div className="flex items-center gap-2 font-bold text-amber-300">
-            <AlertCircle className="h-4 w-4 text-amber-400 shrink-0" />
+        <div className={`rounded-xl border p-4 text-xs space-y-2 ${
+          isLight 
+            ? 'border-amber-200 bg-amber-50/70 text-amber-950' 
+            : 'border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-[#14120B] to-[#0C0E16]'
+        }`}>
+          <div className={`flex items-center gap-2 font-bold ${isLight ? 'text-amber-900' : 'text-amber-300'}`}>
+            <AlertCircle className={`h-4 w-4 shrink-0 ${isLight ? 'text-amber-600' : 'text-amber-400'}`} />
             <span>¿Por qué dio Error 400? Cómo colocar el "Organization Name" correcto:</span>
           </div>
-          <p className="text-[11px] text-slate-300 leading-relaxed">
-            La API de SaladCloud requiere tu nombre de organización exacto en la URL (<code className="text-cyan-300">/organizations/{'{org}'}/...</code>). 
-            Si colocas <strong className="text-rose-400">"N/A"</strong> o una barra, Salad responderá con <strong>Error 400 Bad Request</strong>.
+          <p className={`text-[11px] leading-relaxed ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+            La API de SaladCloud requiere tu nombre de organización exacto en la URL (<code className={isLight ? 'text-cyan-800 font-bold' : 'text-cyan-300'}>/organizations/{'{org}'}/...</code>). 
+            Si colocas <strong className={isLight ? 'text-rose-700' : 'text-rose-400'}>"N/A"</strong> o una barra, Salad responderá con <strong>Error 400 Bad Request</strong>.
           </p>
-          <div className="rounded-lg bg-black/50 border border-white/10 p-2.5 font-mono text-[11px] text-slate-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className={`rounded-lg border p-2.5 font-mono text-[11px] flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
+            isLight 
+              ? 'bg-white border-amber-200 text-slate-800 shadow-xs' 
+              : 'bg-black/50 border-white/10 text-slate-300'
+          }`}>
             <div>
-              <span className="text-slate-500">Paso 1: Entra a </span>
-              <a href="https://portal.salad.com" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline font-bold inline-flex items-center gap-1">
+              <span className={isLight ? 'text-slate-500' : 'text-slate-500'}>Paso 1: Entra a </span>
+              <a href="https://portal.salad.com" target="_blank" rel="noreferrer" className={`hover:underline font-bold inline-flex items-center gap-1 ${isLight ? 'text-cyan-700' : 'text-cyan-400'}`}>
                 portal.salad.com <ExternalLink className="h-3 w-3" />
               </a>
-              <span className="text-slate-500"> y mira la barra de direcciones:</span>
-              <div className="mt-1 text-slate-400">
-                https://portal.salad.com/organizations/<span className="text-emerald-400 font-bold bg-emerald-500/20 px-1.5 py-0.5 rounded">tu-organizacion</span>/...
+              <span className={isLight ? 'text-slate-500' : 'text-slate-500'}> y mira la barra de direcciones:</span>
+              <div className={`mt-1 ${isLight ? 'text-slate-700' : 'text-slate-400'}`}>
+                https://portal.salad.com/organizations/<span className={isLight ? 'text-emerald-700 font-bold bg-emerald-100 px-1.5 py-0.5 rounded' : 'text-emerald-400 font-bold bg-emerald-500/20 px-1.5 py-0.5 rounded'}>tu-organizacion</span>/...
               </div>
             </div>
-            <div className="text-[10px] text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-1 rounded">
+            <div className={`text-[10px] px-2 py-1 rounded font-bold ${
+              isLight 
+                ? 'text-amber-800 bg-amber-100/90 border border-amber-300' 
+                : 'text-amber-300 bg-amber-500/15 border border-amber-500/30'
+            }`}>
               Ese texto en verde es tu Organización
             </div>
           </div>
@@ -419,31 +452,37 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
 
         {/* Edit Account Form */}
         {editingAcc && (
-          <form onSubmit={handleSaveEdit} className="rounded-xl border border-amber-500/40 bg-[#0C0E16] p-4 space-y-3 animate-in slide-in-from-top-2 duration-200">
+          <form onSubmit={handleSaveEdit} className={`rounded-xl border p-4 space-y-3 animate-in slide-in-from-top-2 duration-200 ${
+            isLight ? 'border-amber-300 bg-amber-50/40' : 'border-amber-500/40 bg-[#0C0E16]'
+          }`}>
             <div className="flex items-center justify-between">
-              <h4 className="font-display-title text-sm font-bold text-amber-300 flex items-center gap-2">
+              <h4 className={`font-display-title text-sm font-bold flex items-center gap-2 ${isLight ? 'text-amber-900' : 'text-amber-300'}`}>
                 <Edit3 className="h-4 w-4" />
                 Editar Cuenta: {editingAcc.accountName}
               </h4>
-              <span className="text-[10px] text-slate-500 font-mono-num">ID: {editingAcc.id}</span>
+              <span className={`text-[10px] font-mono-num ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>ID: {editingAcc.id}</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <div>
-                <label className="text-slate-300 block mb-1 font-semibold">Nombre Amigable:</label>
+                <label className={`block mb-1 font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Nombre Amigable:</label>
                 <input
                   type="text"
                   value={editingAcc.accountName}
                   onChange={(e) => setEditingAcc({ ...editingAcc, accountName: e.target.value })}
                   placeholder="ej. Salad Cuenta 1"
                   required
-                  className="w-full rounded-lg border border-[#252E42] bg-[#090A0F] px-3 py-2 text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
+                  className={`w-full rounded-lg border px-3 py-2 focus:outline-none ${
+                    isLight 
+                      ? 'border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-amber-600' 
+                      : 'border-[#252E42] bg-[#090A0F] text-white placeholder-slate-500 focus:border-amber-500'
+                  }`}
                 />
               </div>
 
               <div>
-                <label className="text-slate-300 block mb-1 font-semibold">
-                  Nombre de Organización (Org) <span className="text-rose-400">*No pongas N/A</span>:
+                <label className={`block mb-1 font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                  Nombre de Organización (Org) <span className="text-rose-500">*No pongas N/A</span>:
                 </label>
                 <input
                   type="text"
@@ -451,39 +490,49 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
                   onChange={(e) => setEditingAcc({ ...editingAcc, organizationName: e.target.value })}
                   placeholder="ej. mi-empresa-salad (mira en portal.salad.com)"
                   required
-                  className={`w-full rounded-lg border px-3 py-2 text-white placeholder-slate-500 focus:outline-none font-mono-num ${
+                  className={`w-full rounded-lg border px-3 py-2 focus:outline-none font-mono-num ${
                     editingAcc.organizationName.toLowerCase() === 'n/a'
-                      ? 'border-rose-500 bg-rose-950/20 text-rose-300 focus:border-rose-400'
-                      : 'border-[#252E42] bg-[#090A0F] focus:border-amber-500'
+                      ? 'border-rose-500 bg-rose-50 text-rose-800 focus:border-rose-600'
+                      : isLight 
+                      ? 'border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-amber-600' 
+                      : 'border-[#252E42] bg-[#090A0F] text-white placeholder-slate-500 focus:border-amber-500'
                   }`}
                 />
               </div>
 
               <div>
-                <label className="text-slate-300 block mb-1 font-semibold">Proyecto Salad (Project Name):</label>
+                <label className={`block mb-1 font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Proyecto Salad (Project Name):</label>
                 <input
                   type="text"
                   value={editingAcc.projectName}
                   onChange={(e) => setEditingAcc({ ...editingAcc, projectName: e.target.value })}
                   placeholder="default"
-                  className="w-full rounded-lg border border-[#252E42] bg-[#090A0F] px-3 py-2 text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none font-mono-num"
+                  className={`w-full rounded-lg border px-3 py-2 focus:outline-none font-mono-num ${
+                    isLight 
+                      ? 'border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-amber-600' 
+                      : 'border-[#252E42] bg-[#090A0F] text-white placeholder-slate-500 focus:border-amber-500'
+                  }`}
                 />
               </div>
 
               <div>
-                <label className="text-slate-300 block mb-1 font-semibold">Salad API Key:</label>
+                <label className={`block mb-1 font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Salad API Key:</label>
                 <input
                   type="password"
                   value={editingAcc.apiKey}
                   onChange={(e) => setEditingAcc({ ...editingAcc, apiKey: e.target.value })}
                   placeholder="salad_live_sk_..."
                   required
-                  className="w-full rounded-lg border border-[#252E42] bg-[#090A0F] px-3 py-2 text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none font-mono-num"
+                  className={`w-full rounded-lg border px-3 py-2 focus:outline-none font-mono-num ${
+                    isLight 
+                      ? 'border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-amber-600' 
+                      : 'border-[#252E42] bg-[#090A0F] text-white placeholder-slate-500 focus:border-amber-500'
+                  }`}
                 />
               </div>
 
               <div>
-                <label className="text-slate-300 block mb-1 font-semibold">Saldo Real en Salad ($ USD):</label>
+                <label className={`block mb-1 font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Saldo Real en Salad ($ USD):</label>
                 <input
                   type="number"
                   step="0.01"
@@ -491,22 +540,28 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
                   value={editingAcc.balanceUSD !== undefined ? editingAcc.balanceUSD : ''}
                   onChange={(e) => setEditingAcc({ ...editingAcc, balanceUSD: e.target.value ? parseFloat(e.target.value) : 0 })}
                   placeholder="0.00"
-                  className="w-full rounded-lg border border-[#252E42] bg-[#090A0F] px-3 py-2 text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none font-mono-num"
+                  className={`w-full rounded-lg border px-3 py-2 focus:outline-none font-mono-num ${
+                    isLight 
+                      ? 'border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-amber-600' 
+                      : 'border-[#252E42] bg-[#090A0F] text-white placeholder-slate-500 focus:border-amber-500'
+                  }`}
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/[0.06]">
+            <div className={`flex items-center justify-end gap-2 pt-2 border-t ${isLight ? 'border-amber-200' : 'border-white/[0.06]'}`}>
               <button
                 type="button"
                 onClick={() => setEditingAcc(null)}
-                className="px-3.5 py-1.5 text-xs text-slate-400 hover:text-white"
+                className={`px-3.5 py-1.5 text-xs transition-colors cursor-pointer ${
+                  isLight ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
+                }`}
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                className="rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 transition-colors"
+                className="rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 transition-colors shadow-xs cursor-pointer"
               >
                 Guardar Corrección
               </button>
@@ -516,27 +571,33 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
 
         {/* Add Account Modal / Form */}
         {showAddForm && !editingAcc && (
-          <form onSubmit={handleCreateAccount} className="rounded-xl border border-cyan-500/30 bg-[#0C0E16] p-4 space-y-3 animate-in slide-in-from-top-2 duration-200">
-            <h4 className="font-display-title text-sm font-bold text-cyan-300">
+          <form onSubmit={handleCreateAccount} className={`rounded-xl border p-4 space-y-3 animate-in slide-in-from-top-2 duration-200 ${
+            isLight ? 'border-cyan-200 bg-cyan-50/30' : 'border-cyan-500/30 bg-[#0C0E16]'
+          }`}>
+            <h4 className={`font-display-title text-sm font-bold ${isLight ? 'text-cyan-900' : 'text-cyan-300'}`}>
               Registrar Nueva Cuenta de SaladCloud
             </h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <div>
-                <label className="text-slate-300 block mb-1 font-semibold">Nombre Amigable:</label>
+                <label className={`block mb-1 font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Nombre Amigable:</label>
                 <input
                   type="text"
                   value={newAccName}
                   onChange={(e) => setNewAccName(e.target.value)}
                   placeholder="ej. Salad Cuenta 1 (Principal)"
                   required
-                  className="w-full rounded-lg border border-[#252E42] bg-[#090A0F] px-3 py-2 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+                  className={`w-full rounded-lg border px-3 py-2 focus:outline-none ${
+                    isLight 
+                      ? 'border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-cyan-600' 
+                      : 'border-[#252E42] bg-[#090A0F] text-white placeholder-slate-500 focus:border-cyan-500'
+                  }`}
                 />
               </div>
 
               <div>
-                <label className="text-slate-300 block mb-1 font-semibold">
-                  Nombre de Organización (Org) <span className="text-amber-400">*De portal.salad.com</span>:
+                <label className={`block mb-1 font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                  Nombre de Organización (Org) <span className="text-amber-500">*De portal.salad.com</span>:
                 </label>
                 <input
                   type="text"
@@ -544,35 +605,47 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
                   onChange={(e) => setNewOrgName(e.target.value)}
                   placeholder="ej. mi-organizacion (NO 'N/A')"
                   required
-                  className="w-full rounded-lg border border-[#252E42] bg-[#090A0F] px-3 py-2 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none font-mono-num"
+                  className={`w-full rounded-lg border px-3 py-2 focus:outline-none font-mono-num ${
+                    isLight 
+                      ? 'border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-cyan-600' 
+                      : 'border-[#252E42] bg-[#090A0F] text-white placeholder-slate-500 focus:border-cyan-500'
+                  }`}
                 />
               </div>
 
               <div>
-                <label className="text-slate-300 block mb-1 font-semibold">Proyecto Salad (Project Name):</label>
+                <label className={`block mb-1 font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Proyecto Salad (Project Name):</label>
                 <input
                   type="text"
                   value={newProjName}
                   onChange={(e) => setNewProjName(e.target.value)}
                   placeholder="default"
-                  className="w-full rounded-lg border border-[#252E42] bg-[#090A0F] px-3 py-2 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none font-mono-num"
+                  className={`w-full rounded-lg border px-3 py-2 focus:outline-none font-mono-num ${
+                    isLight 
+                      ? 'border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-cyan-600' 
+                      : 'border-[#252E42] bg-[#090A0F] text-white placeholder-slate-500 focus:border-cyan-500'
+                  }`}
                 />
               </div>
 
               <div>
-                <label className="text-slate-300 block mb-1 font-semibold">Salad API Key:</label>
+                <label className={`block mb-1 font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Salad API Key:</label>
                 <input
                   type="password"
                   value={newApiKey}
                   onChange={(e) => setNewApiKey(e.target.value)}
                   placeholder="salad_live_sk_..."
                   required
-                  className="w-full rounded-lg border border-[#252E42] bg-[#090A0F] px-3 py-2 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none font-mono-num"
+                  className={`w-full rounded-lg border px-3 py-2 focus:outline-none font-mono-num ${
+                    isLight 
+                      ? 'border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-cyan-600' 
+                      : 'border-[#252E42] bg-[#090A0F] text-white placeholder-slate-500 focus:border-cyan-500'
+                  }`}
                 />
               </div>
 
               <div>
-                <label className="text-slate-300 block mb-1 font-semibold">Saldo Inicial en Salad ($ USD):</label>
+                <label className={`block mb-1 font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Saldo Inicial en Salad ($ USD):</label>
                 <input
                   type="number"
                   step="0.01"
@@ -580,22 +653,28 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
                   value={newBalance}
                   onChange={(e) => setNewBalance(e.target.value)}
                   placeholder="0.00"
-                  className="w-full rounded-lg border border-[#252E42] bg-[#090A0F] px-3 py-2 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none font-mono-num"
+                  className={`w-full rounded-lg border px-3 py-2 focus:outline-none font-mono-num ${
+                    isLight 
+                      ? 'border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-cyan-600' 
+                      : 'border-[#252E42] bg-[#090A0F] text-white placeholder-slate-500 focus:border-cyan-500'
+                  }`}
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/[0.06]">
+            <div className={`flex items-center justify-end gap-2 pt-2 border-t ${isLight ? 'border-cyan-200' : 'border-white/[0.06]'}`}>
               <button
                 type="button"
                 onClick={() => setShowAddForm(false)}
-                className="px-3.5 py-1.5 text-xs text-slate-400 hover:text-white"
+                className={`px-3.5 py-1.5 text-xs transition-colors cursor-pointer ${
+                  isLight ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
+                }`}
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                className="rounded-lg bg-emerald-500 px-4 py-1.5 text-xs font-bold text-slate-950 hover:bg-emerald-400 transition-colors"
+                className="rounded-lg bg-emerald-500 px-4 py-1.5 text-xs font-bold text-slate-950 hover:bg-emerald-400 transition-colors shadow-xs cursor-pointer"
               >
                 Guardar Cuenta
               </button>
@@ -606,7 +685,9 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
         {/* Configured Accounts List */}
         <div className="space-y-3">
           {accounts.length === 0 ? (
-            <div className="p-6 text-center rounded-xl border border-dashed border-white/10 text-slate-400 text-xs">
+            <div className={`p-6 text-center rounded-xl border border-dashed text-xs ${
+              isLight ? 'border-slate-300 bg-slate-50 text-slate-500' : 'border-white/10 text-slate-400'
+            }`}>
               No tienes ninguna cuenta de SaladCloud registrada. Haz clic en <strong>Agregar Cuenta Salad</strong> arriba.
             </div>
           ) : (
@@ -618,31 +699,41 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
                   key={acc.id}
                   className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border p-4 text-xs font-mono-num transition-colors ${
                     isInvalidOrg 
-                      ? 'border-rose-500/50 bg-rose-950/15' 
+                      ? isLight ? 'border-rose-300 bg-rose-50 text-rose-900' : 'border-rose-500/50 bg-rose-950/15' 
+                      : isLight 
+                      ? 'border-slate-200 bg-slate-50/70 hover:bg-slate-100/80 hover:border-slate-300' 
                       : 'border-[#1A202C] bg-[#0C0E16] hover:border-[#2A334A]'
                   }`}
                 >
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`h-2.5 w-2.5 rounded-full ${acc.enabled ? 'bg-emerald-400' : 'bg-slate-600'}`} />
-                      <span className="font-bold text-white text-sm">{acc.accountName}</span>
+                      <span className={`h-2.5 w-2.5 rounded-full ${acc.enabled ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                      <span className={`font-bold text-sm ${isLight ? 'text-slate-900' : 'text-white'}`}>{acc.accountName}</span>
                       
                       {isInvalidOrg ? (
-                        <span className="rounded px-2 py-0.5 text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold animate-pulse">
+                        <span className={`rounded px-2 py-0.5 text-[10px] font-bold animate-pulse ${
+                          isLight 
+                            ? 'bg-rose-100 text-rose-800 border border-rose-300' 
+                            : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                        }`}>
                           ⚠️ Org Inválida ("{acc.organizationName}") - Haz clic en Editar
                         </span>
                       ) : (
-                        <span className="rounded px-1.5 py-0.5 text-[10px] bg-[#161B26] text-cyan-300 border border-[#222B3D]">
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] border ${
+                          isLight 
+                            ? 'bg-slate-200 text-cyan-900 border-slate-300 font-semibold' 
+                            : 'bg-[#161B26] text-cyan-300 border-[#222B3D]'
+                        }`}>
                           Org: {acc.organizationName}
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-slate-500 flex items-center gap-2 flex-wrap">
-                      <span>Proyecto: <strong className="text-slate-400">{acc.projectName}</strong></span>
+                    <div className={`text-[11px] flex items-center gap-2 flex-wrap ${isLight ? 'text-slate-600' : 'text-slate-500'}`}>
+                      <span>Proyecto: <strong className={isLight ? 'text-slate-800' : 'text-slate-400'}>{acc.projectName}</strong></span>
                       <span>•</span>
-                      <span>Saldo: <strong className="text-emerald-400 font-mono">${(acc.balanceUSD ?? 0).toFixed(2)} USD</strong></span>
+                      <span>Saldo: <strong className={`font-mono ${isLight ? 'text-emerald-700 font-bold' : 'text-emerald-400'}`}>${(acc.balanceUSD ?? 0).toFixed(2)} USD</strong></span>
                       <span>•</span>
-                      <span>Key: <strong className="text-slate-400">{acc.apiKey ? `${acc.apiKey.substring(0, 14)}...` : 'Sin Key'}</strong></span>
+                      <span>Key: <strong className={isLight ? 'text-slate-800' : 'text-slate-400'}>{acc.apiKey ? `${acc.apiKey.substring(0, 14)}...` : 'Sin Key'}</strong></span>
                     </div>
                   </div>
 
@@ -650,10 +741,14 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
                     <button
                       onClick={() => handleTestSalad(acc)}
                       disabled={testingAccId === acc.id}
-                      className="flex items-center gap-1.5 rounded-lg border border-[#202738] bg-[#121622] px-3 py-1.5 text-slate-300 hover:text-white hover:border-cyan-500 transition-all"
+                      className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 transition-all cursor-pointer ${
+                        isLight 
+                          ? 'border-slate-200 bg-white text-slate-700 hover:text-slate-950 hover:border-cyan-500 hover:bg-slate-50 shadow-xs' 
+                          : 'border-[#202738] bg-[#121622] text-slate-300 hover:text-white hover:border-cyan-500'
+                      }`}
                       title="Verificar conexión directa con la API de SaladCloud"
                     >
-                      <RefreshCw className={`h-3.5 w-3.5 text-cyan-400 ${testingAccId === acc.id ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`h-3.5 w-3.5 text-cyan-500 ${testingAccId === acc.id ? 'animate-spin' : ''}`} />
                       <span>{testingAccId === acc.id ? 'Probando...' : 'Probar API'}</span>
                     </button>
 
@@ -662,7 +757,11 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
                         setShowAddForm(false);
                         setEditingAcc(acc);
                       }}
-                      className="flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/20 transition-all"
+                      className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-all cursor-pointer ${
+                        isLight 
+                          ? 'border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100' 
+                          : 'border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'
+                      }`}
                       title="Editar nombre de organización o API Key"
                     >
                       <Edit3 className="h-3 w-3" />
@@ -671,8 +770,10 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
 
                     <button
                       onClick={() => onToggleAccount(acc.id)}
-                      className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold ${
-                        acc.enabled ? 'bg-emerald-500/10 text-emerald-300' : 'bg-slate-800 text-slate-500'
+                      className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer ${
+                        acc.enabled 
+                          ? isLight ? 'bg-emerald-100 text-emerald-800' : 'bg-emerald-500/10 text-emerald-300' 
+                          : isLight ? 'bg-slate-200 text-slate-600' : 'bg-slate-800 text-slate-500'
                       }`}
                     >
                       {acc.enabled ? 'Activa' : 'Pausada'}
@@ -680,7 +781,9 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
 
                     <button
                       onClick={() => onDeleteAccount(acc.id)}
-                      className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition-colors"
+                      className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                        isLight ? 'text-slate-400 hover:text-rose-600 hover:bg-rose-50' : 'text-slate-500 hover:text-rose-400 hover:bg-rose-500/10'
+                      }`}
                       title="Eliminar cuenta"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -694,28 +797,38 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
       </div>
 
       {/* 2. VAST.AI OFFICIAL CLOUD API INTEGRATION */}
-      <div className="card-cyber rounded-2xl p-5 border border-[#1E2433] space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#1E2433]">
+      <div className={`rounded-2xl p-5 border space-y-4 ${
+        isLight 
+          ? 'bg-white border-slate-200 text-slate-900 shadow-sm' 
+          : 'card-cyber border-[#1E2433] text-white'
+      }`}>
+        <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b ${
+          isLight ? 'border-slate-200' : 'border-[#1E2433]'
+        }`}>
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+            <div className={`p-2 rounded-xl border ${
+              isLight 
+                ? 'bg-cyan-50 border-cyan-200 text-cyan-700' 
+                : 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400'
+            }`}>
               <Server className="h-5 w-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-display-title text-base font-bold text-white">
+                <h3 className={`font-display-title text-base font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>
                   Vast.ai Cloud GPU API
                 </h3>
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase border ${
                   vastConfig.status === 'connected'
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    ? isLight ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                     : vastConfig.hasKey
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                    ? isLight ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                    : isLight ? 'bg-slate-100 text-slate-600 border-slate-300' : 'bg-slate-800 text-slate-400 border-slate-700'
                 }`}>
                   {vastConfig.status === 'connected' ? 'Conectado' : vastConfig.hasKey ? 'Pendiente Test' : 'Sin Configurar'}
                 </span>
               </div>
-              <p className="text-xs text-slate-400">
+              <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                 Integración oficial backend para búsqueda de ofertas, cálculo de rentabilidad y supervisión de alquileres
               </p>
             </div>
@@ -727,8 +840,8 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
               onClick={handleToggleVastEnabled}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                 vastConfig.enabled
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                  : 'bg-white/[0.04] text-slate-400 border-white/[0.08]'
+                  ? isLight ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                  : isLight ? 'bg-slate-100 text-slate-600 border-slate-300' : 'bg-white/[0.04] text-slate-400 border-white/[0.08]'
               }`}
             >
               {vastConfig.enabled ? 'Habilitada' : 'Deshabilitada'}
@@ -737,9 +850,13 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
               type="button"
               onClick={handleTestVastConnection}
               disabled={testingVast}
-              className="flex items-center gap-1.5 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3.5 py-1.5 text-xs font-bold text-cyan-300 hover:bg-cyan-500/20 transition-all cursor-pointer"
+              className={`flex items-center gap-1.5 rounded-xl border px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                isLight 
+                  ? 'border-cyan-300 bg-cyan-50 text-cyan-800 hover:bg-cyan-100 shadow-xs' 
+                  : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20'
+              }`}
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${testingVast ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-3.5 w-3.5 ${testingVast ? 'animate-spin' : ''} ${isLight ? 'text-cyan-700' : ''}`} />
               <span>{testingVast ? 'Probando...' : 'Probar Conexión Vast.ai'}</span>
             </button>
           </div>
@@ -749,14 +866,14 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
           {/* Key status & form */}
           <div className="md:col-span-2">
             <div className="flex items-center justify-between mb-1">
-              <label className="text-slate-300 font-semibold flex items-center gap-1">
+              <label className={`font-semibold flex items-center gap-1 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                 <span>Vast.ai API Key (Bearer Token):</span>
               </label>
               {!isEditingVastKey && (
                 <button
                   type="button"
                   onClick={() => setIsEditingVastKey(true)}
-                  className="text-[10px] text-cyan-400 hover:text-cyan-300 cursor-pointer"
+                  className={`text-[10px] cursor-pointer ${isLight ? 'text-cyan-700 hover:text-cyan-900 font-bold' : 'text-cyan-400 hover:text-cyan-300'}`}
                 >
                   {vastConfig.hasKey ? 'Cambiar Clave' : '+ Asignar Clave'}
                 </button>
@@ -770,7 +887,11 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
                   value={vastApiKeyInput}
                   onChange={(e) => setVastApiKeyInput(e.target.value)}
                   placeholder="vst-..."
-                  className="flex-1 rounded-lg border border-[#252E42] bg-[#090A0F] px-3 py-2 text-white placeholder-slate-600 focus:border-cyan-500 focus:outline-none"
+                  className={`flex-1 rounded-lg border px-3 py-2 focus:outline-none ${
+                    isLight 
+                      ? 'border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-cyan-600' 
+                      : 'border-[#252E42] bg-[#090A0F] text-white placeholder-slate-600 focus:border-cyan-500'
+                  }`}
                   autoFocus
                 />
                 <button
@@ -782,47 +903,57 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsEditingVastKey(false)}
-                  className="px-2 py-2 text-slate-400 hover:text-white cursor-pointer"
+                  className={`px-2 py-2 cursor-pointer ${isLight ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-white'}`}
                 >
                   Cancelar
                 </button>
               </form>
             ) : (
-              <div className="flex items-center justify-between bg-[#090A0F] border border-white/[0.08] rounded-xl px-3 py-2">
-                <span className="text-slate-400 font-mono">
+              <div className={`flex items-center justify-between border rounded-xl px-3 py-2 ${
+                isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#090A0F] border-white/[0.08]'
+              }`}>
+                <span className={`font-mono ${isLight ? 'text-slate-700' : 'text-slate-400'}`}>
                   {vastConfig.hasKey ? vastConfig.maskedKey : 'Ninguna API Key configurada'}
                 </span>
-                <span className="text-[11px] text-slate-500">Almacenada solo en Backend</span>
+                <span className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>Almacenada solo en Backend</span>
               </div>
             )}
-            <p className="text-[10px] text-slate-500 mt-1">
-              Obtén tu API key en <a href="https://cloud.vast.ai/manage-keys/" target="_blank" rel="noreferrer" className="text-cyan-400 underline">cloud.vast.ai/manage-keys</a>. La clave nunca se expone al cliente frontend ni a los paquetes finales.
+            <p className={`text-[10px] mt-1 ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
+              Obtén tu API key en <a href="https://cloud.vast.ai/manage-keys/" target="_blank" rel="noreferrer" className={`underline ${isLight ? 'text-cyan-700' : 'text-cyan-400'}`}>cloud.vast.ai/manage-keys</a>. La clave nunca se expone al cliente frontend ni a los paquetes finales.
             </p>
           </div>
 
           {/* Balance card */}
-          <div className="bg-[#090A0F] border border-white/[0.08] rounded-xl p-3 flex flex-col justify-between">
-            <span className="text-slate-400 text-[11px]">Saldo de Crédito Vast.ai:</span>
-            <div className="text-2xl font-bold font-mono text-cyan-400 mt-1">
-              ${(vastConfig.balanceUSD || 0).toFixed(2)} <span className="text-xs text-slate-400">USD</span>
+          <div className={`border rounded-xl p-3 flex flex-col justify-between ${
+            isLight ? 'bg-slate-50 border-slate-200 text-slate-900' : 'bg-[#090A0F] border-white/[0.08]'
+          }`}>
+            <span className={`text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Saldo de Crédito Vast.ai:</span>
+            <div className={`text-2xl font-bold font-mono mt-1 ${isLight ? 'text-cyan-700' : 'text-cyan-400'}`}>
+              ${(vastConfig.balanceUSD || 0).toFixed(2)} <span className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>USD</span>
             </div>
-            <div className="text-[10px] text-slate-500 mt-1 flex items-center justify-between">
+            <div className={`text-[10px] mt-1 flex items-center justify-between ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
               <span>Modo Inicial:</span>
-              <span className="text-emerald-400 font-bold">SIMULATION</span>
+              <span className={`font-bold ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>SIMULATION</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* 3. KRYPTEX MINING POOL SECTION */}
-      <div className="card-cyber rounded-2xl p-5 border border-[#1E2433] space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#1E2433]">
+      <div className={`rounded-2xl p-5 border space-y-4 ${
+        isLight 
+          ? 'bg-white border-slate-200 text-slate-900 shadow-sm' 
+          : 'card-cyber border-[#1E2433] text-white'
+      }`}>
+        <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b ${
+          isLight ? 'border-slate-200' : 'border-[#1E2433]'
+        }`}>
           <div>
-            <h3 className="font-display-title text-base font-bold text-white flex items-center gap-2">
-              <Key className="h-5 w-5 text-emerald-400" />
+            <h3 className={`font-display-title text-base font-bold flex items-center gap-2 ${isLight ? 'text-slate-900' : 'text-white'}`}>
+              <Key className={`h-5 w-5 ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`} />
               Configuración Kryptex Pool (Pearl - PRL)
             </h3>
-            <p className="text-xs text-slate-400">
+            <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
               Conexión para lectura de hashrates de workers, balance de billetera y shares válidos
             </p>
           </div>
@@ -830,9 +961,13 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
           <button
             onClick={handleTestKryptexConnection}
             disabled={testingKryptex}
-            className="flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20 active:scale-95 transition-all self-start sm:self-auto"
+            className={`flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-bold active:scale-95 transition-all self-start sm:self-auto cursor-pointer ${
+              isLight 
+                ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 shadow-xs' 
+                : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
+            }`}
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${testingKryptex ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-3.5 w-3.5 ${testingKryptex ? 'animate-spin' : ''} ${isLight ? 'text-emerald-700' : ''}`} />
             <span>{testingKryptex ? 'Verificando...' : 'Probar Conexión Kryptex'}</span>
           </button>
         </div>
@@ -840,13 +975,13 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono-num">
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-slate-300 font-semibold">
+              <label className={`font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                 Dirección de Billetera Pearl (PRL) o Usuario Kryptex:
               </label>
               <button
                 type="button"
                 onClick={() => onUpdateKryptexConfig({ walletAddress: 'prl1phs6s7m983309a6pz7qdreq8x6usschwxc5ujalp0lzvzyptjghlsc52549' })}
-                className="text-[11px] text-cyan-400 hover:text-cyan-300 underline font-sans font-medium"
+                className={`text-[11px] underline font-sans font-medium cursor-pointer ${isLight ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}
               >
                 Cargar Farm Real Top (8 Workers)
               </button>
@@ -856,28 +991,36 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
               value={kryptexConfig.walletAddress}
               onChange={(e) => onUpdateKryptexConfig({ walletAddress: e.target.value })}
               placeholder="prl1q..."
-              className="w-full rounded-xl border border-[#252E42] bg-[#0C0E16] px-3.5 py-2.5 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+              className={`w-full rounded-xl border px-3.5 py-2.5 focus:outline-none ${
+                isLight 
+                  ? 'border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-cyan-600' 
+                  : 'border-[#252E42] bg-[#0C0E16] text-white placeholder-slate-500 focus:border-cyan-500'
+              }`}
             />
-            <span className="text-[10px] text-slate-500 mt-1 block">
+            <span className={`text-[10px] mt-1 block ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
               Billetera o cuenta a la que minan tus contenedores de SaladCloud.
             </span>
           </div>
 
           <div>
-            <label className="text-slate-300 block mb-1 font-semibold">
+            <label className={`block mb-1 font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
               Servidor Stratum Kryptex:
             </label>
             <select
               value={kryptexConfig.poolUrl}
               onChange={(e) => onUpdateKryptexConfig({ poolUrl: e.target.value })}
-              className="w-full rounded-xl border border-[#252E42] bg-[#0C0E16] px-3.5 py-2.5 text-white focus:border-cyan-500 focus:outline-none"
+              className={`w-full rounded-xl border px-3.5 py-2.5 focus:outline-none ${
+                isLight 
+                  ? 'border-slate-300 bg-white text-slate-900 focus:border-cyan-600' 
+                  : 'border-[#252E42] bg-[#0C0E16] text-white focus:border-cyan-500'
+              }`}
             >
               <option value="stratum+tcp://prl.kryptex.network:7048">Global (prl.kryptex.network:7048)</option>
               <option value="stratum+tcp://prl-us.kryptex.network:7048">North America (prl-us.kryptex.network:7048)</option>
               <option value="stratum+tcp://prl-eu.kryptex.network:7048">Europe (prl-eu.kryptex.network:7048)</option>
               <option value="stratum+tcp://prl-br.kryptex.network:7048">South America (prl-br.kryptex.network:7048)</option>
             </select>
-            <span className="text-[10px] text-slate-500 mt-1 block">
+            <span className={`text-[10px] mt-1 block ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
               Puerto TCP: 7048 • Puerto SSL: 8048
             </span>
           </div>
@@ -885,20 +1028,32 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
       </div>
 
       {/* 4. TELEGRAM BOT STEP-BY-STEP INTEGRATION CARD */}
-      <div className="card-cyber rounded-2xl p-5 border border-cyan-500/30 bg-gradient-to-br from-[#0B1528] via-[#0A0D18] to-[#090A0F] space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#1E2738]">
+      <div className={`rounded-2xl p-5 border space-y-4 ${
+        isLight 
+          ? 'bg-white border-cyan-200 text-slate-900 shadow-sm' 
+          : 'card-cyber border-cyan-500/30 bg-gradient-to-br from-[#0B1528] via-[#0A0D18] to-[#090A0F]'
+      }`}>
+        <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b ${
+          isLight ? 'border-slate-200' : 'border-[#1E2738]'
+        }`}>
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
+            <div className={`flex h-10 w-10 items-center justify-center rounded-xl border ${
+              isLight 
+                ? 'bg-cyan-50 text-cyan-700 border-cyan-200' 
+                : 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30'
+            }`}>
               <Send className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-display-title text-base font-bold text-white flex items-center gap-2">
+              <h3 className={`font-display-title text-base font-bold flex items-center gap-2 ${isLight ? 'text-slate-900' : 'text-white'}`}>
                 Bot Autónomo de Telegram en Tiempo Real
-                <span className="rounded-full bg-cyan-500/20 px-2.5 py-0.5 text-[10px] font-mono-num font-semibold text-cyan-300">
+                <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-mono-num font-semibold ${
+                  isLight ? 'bg-cyan-100 text-cyan-900 border border-cyan-200' : 'bg-cyan-500/20 text-cyan-300'
+                }`}>
                   Vigilancia 24/7
                 </span>
               </h3>
-              <p className="text-xs text-slate-300">
+              <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-300'}`}>
                 Recibe alertas inmediatas en tu teléfono móvil si una GPU de Salad deja de enviar shares a Kryptex
               </p>
             </div>
@@ -916,9 +1071,13 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
             <button
               onClick={handleSendTelegramStatus}
               disabled={sendingReport}
-              className="flex items-center gap-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] border border-white/[0.15] px-3.5 py-2 text-xs font-bold text-white shadow-lg active:scale-95 transition-all cursor-pointer"
+              className={`flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-bold shadow-lg active:scale-95 transition-all cursor-pointer ${
+                isLight 
+                  ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800' 
+                  : 'bg-white/[0.08] hover:bg-white/[0.14] border-white/[0.15] text-white'
+              }`}
             >
-              <Activity className={`h-3.5 w-3.5 text-cyan-400 ${sendingReport ? 'animate-spin' : ''}`} />
+              <Activity className={`h-3.5 w-3.5 ${sendingReport ? 'animate-spin' : ''} ${isLight ? 'text-cyan-700' : 'text-cyan-400'}`} />
               <span>{sendingReport ? 'Despachando...' : 'Enviar Reporte a Telegram'}</span>
             </button>
           </div>
@@ -926,43 +1085,59 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
 
         {/* Step-by-step Visual Tutorial */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-          <div className="rounded-xl border border-[#1A253A] bg-[#0E1424]/70 p-3 space-y-1.5">
-            <div className="flex items-center gap-2 text-cyan-400 font-bold">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/20 text-[11px] font-mono-num">1</span>
+          <div className={`rounded-xl border p-3 space-y-1.5 ${
+            isLight ? 'border-slate-200 bg-slate-50/80 text-slate-800' : 'border-[#1A253A] bg-[#0E1424]/70 text-slate-400'
+          }`}>
+            <div className={`flex items-center gap-2 font-bold ${isLight ? 'text-cyan-800' : 'text-cyan-400'}`}>
+              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-mono-num ${
+                isLight ? 'bg-cyan-100 text-cyan-800' : 'bg-cyan-500/20'
+              }`}>1</span>
               <span>Crear Bot</span>
             </div>
-            <p className="text-slate-400 text-[11px] leading-relaxed">
-              En Telegram, abre <strong className="text-cyan-300">@BotFather</strong> y escribe el comando <code className="bg-slate-800 text-emerald-400 px-1 py-0.5 rounded">/newbot</code>.
+            <p className={`text-[11px] leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+              En Telegram, abre <strong className={isLight ? 'text-cyan-800' : 'text-cyan-300'}>@BotFather</strong> y escribe el comando <code className={`px-1 py-0.5 rounded ${isLight ? 'bg-slate-200 text-emerald-800' : 'bg-slate-800 text-emerald-400'}`}>/newbot</code>.
             </p>
           </div>
 
-          <div className="rounded-xl border border-[#1A253A] bg-[#0E1424]/70 p-3 space-y-1.5">
-            <div className="flex items-center gap-2 text-cyan-400 font-bold">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/20 text-[11px] font-mono-num">2</span>
+          <div className={`rounded-xl border p-3 space-y-1.5 ${
+            isLight ? 'border-slate-200 bg-slate-50/80 text-slate-800' : 'border-[#1A253A] bg-[#0E1424]/70 text-slate-400'
+          }`}>
+            <div className={`flex items-center gap-2 font-bold ${isLight ? 'text-cyan-800' : 'text-cyan-400'}`}>
+              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-mono-num ${
+                isLight ? 'bg-cyan-100 text-cyan-800' : 'bg-cyan-500/20'
+              }`}>2</span>
               <span>Copiar Token</span>
             </div>
-            <p className="text-slate-400 text-[11px] leading-relaxed">
-              Asígnale un nombre (ej: <em className="text-slate-300">MinerX Alert</em>) y copia el <strong className="text-emerald-400">HTTP API Token</strong> generado.
+            <p className={`text-[11px] leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+              Asígnale un nombre (ej: <em className={isLight ? 'text-slate-700' : 'text-slate-300'}>MinerX Alert</em>) y copia el <strong className={isLight ? 'text-emerald-700' : 'text-emerald-400'}>HTTP API Token</strong> generado.
             </p>
           </div>
 
-          <div className="rounded-xl border border-[#1A253A] bg-[#0E1424]/70 p-3 space-y-1.5">
-            <div className="flex items-center gap-2 text-cyan-400 font-bold">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/20 text-[11px] font-mono-num">3</span>
+          <div className={`rounded-xl border p-3 space-y-1.5 ${
+            isLight ? 'border-slate-200 bg-slate-50/80 text-slate-800' : 'border-[#1A253A] bg-[#0E1424]/70 text-slate-400'
+          }`}>
+            <div className={`flex items-center gap-2 font-bold ${isLight ? 'text-cyan-800' : 'text-cyan-400'}`}>
+              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-mono-num ${
+                isLight ? 'bg-cyan-100 text-cyan-800' : 'bg-cyan-500/20'
+              }`}>3</span>
               <span>Obtener Chat ID</span>
             </div>
-            <p className="text-slate-400 text-[11px] leading-relaxed">
-              Abre <strong className="text-cyan-300">@userinfobot</strong> en Telegram, pulsa <code className="bg-slate-800 text-emerald-400 px-1 py-0.5 rounded">/start</code> y copia tu <strong className="text-amber-300">Id numérico</strong>.
+            <p className={`text-[11px] leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+              Abre <strong className={isLight ? 'text-cyan-800' : 'text-cyan-300'}>@userinfobot</strong> en Telegram, pulsa <code className={`px-1 py-0.5 rounded ${isLight ? 'bg-slate-200 text-emerald-800' : 'bg-slate-800 text-emerald-400'}`}>/start</code> y copia tu <strong className={isLight ? 'text-amber-700 font-bold' : 'text-amber-300'}>Id numérico</strong>.
             </p>
           </div>
 
-          <div className="rounded-xl border border-[#1A253A] bg-[#0E1424]/70 p-3 space-y-1.5">
-            <div className="flex items-center gap-2 text-cyan-400 font-bold">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/20 text-[11px] font-mono-num">4</span>
+          <div className={`rounded-xl border p-3 space-y-1.5 ${
+            isLight ? 'border-slate-200 bg-slate-50/80 text-slate-800' : 'border-[#1A253A] bg-[#0E1424]/70 text-slate-400'
+          }`}>
+            <div className={`flex items-center gap-2 font-bold ${isLight ? 'text-cyan-800' : 'text-cyan-400'}`}>
+              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-mono-num ${
+                isLight ? 'bg-cyan-100 text-cyan-800' : 'bg-cyan-500/20'
+              }`}>4</span>
               <span>Iniciar el Bot</span>
             </div>
-            <p className="text-slate-400 text-[11px] leading-relaxed">
-              <strong className="text-rose-300">¡Muy importante!</strong> Abre tu bot recién creado y presiona <strong className="text-white">START</strong> para autorizar mensajes.
+            <p className={`text-[11px] leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+              <strong className={isLight ? 'text-rose-700' : 'text-rose-300'}>¡Muy importante!</strong> Abre tu bot recién creado y presiona <strong className={isLight ? 'text-slate-900 font-bold' : 'text-white'}>START</strong> para autorizar mensajes.
             </p>
           </div>
         </div>
@@ -970,7 +1145,7 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
         {/* Telegram & Discord Inputs */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono-num pt-2">
           <div>
-            <label className="text-slate-300 block mb-1 font-semibold">
+            <label className={`block mb-1 font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
               Telegram Bot Token (HTTP API):
             </label>
             <input
@@ -978,12 +1153,16 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
               value={settings.telegramBotToken || ''}
               onChange={(e) => onUpdateSettings({ telegramBotToken: e.target.value })}
               placeholder="7123456789:AAHkYQ..."
-              className="w-full rounded-xl border border-[#252E42] bg-[#0C0E16] px-3.5 py-2.5 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+              className={`w-full rounded-xl border px-3.5 py-2.5 focus:outline-none ${
+                isLight 
+                  ? 'border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-cyan-600' 
+                  : 'border-[#252E42] bg-[#0C0E16] text-white placeholder-slate-500 focus:border-cyan-500'
+              }`}
             />
           </div>
 
           <div>
-            <label className="text-slate-300 block mb-1 font-semibold">
+            <label className={`block mb-1 font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
               Telegram Chat ID Personal o Grupo:
             </label>
             <input
@@ -991,17 +1170,23 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
               value={settings.telegramChatId || ''}
               onChange={(e) => onUpdateSettings({ telegramChatId: e.target.value })}
               placeholder="123456789"
-              className="w-full rounded-xl border border-[#252E42] bg-[#0C0E16] px-3.5 py-2.5 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+              className={`w-full rounded-xl border px-3.5 py-2.5 focus:outline-none ${
+                isLight 
+                  ? 'border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-cyan-600' 
+                  : 'border-[#252E42] bg-[#0C0E16] text-white placeholder-slate-500 focus:border-cyan-500'
+              }`}
             />
           </div>
         </div>
 
         {/* Threshold Sliders */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-          <div className="rounded-xl border border-[#1A202C] bg-[#0C0E16] p-3.5 space-y-2">
+          <div className={`rounded-xl border p-3.5 space-y-2 ${
+            isLight ? 'border-slate-200 bg-slate-50/80' : 'border-[#1A202C] bg-[#0C0E16]'
+          }`}>
             <div className="flex justify-between text-xs font-mono-num">
-              <span className="text-slate-300 font-semibold">Umbral Mínimo de Potencia:</span>
-              <span className="text-amber-400 font-bold">{settings.underperformingThresholdPct}%</span>
+              <span className={`font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Umbral Mínimo de Potencia:</span>
+              <span className={`font-bold ${isLight ? 'text-amber-700' : 'text-amber-400'}`}>{settings.underperformingThresholdPct}%</span>
             </div>
             <input
               type="range"
@@ -1009,17 +1194,21 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
               max="95"
               value={settings.underperformingThresholdPct}
               onChange={(e) => onUpdateSettings({ underperformingThresholdPct: Number(e.target.value) })}
-              className="w-full h-1.5 rounded-lg bg-[#161B26] appearance-none cursor-pointer accent-amber-400"
+              className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-amber-400 ${
+                isLight ? 'bg-slate-200' : 'bg-[#161B26]'
+              }`}
             />
-            <span className="text-[10px] text-slate-500 font-mono-num block">
+            <span className={`text-[10px] font-mono-num block ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
               Si la GPU mina a menos del {settings.underperformingThresholdPct}% del benchmark, se emitirá una alerta de reasignación.
             </span>
           </div>
 
-          <div className="rounded-xl border border-[#1A202C] bg-[#0C0E16] p-3.5 space-y-2">
+          <div className={`rounded-xl border p-3.5 space-y-2 ${
+            isLight ? 'border-slate-200 bg-slate-50/80' : 'border-[#1A202C] bg-[#0C0E16]'
+          }`}>
             <div className="flex justify-between text-xs font-mono-num">
-              <span className="text-slate-300 font-semibold">Inactividad de Shares Máxima:</span>
-              <span className="text-rose-400 font-bold">
+              <span className={`font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Inactividad de Shares Máxima:</span>
+              <span className={`font-bold ${isLight ? 'text-rose-700' : 'text-rose-400'}`}>
                 {settings.maxShareInactivityMinutes < 1 
                   ? `${Math.round(settings.maxShareInactivityMinutes * 60)} segundos` 
                   : `${settings.maxShareInactivityMinutes} ${settings.maxShareInactivityMinutes === 1 ? 'minuto' : 'minutos'}`}
@@ -1032,49 +1221,80 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
               step="0.5"
               value={settings.maxShareInactivityMinutes}
               onChange={(e) => onUpdateSettings({ maxShareInactivityMinutes: Number(e.target.value) })}
-              className="w-full h-1.5 rounded-lg bg-[#161B26] appearance-none cursor-pointer accent-rose-400"
+              className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-rose-400 ${
+                isLight ? 'bg-slate-200' : 'bg-[#161B26]'
+              }`}
             />
-            <span className="text-[10px] text-slate-500 font-mono-num block">
+            <span className={`text-[10px] font-mono-num block ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
               Si no se recibe un share válido en {settings.maxShareInactivityMinutes < 1 ? '30 segundos' : `${settings.maxShareInactivityMinutes} minutos`}, se alertará desconexión inmediata en Telegram y en el panel.
             </span>
           </div>
         </div>
+
         {/* Interactive Telegram Commands Cheat Sheet */}
-        <div className="rounded-xl border border-white/[0.08] bg-black/40 p-4 space-y-3">
-          <div className="flex items-center gap-2 text-xs font-bold text-white">
-            <Bot className="h-4 w-4 text-[#05F292]" />
+        <div className={`rounded-xl border p-4 space-y-3 ${
+          isLight ? 'border-slate-200 bg-slate-50/80' : 'border-white/[0.08] bg-black/40'
+        }`}>
+          <div className={`flex items-center gap-2 text-xs font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>
+            <Bot className={`h-4 w-4 ${isLight ? 'text-emerald-600' : 'text-[#05F292]'}`} />
             <span>Comandos Interactivos de Control Remoto en Telegram</span>
-            <span className="text-[10px] text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-full font-mono">
+            <span className={`text-[10px] border px-2 py-0.5 rounded-full font-mono ${
+              isLight ? 'text-cyan-800 bg-cyan-50 border-cyan-200 font-semibold' : 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'
+            }`}>
               Escribe directamente a tu Bot
             </span>
           </div>
-          <p className="text-[11px] text-slate-400 leading-relaxed">
+          <p className={`text-[11px] leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
             Puedes consultar o controlar tu cluster 24/7 desde tu teléfono móvil enviándole cualquiera de estos comandos en el chat:
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 text-xs font-mono">
-            <div className="p-2.5 rounded-lg bg-[#0E1424] border border-white/[0.06] hover:border-[#05F292]/30 transition-all">
-              <span className="text-[#05F292] font-bold block mb-0.5">/status</span>
-              <span className="text-[11px] text-slate-400">Telemetría en vivo: TH/s, GPUs activas y $/h neto en USD.</span>
+            <div className={`p-2.5 rounded-lg border transition-all ${
+              isLight 
+                ? 'bg-white border-slate-200 hover:border-emerald-500 shadow-xs' 
+                : 'bg-[#0E1424] border-white/[0.06] hover:border-[#05F292]/30'
+            }`}>
+              <span className={`font-bold block mb-0.5 ${isLight ? 'text-emerald-700' : 'text-[#05F292]'}`}>/status</span>
+              <span className={`text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Telemetría en vivo: TH/s, GPUs activas y $/h neto en USD.</span>
             </div>
-            <div className="p-2.5 rounded-lg bg-[#0E1424] border border-white/[0.06] hover:border-cyan-500/30 transition-all">
-              <span className="text-cyan-300 font-bold block mb-0.5">/fleet</span>
-              <span className="text-[11px] text-slate-400">Detalle individual de cada worker, estado y último share.</span>
+            <div className={`p-2.5 rounded-lg border transition-all ${
+              isLight 
+                ? 'bg-white border-slate-200 hover:border-cyan-500 shadow-xs' 
+                : 'bg-[#0E1424] border-white/[0.06] hover:border-cyan-500/30'
+            }`}>
+              <span className={`font-bold block mb-0.5 ${isLight ? 'text-cyan-800' : 'text-cyan-300'}`}>/fleet</span>
+              <span className={`text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Detalle individual de cada worker, estado y último share.</span>
             </div>
-            <div className="p-2.5 rounded-lg bg-[#0E1424] border border-white/[0.06] hover:border-amber-500/30 transition-all">
-              <span className="text-amber-300 font-bold block mb-0.5">/balance</span>
-              <span className="text-[11px] text-slate-400">Saldo Salad ($ USD) y balance en pool Kryptex (PRL).</span>
+            <div className={`p-2.5 rounded-lg border transition-all ${
+              isLight 
+                ? 'bg-white border-slate-200 hover:border-amber-500 shadow-xs' 
+                : 'bg-[#0E1424] border-white/[0.06] hover:border-amber-500/30'
+            }`}>
+              <span className={`font-bold block mb-0.5 ${isLight ? 'text-amber-800' : 'text-amber-300'}`}>/balance</span>
+              <span className={`text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Saldo Salad ($ USD) y balance en pool Kryptex (PRL).</span>
             </div>
-            <div className="p-2.5 rounded-lg bg-[#0E1424] border border-white/[0.06] hover:border-purple-500/30 transition-all">
-              <span className="text-purple-300 font-bold block mb-0.5">/cycle</span>
-              <span className="text-[11px] text-slate-400">Ciclo activo, horas acumuladas y ganancia auditada.</span>
+            <div className={`p-2.5 rounded-lg border transition-all ${
+              isLight 
+                ? 'bg-white border-slate-200 hover:border-purple-500 shadow-xs' 
+                : 'bg-[#0E1424] border-white/[0.06] hover:border-purple-500/30'
+            }`}>
+              <span className={`font-bold block mb-0.5 ${isLight ? 'text-purple-800' : 'text-purple-300'}`}>/cycle</span>
+              <span className={`text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Ciclo activo, horas acumuladas y ganancia auditada.</span>
             </div>
-            <div className="p-2.5 rounded-lg bg-[#0E1424] border border-white/[0.06] hover:border-blue-500/30 transition-all">
-              <span className="text-blue-300 font-bold block mb-0.5">/report</span>
-              <span className="text-[11px] text-slate-400">Auditoría contable completa y ROI sin sesgos en USD.</span>
+            <div className={`p-2.5 rounded-lg border transition-all ${
+              isLight 
+                ? 'bg-white border-slate-200 hover:border-blue-500 shadow-xs' 
+                : 'bg-[#0E1424] border-white/[0.06] hover:border-blue-500/30'
+            }`}>
+              <span className={`font-bold block mb-0.5 ${isLight ? 'text-blue-800' : 'text-blue-300'}`}>/report</span>
+              <span className={`text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Auditoría contable completa y ROI sin sesgos en USD.</span>
             </div>
-            <div className="p-2.5 rounded-lg bg-[#0E1424] border border-white/[0.06] hover:border-rose-500/30 transition-all">
-              <span className="text-rose-300 font-bold block mb-0.5">/reallocate &lt;nodo&gt;</span>
-              <span className="text-[11px] text-slate-400">Reasigna un nodo trabado directamente desde Telegram.</span>
+            <div className={`p-2.5 rounded-lg border transition-all ${
+              isLight 
+                ? 'bg-white border-slate-200 hover:border-rose-500 shadow-xs' 
+                : 'bg-[#0E1424] border-white/[0.06] hover:border-rose-500/30'
+            }`}>
+              <span className={`font-bold block mb-0.5 ${isLight ? 'text-rose-800' : 'text-rose-300'}`}>/reallocate &lt;nodo&gt;</span>
+              <span className={`text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Reasigna un nodo trabado directamente desde Telegram.</span>
             </div>
           </div>
         </div>
