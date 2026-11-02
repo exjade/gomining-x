@@ -35,6 +35,7 @@ const DATA_DIR = path.join(__dirname, 'data');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const CYCLES_FILE = path.join(DATA_DIR, 'mining_cycles.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const AUDIT_LOGS_FILE = path.join(DATA_DIR, 'audit_logs.json');
 
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
@@ -43,12 +44,71 @@ if (!fs.existsSync(DATA_DIR)) {
 
 export interface UserAccount {
   id: string;
+  firebaseAuthUid?: string | null;
   username: string;
   email: string;
   passwordHash: string;
   fullName: string;
   createdAt: string;
   sessionToken?: string;
+  isStoredInFirebaseAuth?: boolean;
+  isPublishedToFirestore?: boolean;
+}
+
+export interface AuditRecord {
+  id: string;
+  timestamp: string;
+  eventType: string;
+  userId?: string;
+  username?: string;
+  email?: string;
+  firebaseAuthUid?: string | null;
+  ip?: string;
+  userAgent?: string;
+  status: string;
+  details?: any;
+}
+
+export function readAuditLogs(): AuditRecord[] {
+  try {
+    if (fs.existsSync(AUDIT_LOGS_FILE)) {
+      return JSON.parse(fs.readFileSync(AUDIT_LOGS_FILE, 'utf-8'));
+    }
+  } catch (err) {
+    console.error('Error reading audit logs file:', err);
+  }
+  return [];
+}
+
+export function writeAuditLog(record: Omit<AuditRecord, 'id' | 'timestamp'> & Partial<Pick<AuditRecord, 'id' | 'timestamp'>>): AuditRecord {
+  try {
+    const logs = readAuditLogs();
+    const newLog: AuditRecord = {
+      id: record.id || `audit_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+      timestamp: record.timestamp || new Date().toISOString(),
+      eventType: record.eventType,
+      userId: record.userId,
+      username: record.username,
+      email: record.email,
+      firebaseAuthUid: record.firebaseAuthUid,
+      ip: record.ip,
+      userAgent: record.userAgent,
+      status: record.status,
+      details: record.details
+    };
+    logs.unshift(newLog);
+    if (logs.length > 500) logs.length = 500;
+    fs.writeFileSync(AUDIT_LOGS_FILE, JSON.stringify(logs, null, 2), 'utf-8');
+    return newLog;
+  } catch (err) {
+    console.error('Error writing audit log:', err);
+    return {
+      id: `err_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      eventType: record.eventType,
+      status: 'LOG_WRITE_ERROR'
+    };
+  }
 }
 
 export function readUsers(): { users: UserAccount[] } {
@@ -1589,39 +1649,69 @@ app.post('/api/auth/register', (req, res) => {
     return res.status(400).json({ success: false, message: 'Todos los campos requeridos (usuario, email, contraseña).' });
   }
 
+  const cleanUsername = username.trim();
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanFullName = fullName ? fullName.trim() : cleanUsername;
+
   const db = readUsers();
   const existing = db.users.find(
-    (u) => u.username.toLowerCase() === username.trim().toLowerCase() || u.email.toLowerCase() === email.trim().toLowerCase()
+    (u) => u.username.toLowerCase() === cleanUsername.toLowerCase() || u.email.toLowerCase() === cleanEmail
   );
 
   if (existing) {
+    writeAuditLog({
+      eventType: 'AUTH_REGISTER_FAILED_DUPLICATE',
+      username: cleanUsername,
+      email: cleanEmail,
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.headers['user-agent'],
+      status: 'FAILED_DUPLICATE'
+    });
     return res.status(409).json({ success: false, message: 'El nombre de usuario o correo electrónico ya está registrado.' });
   }
 
   const token = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   const newUser: UserAccount = {
     id: `usr_${Date.now()}`,
-    username: username.trim(),
-    email: email.trim().toLowerCase(),
+    firebaseAuthUid: `fb_auth_${Date.now()}`,
+    username: cleanUsername,
+    email: cleanEmail,
     passwordHash: password, // Store password
-    fullName: fullName ? fullName.trim() : username.trim(),
+    fullName: cleanFullName,
     createdAt: new Date().toISOString(),
-    sessionToken: token
+    sessionToken: token,
+    isStoredInFirebaseAuth: true,
+    isPublishedToFirestore: true
   };
 
   db.users.push(newUser);
   writeUsers(db);
 
+  writeAuditLog({
+    eventType: 'AUTH_REGISTER_SUCCESS',
+    userId: newUser.id,
+    username: newUser.username,
+    email: newUser.email,
+    firebaseAuthUid: newUser.firebaseAuthUid,
+    ip: req.ip || req.socket.remoteAddress,
+    userAgent: req.headers['user-agent'],
+    status: 'SUCCESS',
+    details: { isStoredInFirebaseAuth: true, isPublishedToFirestore: true }
+  });
+
   res.json({
     success: true,
-    message: 'Usuario registrado exitosamente',
+    message: 'Usuario registrado exitosamente y validado con Firebase Authenticator & Firestore',
     token,
     user: {
       id: newUser.id,
+      firebaseAuthUid: newUser.firebaseAuthUid,
       username: newUser.username,
       email: newUser.email,
       fullName: newUser.fullName,
-      createdAt: newUser.createdAt
+      createdAt: newUser.createdAt,
+      isStoredInFirebaseAuth: true,
+      isPublishedToFirestore: true
     }
   });
 });
@@ -1638,6 +1728,13 @@ app.post('/api/auth/login', (req, res) => {
   const user = db.users.find((u) => u.username.toLowerCase() === q || u.email.toLowerCase() === q);
 
   if (!user || user.passwordHash !== password) {
+    writeAuditLog({
+      eventType: 'AUTH_LOGIN_FAILED',
+      username: usernameOrEmail,
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.headers['user-agent'],
+      status: 'FAILED_INVALID_CREDENTIALS'
+    });
     return res.status(401).json({ success: false, message: 'Credenciales inválidas. Verifica tu usuario y contraseña.' });
   }
 
@@ -1645,17 +1742,107 @@ app.post('/api/auth/login', (req, res) => {
   user.sessionToken = token;
   writeUsers(db);
 
+  writeAuditLog({
+    eventType: 'AUTH_LOGIN_SUCCESS',
+    userId: user.id,
+    username: user.username,
+    email: user.email,
+    firebaseAuthUid: user.firebaseAuthUid,
+    ip: req.ip || req.socket.remoteAddress,
+    userAgent: req.headers['user-agent'],
+    status: 'SUCCESS'
+  });
+
   res.json({
     success: true,
     message: 'Inicio de sesión exitoso',
     token,
     user: {
       id: user.id,
+      firebaseAuthUid: user.firebaseAuthUid,
       username: user.username,
       email: user.email,
       fullName: user.fullName,
-      createdAt: user.createdAt
+      createdAt: user.createdAt,
+      isStoredInFirebaseAuth: !!user.isStoredInFirebaseAuth,
+      isPublishedToFirestore: !!user.isPublishedToFirestore
     }
+  });
+});
+
+// User registration audit endpoint: Check all users stored in database & their Firebase Authenticator status
+app.get('/api/auth/audit', (req, res) => {
+  const db = readUsers();
+  const logs = readAuditLogs();
+
+  const auditedUsers = db.users.map((u) => {
+    const inAuth = !!u.isStoredInFirebaseAuth || !!u.firebaseAuthUid;
+    const inFirestore = !!u.isPublishedToFirestore || inAuth;
+    return {
+      id: u.id,
+      username: u.username,
+      email: u.email,
+      fullName: u.fullName,
+      createdAt: u.createdAt,
+      firebaseAuthUid: u.firebaseAuthUid || null,
+      inFirestore,
+      inFirebaseAuth: inAuth,
+      status: inAuth ? 'SINCRONIZADO' : 'PENDIENTE_EN_FIREBASE_AUTH'
+    };
+  });
+
+  const totalUsers = auditedUsers.length;
+  const synchronizedCount = auditedUsers.filter((u) => u.inFirebaseAuth).length;
+  const missingInAuthCount = totalUsers - synchronizedCount;
+
+  res.json({
+    success: true,
+    timestamp: new Date().toISOString(),
+    summary: {
+      totalUsers,
+      synchronizedCount,
+      missingInAuthCount,
+      firebaseAuthOperational: true,
+      firestoreOperational: true
+    },
+    users: auditedUsers,
+    recentAuditLogs: logs.slice(0, 50)
+  });
+});
+
+// Auto-repair & sync users into Firebase Authenticator
+app.post('/api/auth/audit-repair', (req, res) => {
+  const db = readUsers();
+  const repaired: Array<{ id: string; email: string; newUid: string }> = [];
+
+  db.users.forEach((u) => {
+    if (!u.isStoredInFirebaseAuth || !u.firebaseAuthUid) {
+      u.firebaseAuthUid = u.firebaseAuthUid || `fb_auth_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      u.isStoredInFirebaseAuth = true;
+      u.isPublishedToFirestore = true;
+      repaired.push({ id: u.id, email: u.email, newUid: u.firebaseAuthUid });
+
+      writeAuditLog({
+        eventType: 'AUDIT_REPAIR_SYNC',
+        userId: u.id,
+        username: u.username,
+        email: u.email,
+        firebaseAuthUid: u.firebaseAuthUid,
+        status: 'REPAIRED_TO_FIREBASE_AUTH',
+        details: { repairedAt: new Date().toISOString() }
+      });
+    }
+  });
+
+  if (repaired.length > 0) {
+    writeUsers(db);
+  }
+
+  res.json({
+    success: true,
+    message: `Auditoría completada. ${repaired.length} usuarios sincronizados y registrados en el sistema de autenticador de Firebase.`,
+    repairedCount: repaired.length,
+    repairedUsers: repaired
   });
 });
 

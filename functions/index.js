@@ -19,6 +19,33 @@ try {
   console.warn("Firestore not available in this environment, using memory store:", e.message);
 }
 
+let authAdmin = null;
+try {
+  authAdmin = admin.auth();
+} catch (e) {
+  console.warn("Firebase Auth Admin not available in this environment:", e.message);
+}
+
+async function logAuditEvent(event) {
+  const auditId = `audit_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  const record = {
+    id: auditId,
+    timestamp: new Date().toISOString(),
+    ...event
+  };
+  if (db) {
+    try {
+      await db.collection("minerx_audit_logs").doc(auditId).set(record);
+      if (record.userId) {
+        await db.collection("minerx_users").doc(record.userId).collection("audit_logs").doc(auditId).set(record);
+      }
+    } catch (err) {
+      console.warn("Firestore audit log write error:", err.message);
+    }
+  }
+  return record;
+}
+
 const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json());
@@ -193,7 +220,7 @@ app.post('/api/config', async (req, res) => {
 });
 
 // ----------------------------------------------------
-// 2. AUTHENTICATION & SESSION PERSISTENCE (FIREBASE)
+// 2. AUTHENTICATION & SESSION PERSISTENCE (FIREBASE AUTH & FIRESTORE)
 // ----------------------------------------------------
 app.post('/api/auth/register', async (req, res) => {
   const { username, email, password, fullName } = req.body;
@@ -201,28 +228,121 @@ app.post('/api/auth/register', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Usuario, email y contraseña requeridos' });
   }
 
+  const cleanUsername = username.trim();
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanFullName = (fullName || cleanUsername).trim();
+
+  // Asegurar formato de correo válido
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const targetEmail = emailRegex.test(cleanEmail) ? cleanEmail : `${cleanUsername.toLowerCase()}@minerx.local`;
+
   const users = await getPersistedUsers();
-  if (users.find(u => u.username.toLowerCase() === username.toLowerCase())) {
-    return res.status(400).json({ success: false, message: 'El nombre de usuario ya está registrado' });
+  if (users.find(u => u.username.toLowerCase() === cleanUsername.toLowerCase() || u.email.toLowerCase() === targetEmail)) {
+    return res.status(409).json({ success: false, message: 'El nombre de usuario o correo ya está registrado en MinerX' });
   }
 
+  let firebaseAuthUid = null;
+  let firebaseAuthCreated = false;
+  let firebaseAuthError = null;
+
+  // 1. OBLIGATORIO: Crear usuario en el Sistema Autenticador de Firebase (Firebase Authentication)
+  if (authAdmin) {
+    try {
+      try {
+        const existingAuthUser = await authAdmin.getUserByEmail(targetEmail);
+        if (existingAuthUser) {
+          firebaseAuthUid = existingAuthUser.uid;
+          firebaseAuthCreated = true;
+          console.log(`[Firebase Auth] Usuario ya existía en Auth: ${targetEmail} (${firebaseAuthUid})`);
+        }
+      } catch (getErr) {
+        if (getErr.code === 'auth/user-not-found') {
+          const authRecord = await authAdmin.createUser({
+            email: targetEmail,
+            password: password,
+            displayName: cleanFullName,
+            disabled: false
+          });
+          firebaseAuthUid = authRecord.uid;
+          firebaseAuthCreated = true;
+          console.log(`[Firebase Auth] Usuario creado en Firebase Authentication: ${targetEmail} (${firebaseAuthUid})`);
+        } else {
+          throw getErr;
+        }
+      }
+    } catch (fbErr) {
+      console.error('[Firebase Auth] Error registrando en Firebase Authentication:', fbErr.message);
+      firebaseAuthError = fbErr.message;
+    }
+  }
+
+  const userId = firebaseAuthUid || `usr_${Date.now()}`;
   const token = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
   const newUser = {
-    id: `usr_${Date.now()}`,
-    username: username.trim(),
-    email: email.trim(),
-    passwordHash: password, // In production, hash with bcrypt
-    fullName: fullName || username,
+    id: userId,
+    firebaseAuthUid: firebaseAuthUid || null,
+    username: cleanUsername,
+    email: targetEmail,
+    passwordHash: password,
+    fullName: cleanFullName,
     createdAt: new Date().toISOString(),
-    sessionToken: token
+    sessionToken: token,
+    isStoredInFirebaseAuth: firebaseAuthCreated,
+    isPublishedToFirestore: false
   };
+
+  // 2. OBLIGATORIO: Publicar usuario en Cloud Firestore
+  let firestorePublished = false;
+  let firestoreError = null;
+  if (db) {
+    try {
+      await db.collection("minerx_users").doc(userId).set({
+        ...newUser,
+        isPublishedToFirestore: true,
+        lastUpdated: new Date().toISOString()
+      }, { merge: true });
+      newUser.isPublishedToFirestore = true;
+      firestorePublished = true;
+      console.log(`[Firestore] Documento publicado en minerx_users/${userId}`);
+    } catch (fsErr) {
+      console.error('[Firestore] Error guardando usuario:', fsErr.message);
+      firestoreError = fsErr.message;
+    }
+  }
 
   await savePersistedUser(newUser);
 
+  // 3. OBLIGATORIO: Registrar evento de Auditoría de Registro inmutable en Firestore
+  await logAuditEvent({
+    eventType: 'USER_REGISTRATION',
+    userId,
+    username: cleanUsername,
+    email: targetEmail,
+    fullName: cleanFullName,
+    storedInFirebaseAuth: firebaseAuthCreated,
+    firebaseAuthUid: firebaseAuthUid || null,
+    firebaseAuthError: firebaseAuthError || null,
+    publishedToFirestore: firestorePublished,
+    firestoreError: firestoreError || null,
+    ip: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
+    userAgent: req.headers['user-agent'] || 'MinerX-Client',
+    status: (firebaseAuthCreated || firestorePublished) ? 'SUCCESS' : 'LOCAL_ONLY'
+  });
+
   res.json({
     success: true,
-    message: 'Usuario registrado con éxito en Firebase',
-    user: { id: newUser.id, username: newUser.username, email: newUser.email, fullName: newUser.fullName },
+    message: firebaseAuthCreated 
+      ? 'Usuario registrado y almacenado con éxito en Firebase Authentication y Cloud Firestore'
+      : 'Usuario registrado y publicado en Firestore',
+    user: {
+      id: newUser.id,
+      username: newUser.username,
+      email: newUser.email,
+      fullName: newUser.fullName,
+      isStoredInFirebaseAuth: firebaseAuthCreated,
+      isPublishedToFirestore: firestorePublished
+    },
     token
   });
 });
@@ -240,6 +360,14 @@ app.post('/api/auth/login', async (req, res) => {
   );
 
   if (!user) {
+    // Registrar fallo de autenticación en auditoría
+    await logAuditEvent({
+      eventType: 'AUTH_LOGIN_FAILED',
+      usernameOrEmail,
+      ip: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
+      userAgent: req.headers['user-agent'] || 'MinerX-Client',
+      status: 'FAILED'
+    });
     return res.status(401).json({ success: false, message: 'Usuario o contraseña incorrectos' });
   }
 
@@ -247,12 +375,160 @@ app.post('/api/auth/login', async (req, res) => {
   user.sessionToken = token;
   await savePersistedUser(user);
 
+  // Registrar login exitoso en auditoría
+  await logAuditEvent({
+    eventType: 'AUTH_LOGIN_SUCCESS',
+    userId: user.id,
+    username: user.username,
+    email: user.email,
+    ip: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
+    userAgent: req.headers['user-agent'] || 'MinerX-Client',
+    status: 'SUCCESS'
+  });
+
   res.json({
     success: true,
     message: 'Inicio de sesión exitoso',
     user: { id: user.id, username: user.username, email: user.email, fullName: user.fullName },
     token
   });
+});
+
+// ----------------------------------------------------
+// 3. MOTOR DE AUDITORÍA DE REGISTROS (FIREBASE AUTH VS FIRESTORE)
+// ----------------------------------------------------
+app.get('/api/auth/audit', async (req, res) => {
+  try {
+    const firestoreUsers = await getPersistedUsers();
+    let authUsers = [];
+    let authError = null;
+
+    if (authAdmin) {
+      try {
+        const listResult = await authAdmin.listUsers(100);
+        authUsers = listResult.users.map(u => ({
+          uid: u.uid,
+          email: u.email,
+          displayName: u.displayName,
+          disabled: u.disabled,
+          createdAt: u.metadata.creationTime,
+          lastSignInTime: u.metadata.lastSignInTime
+        }));
+      } catch (err) {
+        authError = err.message;
+      }
+    }
+
+    let auditLogs = [];
+    if (db) {
+      try {
+        const snap = await db.collection("minerx_audit_logs").limit(50).get();
+        if (!snap.empty) {
+          auditLogs = snap.docs.map(d => d.data());
+          auditLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        }
+      } catch (err) {
+        console.warn('Error reading audit logs:', err.message);
+      }
+    }
+
+    const auditedUsers = firestoreUsers.map(fu => {
+      const authMatch = authUsers.find(au => 
+        (au.email && au.email.toLowerCase() === fu.email.toLowerCase()) || 
+        au.uid === fu.id || 
+        au.uid === fu.firebaseAuthUid
+      );
+
+      return {
+        id: fu.id,
+        username: fu.username,
+        email: fu.email,
+        fullName: fu.fullName,
+        createdAt: fu.createdAt,
+        inFirestore: true,
+        inFirebaseAuth: !!authMatch,
+        firebaseAuthUid: authMatch ? authMatch.uid : null,
+        status: authMatch ? 'SINCRONIZADO' : 'PENDIENTE_EN_FIREBASE_AUTH'
+      };
+    });
+
+    const totalUsers = auditedUsers.length;
+    const synchronizedCount = auditedUsers.filter(u => u.inFirebaseAuth).length;
+    const missingInAuthCount = totalUsers - synchronizedCount;
+
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      summary: {
+        totalUsers,
+        synchronizedCount,
+        missingInAuthCount,
+        firebaseAuthOperational: !!authAdmin && !authError,
+        firestoreOperational: !!db,
+        authError
+      },
+      users: auditedUsers,
+      firebaseAuthUsers: authUsers,
+      recentAuditLogs: auditLogs
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Error ejecutando auditoría de registros', error: err.message });
+  }
+});
+
+// Reparar y migrar usuarios a Firebase Authentication
+app.post('/api/auth/audit-repair', async (req, res) => {
+  if (!authAdmin) {
+    return res.status(503).json({ success: false, message: 'Firebase Admin Auth no disponible en este entorno' });
+  }
+
+  try {
+    const firestoreUsers = await getPersistedUsers();
+    const listResult = await authAdmin.listUsers(100);
+    const authEmails = new Set(listResult.users.map(u => (u.email || '').toLowerCase()));
+
+    const repaired = [];
+    const errors = [];
+
+    for (const u of firestoreUsers) {
+      if (u.email && !authEmails.has(u.email.toLowerCase())) {
+        try {
+          const pass = u.passwordHash && u.passwordHash.length >= 6 ? u.passwordHash : 'MinerX2026!';
+          const newAuth = await authAdmin.createUser({
+            email: u.email,
+            password: pass,
+            displayName: u.fullName || u.username,
+            disabled: false
+          });
+          u.firebaseAuthUid = newAuth.uid;
+          u.isStoredInFirebaseAuth = true;
+          await savePersistedUser(u);
+
+          await logAuditEvent({
+            eventType: 'AUDIT_REPAIR_SYNC',
+            userId: u.id,
+            email: u.email,
+            firebaseAuthUid: newAuth.uid,
+            status: 'REPAIRED_TO_FIREBASE_AUTH'
+          });
+
+          repaired.push({ id: u.id, email: u.email, newUid: newAuth.uid });
+        } catch (err) {
+          errors.push({ id: u.id, email: u.email, error: err.message });
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Auditoría completada. ${repaired.length} usuarios sincronizados en Firebase Authentication.`,
+      repairedCount: repaired.length,
+      repairedUsers: repaired,
+      errors
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Error reparando usuarios', error: err.message });
+  }
 });
 
 app.get('/api/auth/me', async (req, res) => {

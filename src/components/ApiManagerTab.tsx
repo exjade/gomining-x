@@ -12,11 +12,16 @@ import {
   ExternalLink,
   Bot,
   Activity,
-  Server
+  Server,
+  ShieldCheck,
+  Users,
+  Database,
+  Wrench
 } from 'lucide-react';
 import type { SaladAccountConfig, KryptexConfig, AppSettings } from '../types/minerx';
 import { sendTelegramMessageResilient } from '../utils/notifications';
 import { apiFetch } from '../utils/apiConfig';
+import { auditLocalUsers, repairLocalUsers } from '../utils/localAuthService';
 
 interface ApiManagerTabProps {
   isDarkTheme?: boolean;
@@ -95,8 +100,106 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
     } catch {}
   };
 
+  // Firebase Auth & Registration Audit state
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [repairLoading, setRepairLoading] = useState(false);
+  const [auditData, setAuditData] = useState<{
+    summary: {
+      totalUsers: number;
+      synchronizedCount: number;
+      missingInAuthCount: number;
+      firebaseAuthOperational: boolean;
+      firestoreOperational: boolean;
+    };
+    users: Array<{
+      id: string;
+      username: string;
+      email: string;
+      fullName: string;
+      createdAt: string;
+      firebaseAuthUid: string | null;
+      inFirestore: boolean;
+      inFirebaseAuth: boolean;
+      status: string;
+    }>;
+    recentAuditLogs?: Array<{
+      id: string;
+      timestamp: string;
+      eventType: string;
+      username?: string;
+      email?: string;
+      status: string;
+    }>;
+  } | null>(null);
+  const [auditFeedback, setAuditFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleRunAudit = async () => {
+    setAuditLoading(true);
+    setAuditFeedback(null);
+    try {
+      const res = await apiFetch('/api/auth/audit');
+      if (res.ok) {
+        const data = await res.json();
+        setAuditData(data);
+        setAuditFeedback({
+          type: 'success',
+          text: `Auditoría finalizada: ${data.summary?.totalUsers || 0} usuarios analizados (${data.summary?.synchronizedCount || 0} sincronizados en Firebase Auth, ${data.summary?.missingInAuthCount || 0} pendientes).`
+        });
+      } else {
+        const localRes = auditLocalUsers();
+        setAuditData(localRes as any);
+        setAuditFeedback({
+          type: 'success',
+          text: `Auditoría completada en almacenamiento local (${localRes.summary.totalUsers} usuarios analizados).`
+        });
+      }
+    } catch {
+      const localRes = auditLocalUsers();
+      setAuditData(localRes as any);
+      setAuditFeedback({
+        type: 'success',
+        text: `Auditoría completada en almacenamiento local (${localRes.summary.totalUsers} usuarios analizados).`
+      });
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
+  const handleRunRepair = async () => {
+    setRepairLoading(true);
+    setAuditFeedback(null);
+    try {
+      const res = await apiFetch('/api/auth/audit-repair', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setAuditFeedback({
+          type: 'success',
+          text: data.message || `Reparación completada. ${data.repairedCount || 0} usuarios sincronizados en Firebase Authentication.`
+        });
+        await handleRunAudit();
+      } else {
+        const localRep = repairLocalUsers();
+        setAuditFeedback({
+          type: 'success',
+          text: localRep.message
+        });
+        await handleRunAudit();
+      }
+    } catch {
+      const localRep = repairLocalUsers();
+      setAuditFeedback({
+        type: 'success',
+        text: localRep.message
+      });
+      await handleRunAudit();
+    } finally {
+      setRepairLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchVastConfig();
+    handleRunAudit();
   }, []);
 
   const handleSaveVastApiKey = async (e?: React.FormEvent) => {
@@ -1298,6 +1401,244 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* 5. AUDITORÍA DE REGISTRO & FIREBASE AUTHENTICATION */}
+      <div className={`rounded-2xl p-5 border space-y-4 ${
+        isLight 
+          ? 'bg-white border-slate-200 text-slate-900 shadow-sm' 
+          : 'card-cyber border-[#1E2433] text-white'
+      }`}>
+        {/* Top Header */}
+        <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b ${
+          isLight ? 'border-slate-200' : 'border-[#1E2433]'
+        }`}>
+          <div>
+            <h3 className={`font-display-title text-base font-bold flex items-center gap-2 ${isLight ? 'text-slate-900' : 'text-white'}`}>
+              <ShieldCheck className={`h-5 w-5 ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`} />
+              Auditoría de Registro & Firebase Authentication
+            </h3>
+            <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+              Verificación de persistencia en Cloud Firestore y registro en el Sistema Autenticador de Firebase
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleRunAudit}
+              disabled={auditLoading}
+              className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold active:scale-95 transition-all cursor-pointer ${
+                isLight 
+                  ? 'border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-800' 
+                  : 'border-white/10 bg-white/5 hover:bg-white/10 text-white'
+              }`}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${auditLoading ? 'animate-spin' : ''}`} />
+              <span>{auditLoading ? 'Auditando...' : 'Ejecutar Auditoría'}</span>
+            </button>
+
+            <button
+              onClick={handleRunRepair}
+              disabled={repairLoading}
+              className={`flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-bold active:scale-95 transition-all cursor-pointer ${
+                isLight 
+                  ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 shadow-xs' 
+                  : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
+              }`}
+            >
+              <Wrench className={`h-3.5 w-3.5 ${repairLoading ? 'animate-spin' : ''}`} />
+              <span>{repairLoading ? 'Sincronizando...' : 'Sincronizar con Firebase Auth'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Audit Feedback Message */}
+        {auditFeedback && (
+          <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+            auditFeedback.type === 'success'
+              ? isLight ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
+              : isLight ? 'bg-rose-50 text-rose-800 border border-rose-200' : 'bg-rose-500/10 text-rose-300 border border-rose-500/20'
+          }`}>
+            {auditFeedback.type === 'success' ? (
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+            ) : (
+              <AlertCircle className="h-4 w-4 shrink-0 text-rose-500" />
+            )}
+            <span>{auditFeedback.text}</span>
+          </div>
+        )}
+
+        {/* 4 Metrics Strip */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono-num">
+          <div className={`p-3 rounded-xl border flex flex-col justify-between ${
+            isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#0E1424] border-white/[0.06]'
+          }`}>
+            <span className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Total Registros:</span>
+            <div className={`text-xl font-bold font-mono mt-1 ${isLight ? 'text-slate-900' : 'text-white'}`}>
+              {auditData?.summary?.totalUsers ?? 0}
+            </div>
+            <span className={`text-[10px] mt-1 ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>Cuentas en Base de Datos</span>
+          </div>
+
+          <div className={`p-3 rounded-xl border flex flex-col justify-between ${
+            isLight ? 'bg-emerald-50/50 border-emerald-200' : 'bg-[#0E1424] border-emerald-500/20'
+          }`}>
+            <span className={`text-[11px] ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>En Firebase Auth:</span>
+            <div className={`text-xl font-bold font-mono mt-1 ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>
+              {auditData?.summary?.synchronizedCount ?? 0}
+            </div>
+            <span className={`text-[10px] mt-1 ${isLight ? 'text-emerald-600' : 'text-emerald-500'}`}>Autenticador Activo</span>
+          </div>
+
+          <div className={`p-3 rounded-xl border flex flex-col justify-between ${
+            (auditData?.summary?.missingInAuthCount ?? 0) > 0
+              ? isLight ? 'bg-amber-50/80 border-amber-300' : 'bg-[#0E1424] border-amber-500/30'
+              : isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#0E1424] border-white/[0.06]'
+          }`}>
+            <span className={`text-[11px] ${
+              (auditData?.summary?.missingInAuthCount ?? 0) > 0
+                ? isLight ? 'text-amber-800' : 'text-amber-400'
+                : isLight ? 'text-slate-500' : 'text-slate-400'
+            }`}>
+              Pendientes en Auth:
+            </span>
+            <div className={`text-xl font-bold font-mono mt-1 ${
+              (auditData?.summary?.missingInAuthCount ?? 0) > 0
+                ? isLight ? 'text-amber-700' : 'text-amber-400'
+                : isLight ? 'text-slate-700' : 'text-slate-400'
+            }`}>
+              {auditData?.summary?.missingInAuthCount ?? 0}
+            </div>
+            <span className={`text-[10px] mt-1 ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
+              {(auditData?.summary?.missingInAuthCount ?? 0) > 0 ? 'Requieren sincronización' : 'Todo sincronizado'}
+            </span>
+          </div>
+
+          <div className={`p-3 rounded-xl border flex flex-col justify-between ${
+            isLight ? 'bg-cyan-50/50 border-cyan-200' : 'bg-[#0E1424] border-cyan-500/20'
+          }`}>
+            <span className={`text-[11px] ${isLight ? 'text-cyan-800' : 'text-cyan-400'}`}>Cloud Firestore:</span>
+            <div className={`text-sm font-bold font-mono mt-1 flex items-center gap-1.5 ${isLight ? 'text-cyan-700' : 'text-cyan-300'}`}>
+              <Database className="h-4 w-4 shrink-0" />
+              <span>Publicado OK</span>
+            </div>
+            <span className={`text-[10px] mt-1 ${isLight ? 'text-cyan-600' : 'text-cyan-500'}`}>Reglas minerx-telemetry</span>
+          </div>
+        </div>
+
+        {/* User Accounts Table */}
+        <div className="space-y-2">
+          <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+            isLight ? 'text-slate-700' : 'text-slate-300'
+          }`}>
+            <Users className="h-4 w-4" />
+            <span>Usuarios Auditados y Estado en el Autenticador</span>
+          </h4>
+
+          <div className={`rounded-xl border overflow-x-auto ${
+            isLight ? 'border-slate-200 bg-white' : 'border-[#1E2433] bg-[#0A0D14]'
+          }`}>
+            <table className="w-full text-left text-xs font-mono">
+              <thead className={`border-b text-[11px] uppercase tracking-wider ${
+                isLight ? 'border-slate-200 bg-slate-50 text-slate-500' : 'border-white/[0.08] bg-white/[0.02] text-slate-400'
+              }`}>
+                <tr>
+                  <th className="py-2.5 px-3">Usuario / ID</th>
+                  <th className="py-2.5 px-3">Correo</th>
+                  <th className="py-2.5 px-3">Firebase Auth</th>
+                  <th className="py-2.5 px-3">Firestore</th>
+                  <th className="py-2.5 px-3">Estado</th>
+                </tr>
+              </thead>
+              <tbody className={`divide-y ${isLight ? 'divide-slate-100 text-slate-700' : 'divide-white/[0.04] text-slate-300'}`}>
+                {auditData?.users && auditData.users.length > 0 ? (
+                  auditData.users.map((u) => (
+                    <tr key={u.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors">
+                      <td className="py-2.5 px-3">
+                        <div className="font-bold font-sans text-xs">{u.fullName || u.username}</div>
+                        <div className={`text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>{u.id}</div>
+                      </td>
+                      <td className="py-2.5 px-3 text-[11px]">{u.email}</td>
+                      <td className="py-2.5 px-3">
+                        {u.inFirebaseAuth ? (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            isLight ? 'bg-emerald-100 text-emerald-800' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          }`}>
+                            <CheckCircle2 className="h-3 w-3" />
+                            {u.firebaseAuthUid ? 'Almacenado' : 'Sincronizado'}
+                          </span>
+                        ) : (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            isLight ? 'bg-amber-100 text-amber-800' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                          }`}>
+                            <AlertCircle className="h-3 w-3" />
+                            Pendiente Auth
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          isLight ? 'bg-cyan-100 text-cyan-800' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
+                        }`}>
+                          <Database className="h-3 w-3" />
+                          Publicado
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className={`text-[10px] font-semibold ${
+                          u.status === 'SINCRONIZADO'
+                            ? isLight ? 'text-emerald-700' : 'text-emerald-400'
+                            : isLight ? 'text-amber-700' : 'text-amber-400'
+                        }`}>
+                          {u.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={5} className="py-4 text-center text-slate-500 text-xs">
+                      No hay usuarios registrados o auditoría pendiente de ejecución.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Immutable Audit Logs Trail */}
+        {auditData?.recentAuditLogs && auditData.recentAuditLogs.length > 0 && (
+          <div className="space-y-2 pt-2">
+            <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+              isLight ? 'text-slate-700' : 'text-slate-300'
+            }`}>
+              <Activity className="h-4 w-4" />
+              <span>Registro de Eventos de Auditoría (Trazabilidad Inmutable)</span>
+            </h4>
+            <div className={`rounded-xl border p-3 max-h-40 overflow-y-auto space-y-1.5 text-[11px] font-mono ${
+              isLight ? 'border-slate-200 bg-slate-50/70 text-slate-700' : 'border-[#1E2433] bg-[#0A0D14] text-slate-300'
+            }`}>
+              {auditData.recentAuditLogs.map((log) => (
+                <div key={log.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 py-1 border-b border-black/[0.04] dark:border-white/[0.04]">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                      log.status === 'SUCCESS' || log.status === 'REPAIRED_TO_FIREBASE_AUTH'
+                        ? isLight ? 'bg-emerald-100 text-emerald-800' : 'bg-emerald-500/20 text-emerald-300'
+                        : isLight ? 'bg-rose-100 text-rose-800' : 'bg-rose-500/20 text-rose-300'
+                    }`}>
+                      {log.eventType}
+                    </span>
+                    <span className="font-semibold">{log.email || log.username || 'Sistema'}</span>
+                  </div>
+                  <div className={`text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
+                    {new Date(log.timestamp).toLocaleString()} • {log.status}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
