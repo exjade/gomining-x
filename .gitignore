@@ -6,3 +6,4 @@ dist/
 !.env.example
 .firebase/
 firebase-debug.log
+.rea-mobile-audit-2026-11-01/
