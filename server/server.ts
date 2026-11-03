@@ -1021,8 +1021,10 @@ app.get('/api/kryptex/workers/:address', async (req, res) => {
     return res.status(400).json({ error: 'Falta la dirección de wallet de Kryptex' });
   }
 
+  const cleanAddress = address.split('?')[0].trim();
+
   try {
-    const response = await fetch(`https://pool.kryptex.com/${coin}/api/v3/miner/workers/${address}`);
+    const response = await fetch(`https://pool.kryptex.com/${coin}/api/v3/miner/workers/${cleanAddress}`);
     if (response.ok) {
       const data = await response.json();
       return res.json(data);
@@ -1037,9 +1039,10 @@ app.get('/api/kryptex/workers/:address', async (req, res) => {
 app.get('/api/kryptex/balance/:address', async (req, res) => {
   const { address } = req.params;
   const coin = (req.query.coin as string) || 'prl';
+  const cleanAddress = (address || '').split('?')[0].trim();
 
   try {
-    const response = await fetch(`https://pool.kryptex.com/${coin}/api/v1/miner/balance/${address}`);
+    const response = await fetch(`https://pool.kryptex.com/${coin}/api/v1/miner/balance/${cleanAddress}`);
     if (response.ok) {
       const data = await response.json();
       return res.json(data);
@@ -1054,9 +1057,10 @@ app.get('/api/kryptex/balance/:address', async (req, res) => {
 app.get('/api/kryptex/payouts/:address', async (req, res) => {
   const { address } = req.params;
   const coin = (req.query.coin as string) || 'prl';
+  const cleanAddress = (address || '').split('?')[0].trim();
 
   try {
-    const response = await fetch(`https://pool.kryptex.com/${coin}/api/v1/miner/payouts/${address}/stats`);
+    const response = await fetch(`https://pool.kryptex.com/${coin}/api/v1/miner/payouts/${cleanAddress}/stats`);
     if (response.ok) {
       const data = await response.json();
       return res.json(data);
@@ -1071,9 +1075,24 @@ app.get('/api/kryptex/payouts/:address', async (req, res) => {
 app.get('/api/kryptex/chart/:address', async (req, res) => {
   const { address } = req.params;
   const coin = (req.query.coin as string) || 'prl';
+  const cleanAddress = (address || '').split('?')[0].trim();
 
   try {
-    const response = await fetch(`https://pool.kryptex.com/${coin}/api/v1/miner/chart/${address}`);
+    const response = await fetch(`https://pool.kryptex.com/${coin}/api/v1/miner/chart/${cleanAddress}`);
+    if (response.ok) {
+      const data = await response.json();
+      return res.json(data);
+    }
+    res.status(response.status).json({ error: response.statusText });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 11. Kryptex Spot Market Rates Proxy (PRL & Fiat spot exchange rates)
+app.get('/api/kryptex/rates', async (_req, res) => {
+  try {
+    const response = await fetch('https://pool.kryptex.com/api/v1/rates');
     if (response.ok) {
       const data = await response.json();
       return res.json(data);

@@ -117,6 +117,18 @@ export interface KryptexBalanceRaw {
   accounts?: KryptexBalanceAccount[];
 }
 
+export interface KryptexPayoutAccount {
+  id: string;
+  accountName: string;
+  walletAddress: string;
+  paid: number;
+  unpaid: number;
+  reward: {
+    week: number;
+    month: number;
+  };
+}
+
 export interface KryptexPayoutStatsRaw {
   paid: number;
   unpaid: number;
@@ -124,6 +136,7 @@ export interface KryptexPayoutStatsRaw {
     week: number;
     month: number;
   };
+  accounts?: KryptexPayoutAccount[];
 }
 
 export interface SaladQuotas {

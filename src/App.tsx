@@ -118,6 +118,7 @@ export const App: React.FC = () => {
   const [history, setHistory] = useState<HashrateHistoryPoint[]>(INITIAL_HASHRATE_HISTORY);
   const [balance, setBalance] = useState<KryptexBalanceRaw>(INITIAL_KRYPTEX_BALANCE);
   const [payoutStats, setPayoutStats] = useState<KryptexPayoutStatsRaw | null>(null);
+  const [prlRateUSD, setPrlRateUSD] = useState<number>(1.43);
   const [poolInfo, setPoolInfo] = useState<KryptexPoolInfo>(INITIAL_POOL_INFO);
 
   const [saladBalance, setSaladBalance] = useState<SaladBalanceInfo | null>(null);
@@ -365,15 +366,28 @@ export const App: React.FC = () => {
         }
       }
 
-      // 2. Fetch Kryptex Live Data (Pool, Workers, Balance, Payouts) unified across all accounts
+      // 2. Fetch Kryptex Live Data (Pool, Workers, Balance, Payouts, Rates) unified across all accounts
       if (effectiveKryptexAccounts.length > 0) {
         try {
-          // 2a. Kryptex Pool Info (Using coin of first account)
+          // 2a. Kryptex Pool Info & Spot Market Rates
           const primaryCoin = effectiveKryptexAccounts[0].coin || 'prl';
           const poolRes = await apiFetch(`/api/kryptex/pool?coin=${primaryCoin}`);
           if (poolRes.ok) {
             const pData = await poolRes.json();
             setPoolInfo((prev) => ({ ...prev, ...pData }));
+          }
+
+          try {
+            const ratesRes = await apiFetch('/api/kryptex/rates');
+            if (ratesRes.ok) {
+              const rData = await ratesRes.json();
+              const rate = Number(rData?.crypto?.PRL || 0);
+              if (rate > 0) {
+                setPrlRateUSD(rate);
+              }
+            }
+          } catch (rErr) {
+            console.warn('Error fetching Kryptex rates:', rErr);
           }
 
           // 2b, 2c, 2d. Concurrently query all connected Kryptex accounts & unify data
@@ -387,11 +401,13 @@ export const App: React.FC = () => {
           let aggregatedUnpaid = 0;
           let aggregatedWeekReward = 0;
           let aggregatedMonthReward = 0;
+          const payoutAccountsBreakdown: any[] = [];
 
           await Promise.allSettled(
             effectiveKryptexAccounts.map(async (acc) => {
               const coin = acc.coin || 'prl';
-              const wallet = acc.walletAddress.trim();
+              const wallet = (acc.walletAddress || '').split('?')[0].trim();
+              if (!wallet) return;
 
               // Active Workers for this wallet
               try {
@@ -443,10 +459,25 @@ export const App: React.FC = () => {
                 const payoutsRes = await apiFetch(`/api/kryptex/payouts/${wallet}?coin=${coin}`);
                 if (payoutsRes.ok) {
                   const payData = await payoutsRes.json();
-                  aggregatedPaid += Number(payData?.paid || 0);
-                  aggregatedUnpaid += Number(payData?.unpaid || 0);
-                  aggregatedWeekReward += Number(payData?.reward?.week || 0);
-                  aggregatedMonthReward += Number(payData?.reward?.month || 0);
+                  const pPaid = Number(payData?.paid || 0);
+                  const pUnpaid = Number(payData?.unpaid || 0);
+                  const pWeek = Number(payData?.reward?.week || 0);
+                  const pMonth = Number(payData?.reward?.month || 0);
+                  aggregatedPaid += pPaid;
+                  aggregatedUnpaid += pUnpaid;
+                  aggregatedWeekReward += pWeek;
+                  aggregatedMonthReward += pMonth;
+                  payoutAccountsBreakdown.push({
+                    id: acc.id,
+                    accountName: acc.accountName,
+                    walletAddress: wallet,
+                    paid: pPaid,
+                    unpaid: pUnpaid,
+                    reward: {
+                      week: pWeek,
+                      month: pMonth
+                    }
+                  });
                 }
               } catch (pErr) {
                 console.error(`Error fetching payouts for ${acc.accountName}:`, pErr);
@@ -470,7 +501,8 @@ export const App: React.FC = () => {
             reward: {
               week: aggregatedWeekReward,
               month: aggregatedMonthReward
-            }
+            },
+            accounts: payoutAccountsBreakdown
           });
         } catch (kryptexErr) {
           console.error('Error fetching live Kryptex APIs:', kryptexErr);
@@ -1285,6 +1317,8 @@ export const App: React.FC = () => {
               balance={balance}
               poolInfo={poolInfo}
               payoutStats={payoutStats}
+              prlRateUSD={prlRateUSD}
+              kryptexAccounts={kryptexAccounts}
               walletAddress={kryptexConfig.walletAddress}
               onOpenReallocate={(w) => setReallocatingWorker(w)}
               onNavigateToFleet={() => setActiveTab('fleet')}

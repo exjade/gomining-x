@@ -41,6 +41,7 @@ import type {
   KryptexBalanceRaw, 
   KryptexPoolInfo,
   KryptexPayoutStatsRaw,
+  KryptexAccountConfig,
   MiningCycle
 } from '../types/minerx';
 
@@ -51,6 +52,8 @@ export interface OverviewTabProps {
   balance: KryptexBalanceRaw;
   poolInfo: KryptexPoolInfo;
   payoutStats?: KryptexPayoutStatsRaw | null;
+  prlRateUSD?: number;
+  kryptexAccounts?: KryptexAccountConfig[];
   walletAddress?: string;
   onOpenReallocate: (worker: MergedGPUWorker) => void;
   onNavigateToFleet: () => void;
@@ -65,6 +68,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   balance,
   poolInfo,
   payoutStats,
+  prlRateUSD = 1.43,
+  kryptexAccounts = [],
   walletAddress,
   onOpenReallocate,
   onNavigateToFleet,
@@ -80,6 +85,49 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   // Video-clone states: Search and bottom switch toggle
   const [searchQuery, setSearchQuery] = useState('');
   const [fleetActiveTab, setFleetActiveTab] = useState<'all' | 'alerts'>('all');
+  // Multi-wallet Payouts filter selector: 'all' | accountId
+  const [selectedPayoutAccount, setSelectedPayoutAccount] = useState<string>('all');
+
+  const availableAccounts = useMemo(() => {
+    if (payoutStats?.accounts && payoutStats.accounts.length > 0) {
+      return payoutStats.accounts;
+    }
+    return kryptexAccounts.map((a) => ({
+      id: a.id,
+      accountName: a.accountName,
+      walletAddress: a.walletAddress,
+      paid: 0,
+      unpaid: 0,
+      reward: { week: 0, month: 0 }
+    }));
+  }, [payoutStats, kryptexAccounts]);
+
+  // Dynamic Payout Metrics (Unified aggregate or per-account selection)
+  const currentPayoutData = useMemo(() => {
+    if (selectedPayoutAccount !== 'all') {
+      const match = availableAccounts.find(a => a.id === selectedPayoutAccount);
+      if (match) {
+        return {
+          week: match.reward.week,
+          month: match.reward.month,
+          paid: match.paid,
+          unpaid: match.unpaid,
+          accountName: match.accountName,
+          wallet: match.walletAddress
+        };
+      }
+    }
+    return {
+      week: payoutStats?.reward?.week ?? 0,
+      month: payoutStats?.reward?.month ?? 0,
+      paid: payoutStats?.paid ?? 0,
+      unpaid: payoutStats?.unpaid ?? 0,
+      accountName: 'Todas las Billeteras (Total Unificado)',
+      wallet: walletAddress || ''
+    };
+  }, [selectedPayoutAccount, availableAccounts, payoutStats, walletAddress]);
+
+  const effectivePrlRate = prlRateUSD && prlRateUSD > 0 ? prlRateUSD : 1.43;
 
   // Global fleet breakeven TH/s calculation con auditoría de fricción real (4.56% de spread Kryptex y liquidación SPEI)
   const fleetBreakevenTHs = useMemo(() => {
@@ -1405,6 +1453,194 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 
       </div>
 
+      {/* 2b. SECCIÓN DE PAYOUTS (ENTRE POTENCIA TOTAL DE MINADO Y CALIDAD DE SHARES) */}
+      <motion.div
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className={`rounded-3xl border p-5 sm:p-6 transition-all ${
+          isLight 
+            ? 'bg-white border-slate-200/90 shadow-xs hover:shadow-md text-slate-900' 
+            : 'border-white/10 bg-[#0B0F19] backdrop-blur-xl shadow-xl text-white'
+        }`}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+          <div className="flex items-center gap-2.5">
+            <div className={`p-2 rounded-xl ${isLight ? 'bg-emerald-50 text-emerald-600' : 'bg-emerald-500/10 text-emerald-400'}`}>
+              <CreditCard className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className={`font-rajdhani text-lg font-bold tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                  Payouts
+                </h3>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-jetbrains border ${
+                  isLight ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-white/5 text-slate-300 border-white/10'
+                }`}>
+                  PoUW Pearl
+                </span>
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold font-jetbrains bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Kryptex Pool Live
+                </span>
+              </div>
+              <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                Recompensas acreditadas y valor liquidado en dólares según tasa spot
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            {/* Spot Exchange Rate Pill */}
+            <div className={`px-3 py-1.5 rounded-xl border text-xs font-jetbrains font-medium flex items-center gap-1.5 ${
+              isLight ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-white/[0.04] border-white/10 text-slate-300'
+            }`}>
+              <span className="text-emerald-500 font-bold">1 PRL</span>
+              <span>≈</span>
+              <span className="font-bold text-[#05DF72]">${effectivePrlRate.toFixed(2)} USD</span>
+            </div>
+
+            {/* Kryptex Pool Link */}
+            {currentPayoutData.wallet && (
+              <a
+                href={`https://pool.kryptex.com/${(poolInfo.ticker || 'prl').toLowerCase()}/miner/${currentPayoutData.wallet}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`px-3 py-1.5 rounded-xl border text-xs font-rajdhani font-bold flex items-center gap-1.5 transition-all ${
+                  isLight 
+                    ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200' 
+                    : 'bg-white/[0.05] hover:bg-white/[0.1] text-slate-200 hover:text-white border-white/10'
+                }`}
+              >
+                <span>Ver en Pool</span>
+                <ExternalLink className="h-3 w-3 text-emerald-500" />
+              </a>
+            )}
+          </div>
+        </div>
+
+        {/* Multi-Account Filter Selector if more than 1 wallet is connected */}
+        {availableAccounts.length > 1 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-4 scrollbar-none">
+            <button
+              onClick={() => setSelectedPayoutAccount('all')}
+              className={`px-3 py-1 rounded-xl text-xs font-rajdhani font-bold whitespace-nowrap transition-all border ${
+                selectedPayoutAccount === 'all'
+                  ? 'bg-emerald-500 text-black border-emerald-400 shadow-sm'
+                  : isLight
+                    ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200'
+                    : 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border-white/[0.06]'
+              }`}
+            >
+              Todas las Billeteras (Total Unificado)
+            </button>
+            {availableAccounts.map((acc) => (
+              <button
+                key={acc.id}
+                onClick={() => setSelectedPayoutAccount(acc.id)}
+                className={`px-3 py-1 rounded-xl text-xs font-rajdhani font-bold whitespace-nowrap transition-all border flex items-center gap-1.5 ${
+                  selectedPayoutAccount === acc.id
+                    ? 'bg-emerald-500 text-black border-emerald-400 shadow-sm'
+                    : isLight
+                      ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200'
+                      : 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border-white/[0.06]'
+                }`}
+              >
+                <span>{acc.accountName}</span>
+                <span className="text-[10px] font-jetbrains opacity-80">({acc.paid.toFixed(0)} PRL)</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* 3 Main Payout Metric Cards (Identical to Kryptex Pool UI) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+          {/* 1. Reward (7 days) */}
+          <div className={`p-4 rounded-2xl border transition-all ${
+            isLight ? 'bg-slate-50/80 border-slate-100 hover:border-slate-200' : 'bg-[#101626] border-white/[0.06] hover:border-white/10'
+          }`}>
+            <span className={`font-rajdhani text-xs font-semibold block mb-2 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+              Reward (7 days)
+            </span>
+            <div className="flex items-baseline flex-wrap gap-x-2 gap-y-1">
+              <div className="flex items-baseline gap-1">
+                <span className="font-jetbrains font-bold text-lg text-emerald-500">₱</span>
+                <span className={`font-jetbrains text-xl sm:text-2xl font-bold tracking-tight tabular-nums ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                  {currentPayoutData.week.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                <span className="font-jetbrains text-xs font-semibold text-slate-400 uppercase">PRL</span>
+              </div>
+              <div className="flex items-baseline gap-1 font-jetbrains text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400">
+                <span className="text-slate-400">≈</span>
+                <span className="font-bold tabular-nums text-slate-700 dark:text-slate-200">
+                  {(currentPayoutData.week * effectivePrlRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Reward (30 days) */}
+          <div className={`p-4 rounded-2xl border transition-all ${
+            isLight ? 'bg-slate-50/80 border-slate-100 hover:border-slate-200' : 'bg-[#101626] border-white/[0.06] hover:border-white/10'
+          }`}>
+            <span className={`font-rajdhani text-xs font-semibold block mb-2 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+              Reward (30 days)
+            </span>
+            <div className="flex items-baseline flex-wrap gap-x-2 gap-y-1">
+              <div className="flex items-baseline gap-1">
+                <span className="font-jetbrains font-bold text-lg text-emerald-500">₱</span>
+                <span className={`font-jetbrains text-xl sm:text-2xl font-bold tracking-tight tabular-nums ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                  {currentPayoutData.month.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                <span className="font-jetbrains text-xs font-semibold text-slate-400 uppercase">PRL</span>
+              </div>
+              <div className="flex items-baseline gap-1 font-jetbrains text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400">
+                <span className="text-slate-400">≈</span>
+                <span className="font-bold tabular-nums text-slate-700 dark:text-slate-200">
+                  {(currentPayoutData.month * effectivePrlRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Total Paid */}
+          <div className={`p-4 rounded-2xl border transition-all ${
+            isLight ? 'bg-slate-50/80 border-slate-100 hover:border-slate-200' : 'bg-[#101626] border-white/[0.06] hover:border-white/10'
+          }`}>
+            <span className={`font-rajdhani text-xs font-semibold block mb-2 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+              Total Paid
+            </span>
+            <div className="flex items-baseline flex-wrap gap-x-2 gap-y-1">
+              <div className="flex items-baseline gap-1">
+                <span className="font-jetbrains font-bold text-lg text-emerald-500">₱</span>
+                <span className={`font-jetbrains text-xl sm:text-2xl font-bold tracking-tight tabular-nums ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                  {currentPayoutData.paid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                <span className="font-jetbrains text-xs font-semibold text-slate-400 uppercase">PRL</span>
+              </div>
+              <div className="flex items-baseline gap-1 font-jetbrains text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400">
+                <span className="text-slate-400">≈</span>
+                <span className="font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                  {(currentPayoutData.paid * effectivePrlRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Unpaid / Pending Balance Footer Note */}
+        {currentPayoutData.unpaid > 0 && (
+          <div className={`mt-3.5 pt-3 border-t flex items-center justify-between text-xs font-jetbrains ${
+            isLight ? 'border-slate-100 text-slate-500' : 'border-white/[0.06] text-slate-400'
+          }`}>
+            <span>Pendiente de liquidación en pool:</span>
+            <span className="font-bold text-amber-500 tabular-nums">
+              {currentPayoutData.unpaid.toFixed(6)} PRL ≈ ${(currentPayoutData.unpaid * effectivePrlRate).toFixed(4)} USD
+            </span>
+          </div>
+        )}
+      </motion.div>
+
       {/* 3. CALIDAD DE SHARES KRYPTEX */}
       <div className={`rounded-3xl border p-5 sm:p-6 transition-all ${
         isLight ? 'bg-white border-slate-200/90 shadow-xs hover:shadow-md text-slate-900' : 'border-white/10 bg-[#0B0F19] backdrop-blur-xl shadow-xl text-white'
@@ -1453,12 +1689,30 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           const realRejectionRate = totalFleetShares > 0
             ? (((summary.totalStaleShares || 0) + (summary.totalInvalidShares || 0)) / totalFleetShares * 100).toFixed(2)
             : '0.00';
+
+          // Cálculo PPS+ PearlHash:
+          // A dificultad stratum estándar (hashes_per_diff * default = 4,294,967,296 * 2,097,152 = 9.007e15 hashes/share)
+          // Recompensa matemática por share en PRL = (hashesPerShare / net_hashrate) * block_reward
+          const netHashNum = poolInfo.net_hashrate || 8.9e19;
+          const blockReward = poolInfo.block_reward || 2200;
+          const hashesPerShare = 4294967296 * 2097152;
+          const ppsPrlPerShare = netHashNum > 0 ? (hashesPerShare / netHashNum) * blockReward : 0.001147;
+          const ppsUsdPerShare = ppsPrlPerShare * effectivePrlRate;
+
           return (
             <div className={`mt-4 pt-3 border-t ${isLight ? 'border-slate-100' : 'border-white/[0.06]'} flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs`}>
-              <p className={`text-[11px] leading-relaxed ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                Valor estimado por share válido: <strong className="font-jetbrains text-[#05DF72] tabular-nums">${summary.estPayPerValidShareUSD.toFixed(7)} USD</strong>.
-                Tasa de rechazo calculada: <strong className={`font-jetbrains tabular-nums ${isLight ? 'text-slate-900' : 'text-white'}`}>{realRejectionRate}%</strong> ({summary.totalStaleShares || 0} stale de {totalFleetShares} shares totales).
-              </p>
+              <div className={`text-[11px] leading-relaxed ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                <span>Valor estimado PPS+ por share válido: </span>
+                <strong className="font-jetbrains text-[#05DF72] tabular-nums">
+                  ${ppsUsdPerShare > 0 ? ppsUsdPerShare.toFixed(6) : summary.estPayPerValidShareUSD.toFixed(7)} USD
+                </strong>
+                <span className="text-slate-400 dark:text-slate-500"> (~${(ppsUsdPerShare * 1000).toFixed(3)} USD / 1k shares)</span>.
+                <span className="ml-2">Tasa de rechazo calculada: </span>
+                <strong className={`font-jetbrains tabular-nums ${Number(realRejectionRate) > 2 ? 'text-rose-500' : isLight ? 'text-slate-900' : 'text-white'}`}>
+                  {realRejectionRate}%
+                </strong>
+                <span> ({summary.totalStaleShares || 0} stale de {totalFleetShares.toLocaleString()} shares totales).</span>
+              </div>
               <span className={`text-[11px] font-jetbrains text-slate-400 shrink-0`}>
                 Sincronización: {summary.lastUpdated || 'En vivo'}
               </span>

@@ -947,7 +947,8 @@ app.get('/api/kryptex/workers/:address', async (req, res) => {
   try {
     const { address } = req.params;
     const coin = req.query.coin || 'prl';
-    const response = await fetch(`https://pool.kryptex.com/${coin}/api/v3/miner/workers/${address}`);
+    const cleanAddress = (address || '').split('?')[0].trim();
+    const response = await fetch(`https://pool.kryptex.com/${coin}/api/v3/miner/workers/${cleanAddress}`);
     if (response.ok) {
       const data = await response.json();
       return res.json(data);
@@ -962,7 +963,8 @@ app.get('/api/kryptex/balance/:address', async (req, res) => {
   try {
     const { address } = req.params;
     const coin = req.query.coin || 'prl';
-    const response = await fetch(`https://pool.kryptex.com/${coin}/api/v1/miner/balance/${address}`);
+    const cleanAddress = (address || '').split('?')[0].trim();
+    const response = await fetch(`https://pool.kryptex.com/${coin}/api/v1/miner/balance/${cleanAddress}`);
     if (response.ok) {
       const data = await response.json();
       return res.json(data);
@@ -977,12 +979,26 @@ app.get('/api/kryptex/payouts/:address', async (req, res) => {
   try {
     const { address } = req.params;
     const coin = req.query.coin || 'prl';
-    const response = await fetch(`https://pool.kryptex.com/${coin}/api/v1/miner/payouts/${address}/stats`);
+    const cleanAddress = (address || '').split('?')[0].trim();
+    const response = await fetch(`https://pool.kryptex.com/${coin}/api/v1/miner/payouts/${cleanAddress}/stats`);
     if (response.ok) {
       const data = await response.json();
       return res.json(data);
     }
     res.status(response.status).json({ success: false, message: 'Error consultando pagos en Kryptex' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.get('/api/kryptex/rates', async (_req, res) => {
+  try {
+    const response = await fetch('https://pool.kryptex.com/api/v1/rates');
+    if (response.ok) {
+      const data = await response.json();
+      return res.json(data);
+    }
+    res.status(response.status).json({ success: false, message: 'Error consultando rates de Kryptex' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
