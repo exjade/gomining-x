@@ -72,10 +72,10 @@ export const ReallocateModal: React.FC<ReallocateModalProps> = ({
   const lossPerDay = Math.max(0, shortfallTHs * NET_AUDITED_USD_PER_THS_HOUR * 24);
 
   return (
-    <div className={`fixed inset-0 z-[10000] flex items-center justify-center p-4 backdrop-blur-lg animate-in fade-in duration-200 ${
+    <div className={`fixed inset-0 z-[10000] flex items-center justify-center p-3 sm:p-4 backdrop-blur-lg animate-in fade-in duration-200 ${
       isLight ? 'bg-slate-950/70' : 'bg-black/85'
     }`}>
-      <div className={`relative w-full max-w-lg rounded-2xl p-6 sm:p-7 border shadow-2xl overflow-hidden transition-all my-auto max-h-[92vh] overflow-y-auto ${
+      <div className={`relative w-full max-w-lg rounded-3xl border shadow-2xl overflow-hidden transition-all my-auto max-h-[88vh] flex flex-col ${
         isLight 
           ? 'bg-white border-slate-200 text-slate-900 shadow-2xl' 
           : 'bg-[#0B0F19] border-white/[0.12] text-white shadow-[0_20px_50px_rgba(0,0,0,0.95)]'
@@ -84,43 +84,50 @@ export const ReallocateModal: React.FC<ReallocateModalProps> = ({
         <div className="absolute -top-24 -right-24 h-48 w-48 rounded-full bg-cyan-500/10 blur-3xl pointer-events-none" />
         <div className="absolute -bottom-24 -left-24 h-48 w-48 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
 
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          disabled={isSubmitting}
-          className={`absolute top-4 right-4 p-1.5 rounded-xl border transition-all cursor-pointer ${
-            isLight 
-              ? 'border-slate-200 bg-slate-50 text-slate-500 hover:text-slate-900 hover:bg-slate-100' 
-              : 'border-white/10 bg-white/5 text-slate-400 hover:text-white hover:bg-white/[0.1]'
-          }`}
-          title="Cerrar ventana"
-        >
-          <X className="h-5 w-5" />
-        </button>
-
-        {/* Modal Header */}
-        <div className="flex items-center gap-3.5 mb-5 pr-8">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 text-emerald-500 border border-emerald-500/30 shadow-[0_0_20px_rgba(5,242,146,0.25)]">
-            <RefreshCw className={`h-6 w-6 ${isSubmitting ? 'animate-spin' : ''}`} />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className={`font-display-title text-base sm:text-lg font-bold ${
-                isLight ? 'text-slate-900' : 'text-white'
-              }`}>
-                Gestión & Remediación de Instancia
-              </h3>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold border uppercase shrink-0 ${
-                isLight ? 'bg-cyan-100 text-cyan-800 border-cyan-300' : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
-              }`}>
-                Salad API v1.2
-              </span>
+        {/* Modal Header (Fixed at top) */}
+        <div className={`p-5 sm:p-6 pb-4 border-b shrink-0 flex items-center justify-between gap-3 relative z-10 ${
+          isLight ? 'border-slate-100 bg-white' : 'border-white/[0.06] bg-[#0B0F19]'
+        }`}>
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 text-emerald-500 border border-emerald-500/30 shadow-[0_0_20px_rgba(5,242,146,0.25)]">
+              <RefreshCw className={`h-5 w-5 ${isSubmitting ? 'animate-spin' : ''}`} />
             </div>
-            <p className={`text-xs mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-              Control nativo de ciclo de vida del contenedor de cómputo GPU
-            </p>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className={`font-display-title text-base sm:text-lg font-bold truncate ${
+                  isLight ? 'text-slate-900' : 'text-white'
+                }`}>
+                  Gestión & Remediación de Silicio
+                </h3>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold border uppercase shrink-0 ${
+                  isLight ? 'bg-cyan-100 text-cyan-800 border-cyan-300' : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                }`}>
+                  Salad API v1.2
+                </span>
+              </div>
+              <p className={`text-xs mt-0.5 truncate ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                Control nativo de ciclo de vida del contenedor de cómputo GPU
+              </p>
+            </div>
           </div>
+
+          {/* Close Button */}
+          <button
+            onClick={onClose}
+            disabled={isSubmitting}
+            className={`shrink-0 p-1.5 rounded-xl border transition-all cursor-pointer ${
+              isLight 
+                ? 'border-slate-200 bg-slate-50 text-slate-500 hover:text-slate-900 hover:bg-slate-100' 
+                : 'border-white/10 bg-white/5 text-slate-400 hover:text-white hover:bg-white/[0.1]'
+            }`}
+            title="Cerrar ventana"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
+
+        {/* Modal Scrollable Body */}
+        <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 pr-3.5 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700/60 hover:scrollbar-thumb-emerald-500/60 relative z-10">
 
         {success ? (
           <div className="py-8 text-center space-y-3">
@@ -271,39 +278,43 @@ export const ReallocateModal: React.FC<ReallocateModalProps> = ({
               </div>
             )}
 
-            {/* Actions */}
-            <div className={`flex items-center justify-end gap-3 pt-2 border-t ${
-              isLight ? 'border-slate-100' : 'border-white/[0.06]'
-            }`}>
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={isSubmitting}
-                className={`px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
-                  isLight ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-100' : 'text-slate-400 hover:text-white hover:bg-white/[0.06]'
-                }`}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleExecute}
-                disabled={isSubmitting}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#05DF72] to-[#00F0FF] text-slate-950 font-bold text-xs hover:brightness-110 active:scale-95 transition-all shadow-md cursor-pointer"
-              >
-                {isSubmitting ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    <span>Ejecutando en SaladCloud...</span>
-                  </>
-                ) : (
-                  <>
-                    <Zap className="h-4 w-4 fill-current" />
-                    <span>Confirmar Acción ({selectedAction.toUpperCase()})</span>
-                  </>
-                )}
-              </button>
             </div>
+          )}
+        </div>
+
+        {/* Modal Footer (Fixed at bottom) */}
+        {!success && (
+          <div className={`p-4 sm:p-5 border-t shrink-0 flex items-center justify-end gap-3 relative z-10 ${
+            isLight ? 'border-slate-100 bg-slate-50/80' : 'border-white/[0.06] bg-[#070A12]'
+          }`}>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className={`px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                isLight ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70' : 'text-slate-400 hover:text-white hover:bg-white/[0.06]'
+              }`}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleExecute}
+              disabled={isSubmitting}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#05DF72] to-[#00F0FF] text-slate-950 font-bold text-xs hover:brightness-110 active:scale-95 transition-all shadow-md cursor-pointer"
+            >
+              {isSubmitting ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  <span>Ejecutando en SaladCloud...</span>
+                </>
+              ) : (
+                <>
+                  <Zap className="h-4 w-4 fill-current" />
+                  <span>Confirmar Acción ({selectedAction.toUpperCase()})</span>
+                </>
+              )}
+            </button>
           </div>
         )}
       </div>
