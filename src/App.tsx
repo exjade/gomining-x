@@ -14,6 +14,7 @@ import { AuthScreen } from './components/AuthScreen';
 import { 
   INITIAL_SALAD_ACCOUNTS, 
   INITIAL_KRYPTEX_CONFIG, 
+  INITIAL_KRYPTEX_ACCOUNTS,
   INITIAL_APP_SETTINGS, 
   INITIAL_WORKERS, 
   INITIAL_ALERTS, 
@@ -28,6 +29,7 @@ import { apiFetch } from './utils/apiConfig';
 import type { 
   SaladAccountConfig, 
   KryptexConfig, 
+  KryptexAccountConfig,
   AppSettings, 
   MergedGPUWorker, 
   AlertEvent, 
@@ -67,6 +69,35 @@ export const App: React.FC = () => {
       }
     }
     return INITIAL_KRYPTEX_CONFIG;
+  });
+
+  const [kryptexAccounts, setKryptexAccounts] = useState<KryptexAccountConfig[]>(() => {
+    const saved = localStorage.getItem('minerx_kryptex_accounts');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    const legacySaved = localStorage.getItem('minerx_kryptex_config');
+    if (legacySaved) {
+      try {
+        const parsed = JSON.parse(legacySaved);
+        if (parsed.walletAddress && parsed.walletAddress !== 'prl1qy7997hvd3l0628e3k4mfx5z4ptslqgww99d8v9') {
+          return [{
+            id: 'kryptex-acc-primary',
+            accountName: 'Billetera Principal Kryptex',
+            walletAddress: parsed.walletAddress,
+            coin: parsed.coin || 'prl',
+            poolUrl: parsed.poolUrl || 'stratum+tcp://prl.kryptex.network:7048',
+            enabled: true,
+            status: parsed.status || 'connected',
+            lastConnected: parsed.lastConnected
+          }];
+        }
+      } catch {}
+    }
+    return INITIAL_KRYPTEX_ACCOUNTS;
   });
 
   const [settings, setSettings] = useState<AppSettings>(() => {
@@ -185,7 +216,9 @@ export const App: React.FC = () => {
             if (cfg.saladAccounts && Array.isArray(cfg.saladAccounts) && cfg.saladAccounts.length > 0) {
               setAccounts(cfg.saladAccounts);
             }
-            if (cfg.kryptexConfig && cfg.kryptexConfig.walletAddress) {
+            if (cfg.kryptexAccounts && Array.isArray(cfg.kryptexAccounts) && cfg.kryptexAccounts.length > 0) {
+              setKryptexAccounts(cfg.kryptexAccounts);
+            } else if (cfg.kryptexConfig && cfg.kryptexConfig.walletAddress) {
               setKryptexConfig(cfg.kryptexConfig);
             }
             if (cfg.appSettings) {
@@ -239,17 +272,35 @@ export const App: React.FC = () => {
   }, [kryptexConfig]);
 
   useEffect(() => {
+    localStorage.setItem('minerx_kryptex_accounts', JSON.stringify(kryptexAccounts));
+  }, [kryptexAccounts]);
+
+  useEffect(() => {
+    const firstActive = kryptexAccounts.find(a => a.enabled && a.walletAddress.trim()) || kryptexAccounts[0];
+    if (firstActive) {
+      setKryptexConfig({
+        walletAddress: firstActive.walletAddress,
+        coin: firstActive.coin,
+        poolUrl: firstActive.poolUrl,
+        status: firstActive.status,
+        lastConnected: firstActive.lastConnected
+      });
+    }
+  }, [kryptexAccounts]);
+
+  useEffect(() => {
     localStorage.setItem('minerx_settings', JSON.stringify(settings));
   }, [settings]);
 
   // Sync to backend config only on explicit user actions (User-Isolated with Bearer Auth)
-  const syncBackendConfig = useCallback((accs: SaladAccountConfig[], kcfg: KryptexConfig, sett: AppSettings) => {
+  const syncBackendConfig = useCallback((accs: SaladAccountConfig[], kcfg: KryptexConfig, sett: AppSettings, kAccs?: KryptexAccountConfig[]) => {
     apiFetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         saladAccounts: accs,
         kryptexConfig: kcfg,
+        kryptexAccounts: kAccs || kryptexAccounts,
         appSettings: sett
       })
     }).catch(() => {});
@@ -271,8 +322,22 @@ export const App: React.FC = () => {
       setIsRefreshing(true);
     }
     try {
+      // Resolve active Kryptex accounts (Multi-API support)
+      const activeKryptexAccounts = kryptexAccounts.filter(a => a.enabled && a.walletAddress && a.walletAddress.trim());
+      const effectiveKryptexAccounts: KryptexAccountConfig[] = activeKryptexAccounts.length > 0
+        ? activeKryptexAccounts
+        : (kryptexConfig.walletAddress && kryptexConfig.walletAddress.trim() ? [{
+            id: 'kryptex-acc-primary',
+            accountName: 'Billetera Principal Kryptex',
+            walletAddress: kryptexConfig.walletAddress.trim(),
+            coin: kryptexConfig.coin || 'prl',
+            poolUrl: kryptexConfig.poolUrl || 'stratum+tcp://prl.kryptex.network:7048',
+            enabled: true,
+            status: kryptexConfig.status || 'connected'
+          }] : []);
+
       // If neither Kryptex wallet nor Salad accounts exist, keep everything cleanly at zero
-      if (!kryptexConfig.walletAddress && accounts.length === 0) {
+      if (effectiveKryptexAccounts.length === 0 && accounts.length === 0) {
         setWorkers([]);
         setAlerts([]);
         setHistory([]);
@@ -300,48 +365,131 @@ export const App: React.FC = () => {
         }
       }
 
-      // 2. Fetch Kryptex Live Data (Pool, Workers, Balance, Payouts)
-      if (kryptexConfig.walletAddress) {
+      // 2. Fetch Kryptex Live Data (Pool, Workers, Balance, Payouts) unified across all accounts
+      if (effectiveKryptexAccounts.length > 0) {
         try {
-          // 2a. Kryptex Pool Info
-          const poolRes = await apiFetch(`/api/kryptex/pool?coin=${kryptexConfig.coin || 'prl'}`);
+          // 2a. Kryptex Pool Info (Using coin of first account)
+          const primaryCoin = effectiveKryptexAccounts[0].coin || 'prl';
+          const poolRes = await apiFetch(`/api/kryptex/pool?coin=${primaryCoin}`);
           if (poolRes.ok) {
             const pData = await poolRes.json();
             setPoolInfo((prev) => ({ ...prev, ...pData }));
           }
 
-          // 2b. Kryptex Active Workers
-          const workersRes = await apiFetch(`/api/kryptex/workers/${kryptexConfig.walletAddress}?coin=${kryptexConfig.coin || 'prl'}`);
-          if (workersRes.ok) {
-            const wData = await workersRes.json();
-            kryptexLiveWorkers = wData?.results || [];
-          }
+          // 2b, 2c, 2d. Concurrently query all connected Kryptex accounts & unify data
+          let aggregatedTotal = 0;
+          let aggregatedConfirmed = 0;
+          let aggregatedUnconfirmed = 0;
+          let aggregatedThreshold = 0;
+          const balanceAccountsBreakdown: any[] = [];
 
-          // 2c. Kryptex Balance
-          const balRes = await apiFetch(`/api/kryptex/balance/${kryptexConfig.walletAddress}?coin=${kryptexConfig.coin || 'prl'}`);
-          if (balRes.ok) {
-            const bData = await balRes.json();
-            setBalance((prev) => ({ ...prev, ...bData }));
-          }
+          let aggregatedPaid = 0;
+          let aggregatedUnpaid = 0;
+          let aggregatedWeekReward = 0;
+          let aggregatedMonthReward = 0;
 
-          // 2d. Kryptex Historical Payouts & Reward Stats (Live API)
-          const payoutsRes = await apiFetch(`/api/kryptex/payouts/${kryptexConfig.walletAddress}?coin=${kryptexConfig.coin || 'prl'}`);
-          if (payoutsRes.ok) {
-            const payData = await payoutsRes.json();
-            setPayoutStats(payData);
-          }
+          await Promise.allSettled(
+            effectiveKryptexAccounts.map(async (acc) => {
+              const coin = acc.coin || 'prl';
+              const wallet = acc.walletAddress.trim();
+
+              // Active Workers for this wallet
+              try {
+                const workersRes = await apiFetch(`/api/kryptex/workers/${wallet}?coin=${coin}`);
+                if (workersRes.ok) {
+                  const wData = await workersRes.json();
+                  const results = (wData?.results || []).map((w: any) => ({
+                    ...w,
+                    _kryptexAccountId: acc.id,
+                    _kryptexAccountName: acc.accountName,
+                    _kryptexWallet: wallet
+                  }));
+                  kryptexLiveWorkers.push(...results);
+                }
+              } catch (wErr) {
+                console.error(`Error fetching workers for ${acc.accountName}:`, wErr);
+              }
+
+              // Balance for this wallet
+              try {
+                const balRes = await apiFetch(`/api/kryptex/balance/${wallet}?coin=${coin}`);
+                if (balRes.ok) {
+                  const bData = await balRes.json();
+                  const t = Number(bData?.total || 0);
+                  const c = Number(bData?.confirmed || 0);
+                  const u = Number(bData?.unconfirmed || 0);
+                  const th = Number(bData?.threshold || 1.0);
+                  aggregatedTotal += t;
+                  aggregatedConfirmed += c;
+                  aggregatedUnconfirmed += u;
+                  aggregatedThreshold += th;
+                  balanceAccountsBreakdown.push({
+                    id: acc.id,
+                    accountName: acc.accountName,
+                    walletAddress: wallet,
+                    total: t,
+                    confirmed: c,
+                    unconfirmed: u,
+                    threshold: th,
+                    reached_pct: th > 0 ? (t / th) * 100 : 0
+                  });
+                }
+              } catch (bErr) {
+                console.error(`Error fetching balance for ${acc.accountName}:`, bErr);
+              }
+
+              // Payouts for this wallet
+              try {
+                const payoutsRes = await apiFetch(`/api/kryptex/payouts/${wallet}?coin=${coin}`);
+                if (payoutsRes.ok) {
+                  const payData = await payoutsRes.json();
+                  aggregatedPaid += Number(payData?.paid || 0);
+                  aggregatedUnpaid += Number(payData?.unpaid || 0);
+                  aggregatedWeekReward += Number(payData?.reward?.week || 0);
+                  aggregatedMonthReward += Number(payData?.reward?.month || 0);
+                }
+              } catch (pErr) {
+                console.error(`Error fetching payouts for ${acc.accountName}:`, pErr);
+              }
+            })
+          );
+
+          const finalThreshold = aggregatedThreshold > 0 ? aggregatedThreshold : 1.0;
+          setBalance({
+            total: aggregatedTotal,
+            confirmed: aggregatedConfirmed,
+            unconfirmed: aggregatedUnconfirmed,
+            threshold: finalThreshold,
+            reached_pct: finalThreshold > 0 ? Math.min(100, Number(((aggregatedTotal / finalThreshold) * 100).toFixed(1))) : 0,
+            accounts: balanceAccountsBreakdown
+          });
+
+          setPayoutStats({
+            paid: aggregatedPaid,
+            unpaid: aggregatedUnpaid,
+            reward: {
+              week: aggregatedWeekReward,
+              month: aggregatedMonthReward
+            }
+          });
         } catch (kryptexErr) {
           console.error('Error fetching live Kryptex APIs:', kryptexErr);
         }
       }
 
-      // 3. Merged Fleet Synthesis (Cross-reference Salad instances & Kryptex workers)
+      // 3. Merged Fleet Synthesis (Cross-reference Salad instances & unified Kryptex workers)
       const mergedWorkersList: MergedGPUWorker[] = [];
 
       if (saladLiveInstances.length > 0) {
-        const kryptexPoolWorker = kryptexLiveWorkers[0];
-        const rawPoolHash = kryptexPoolWorker?.avg_hashrate_30m || kryptexPoolWorker?.avg_hashrate_3h || kryptexPoolWorker?.avg_hashrate_24h || '0';
-        const kryptexPoolHashTHs = Number((parseFloat(rawPoolHash) / 1e12).toFixed(1));
+        const totalPoolHashNum = kryptexLiveWorkers.reduce((acc, kw) => {
+          const rawHash = kw.avg_hashrate_30m || kw.avg_hashrate_3h || kw.avg_hashrate_24h || '0';
+          return acc + (parseFloat(rawHash) || 0);
+        }, 0);
+        const kryptexPoolHashTHs = Number((totalPoolHashNum / 1e12).toFixed(1));
+
+        const totalValidSharesPool = kryptexLiveWorkers.reduce((acc, kw) => acc + (kw.valid || 0), 0);
+        const totalStaleSharesPool = kryptexLiveWorkers.reduce((acc, kw) => acc + (kw.stale || 0), 0);
+        const totalInvalidSharesPool = kryptexLiveWorkers.reduce((acc, kw) => acc + (kw.invalid || 0), 0);
 
         const runningInstances = saladLiveInstances.filter((si: any) => si.state === 'running');
         const runningCount = Math.max(1, runningInstances.length);
@@ -425,11 +573,11 @@ export const App: React.FC = () => {
             dailyNetProfit: netHour * 24,
             profitMarginPct: grossHour > 0 ? (netHour / grossHour) * 100 : 0,
             efficiencyTHsPerDollar: hourlyCost > 0 ? effectiveHash / hourlyCost : 0,
-            validShares: kryptexPoolWorker?.valid ? Math.round(kryptexPoolWorker.valid / runningCount) : 0,
-            staleShares: kryptexPoolWorker?.stale ? Math.round(kryptexPoolWorker.stale / runningCount) : 0,
-            invalidShares: kryptexPoolWorker?.invalid || 0,
-            agent: kryptexPoolWorker?.agent || 'Fl4shMiner/1.5.2',
-            serverGeo: kryptexPoolWorker?.country || 'US',
+            validShares: totalValidSharesPool > 0 ? Math.round(totalValidSharesPool / runningCount) : 0,
+            staleShares: totalStaleSharesPool > 0 ? Math.round(totalStaleSharesPool / runningCount) : 0,
+            invalidShares: totalInvalidSharesPool > 0 ? Math.round(totalInvalidSharesPool / runningCount) : 0,
+            agent: 'Fl4shMiner/1.5.2',
+            serverGeo: 'US',
             connectedAt: isRunning ? 'Minando activamente' : isAllocating ? 'En asignación (Allocating)' : 'Inactivo',
             lastShareTimestamp: isRunning ? Date.now() - 30000 : 0,
             hasAlert: isUnderperforming || isAllocating,
@@ -437,6 +585,77 @@ export const App: React.FC = () => {
             alertMessage: alertMessage,
             recommendation: recommendation
           });
+        });
+
+        // Add any non-Salad standalone Kryptex workers (from other Kryptex accounts or rigs)
+        const saladShortIds = new Set(saladLiveInstances.map((si: any, idx: number) => {
+          return si.machine_id && si.machine_id.length > 8 ? si.machine_id.slice(0, 8) : si.machineId && si.machineId.length > 8 ? si.machineId.slice(0, 8) : `node-${idx + 1}`;
+        }));
+
+        kryptexLiveWorkers.forEach((kw: any, idx: number) => {
+          const isMatchedToSalad = Array.from(saladShortIds).some(sId => kw.worker && kw.worker.includes(sId));
+          if (!isMatchedToSalad) {
+            const rawHashStr = kw.avg_hashrate_30m || kw.avg_hashrate_3h || kw.avg_hashrate_24h || '0';
+            const rawHashNum = parseFloat(rawHashStr);
+            const hashrateTHs = Number((rawHashNum / 1e12).toFixed(1));
+            const lastShareMs = kw.last_share > 1e11 ? Number(kw.last_share) : Number(kw.last_share) * 1000;
+            const minutesAgo = Math.max(0, (Date.now() - lastShareMs) / 60000);
+            const isAlive = kw.status === 'online' && minutesAgo < (settings.maxShareInactivityMinutes || 1);
+            const rawGpuName = kw.gpu || kw.worker || 'NVIDIA GeForce RTX 4090';
+            const matchedKryptexGpu = resolveGpuBenchmark(rawGpuName);
+            const hourlyCost = matchedKryptexGpu.hourlyCost;
+            const benchmarkTHs = matchedKryptexGpu.expectedTHs;
+            const targetMin = matchedKryptexGpu.targetMin;
+            const targetMax = matchedKryptexGpu.targetMax;
+            const vram = matchedKryptexGpu.vram;
+            const grossHour = hashrateTHs * BASELINE_USD_PER_THS_HOUR;
+            const netHour = grossHour - hourlyCost;
+            const ratio = benchmarkTHs > 0 ? (hashrateTHs / benchmarkTHs) * 100 : 100;
+            const isUnder = isAlive && hashrateTHs < targetMin;
+
+            mergedWorkersList.push({
+              id: `kryptex-${kw.worker || idx}`,
+              workerName: kw.worker || `worker-${idx + 1}`,
+              machineId: `kryptex_${kw.server_geo || kw.country || 'us'}_${idx + 1}`,
+              accountId: accounts[0]?.id || 'salad-acc-1',
+              accountName: kw._kryptexAccountName || accounts[0]?.accountName || 'Kryptex Rig',
+              kryptexAccountId: kw._kryptexAccountId,
+              kryptexAccountName: kw._kryptexAccountName,
+              kryptexWallet: kw._kryptexWallet,
+              containerGroupName: 'prl-cluster-live',
+              gpuModel: matchedKryptexGpu.name,
+              vramGB: vram,
+              saladPriority: 'Lowest Priority',
+              saladStatus: isAlive ? 'running' : 'stopped',
+              isMining: isAlive,
+              minutesSinceLastShare: Number(minutesAgo.toFixed(1)),
+              currentHashrateTHs: hashrateTHs,
+              expectedBenchmarkTHs: benchmarkTHs,
+              targetWindowMinTHs: targetMin,
+              targetWindowMaxTHs: targetMax,
+              isWithinWindow: hashrateTHs >= targetMin && hashrateTHs <= targetMax,
+              performanceRatioPct: Number(ratio.toFixed(1)),
+              hourlySaladCost: hourlyCost,
+              dailySaladCost: hourlyCost * 24,
+              hourlyGrossRevenue: grossHour,
+              dailyGrossRevenue: grossHour * 24,
+              hourlyNetProfit: netHour,
+              dailyNetProfit: netHour * 24,
+              profitMarginPct: grossHour > 0 ? (netHour / grossHour) * 100 : 0,
+              efficiencyTHsPerDollar: hashrateTHs / hourlyCost,
+              validShares: kw.valid || 0,
+              staleShares: kw.stale || 0,
+              invalidShares: kw.invalid || 0,
+              agent: kw.agent,
+              serverGeo: kw.country || kw.server_geo,
+              connectedAt: isAlive ? 'Minando activamente' : `Inactivo hace ${Math.floor(minutesAgo)}m`,
+              lastShareTimestamp: lastShareMs,
+              hasAlert: !isAlive || isUnder,
+              alertType: !isAlive ? 'OFFLINE_NOT_MINING' : isUnder ? 'UNDERPERFORMING' : undefined,
+              alertMessage: !isAlive ? `Sin enviar shares hace ${Math.floor(minutesAgo)}m` : isUnder ? `Rendimiento al ${ratio.toFixed(0)}% (esperado: 280-330 TH/s)` : undefined,
+              recommendation: !isAlive ? 'RESTART_CONTAINER' : isUnder ? 'REALLOCATE_RECOMMENDED' : 'OPTIMAL'
+            });
+          }
         });
       } else if (kryptexLiveWorkers.length > 0) {
         kryptexLiveWorkers.forEach((kw: any, idx: number) => {
@@ -463,7 +682,10 @@ export const App: React.FC = () => {
             workerName: kw.worker || `worker-${idx + 1}`,
             machineId: `kryptex_${kw.server_geo || kw.country || 'us'}_${idx + 1}`,
             accountId: accounts[0]?.id || 'salad-acc-1',
-            accountName: accounts[0]?.accountName || 'SaladCloud Cluster',
+            accountName: kw._kryptexAccountName || accounts[0]?.accountName || 'SaladCloud Cluster',
+            kryptexAccountId: kw._kryptexAccountId,
+            kryptexAccountName: kw._kryptexAccountName,
+            kryptexWallet: kw._kryptexWallet,
             containerGroupName: 'prl-cluster-live',
             gpuModel: matchedKryptexGpu.name,
             vramGB: vram,
@@ -822,6 +1044,73 @@ export const App: React.FC = () => {
     setAlerts([]);
   };
 
+  // Kryptex Multi-Account Handlers
+  const handleAddKryptexAccount = (newAcc: Omit<KryptexAccountConfig, 'id' | 'status'>) => {
+    const acc: KryptexAccountConfig = {
+      ...newAcc,
+      id: `kryptex-acc-${Date.now()}`,
+      status: 'untested'
+    };
+    const updated = [...kryptexAccounts, acc];
+    setKryptexAccounts(updated);
+    if (!kryptexConfig.walletAddress && updated.length === 1) {
+      setKryptexConfig({
+        walletAddress: acc.walletAddress,
+        coin: acc.coin,
+        poolUrl: acc.poolUrl,
+        status: acc.status
+      });
+    }
+    syncBackendConfig(accounts, kryptexConfig, settings, updated);
+    setTimeout(() => refreshTelemetry(false), 300);
+  };
+
+  const handleDeleteKryptexAccount = (id: string) => {
+    const updated = kryptexAccounts.filter((a) => a.id !== id);
+    setKryptexAccounts(updated);
+    const firstActive = updated.find(a => a.enabled) || updated[0];
+    setKryptexConfig(prev => ({
+      ...prev,
+      walletAddress: firstActive ? firstActive.walletAddress : '',
+      coin: firstActive ? firstActive.coin : 'prl',
+      poolUrl: firstActive ? firstActive.poolUrl : 'stratum+tcp://prl.kryptex.network:7048',
+      status: firstActive ? firstActive.status : 'untested'
+    }));
+    syncBackendConfig(accounts, kryptexConfig, settings, updated);
+    setTimeout(() => refreshTelemetry(false), 300);
+  };
+
+  const handleToggleKryptexAccount = (id: string) => {
+    const updated = kryptexAccounts.map((a) => (a.id === id ? { ...a, enabled: !a.enabled } : a));
+    setKryptexAccounts(updated);
+    syncBackendConfig(accounts, kryptexConfig, settings, updated);
+    setTimeout(() => refreshTelemetry(false), 300);
+  };
+
+  const handleUpdateKryptexAccount = (updatedAcc: KryptexAccountConfig) => {
+    const updated = kryptexAccounts.map((a) => (a.id === updatedAcc.id ? updatedAcc : a));
+    setKryptexAccounts(updated);
+    syncBackendConfig(accounts, kryptexConfig, settings, updated);
+    setTimeout(() => refreshTelemetry(false), 300);
+  };
+
+  const handleTestSingleKryptexAccount = async (acc: KryptexAccountConfig): Promise<{ success: boolean; message: string }> => {
+    try {
+      const res = await apiFetch(`/api/kryptex/workers/${acc.walletAddress}?coin=${acc.coin || 'prl'}`);
+      if (res.ok) {
+        const data = await res.json();
+        const count = data?.results?.length || 0;
+        const updated = kryptexAccounts.map((a) => a.id === acc.id ? { ...a, status: 'connected' as const, lastConnected: 'Conectado' } : a);
+        setKryptexAccounts(updated);
+        syncBackendConfig(accounts, kryptexConfig, settings, updated);
+        return { success: true, message: `Conexión a Kryptex exitosa (${count} workers detectados)` };
+      }
+      return { success: false, message: `Error HTTP ${res.status} al consultar pool de Kryptex` };
+    } catch (e: any) {
+      return { success: false, message: e.message || 'Error de red' };
+    }
+  };
+
   // Android & Mobile Picture-in-Picture Mode State
   const [isPiP, setIsPiP] = useState(false);
   useEffect(() => {
@@ -1041,6 +1330,12 @@ export const App: React.FC = () => {
                 setKryptexConfig(updated);
                 syncBackendConfig(accounts, updated, settings);
               }}
+              kryptexAccounts={kryptexAccounts}
+              onAddKryptexAccount={handleAddKryptexAccount}
+              onUpdateKryptexAccount={handleUpdateKryptexAccount}
+              onDeleteKryptexAccount={handleDeleteKryptexAccount}
+              onToggleKryptexAccount={handleToggleKryptexAccount}
+              onTestSingleKryptexAccount={handleTestSingleKryptexAccount}
               settings={settings}
               onUpdateSettings={(st) => {
                 const updated = { ...settings, ...st };
@@ -1098,6 +1393,7 @@ export const App: React.FC = () => {
         isDarkTheme={themeMode === 'dark'}
         onRefresh={() => refreshTelemetry(true)}
         isRefreshing={isRefreshing}
+        isModalOpen={!!reallocatingWorker}
       />
     </div>
   );

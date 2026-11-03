@@ -1,4 +1,6 @@
 export type SaladPriority = 'Lowest Priority' | 'Low Priority' | 'Medium Priority' | 'High Priority';
+export { formatHashrate, formatHashrateCompact } from '../utils/hashrateFormatter';
+export type { FormattedHashrate } from '../utils/hashrateFormatter';
 
 export interface GPUBenchmark {
   id: string;

@@ -72,13 +72,13 @@ export const ReallocateModal: React.FC<ReallocateModalProps> = ({
   const lossPerDay = Math.max(0, shortfallTHs * NET_AUDITED_USD_PER_THS_HOUR * 24);
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-200 ${
-      isLight ? 'bg-slate-900/40' : 'bg-black/85'
+    <div className={`fixed inset-0 z-[10000] flex items-center justify-center p-4 backdrop-blur-lg animate-in fade-in duration-200 ${
+      isLight ? 'bg-slate-950/70' : 'bg-black/85'
     }`}>
-      <div className={`relative w-full max-w-lg rounded-2xl p-6 sm:p-7 border shadow-2xl overflow-hidden transition-all ${
+      <div className={`relative w-full max-w-lg rounded-2xl p-6 sm:p-7 border shadow-2xl overflow-hidden transition-all my-auto max-h-[92vh] overflow-y-auto ${
         isLight 
-          ? 'bg-white border-slate-200 text-slate-900 shadow-xl' 
-          : 'bg-[#0B0F19] border-white/[0.1] text-white shadow-[0_20px_50px_rgba(0,0,0,0.9)]'
+          ? 'bg-white border-slate-200 text-slate-900 shadow-2xl' 
+          : 'bg-[#0B0F19] border-white/[0.12] text-white shadow-[0_20px_50px_rgba(0,0,0,0.95)]'
       }`}>
         {/* Glow decoration */}
         <div className="absolute -top-24 -right-24 h-48 w-48 rounded-full bg-cyan-500/10 blur-3xl pointer-events-none" />
@@ -88,29 +88,34 @@ export const ReallocateModal: React.FC<ReallocateModalProps> = ({
         <button
           onClick={onClose}
           disabled={isSubmitting}
-          className={`absolute top-4 right-4 p-1 rounded-lg transition-colors cursor-pointer ${
-            isLight ? 'text-slate-400 hover:text-slate-800 hover:bg-slate-100' : 'text-slate-400 hover:text-white hover:bg-white/[0.08]'
+          className={`absolute top-4 right-4 p-1.5 rounded-xl border transition-all cursor-pointer ${
+            isLight 
+              ? 'border-slate-200 bg-slate-50 text-slate-500 hover:text-slate-900 hover:bg-slate-100' 
+              : 'border-white/10 bg-white/5 text-slate-400 hover:text-white hover:bg-white/[0.1]'
           }`}
+          title="Cerrar ventana"
         >
           <X className="h-5 w-5" />
         </button>
 
         {/* Modal Header */}
-        <div className="flex items-center gap-3 mb-5">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 shadow-[0_0_15px_rgba(5,242,146,0.2)]">
+        <div className="flex items-center gap-3.5 mb-5 pr-8">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 text-emerald-500 border border-emerald-500/30 shadow-[0_0_20px_rgba(5,242,146,0.25)]">
             <RefreshCw className={`h-6 w-6 ${isSubmitting ? 'animate-spin' : ''}`} />
           </div>
-          <div>
-            <h3 className={`font-display-title text-lg font-bold flex items-center gap-2 ${
-              isLight ? 'text-slate-900' : 'text-white'
-            }`}>
-              Gestión & Remediación de Instancia
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-semibold border ${
-                isLight ? 'bg-cyan-50 text-cyan-700 border-cyan-200' : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30'
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className={`font-display-title text-base sm:text-lg font-bold ${
+                isLight ? 'text-slate-900' : 'text-white'
+              }`}>
+                Gestión & Remediación de Instancia
+              </h3>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold border uppercase shrink-0 ${
+                isLight ? 'bg-cyan-100 text-cyan-800 border-cyan-300' : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
               }`}>
                 Salad API v1.2
               </span>
-            </h3>
+            </div>
             <p className={`text-xs mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
               Control nativo de ciclo de vida del contenedor de cómputo GPU
             </p>
@@ -252,8 +257,17 @@ export const ReallocateModal: React.FC<ReallocateModalProps> = ({
             </div>
 
             {errorMessage && (
-              <div className="rounded-lg bg-rose-500/10 border border-rose-500/30 p-2.5 text-xs text-rose-500 font-semibold">
-                {errorMessage}
+              <div className="rounded-xl bg-rose-500/10 border border-rose-500/30 p-3 text-xs text-rose-500 font-medium flex items-start gap-2.5">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-rose-500" />
+                <div className="space-y-0.5">
+                  <span className="font-bold block">No se pudo completar la remediación:</span>
+                  <p className="text-[11px] leading-relaxed text-rose-400">
+                    {errorMessage}
+                  </p>
+                  <span className="text-[10px] text-slate-400 block mt-1">
+                    Verifica que tu API Key de SaladCloud en la pestaña APIs tenga permisos de escritura sobre este grupo de contenedores.
+                  </span>
+                </div>
               </div>
             )}
 

@@ -33,7 +33,7 @@ import {
   ReferenceLine,
   Legend
 } from 'recharts';
-import { BASELINE_USD_PER_THS_HOUR, calculateBreakEvenTHs } from '../data/gpuBenchmarks';
+import { BASELINE_USD_PER_THS_HOUR, calculateBreakEvenTHs, formatHashrate } from '../data/gpuBenchmarks';
 import type { 
   FleetSummary, 
   MergedGPUWorker, 
@@ -246,6 +246,25 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         w.saladStatus.toLowerCase().includes(q)
     );
   }, [workers, problematicWorkers, fleetActiveTab, searchQuery]);
+
+  // Workers Online & Offline Metrics (Dual Circular Progress)
+  const totalWorkersCount = workers.length;
+  const onlineWorkersList = useMemo(() => {
+    return workers.filter((w) => w.isMining && w.saladStatus !== 'stopped');
+  }, [workers]);
+  const offlineWorkersList = useMemo(() => {
+    return workers.filter((w) => !w.isMining || w.saladStatus === 'stopped');
+  }, [workers]);
+
+  const onlineCount = onlineWorkersList.length;
+  const offlineCount = offlineWorkersList.length;
+
+  const onlinePct = totalWorkersCount > 0 ? (onlineCount / totalWorkersCount) * 100 : 0;
+  const offlinePct = totalWorkersCount > 0 ? (offlineCount / totalWorkersCount) * 100 : 0;
+
+  const onlineHashrateTHs = useMemo(() => {
+    return onlineWorkersList.reduce((acc, w) => acc + (w.currentHashrateTHs || 0), 0);
+  }, [onlineWorkersList]);
 
   // --------------------------------------------------------------------------
   // MAIN BENTO GRID DASHBOARD (Exact Replica of Reference Video Layout)
@@ -572,21 +591,21 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                 <span className={`font-jetbrains text-3xl sm:text-4xl font-extrabold tracking-tight tabular-nums ${
                   isLight ? 'text-slate-900' : 'text-white'
                 }`}>
-                  {summary.totalHashrateTHs.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                  {formatHashrate(summary.totalHashrateTHs).value}
                 </span>
                 <span className="text-sm font-bold text-emerald-700 dark:text-[#05DF72] uppercase font-mono">
-                  TH/s
+                  {formatHashrate(summary.totalHashrateTHs).unit}
                 </span>
               </div>
               <p className={`text-xs mt-1 uppercase font-semibold font-mono ${isLight ? 'text-slate-500' : 'text-emerald-200/70'}`}>
-                Teórico Silicio: <span className={`font-jetbrains font-bold tabular-nums ${isLight ? 'text-slate-700' : 'text-emerald-100'}`}>{summary.benchmarkHashrateTHs.toFixed(1)} TH/s</span>
+                Teórico Silicio: <span className={`font-jetbrains font-bold tabular-nums ${isLight ? 'text-slate-700' : 'text-emerald-100'}`}>{formatHashrate(summary.benchmarkHashrateTHs).full}</span>
               </p>
             </div>
 
             {/* Video-replica bottom bar: Solid Black Pill on left + Kryptex PPS on right */}
             <div className={`mt-3.5 pt-2.5 border-t ${isLight ? 'border-emerald-200/70' : 'border-emerald-500/20'} flex items-center justify-between text-xs relative z-10`}>
               <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 dark:bg-slate-950 text-white border border-transparent dark:border-white/10 px-3.5 py-1 text-xs font-semibold shadow-xs">
-                <span className="text-amber-400">Equilibrio: {fleetBreakevenTHs.toFixed(1)} TH/s</span>
+                <span className="text-amber-400">Equilibrio: {formatHashrate(fleetBreakevenTHs).full}</span>
               </div>
               <div className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 dark:text-emerald-300 bg-white/80 dark:bg-emerald-500/15 px-3 py-1 rounded-full border border-emerald-500/20 shadow-xs">
                 <CheckCircle2 className="h-3.5 w-3.5 text-[#05DF72]" />
@@ -881,6 +900,200 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             </div>
           </motion.div>
 
+          {/* DEDICATED FULL-WIDTH COMPONENT: ESTADO DE WORKERS ONLINE & OFFLINE (CIRCULAR PROGRESS BARS) */}
+          <motion.div 
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.12 }}
+            whileHover={{ y: -3, transition: { duration: 0.2 } }}
+            className={`rounded-[30px] border p-5 sm:p-6 transition-shadow duration-300 hover:shadow-lg ${
+              isLight ? 'bg-white border-slate-200/90 shadow-xs text-slate-900' : 'border-white/10 bg-[#0B0F19] backdrop-blur-xl shadow-xl text-white'
+            }`}
+          >
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
+              {/* Left Column (5 cols): Title, Subtitle & Cluster Health Distribution */}
+              <div className="lg:col-span-5 flex flex-col justify-between space-y-3.5">
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Activity className="h-4 w-4 text-[#05DF72]" />
+                      <h3 className={`font-rajdhani text-base font-bold uppercase tracking-wider ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                        Estado de Workers
+                      </h3>
+                    </div>
+                    <span className="text-[10px] font-jetbrains font-bold px-2.5 py-0.5 rounded-full bg-slate-900 dark:bg-black/40 text-[#05DF72] border border-[#05DF72]/30">
+                      {totalWorkersCount} {totalWorkersCount === 1 ? 'Worker' : 'Workers'}
+                    </span>
+                  </div>
+                  <p className={`text-xs mt-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                    Disponibilidad, salud operativa de nodos y telemetría de minado en tiempo real
+                  </p>
+                </div>
+
+                {/* Cluster Health Distribution Box */}
+                <div className={`p-3.5 rounded-2xl border space-y-2 ${
+                  isLight ? 'bg-slate-50/90 border-slate-100' : 'bg-[#0E1320] border-white/[0.04]'
+                }`}>
+                  <div className="flex items-center justify-between text-xs font-rajdhani font-bold">
+                    <span className={isLight ? 'text-slate-700' : 'text-slate-300'}>
+                      Salud Operativa del Clúster:
+                    </span>
+                    <span className={offlineCount === 0 ? 'text-[#05DF72]' : 'text-rose-400 font-jetbrains'}>
+                      {totalWorkersCount === 0 
+                        ? 'Sin workers' 
+                        : offlineCount === 0 
+                        ? '100% Operativo' 
+                        : `${onlineCount}/${totalWorkersCount} Activos (${onlinePct.toFixed(0)}%)`}
+                    </span>
+                  </div>
+
+                  {/* Visual 2-color distribution bar */}
+                  <div className="h-2.5 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex">
+                    <div 
+                      className="h-full bg-[#05DF72] transition-all duration-700 ease-out" 
+                      style={{ width: `${onlinePct}%` }} 
+                      title={`Online: ${onlinePct.toFixed(0)}%`}
+                    />
+                    <div 
+                      className="h-full bg-rose-500 transition-all duration-700 ease-out" 
+                      style={{ width: `${offlinePct}%` }} 
+                      title={`Offline: ${offlinePct.toFixed(0)}%`}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 pt-0.5">
+                    <span className="flex items-center gap-1 text-[#05DF72]">
+                      <CheckCircle2 className="h-3 w-3" />
+                      {onlineCount} en stratum
+                    </span>
+                    <button
+                      onClick={onNavigateToFleet}
+                      className="inline-flex items-center gap-1 text-xs font-rajdhani font-bold text-[#05DF72] hover:underline cursor-pointer uppercase transition-colors"
+                    >
+                      <span>Ver Flota Completa</span>
+                      <ArrowUpRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column (7 cols): Dual Circular Progress Bars Side-by-Side */}
+              <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* Circle 1: Online Workers */}
+                <div className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${
+                  isLight 
+                    ? 'bg-emerald-50/70 border-emerald-200/90' 
+                    : 'bg-emerald-950/20 border-emerald-500/25'
+                }`}>
+                  <div className="relative h-20 w-20 flex-shrink-0 flex items-center justify-center">
+                    <svg className="h-full w-full -rotate-90 transform" viewBox="0 0 36 36">
+                      <path
+                        stroke={isLight ? '#D1FAE5' : 'rgba(255,255,255,0.08)'}
+                        strokeWidth="3.2"
+                        fill="none"
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      />
+                      <path
+                        stroke="#05DF72"
+                        strokeWidth="3.4"
+                        strokeDasharray="100, 100"
+                        strokeDashoffset={totalWorkersCount > 0 ? (100 - onlinePct) : 100}
+                        strokeLinecap="round"
+                        fill="none"
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                        className="transition-all duration-1000 ease-out"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                      <span className={`font-jetbrains text-xl font-extrabold tabular-nums ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                        {onlineCount}
+                      </span>
+                      <span className="text-[10px] font-bold font-mono text-[#05DF72] -mt-0.5">
+                        {onlinePct.toFixed(0)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 rounded-full bg-[#05DF72] animate-pulse" />
+                      <span className={`text-sm font-rajdhani font-bold uppercase tracking-wider ${isLight ? 'text-emerald-950' : 'text-emerald-300'}`}>
+                        Online
+                      </span>
+                    </div>
+                    <span className={`text-xs font-mono font-bold mt-1 block ${isLight ? 'text-emerald-800' : 'text-emerald-400'}`}>
+                      {formatHashrate(onlineHashrateTHs).full}
+                    </span>
+                    <p className={`text-[11px] mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                      Nodos minando y enviando shares
+                    </p>
+                  </div>
+                </div>
+
+                {/* Circle 2: Offline Workers */}
+                <div className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${
+                  offlineCount > 0
+                    ? (isLight ? 'bg-rose-50/80 border-rose-200' : 'bg-rose-950/25 border-rose-500/30')
+                    : (isLight ? 'bg-slate-50 border-slate-200/70' : 'bg-[#0E1320] border-white/[0.06]')
+                }`}>
+                  <div className="relative h-20 w-20 flex-shrink-0 flex items-center justify-center">
+                    <svg className="h-full w-full -rotate-90 transform" viewBox="0 0 36 36">
+                      <path
+                        stroke={isLight ? (offlineCount > 0 ? '#FFE4E6' : '#E2E8F0') : 'rgba(255,255,255,0.08)'}
+                        strokeWidth="3.2"
+                        fill="none"
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      />
+                      <path
+                        stroke={offlineCount > 0 ? '#EF4444' : '#64748B'}
+                        strokeWidth="3.4"
+                        strokeDasharray="100, 100"
+                        strokeDashoffset={totalWorkersCount > 0 ? (100 - offlinePct) : 100}
+                        strokeLinecap="round"
+                        fill="none"
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                        className="transition-all duration-1000 ease-out"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                      <span className={`font-jetbrains text-xl font-extrabold tabular-nums ${
+                        offlineCount > 0 ? 'text-rose-500' : isLight ? 'text-slate-600' : 'text-slate-400'
+                      }`}>
+                        {offlineCount}
+                      </span>
+                      <span className={`text-[10px] font-bold font-mono -mt-0.5 ${
+                        offlineCount > 0 ? 'text-rose-500' : 'text-slate-500'
+                      }`}>
+                        {offlinePct.toFixed(0)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`h-2.5 w-2.5 rounded-full ${offlineCount > 0 ? 'bg-rose-500' : 'bg-slate-400'}`} />
+                      <span className={`text-sm font-rajdhani font-bold uppercase tracking-wider ${
+                        offlineCount > 0 
+                          ? (isLight ? 'text-rose-950' : 'text-rose-300') 
+                          : (isLight ? 'text-slate-600' : 'text-slate-400')
+                      }`}>
+                        Offline
+                      </span>
+                    </div>
+                    <span className={`text-xs font-mono font-bold mt-1 block ${
+                      offlineCount > 0 ? 'text-rose-500' : isLight ? 'text-slate-500' : 'text-slate-400'
+                    }`}>
+                      {offlineCount > 0 ? `${offlineCount} sin shares` : '0 desconexiones'}
+                    </span>
+                    <p className={`text-[11px] mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                      {offlineCount > 0 ? 'Requiere revisión en Flota' : 'Flota 100% activa en Kryptex'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+
           {/* 2 SIDE-BY-SIDE BENTO CARDS */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
             
@@ -1141,7 +1354,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                       </div>
                     </div>
                     <span className="font-jetbrains text-xs font-bold text-cyan-400 tabular-nums">
-                      {summary.totalHashrateTHs.toFixed(1)} TH/s
+                      {formatHashrate(summary.totalHashrateTHs).full}
                     </span>
                   </div>
 

@@ -1,6 +1,7 @@
 import type {
   SaladAccountConfig,
   KryptexConfig,
+  KryptexAccountConfig,
   VastAccountConfig,
   AppSettings,
   MergedGPUWorker,
@@ -27,6 +28,8 @@ export const INITIAL_KRYPTEX_CONFIG: KryptexConfig = {
   poolUrl: 'stratum+tcp://prl.kryptex.network:7048',
   status: 'untested',
 };
+
+export const INITIAL_KRYPTEX_ACCOUNTS: KryptexAccountConfig[] = [];
 
 export const INITIAL_APP_SETTINGS: AppSettings = {
   refreshIntervalSeconds: 45,
@@ -361,8 +364,15 @@ export function computeFleetSummary(workers: MergedGPUWorker[], accounts: SaladA
   const benchmarkHashrate = Number(runningWorkers.reduce((acc, w) => acc + w.expectedBenchmarkTHs, 0).toFixed(1));
   const fleetEfficiency = benchmarkHashrate > 0 ? Number(((totalHashrate / benchmarkHashrate) * 100).toFixed(1)) : (totalHashrate > 0 ? 100 : 0);
 
-  // En SaladCloud solo se factura por instancias en estado 'running'
-  const totalSaladCostPerHour = Number(runningWorkers.reduce((acc, w) => acc + w.hourlySaladCost, 0).toFixed(3));
+  // Costo real de alquiler de la flota de GPUs:
+  // Considera todas las GPUs asignadas/alquiladas en la flota con costo horario activo
+  // (coincidiendo con el cómputo real de facturación y el gráfico de rendimiento).
+  const billableWorkers = workers.filter(w => w.saladStatus !== 'allocating');
+  const totalSaladCostPerHour = Number(
+    (billableWorkers.length > 0 ? billableWorkers : runningWorkers)
+      .reduce((acc, w) => acc + (w.hourlySaladCost || 0), 0)
+      .toFixed(3)
+  );
   const totalSaladCostPerDay = Number((totalSaladCostPerHour * 24).toFixed(2));
 
   const totalGrossRevPerHour = Number((totalHashrate * BASELINE_USD_PER_THS_HOUR).toFixed(4));

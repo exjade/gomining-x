@@ -158,6 +158,18 @@ interface SavedConfig {
     customPpsRewardPerTHs?: number;
     status: string;
   };
+  kryptexAccounts?: Array<{
+    id: string;
+    accountName: string;
+    walletAddress: string;
+    coin: string;
+    poolUrl: string;
+    enabled: boolean;
+    status: string;
+    lastConnected?: string;
+    errorMessage?: string;
+    customPpsRewardPerTHs?: number;
+  }>;
   vastConfig?: {
     apiKey: string;
     enabled: boolean;
@@ -185,6 +197,7 @@ const DEFAULT_CONFIG: SavedConfig = {
     poolUrl: 'stratum+tcp://prl.kryptex.network:7048',
     status: 'untested'
   },
+  kryptexAccounts: [],
   vastConfig: {
     apiKey: '',
     enabled: false,
@@ -1922,6 +1935,24 @@ async function registerTelegramBotCommands(token: string) {
   }
 }
 
+function getActiveKryptexAccounts(cfg: SavedConfig): Array<{ id: string; accountName: string; walletAddress: string; coin: string; poolUrl: string; enabled: boolean }> {
+  if (cfg.kryptexAccounts && cfg.kryptexAccounts.length > 0) {
+    const enabled = cfg.kryptexAccounts.filter(a => a.enabled && a.walletAddress && a.walletAddress.trim());
+    if (enabled.length > 0) return enabled as any;
+  }
+  if (cfg.kryptexConfig && cfg.kryptexConfig.walletAddress && cfg.kryptexConfig.walletAddress.trim()) {
+    return [{
+      id: 'default',
+      accountName: 'Billetera Principal',
+      walletAddress: cfg.kryptexConfig.walletAddress.trim(),
+      coin: cfg.kryptexConfig.coin || 'prl',
+      poolUrl: cfg.kryptexConfig.poolUrl || 'stratum+tcp://prl.kryptex.network:7048',
+      enabled: true
+    }];
+  }
+  return [];
+}
+
 async function pollTelegramCommands() {
   if (isPollingTelegram) return;
   const cfg = readConfig();
@@ -2013,14 +2044,15 @@ async function pollTelegramCommands() {
           `🛠️ \`/reallocate <nodo>\` - Reasignar worker en SaladCloud\n\n` +
           `_MinerX Telemetry Engine • 100% Datos en Vivo_`;
       } else if (command === '/status') {
-        const { walletAddress, coin } = cfg.kryptexConfig;
+        const kAccs = getActiveKryptexAccounts(cfg);
         let workers: any[] = [];
-        if (walletAddress) {
+        for (const acc of kAccs) {
           try {
-            const wRes = await fetch(`https://pool.kryptex.com/${coin || 'prl'}/api/v3/miner/workers/${walletAddress}`);
+            const wRes = await fetch(`https://pool.kryptex.com/${acc.coin || 'prl'}/api/v3/miner/workers/${acc.walletAddress}`);
             if (wRes.ok) {
               const wData = await wRes.json();
-              workers = wData.results || [];
+              const list = (wData.results || []).map((w: any) => ({ ...w, _accountName: acc.accountName }));
+              workers = workers.concat(list);
             }
           } catch {}
         }
@@ -2032,7 +2064,8 @@ async function pollTelegramCommands() {
 
         reply = `⚡ *[MinerX • Telemetría en Vivo]*\n\n` +
           `🚀 *Potencia Total:* \`${totalHashTHs.toFixed(1)} TH/s\`\n` +
-          `🟢 *Nodos Activos:* \`${runningGpus} GPU(s) en línea\`\n` +
+          `🟢 *Nodos Activos:* \`${runningGpus} GPU(s) en línea\` (de ${workers.length} workers)\n` +
+          `🏦 *Cuentas Kryptex:* \`${kAccs.length} conectada(s)\`\n` +
           `🥗 *Costo Salad:* \`$${hourlyCost.toFixed(3)} USD/h\`\n` +
           `📈 *Ingreso Bruto:* \`$${grossUSD.toFixed(3)} USD/h\`\n` +
           `💰 *Utilidad Neta:* \`${netUSD >= 0 ? '+' : ''}$${netUSD.toFixed(3)} USD/h\`\n` +
@@ -2040,14 +2073,15 @@ async function pollTelegramCommands() {
           `⚖️ *Fricción:* \`4.56% auditada (Spread + SPEI)\`\n\n` +
           `_Hora: ${new Date().toLocaleTimeString()}_`;
       } else if (command === '/profit') {
-        const { walletAddress, coin } = cfg.kryptexConfig;
+        const kAccs = getActiveKryptexAccounts(cfg);
         let workers: any[] = [];
-        if (walletAddress) {
+        for (const acc of kAccs) {
           try {
-            const wRes = await fetch(`https://pool.kryptex.com/${coin || 'prl'}/api/v3/miner/workers/${walletAddress}`);
+            const wRes = await fetch(`https://pool.kryptex.com/${acc.coin || 'prl'}/api/v3/miner/workers/${acc.walletAddress}`);
             if (wRes.ok) {
               const wData = await wRes.json();
-              workers = wData.results || [];
+              const list = (wData.results || []).map((w: any) => ({ ...w, _accountName: acc.accountName }));
+              workers = workers.concat(list);
             }
           } catch {}
         }
@@ -2083,43 +2117,61 @@ async function pollTelegramCommands() {
           `🛑 *Acciones Automáticas:* \`${supervisor.automaticActionsCount}\`\n\n` +
           `_Modo por defecto: SIMULATION (Sin cargos reales sin autorización)_`;
       } else if (command === '/fleet') {
-        const { walletAddress, coin } = cfg.kryptexConfig;
+        const kAccs = getActiveKryptexAccounts(cfg);
         let workers: any[] = [];
-        if (walletAddress) {
+        for (const acc of kAccs) {
           try {
-            const wRes = await fetch(`https://pool.kryptex.com/${coin || 'prl'}/api/v3/miner/workers/${walletAddress}`);
+            const wRes = await fetch(`https://pool.kryptex.com/${acc.coin || 'prl'}/api/v3/miner/workers/${acc.walletAddress}`);
             if (wRes.ok) {
               const wData = await wRes.json();
-              workers = wData.results || [];
+              const list = (wData.results || []).map((w: any) => ({ ...w, _accountName: acc.accountName }));
+              workers = workers.concat(list);
             }
           } catch {}
         }
         if (workers.length === 0) {
-          reply = `🖥️ *[MinerX • Flota]*\n\nNo se detectaron workers activos en Kryptex para la wallet \`${walletAddress || 'Sin configurar'}\`.`;
+          reply = `🖥️ *[MinerX • Flota]*\n\nNo se detectaron workers activos en Kryptex para las cuentas configuradas (${kAccs.length} cuentas).`;
         } else {
-          reply = `🖥️ *[MinerX • Estado de Flota (${workers.length} Nodos)]*\n\n` +
+          reply = `🖥️ *[MinerX • Estado de Flota (${workers.length} Nodos Unificados)]*\n\n` +
             workers.map((w: any) => {
               const hash = w.avg_hashrate_30m ? (Number(w.avg_hashrate_30m) / 1e12).toFixed(1) : '0.0';
               const isOnline = w.status === 'online';
               const lastMin = Math.floor((Date.now() - (w.last_share > 1e11 ? w.last_share : w.last_share * 1000)) / 60000);
-              return `${isOnline ? '🟢' : '🔴'} *\`${w.worker || 'nodo'}\`*\n  ├ Potencia: \`${hash} TH/s\`\n  ├ Estado: \`${w.status}\`\n  └ Último share: hace ${lastMin} min`;
+              const accTag = kAccs.length > 1 && w._accountName ? ` [${w._accountName}]` : '';
+              return `${isOnline ? '🟢' : '🔴'} *\`${w.worker || 'nodo'}\`*${accTag}\n  ├ Potencia: \`${hash} TH/s\`\n  ├ Estado: \`${w.status}\`\n  └ Último share: hace ${lastMin} min`;
             }).join('\n\n');
         }
       } else if (command === '/balance') {
-        const { walletAddress, coin } = cfg.kryptexConfig;
-        let bal: any = null;
-        if (walletAddress) {
+        const kAccs = getActiveKryptexAccounts(cfg);
+        let totalPRL = 0;
+        let confirmedPRL = 0;
+        let unconfirmedPRL = 0;
+        let breakdown: string[] = [];
+
+        for (const acc of kAccs) {
           try {
-            const bRes = await fetch(`https://pool.kryptex.com/${coin || 'prl'}/api/v1/miner/balance/${walletAddress}`);
-            if (bRes.ok) bal = await bRes.json();
+            const bRes = await fetch(`https://pool.kryptex.com/${acc.coin || 'prl'}/api/v1/miner/balance/${acc.walletAddress}`);
+            if (bRes.ok) {
+              const bal = await bRes.json();
+              const bTotal = bal?.total || 0;
+              const bConf = bal?.confirmed || 0;
+              const bUnconf = bal?.unconfirmed || 0;
+              totalPRL += bTotal;
+              confirmedPRL += bConf;
+              unconfirmedPRL += bUnconf;
+              if (kAccs.length > 1) {
+                breakdown.push(`  ▫️ *${acc.accountName}:* \`${bTotal.toFixed(4)} PRL\` (Conf: ${bConf.toFixed(4)})`);
+              }
+            }
           } catch {}
         }
-        reply = `💰 *[MinerX • Saldos y Tesorería]*\n\n` +
-          `💎 *Kryptex Total:* \`${(bal?.total || 0).toFixed(4)} ${coin?.toUpperCase() || 'PRL'}\`\n` +
-          `✅ *Confirmado:* \`${(bal?.confirmed || 0).toFixed(4)}\`\n` +
-          `⏳ *Por confirmar:* \`${(bal?.unconfirmed || 0).toFixed(4)}\`\n` +
-          `🎯 *Umbral Retiro:* \`${bal?.threshold || 1.0}\` (${(bal?.reached_pct || 0).toFixed(1)}%)\n\n` +
-          `_Tesorería en USD y Pearl PRL_`;
+        reply = `💰 *[MinerX • Saldos y Tesorería Unificada]*\n\n` +
+          `💎 *Kryptex Total Global:* \`${totalPRL.toFixed(4)} PRL\`\n` +
+          `✅ *Confirmado Global:* \`${confirmedPRL.toFixed(4)} PRL\`\n` +
+          `⏳ *Por confirmar:* \`${unconfirmedPRL.toFixed(4)} PRL\`\n` +
+          `🏦 *Billeteras Conectadas:* \`${kAccs.length}\`\n` +
+          (breakdown.length > 0 ? `\n*Desglose por Billetera:*\n${breakdown.join('\n')}\n` : '') +
+          `\n_Tesorería unificada multi-cuenta_`;
       } else if (command === '/cycle') {
         const cyclesData = readMiningCycles();
         if (cyclesData.activeCycle) {
@@ -2182,119 +2234,127 @@ async function pollTelegramCommands() {
 // 18b. Autonomous Surveillance Loop
 async function runAutonomousBackgroundWatcher() {
   const cfg = readConfig();
-  const { walletAddress, coin } = cfg.kryptexConfig;
+  const kAccs = getActiveKryptexAccounts(cfg);
   const { telegramBotToken, telegramChatId, maxShareInactivityMinutes, underperformingThresholdPct } = cfg.appSettings;
 
-  if (!walletAddress || !telegramBotToken || !telegramChatId) {
+  if (kAccs.length === 0 || !telegramBotToken || !telegramChatId) {
     return;
   }
 
-  try {
-    const url = `https://pool.kryptex.com/${coin || 'prl'}/api/v3/miner/workers/${walletAddress}`;
-    const response = await fetch(url);
-    if (!response.ok) return;
+  const allWorkersList: any[] = [];
 
-    const data = await response.json();
-    const workersList = data?.results || [];
+  for (const acc of kAccs) {
+    try {
+      const url = `https://pool.kryptex.com/${acc.coin || 'prl'}/api/v3/miner/workers/${acc.walletAddress}`;
+      const response = await fetch(url);
+      if (!response.ok) continue;
 
-    for (const w of workersList) {
-      const workerName = w.worker || 'Worker desconocido';
-      const lastShareTime = w.last_share > 1e11 ? w.last_share : w.last_share * 1000;
-      const minutesSinceShare = (Date.now() - lastShareTime) / 60000;
-      const maxAllowed = maxShareInactivityMinutes || 8;
-      const hashrateTHs = w.avg_hashrate_30m ? (Number(w.avg_hashrate_30m) / 1e12) : 0;
+      const data = await response.json();
+      const workersList = data?.results || [];
+      allWorkersList.push(...workersList);
 
-      // 1. Worker Offline Alert
-      if (w.status !== 'online' || minutesSinceShare > maxAllowed) {
-        if (!notifiedOfflineWorkers.has(workerName)) {
-          notifiedOfflineWorkers.add(workerName);
-          const text = `🚨 *[MinerX ALERTA CRÍTICA: GPU DESCONECTADA]*\n\n` +
-            `❌ *Worker:* \`${workerName}\`\n` +
-            `⏱️ *Tiempo sin shares:* ${Math.floor(minutesSinceShare)} minutos\n` +
-            `📊 *Estado:* ${w.status || 'Offline'}\n` +
-            `💡 *Acción recomendada:* Ingresa a MinerX o escribe \`/reallocate ${workerName}\` para reasignar el nodo.\n\n` +
-            `_Hora: ${new Date().toLocaleTimeString()}_`;
+      for (const w of workersList) {
+        const workerName = w.worker || 'Worker desconocido';
+        const workerKey = `${acc.id || acc.walletAddress}_${workerName}`;
+        const lastShareTime = w.last_share > 1e11 ? w.last_share : w.last_share * 1000;
+        const minutesSinceShare = (Date.now() - lastShareTime) / 60000;
+        const maxAllowed = maxShareInactivityMinutes || 8;
+        const hashrateTHs = w.avg_hashrate_30m ? (Number(w.avg_hashrate_30m) / 1e12) : 0;
+        const accInfo = kAccs.length > 1 ? `\n🏦 *Cuenta Kryptex:* \`${acc.accountName}\`` : '';
 
-          await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: telegramChatId, text, parse_mode: 'Markdown' })
-          });
-        }
-      } else {
-        // Recovered from offline
-        if (notifiedOfflineWorkers.has(workerName)) {
-          notifiedOfflineWorkers.delete(workerName);
-          const recoverText = `✅ *[MinerX: GPU RECUPERADA]*\n\n` +
-            `🟢 *Worker:* \`${workerName}\` ha vuelto a minar.\n` +
-            `⚡ *Hashrate:* ${hashrateTHs.toFixed(1)} TH/s\n\n` +
-            `_Hora: ${new Date().toLocaleTimeString()}_`;
-
-          await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: telegramChatId, text: recoverText, parse_mode: 'Markdown' })
-          });
-        }
-
-        // 2. Hashrate Throttling Check (Benchmark: RTX 4090 expected ~310 TH/s, threshold e.g. 80% = 248 TH/s)
-        const thresholdTHs = 310 * ((underperformingThresholdPct || 80) / 100);
-        if (hashrateTHs > 0 && hashrateTHs < thresholdTHs) {
-          if (!notifiedThrottlingWorkers.has(workerName)) {
-            notifiedThrottlingWorkers.add(workerName);
-            const throttleText = `⚠️ *[MinerX: ALERTA DE THROTTLING / BAJO RENDIMIENTO]*\n\n` +
-              `⚠️ *Worker:* \`${workerName}\`\n` +
-              `⚡ *Hashrate Actual:* \`${hashrateTHs.toFixed(1)} TH/s\` (Benchmark esperado: ~310 TH/s)\n` +
-              `📉 *Rendimiento:* \`${((hashrateTHs / 310) * 100).toFixed(1)}%\`\n` +
-              `💡 *Sugerencia:* Reasigna el nodo con \`/reallocate ${workerName}\` para obtener mejor silicio.\n\n` +
+        // 1. Worker Offline Alert
+        if (w.status !== 'online' || minutesSinceShare > maxAllowed) {
+          if (!notifiedOfflineWorkers.has(workerKey)) {
+            notifiedOfflineWorkers.add(workerKey);
+            const text = `🚨 *[MinerX ALERTA CRÍTICA: GPU DESCONECTADA]*\n\n` +
+              `❌ *Worker:* \`${workerName}\`${accInfo}\n` +
+              `⏱️ *Tiempo sin shares:* ${Math.floor(minutesSinceShare)} minutos\n` +
+              `📊 *Estado:* ${w.status || 'Offline'}\n` +
+              `💡 *Acción recomendada:* Ingresa a MinerX o escribe \`/reallocate ${workerName}\` para reasignar el nodo.\n\n` +
               `_Hora: ${new Date().toLocaleTimeString()}_`;
 
             await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ chat_id: telegramChatId, text: throttleText, parse_mode: 'Markdown' })
+              body: JSON.stringify({ chat_id: telegramChatId, text, parse_mode: 'Markdown' })
             });
           }
-        } else if (hashrateTHs >= thresholdTHs) {
-          notifiedThrottlingWorkers.delete(workerName);
+        } else {
+          // Recovered from offline
+          if (notifiedOfflineWorkers.has(workerKey)) {
+            notifiedOfflineWorkers.delete(workerKey);
+            const recoverText = `✅ *[MinerX: GPU RECUPERADA]*\n\n` +
+              `🟢 *Worker:* \`${workerName}\`${accInfo} ha vuelto a minar.\n` +
+              `⚡ *Hashrate:* ${hashrateTHs.toFixed(1)} TH/s\n\n` +
+              `_Hora: ${new Date().toLocaleTimeString()}_`;
+
+            await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chat_id: telegramChatId, text: recoverText, parse_mode: 'Markdown' })
+            });
+          }
+
+          // 2. Hashrate Throttling Check (Benchmark: RTX 4090 expected ~310 TH/s, threshold e.g. 80% = 248 TH/s)
+          const thresholdTHs = 310 * ((underperformingThresholdPct || 80) / 100);
+          if (hashrateTHs > 0 && hashrateTHs < thresholdTHs) {
+            if (!notifiedThrottlingWorkers.has(workerKey)) {
+              notifiedThrottlingWorkers.add(workerKey);
+              const throttleText = `⚠️ *[MinerX: ALERTA DE THROTTLING / BAJO RENDIMIENTO]*\n\n` +
+                `⚠️ *Worker:* \`${workerName}\`${accInfo}\n` +
+                `⚡ *Hashrate Actual:* \`${hashrateTHs.toFixed(1)} TH/s\` (Benchmark esperado: ~310 TH/s)\n` +
+                `📉 *Rendimiento:* \`${((hashrateTHs / 310) * 100).toFixed(1)}%\`\n` +
+                `💡 *Sugerencia:* Reasigna el nodo con \`/reallocate ${workerName}\` para obtener mejor silicio.\n\n` +
+                `_Hora: ${new Date().toLocaleTimeString()}_`;
+
+              await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: telegramChatId, text: throttleText, parse_mode: 'Markdown' })
+              });
+            }
+          } else if (hashrateTHs >= thresholdTHs) {
+            notifiedThrottlingWorkers.delete(workerKey);
+          }
         }
+      }
+    } catch {}
+  }
+
+  // 3. Vast.ai Instance Telemetry Correlation & Strategy Engine Cycle
+  try {
+    const vastInstances = vastInstanceService.getInstances().filter((i) => i.status !== 'TERMINATED');
+    for (const vInst of vastInstances) {
+      const matching = allWorkersList.find((w: any) => w.worker === vInst.workerName);
+      if (matching) {
+        const workerTHs = matching.avg_hashrate_30m ? (Number(matching.avg_hashrate_30m) / 1e12) : 0;
+        vastInstanceService.recordMeasurement({
+          id: `meas-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          instanceId: vInst.id,
+          workerName: vInst.workerName,
+          periodStart: new Date(Date.now() - 30 * 60000).toISOString(),
+          periodEnd: new Date().toISOString(),
+          hashrateTHs: workerTHs,
+          acceptedShares: matching.shares || 0,
+          rejectedShares: matching.invalid_shares || 0,
+          rejectedSharePct: matching.shares > 0 ? ((matching.invalid_shares || 0) / matching.shares) * 100 : 0,
+          estimatedPRL: 0,
+          revenueUSD: 0,
+          sourceType: 'POOL_OBSERVED',
+          sourceTimestamp: new Date().toISOString(),
+          confidence: 'HIGH'
+        });
       }
     }
 
-    // 3. Vast.ai Instance Telemetry Correlation & Strategy Engine Cycle
-    try {
-      const vastInstances = vastInstanceService.getInstances().filter((i) => i.status !== 'TERMINATED');
-      for (const vInst of vastInstances) {
-        const matching = workersList.find((w: any) => w.worker === vInst.workerName);
-        if (matching) {
-          const workerTHs = matching.avg_hashrate_30m ? (Number(matching.avg_hashrate_30m) / 1e12) : 0;
-          vastInstanceService.recordMeasurement({
-            id: `meas-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-            instanceId: vInst.id,
-            workerName: vInst.workerName,
-            periodStart: new Date(Date.now() - 30 * 60000).toISOString(),
-            periodEnd: new Date().toISOString(),
-            hashrateTHs: workerTHs,
-            acceptedShares: matching.shares || 0,
-            rejectedShares: matching.invalid_shares || 0,
-            rejectedSharePct: matching.shares > 0 ? ((matching.invalid_shares || 0) / matching.shares) * 100 : 0,
-            estimatedPRL: 0,
-            revenueUSD: 0,
-            sourceType: 'POOL_OBSERVED',
-            sourceTimestamp: new Date().toISOString(),
-            confidence: 'HIGH'
-          });
-        }
-      }
-
-      await strategyEngine.executeStrategyCycle(walletAddress, (title, message, severity) => {
+    const primaryWallet = kAccs[0]?.walletAddress;
+    if (primaryWallet) {
+      await strategyEngine.executeStrategyCycle(primaryWallet, (title, message, severity) => {
         dispatchAlertNotification(title, message, severity);
       });
-    } catch (vastErr: any) {
-      console.warn('[Vast Strategy Watcher Error]:', vastErr.message);
     }
-  } catch (err) {
-    console.error('[Background Watcher Error]:', err);
+  } catch (vastErr: any) {
+    console.warn('[Vast Strategy Watcher Error]:', vastErr.message);
   }
 }
 

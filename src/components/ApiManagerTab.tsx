@@ -16,9 +16,10 @@ import {
   ShieldCheck,
   Users,
   Database,
-  Wrench
+  Wrench,
+  Wallet
 } from 'lucide-react';
-import type { SaladAccountConfig, KryptexConfig, AppSettings } from '../types/minerx';
+import type { SaladAccountConfig, KryptexConfig, KryptexAccountConfig, AppSettings } from '../types/minerx';
 import { sendTelegramMessageResilient } from '../utils/notifications';
 import { apiFetch } from '../utils/apiConfig';
 import { auditLocalUsers, repairLocalUsers } from '../utils/localAuthService';
@@ -32,6 +33,12 @@ interface ApiManagerTabProps {
   onToggleAccount: (id: string) => void;
   kryptexConfig: KryptexConfig;
   onUpdateKryptexConfig: (cfg: Partial<KryptexConfig>) => void;
+  kryptexAccounts?: KryptexAccountConfig[];
+  onAddKryptexAccount?: (acc: Omit<KryptexAccountConfig, 'id' | 'status'>) => void;
+  onUpdateKryptexAccount?: (acc: KryptexAccountConfig) => void;
+  onDeleteKryptexAccount?: (id: string) => void;
+  onToggleKryptexAccount?: (id: string) => void;
+  onTestSingleKryptexAccount?: (acc: KryptexAccountConfig) => Promise<{ success: boolean; message: string }>;
   settings: AppSettings;
   onUpdateSettings: (settings: Partial<AppSettings>) => void;
   onTestSaladAccount: (acc: SaladAccountConfig) => Promise<{ success: boolean; message: string }>;
@@ -48,6 +55,12 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
   onToggleAccount,
   kryptexConfig,
   onUpdateKryptexConfig,
+  kryptexAccounts = [],
+  onAddKryptexAccount,
+  onUpdateKryptexAccount,
+  onDeleteKryptexAccount,
+  onToggleKryptexAccount,
+  onTestSingleKryptexAccount,
   settings,
   onUpdateSettings,
   onTestSaladAccount,
@@ -64,6 +77,14 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
 
   // Edit existing account state
   const [editingAcc, setEditingAcc] = useState<SaladAccountConfig | null>(null);
+
+  // Kryptex Multi-Account form state
+  const [showAddKryptexForm, setShowAddKryptexForm] = useState(false);
+  const [newKryptexName, setNewKryptexName] = useState('');
+  const [newKryptexWallet, setNewKryptexWallet] = useState('');
+  const [newKryptexPoolUrl, setNewKryptexPoolUrl] = useState('stratum+tcp://prl.kryptex.network:7048');
+  const [editingKryptexAcc, setEditingKryptexAcc] = useState<KryptexAccountConfig | null>(null);
+  const [testingKryptexAccId, setTestingKryptexAccId] = useState<string | null>(null);
 
   // Status message state
   const [testingAccId, setTestingAccId] = useState<string | null>(null);
@@ -351,6 +372,51 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
     setFeedbackMsg({
       type: res.success ? 'success' : 'error',
       text: res.message
+    });
+  };
+
+  const handleSaveKryptexAccount = () => {
+    if (!newKryptexWallet.trim()) {
+      setFeedbackMsg({ type: 'error', text: 'Ingresa una dirección de wallet o usuario de Kryptex' });
+      return;
+    }
+    if (editingKryptexAcc && onUpdateKryptexAccount) {
+      onUpdateKryptexAccount({
+        ...editingKryptexAcc,
+        accountName: newKryptexName.trim() || 'Billetera Kryptex',
+        walletAddress: newKryptexWallet.trim(),
+        poolUrl: newKryptexPoolUrl
+      });
+      setFeedbackMsg({ type: 'success', text: `Cuenta Kryptex "${newKryptexName}" actualizada correctamente.` });
+      setEditingKryptexAcc(null);
+    } else if (onAddKryptexAccount) {
+      onAddKryptexAccount({
+        accountName: newKryptexName.trim() || `Billetera Kryptex ${(kryptexAccounts?.length || 0) + 1}`,
+        walletAddress: newKryptexWallet.trim(),
+        coin: 'prl',
+        poolUrl: newKryptexPoolUrl,
+        enabled: true
+      });
+      setFeedbackMsg({ type: 'success', text: `Billetera Kryptex agregada. Los datos se unificarán en la telemetría.` });
+    }
+    setShowAddKryptexForm(false);
+    setNewKryptexName('');
+    setNewKryptexWallet('');
+    setNewKryptexPoolUrl('stratum+tcp://prl.kryptex.network:7048');
+  };
+
+  const handleTestSpecificKryptex = async (acc: KryptexAccountConfig) => {
+    if (!onTestSingleKryptexAccount) {
+      handleTestKryptexConnection();
+      return;
+    }
+    setTestingKryptexAccId(acc.id);
+    setFeedbackMsg(null);
+    const res = await onTestSingleKryptexAccount(acc);
+    setTestingKryptexAccId(null);
+    setFeedbackMsg({
+      type: res.success ? 'success' : 'error',
+      text: `[${acc.accountName}] ${res.message}`
     });
   };
 
@@ -1042,7 +1108,7 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
         </div>
       </div>
 
-      {/* 3. KRYPTEX MINING POOL SECTION */}
+      {/* 3. KRYPTEX MINING POOL SECTION (MULTI-WALLET & TELEMETRY UNIFICATION) */}
       <div className={`rounded-2xl p-5 border space-y-4 ${
         isLight 
           ? 'bg-white border-slate-200 text-slate-900 shadow-sm' 
@@ -1054,80 +1120,353 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
           <div>
             <h3 className={`font-display-title text-base font-bold flex items-center gap-2 ${isLight ? 'text-slate-900' : 'text-white'}`}>
               <Key className={`h-5 w-5 ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`} />
-              Configuración Kryptex Pool (Pearl - PRL)
+              Configuración Kryptex Pool (Pearl - PRL) Multi-Billetera
+              <span className={`text-[11px] font-mono-num px-2 py-0.5 rounded-full font-bold ${
+                isLight 
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                  : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+              }`}>
+                {(kryptexAccounts || []).filter(a => a.enabled).length} de {(kryptexAccounts || []).length || 1} activas
+              </span>
             </h3>
             <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-              Conexión para lectura de hashrates de workers, balance de billetera y shares válidos
+              Soporte multi-cuenta: Unifica telemetría de hashrate, workers, balance de billeteras y vigilancia de Telegram.
             </p>
           </div>
 
-          <button
-            onClick={handleTestKryptexConnection}
-            disabled={testingKryptex}
-            className={`flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-bold active:scale-95 transition-all self-start sm:self-auto cursor-pointer ${
-              isLight 
-                ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 shadow-xs' 
-                : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
-            }`}
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${testingKryptex ? 'animate-spin' : ''} ${isLight ? 'text-emerald-700' : ''}`} />
-            <span>{testingKryptex ? 'Verificando...' : 'Probar Conexión Kryptex'}</span>
-          </button>
-        </div>
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => {
+                setEditingKryptexAcc(null);
+                setNewKryptexName(`Billetera Farm ${(kryptexAccounts?.length || 0) + 1}`);
+                setNewKryptexWallet('');
+                setNewKryptexPoolUrl(kryptexConfig.poolUrl || 'stratum+tcp://prl.kryptex.network:7048');
+                setShowAddKryptexForm(!showAddKryptexForm);
+              }}
+              className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-3.5 py-2 text-xs font-bold text-slate-950 shadow-md hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+            >
+              <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
+              <span>{showAddKryptexForm ? 'Cerrar Formulario' : 'Agregar Billetera'}</span>
+            </button>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono-num">
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className={`font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
-                Dirección de Billetera Pearl (PRL) o Usuario Kryptex:
-              </label>
-              <button
-                type="button"
-                onClick={() => onUpdateKryptexConfig({ walletAddress: 'prl1phs6s7m983309a6pz7qdreq8x6usschwxc5ujalp0lzvzyptjghlsc52549' })}
-                className={`text-[11px] underline font-sans font-medium cursor-pointer ${isLight ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}
-              >
-                Cargar Farm Real Top (8 Workers)
-              </button>
-            </div>
-            <input
-              type="text"
-              value={kryptexConfig.walletAddress}
-              onChange={(e) => onUpdateKryptexConfig({ walletAddress: e.target.value })}
-              placeholder="prl1q..."
-              className={`w-full rounded-xl border px-3.5 py-2.5 focus:outline-none ${
+            <button
+              type="button"
+              onClick={handleTestKryptexConnection}
+              disabled={testingKryptex}
+              className={`flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-bold active:scale-95 transition-all cursor-pointer ${
                 isLight 
-                  ? 'border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-cyan-600' 
-                  : 'border-[#252E42] bg-[#0C0E16] text-white placeholder-slate-500 focus:border-cyan-500'
-              }`}
-            />
-            <span className={`text-[10px] mt-1 block ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
-              Billetera o cuenta a la que minan tus contenedores de SaladCloud.
-            </span>
-          </div>
-
-          <div>
-            <label className={`block mb-1 font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
-              Servidor Stratum Kryptex:
-            </label>
-            <select
-              value={kryptexConfig.poolUrl}
-              onChange={(e) => onUpdateKryptexConfig({ poolUrl: e.target.value })}
-              className={`w-full rounded-xl border px-3.5 py-2.5 focus:outline-none ${
-                isLight 
-                  ? 'border-slate-300 bg-white text-slate-900 focus:border-cyan-600' 
-                  : 'border-[#252E42] bg-[#0C0E16] text-white focus:border-cyan-500'
+                  ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 shadow-xs' 
+                  : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
               }`}
             >
-              <option value="stratum+tcp://prl.kryptex.network:7048">Global (prl.kryptex.network:7048)</option>
-              <option value="stratum+tcp://prl-us.kryptex.network:7048">North America (prl-us.kryptex.network:7048)</option>
-              <option value="stratum+tcp://prl-eu.kryptex.network:7048">Europe (prl-eu.kryptex.network:7048)</option>
-              <option value="stratum+tcp://prl-br.kryptex.network:7048">South America (prl-br.kryptex.network:7048)</option>
-            </select>
-            <span className={`text-[10px] mt-1 block ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
-              Puerto TCP: 7048 • Puerto SSL: 8048
-            </span>
+              <RefreshCw className={`h-3.5 w-3.5 ${testingKryptex ? 'animate-spin' : ''} ${isLight ? 'text-emerald-700' : ''}`} />
+              <span>{testingKryptex ? 'Verificando...' : 'Probar Todas'}</span>
+            </button>
           </div>
         </div>
+
+        {/* Multi-Account Unification Explanatory Banner */}
+        <div className={`p-3.5 rounded-xl border flex items-start gap-3 text-xs ${
+          isLight ? 'bg-cyan-50/60 border-cyan-200 text-slate-700' : 'bg-cyan-950/20 border-cyan-500/20 text-slate-300'
+        }`}>
+          <Wallet className={`h-4 w-4 shrink-0 mt-0.5 ${isLight ? 'text-cyan-700' : 'text-cyan-400'}`} />
+          <div className="space-y-1">
+            <span className={`font-bold block ${isLight ? 'text-cyan-900' : 'text-cyan-300'}`}>
+              Telemetría Unificada en Tiempo Real
+            </span>
+            <p className="text-[11px] leading-relaxed">
+              Si posees múltiples billeteras de Pearl (PRL) o rigs minando a cuentas Kryptex independientes, puedes registrarlas todas aquí.
+              El motor de MinerX consultará cada API en paralelo vía <code className="font-mono text-[10px] bg-black/10 dark:bg-white/10 px-1 py-0.5 rounded">Promise.allSettled</code>,
+              unificando la lista total de workers, combinando el hashrate efectivo en TH/s, consolidando balances y sincronizando los reportes y alertas del bot de Telegram.
+            </p>
+          </div>
+        </div>
+
+        {/* Add / Edit Kryptex Account Form */}
+        {(showAddKryptexForm || editingKryptexAcc) && (
+          <div className={`p-4 rounded-xl border space-y-3 ${
+            isLight ? 'bg-slate-50 border-emerald-300' : 'bg-[#0E131F] border-emerald-500/40'
+          }`}>
+            <div className="flex items-center justify-between pb-2 border-b border-white/[0.08]">
+              <span className={`text-xs font-bold flex items-center gap-2 ${isLight ? 'text-slate-800' : 'text-white'}`}>
+                <Edit3 className="h-3.5 w-3.5 text-emerald-400" />
+                {editingKryptexAcc ? `Editar Billetera: ${editingKryptexAcc.accountName}` : 'Nueva Billetera Kryptex'}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddKryptexForm(false);
+                  setEditingKryptexAcc(null);
+                }}
+                className={`text-[11px] cursor-pointer ${isLight ? 'text-slate-500 hover:text-slate-700' : 'text-slate-400 hover:text-white'}`}
+              >
+                Cancelar
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+              <div>
+                <label className={`block mb-1 font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                  Nombre / Etiqueta:
+                </label>
+                <input
+                  type="text"
+                  value={newKryptexName}
+                  onChange={(e) => setNewKryptexName(e.target.value)}
+                  placeholder="Ej: Farm A - 8x RTX 4090"
+                  className={`w-full rounded-xl border px-3 py-2 text-xs focus:outline-none ${
+                    isLight 
+                      ? 'border-slate-300 bg-white text-slate-900 focus:border-emerald-600' 
+                      : 'border-[#252E42] bg-[#0C0E16] text-white focus:border-emerald-500'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className={`font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                    Dirección Pearl (PRL):
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setNewKryptexWallet('prl1phs6s7m983309a6pz7qdreq8x6usschwxc5ujalp0lzvzyptjghlsc52549')}
+                    className={`text-[10px] underline cursor-pointer ${isLight ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}
+                  >
+                    Farm Real (8 Workers)
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={newKryptexWallet}
+                  onChange={(e) => setNewKryptexWallet(e.target.value)}
+                  placeholder="prl1q..."
+                  className={`w-full rounded-xl border px-3 py-2 font-mono text-xs focus:outline-none ${
+                    isLight 
+                      ? 'border-slate-300 bg-white text-slate-900 focus:border-emerald-600' 
+                      : 'border-[#252E42] bg-[#0C0E16] text-white focus:border-emerald-500'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className={`block mb-1 font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                  Servidor Stratum:
+                </label>
+                <select
+                  value={newKryptexPoolUrl}
+                  onChange={(e) => setNewKryptexPoolUrl(e.target.value)}
+                  className={`w-full rounded-xl border px-3 py-2 text-xs focus:outline-none ${
+                    isLight 
+                      ? 'border-slate-300 bg-white text-slate-900 focus:border-emerald-600' 
+                      : 'border-[#252E42] bg-[#0C0E16] text-white focus:border-emerald-500'
+                  }`}
+                >
+                  <option value="stratum+tcp://prl.kryptex.network:7048">Global (prl.kryptex.network:7048)</option>
+                  <option value="stratum+tcp://prl-us.kryptex.network:7048">North America (prl-us.kryptex.network:7048)</option>
+                  <option value="stratum+tcp://prl-eu.kryptex.network:7048">Europe (prl-eu.kryptex.network:7048)</option>
+                  <option value="stratum+tcp://prl-br.kryptex.network:7048">South America (prl-br.kryptex.network:7048)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddKryptexForm(false);
+                  setEditingKryptexAcc(null);
+                }}
+                className={`px-3 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer ${
+                  isLight ? 'border-slate-300 text-slate-600 hover:bg-slate-100' : 'border-white/10 text-slate-400 hover:text-white'
+                }`}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveKryptexAccount}
+                className="px-4 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-md transition-all cursor-pointer"
+              >
+                {editingKryptexAcc ? 'Actualizar Billetera' : 'Guardar Billetera'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* List of Configured Kryptex Accounts */}
+        {(kryptexAccounts && kryptexAccounts.length > 0) ? (
+          <div className="space-y-2.5">
+            {kryptexAccounts.map((acc, index) => {
+              const isTestingThis = testingKryptexAccId === acc.id;
+              return (
+                <div 
+                  key={acc.id || index}
+                  className={`p-3.5 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-3 transition-all ${
+                    acc.enabled 
+                      ? (isLight ? 'bg-slate-50/70 border-slate-200' : 'bg-[#0B0F19] border-white/[0.08]') 
+                      : (isLight ? 'bg-slate-100/50 border-slate-200 opacity-60' : 'bg-[#080B12] border-white/[0.04] opacity-50')
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 border ${
+                      acc.enabled
+                        ? (isLight ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400')
+                        : (isLight ? 'bg-slate-200 border-slate-300 text-slate-500' : 'bg-white/5 border-white/10 text-slate-500')
+                    }`}>
+                      <Wallet className="h-4 w-4" />
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`font-bold text-xs truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                          {acc.accountName}
+                        </span>
+                        <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-bold uppercase ${
+                          acc.enabled
+                            ? (isLight ? 'bg-emerald-100 text-emerald-800' : 'bg-emerald-500/20 text-emerald-300')
+                            : (isLight ? 'bg-slate-200 text-slate-600' : 'bg-white/10 text-slate-400')
+                        }`}>
+                          {acc.coin.toUpperCase()}
+                        </span>
+                        <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${
+                          acc.status === 'connected' 
+                            ? 'bg-emerald-500/10 text-emerald-400' 
+                            : acc.status === 'error'
+                            ? 'bg-rose-500/10 text-rose-400'
+                            : 'bg-slate-500/10 text-slate-400'
+                        }`}>
+                          {acc.status === 'connected' ? 'Conectado' : acc.status === 'error' ? 'Error API' : 'No verificado'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5 text-[11px] font-mono text-slate-400 flex-wrap">
+                        <span className="truncate max-w-[280px] sm:max-w-md">{acc.walletAddress}</span>
+                        <span className="text-slate-600 dark:text-slate-600">•</span>
+                        <span className="text-[10px] text-slate-500">{acc.poolUrl.replace('stratum+tcp://', '')}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-end md:self-auto shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleTestSpecificKryptex(acc)}
+                      disabled={isTestingThis}
+                      title="Probar conexión con esta billetera"
+                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer active:scale-95 transition-all ${
+                        isLight 
+                          ? 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50' 
+                          : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                      }`}
+                    >
+                      <RefreshCw className={`h-3 w-3 ${isTestingThis ? 'animate-spin text-emerald-400' : ''}`} />
+                      <span>{isTestingThis ? 'Probando...' : 'Test'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingKryptexAcc(acc);
+                        setNewKryptexName(acc.accountName);
+                        setNewKryptexWallet(acc.walletAddress);
+                        setNewKryptexPoolUrl(acc.poolUrl);
+                        setShowAddKryptexForm(true);
+                      }}
+                      title="Editar cuenta"
+                      className={`p-1.5 rounded-lg border text-xs cursor-pointer active:scale-95 transition-all ${
+                        isLight ? 'border-slate-300 text-slate-700 hover:bg-slate-100' : 'border-white/10 text-slate-300 hover:bg-white/10'
+                      }`}
+                    >
+                      <Edit3 className="h-3.5 w-3.5" />
+                    </button>
+
+                    {onToggleKryptexAccount && (
+                      <button
+                        type="button"
+                        onClick={() => onToggleKryptexAccount(acc.id)}
+                        className={`px-2 py-1 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                          acc.enabled
+                            ? (isLight ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30')
+                            : (isLight ? 'bg-slate-200 text-slate-600 hover:bg-slate-300' : 'bg-white/10 text-slate-400 hover:bg-white/20')
+                        }`}
+                      >
+                        {acc.enabled ? 'Activa' : 'Pausada'}
+                      </button>
+                    )}
+
+                    {onDeleteKryptexAccount && (
+                      <button
+                        type="button"
+                        onClick={() => onDeleteKryptexAccount(acc.id)}
+                        title="Eliminar cuenta"
+                        className={`p-1.5 rounded-lg border text-xs cursor-pointer active:scale-95 transition-all ${
+                          isLight ? 'border-rose-200 text-rose-600 hover:bg-rose-50' : 'border-rose-500/30 text-rose-400 hover:bg-rose-500/20'
+                        }`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* Fallback Single Configuration Mode */
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono-num">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className={`font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                  Dirección de Billetera Pearl (PRL) o Usuario Kryptex:
+                </label>
+                <button
+                  type="button"
+                  onClick={() => onUpdateKryptexConfig({ walletAddress: 'prl1phs6s7m983309a6pz7qdreq8x6usschwxc5ujalp0lzvzyptjghlsc52549' })}
+                  className={`text-[11px] underline font-sans font-medium cursor-pointer ${isLight ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}
+                >
+                  Cargar Farm Real Top (8 Workers)
+                </button>
+              </div>
+              <input
+                type="text"
+                value={kryptexConfig.walletAddress}
+                onChange={(e) => onUpdateKryptexConfig({ walletAddress: e.target.value })}
+                placeholder="prl1q..."
+                className={`w-full rounded-xl border px-3.5 py-2.5 focus:outline-none ${
+                  isLight 
+                    ? 'border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-cyan-600' 
+                    : 'border-[#252E42] bg-[#0C0E16] text-white placeholder-slate-500 focus:border-cyan-500'
+                }`}
+              />
+              <span className={`text-[10px] mt-1 block ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
+                Billetera o cuenta a la que minan tus contenedores de SaladCloud.
+              </span>
+            </div>
+
+            <div>
+              <label className={`block mb-1 font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                Servidor Stratum Kryptex:
+              </label>
+              <select
+                value={kryptexConfig.poolUrl}
+                onChange={(e) => onUpdateKryptexConfig({ poolUrl: e.target.value })}
+                className={`w-full rounded-xl border px-3.5 py-2.5 focus:outline-none ${
+                  isLight 
+                    ? 'border-slate-300 bg-white text-slate-900 focus:border-cyan-600' 
+                    : 'border-[#252E42] bg-[#0C0E16] text-white focus:border-cyan-500'
+                }`}
+              >
+                <option value="stratum+tcp://prl.kryptex.network:7048">Global (prl.kryptex.network:7048)</option>
+                <option value="stratum+tcp://prl-us.kryptex.network:7048">North America (prl-us.kryptex.network:7048)</option>
+                <option value="stratum+tcp://prl-eu.kryptex.network:7048">Europe (prl-eu.kryptex.network:7048)</option>
+                <option value="stratum+tcp://prl-br.kryptex.network:7048">South America (prl-br.kryptex.network:7048)</option>
+              </select>
+              <span className={`text-[10px] mt-1 block ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
+                Puerto TCP: 7048 • Puerto SSL: 8048
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 4. TELEGRAM BOT STEP-BY-STEP INTEGRATION CARD */}

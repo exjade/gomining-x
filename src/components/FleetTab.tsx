@@ -29,7 +29,7 @@ import {
   Minus,
   ExternalLink
 } from 'lucide-react';
-import { calculateBreakEvenTHs, BASELINE_USD_PER_THS_HOUR, resolveGpuBenchmark } from '../data/gpuBenchmarks';
+import { calculateBreakEvenTHs, BASELINE_USD_PER_THS_HOUR, resolveGpuBenchmark, formatHashrate } from '../data/gpuBenchmarks';
 import type { MergedGPUWorker, SaladAccountConfig, SaladBalanceInfo, SaladQuotas } from '../types/minerx';
 import { VastFleetSection } from './VastFleetSection';
 
@@ -825,13 +825,13 @@ export const FleetTab: React.FC<FleetTabProps> = ({
           </div>
           <div className="flex items-baseline gap-1.5">
             <span className="font-display-title text-xl font-bold text-[#05DF72]">
-              {totalSaladLogHashTHs}
+              {formatHashrate(totalSaladLogHashTHs).value}
             </span>
-            <span className={`text-xs font-mono-num ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>TH/s (Salad Logs)</span>
+            <span className={`text-xs font-mono-num ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>{formatHashrate(totalSaladLogHashTHs).unit} (Salad Logs)</span>
           </div>
           <div className={`text-[11px] font-mono-num mt-1 flex items-center justify-between ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
             <span>Pool Kryptex:</span>
-            <strong className={isLight ? 'text-cyan-700 font-bold' : 'text-cyan-300'}>{poolReportedHashTHs} TH/s</strong>
+            <strong className={isLight ? 'text-cyan-700 font-bold' : 'text-cyan-300'}>{formatHashrate(poolReportedHashTHs).full}</strong>
           </div>
         </div>
       </div>

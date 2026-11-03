@@ -27,6 +27,19 @@ export interface KryptexConfig {
   status: 'connected' | 'error' | 'untested';
 }
 
+export interface KryptexAccountConfig {
+  id: string;
+  accountName: string;
+  walletAddress: string;
+  coin: string; // default: 'prl'
+  poolUrl: string; // e.g. stratum+tcp://prl.kryptex.network:7048
+  enabled: boolean;
+  status: 'connected' | 'error' | 'untested';
+  lastConnected?: string;
+  errorMessage?: string;
+  customPpsRewardPerTHs?: number;
+}
+
 export interface VastAccountConfig {
   apiKey: string;
   enabled: boolean;
@@ -85,12 +98,23 @@ export interface KryptexPoolInfo {
   estimated_profit_day: number;
 }
 
+export interface KryptexBalanceAccount {
+  id: string;
+  accountName: string;
+  walletAddress: string;
+  total: number;
+  confirmed: number;
+  unconfirmed: number;
+  threshold?: number;
+}
+
 export interface KryptexBalanceRaw {
   total: number;
   threshold: number;
   reached_pct: number;
   unconfirmed: number;
   confirmed: number;
+  accounts?: KryptexBalanceAccount[];
 }
 
 export interface KryptexPayoutStatsRaw {
@@ -134,6 +158,9 @@ export interface MergedGPUWorker {
   currentHashrateTHs: number;
   saladLogHashrateTHs?: number;
   kryptexHashrateTHs?: number;
+  kryptexAccountId?: string;
+  kryptexAccountName?: string;
+  kryptexWallet?: string;
   expectedBenchmarkTHs: number;
   targetWindowMinTHs?: number;
   targetWindowMaxTHs?: number;

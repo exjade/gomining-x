@@ -26,6 +26,7 @@ import {
 } from 'recharts';
 import type { FleetSummary, MergedGPUWorker, SaladBalanceInfo } from '../types/minerx';
 import { sendNativeNotification } from '../utils/notifications';
+import { formatHashrate } from '../utils/hashrateFormatter';
 
 interface FloatingHubWidgetProps {
   summary: FleetSummary;
@@ -41,6 +42,7 @@ interface FloatingHubWidgetProps {
   isRefreshing: boolean;
   initiallyExpanded?: boolean;
   isStandalone?: boolean;
+  isModalOpen?: boolean;
 }
 
 export const FloatingHubWidget: React.FC<FloatingHubWidgetProps> = ({
@@ -56,7 +58,8 @@ export const FloatingHubWidget: React.FC<FloatingHubWidgetProps> = ({
   onRefresh,
   isRefreshing,
   initiallyExpanded = false,
-  isStandalone = false
+  isStandalone = false,
+  isModalOpen = false
 }) => {
   const [isExpanded, setIsExpanded] = useState(initiallyExpanded);
 
@@ -247,8 +250,9 @@ export const FloatingHubWidget: React.FC<FloatingHubWidgetProps> = ({
         top: 'max(8px, env(safe-area-inset-top, 8px))',
         left: '50%',
         transform: 'translateX(-50%)',
-        zIndex: 9999,
-        maxWidth: 'calc(100vw - 20px)'
+        zIndex: 40,
+        maxWidth: 'calc(100vw - 20px)',
+        display: isModalOpen ? 'none' : undefined
       };
     }
 
@@ -257,11 +261,12 @@ export const FloatingHubWidget: React.FC<FloatingHubWidgetProps> = ({
       position: 'fixed',
       left: `${position.x}px`,
       top: `${position.y}px`,
-      zIndex: 9999,
+      zIndex: 40,
       maxWidth: 'calc(100vw - 20px)',
-      touchAction: 'none'
+      touchAction: 'none',
+      display: isModalOpen ? 'none' : undefined
     };
-  }, [isStandalone, hubMode, position]);
+  }, [isStandalone, hubMode, position, isModalOpen]);
 
   return (
     <div
@@ -326,7 +331,7 @@ export const FloatingHubWidget: React.FC<FloatingHubWidgetProps> = ({
             >
               <div className="flex flex-col">
                 <span className="text-xs font-bold leading-tight">
-                  {totalTHs.toFixed(1)} <span className="text-[10px] text-slate-400 font-normal">TH/s</span>
+                  {formatHashrate(totalTHs).value} <span className="text-[10px] text-slate-400 font-normal">{formatHashrate(totalTHs).unit}</span>
                 </span>
                 <span className={`text-[10px] font-bold -mt-0.5 ${netProfitUSD >= 0 ? 'text-[#05DF72]' : 'text-rose-500'}`}>
                   {netProfitUSD >= 0 ? '+' : ''}${netProfitUSD.toFixed(3)}/h
@@ -481,10 +486,10 @@ export const FloatingHubWidget: React.FC<FloatingHubWidgetProps> = ({
               }`}>
                 <span className="text-[9px] text-slate-400 uppercase block font-semibold">Potencia Pool</span>
                 <div className="text-sm font-bold mt-0.5">
-                  {totalTHs.toFixed(1)} <span className="text-[9px] font-normal text-slate-400">TH/s</span>
+                  {formatHashrate(totalTHs).value} <span className="text-[9px] font-normal text-slate-400">{formatHashrate(totalTHs).unit}</span>
                 </div>
                 <span className="text-[9px] text-[#05DF72] font-semibold block mt-0.5 truncate">
-                  {efficiencyPct.toFixed(0)}% vs Silicio ({benchmarkTHs.toFixed(0)} TH/s)
+                  {efficiencyPct.toFixed(0)}% vs Silicio ({formatHashrate(benchmarkTHs).full})
                 </span>
               </div>
 
@@ -512,7 +517,7 @@ export const FloatingHubWidget: React.FC<FloatingHubWidgetProps> = ({
                   <span>Curva Hashrate en Vivo</span>
                 </span>
                 <span className="font-bold text-[#05DF72]">
-                  {totalTHs.toFixed(1)} TH/s
+                  {formatHashrate(totalTHs).full}
                 </span>
               </div>
 

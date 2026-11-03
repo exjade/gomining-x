@@ -1043,14 +1043,17 @@ app.post('/api/telegram/send-status', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Falta Bot Token o Chat ID de Telegram' });
     }
 
-    const { walletAddress, coin } = cfg.kryptexConfig;
+    const kAccs = (cfg.kryptexAccounts && cfg.kryptexAccounts.length > 0)
+      ? cfg.kryptexAccounts.filter(a => a.enabled && a.walletAddress && a.walletAddress.trim())
+      : (cfg.kryptexConfig?.walletAddress ? [{ ...cfg.kryptexConfig, id: 'default', accountName: 'Billetera Principal', enabled: true }] : []);
+
     let workersList = [];
-    if (walletAddress) {
+    for (const acc of kAccs) {
       try {
-        const wRes = await fetch(`https://pool.kryptex.com/${coin || 'prl'}/api/v3/miner/workers/${walletAddress}`);
+        const wRes = await fetch(`https://pool.kryptex.com/${acc.coin || 'prl'}/api/v3/miner/workers/${acc.walletAddress}`);
         if (wRes.ok) {
           const wData = await wRes.json();
-          workersList = wData.results || [];
+          workersList.push(...(wData.results || []));
         }
       } catch {}
     }
