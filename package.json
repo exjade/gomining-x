@@ -12,7 +12,7 @@
     "dev:server": "node server/server.ts",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "node --import tsx --test test/unit/profitabilityService.test.ts test/unit/vastOffersService.test.ts test/unit/strategyEngine.test.ts",
+    "test": "node --import tsx --test test/unit/profitabilityService.test.ts test/unit/vastOffersService.test.ts test/unit/strategyEngine.test.ts test/unit/miningVisualizationService.test.ts",
     "start": "tsx server/server.ts",
     "electron:dev": "concurrently -n \"SERVER,CLIENT,ELECTRON\" -c \"cyan,emerald,magenta\" \"tsx watch server/server.ts\" \"vite\" \"electron .\"",
     "build:exe": "npm run build && electron-builder --win --dir",
@@ -52,7 +52,10 @@
   },
   "dependencies": {
     "@capacitor/core": "^8.5.3",
+    "@react-three/drei": "^10.7.9",
+    "@react-three/fiber": "^9.8.2",
     "@tailwindcss/vite": "^4.3.3",
+    "@types/three": "^0.187.0",
     "concurrently": "^10.0.6",
     "cors": "^2.8.6",
     "dotenv": "^18.0.8",
@@ -65,6 +68,7 @@
     "react-is": "^19.3.1",
     "recharts": "^3.10.1",
     "tailwindcss": "^4.3.3",
+    "three": "^0.187.0",
     "tsx": "^4.23.15"
   },
   "devDependencies": {

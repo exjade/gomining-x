@@ -359,10 +359,17 @@ export function computeFleetSummary(workers: MergedGPUWorker[], accounts: SaladA
   const underperforming = runningWorkers.filter(w => w.isMining && (w.performanceRatioPct < 80 || !w.isWithinWindow)).length;
 
   const totalHashrate = Number(workers.reduce((acc, w) => acc + (w.isMining ? w.currentHashrateTHs : 0), 0).toFixed(1));
-  // El Benchmark teórico se calcula ÚNICAMENTE sobre las GPUs que están en estado RUNNING (activas)
-  // Las GPUs en aprovisionamiento (allocating) aún no consumen saldo ni entregan hashrate.
-  const benchmarkHashrate = Number(runningWorkers.reduce((acc, w) => acc + w.expectedBenchmarkTHs, 0).toFixed(1));
-  const fleetEfficiency = benchmarkHashrate > 0 ? Number(((totalHashrate / benchmarkHashrate) * 100).toFixed(1)) : (totalHashrate > 0 ? 100 : 0);
+  
+  // Benchmark teórico del total de la flota (toda máquina registrada o provisionada)
+  const totalFleetBenchmark = Number(workers.reduce((acc, w) => acc + (w.expectedBenchmarkTHs || 0), 0).toFixed(1));
+  // Benchmark de las que están activas
+  const runningBenchmark = Number(runningWorkers.reduce((acc, w) => acc + (w.expectedBenchmarkTHs || 0), 0).toFixed(1));
+  
+  // Eficiencia real de flota: considera el total de la flota instalada/asignada.
+  // Si hay trabajadores caídos/offline, la eficiencia de flota refleja esa pérdida real.
+  const fleetEfficiency = totalFleetBenchmark > 0 
+    ? Number(((totalHashrate / totalFleetBenchmark) * 100).toFixed(1))
+    : (runningBenchmark > 0 ? Number(((totalHashrate / runningBenchmark) * 100).toFixed(1)) : (totalHashrate > 0 ? 100 : 0));
 
   // Costo real de alquiler de la flota de GPUs:
   // Considera todas las GPUs asignadas/alquiladas en la flota con costo horario activo
@@ -395,7 +402,7 @@ export function computeFleetSummary(workers: MergedGPUWorker[], accounts: SaladA
     idleOrDeadGPUs: idleOrDead,
     underperformingGPUs: underperforming,
     totalHashrateTHs: totalHashrate,
-    benchmarkHashrateTHs: benchmarkHashrate,
+    benchmarkHashrateTHs: totalFleetBenchmark || runningBenchmark,
     fleetEfficiencyPct: fleetEfficiency,
     hourlyGrossRevenueUSD: totalGrossRevPerHour,
     dailyGrossRevenueUSD: totalGrossRevPerDay,

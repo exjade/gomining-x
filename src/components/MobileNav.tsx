@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Cpu, DollarSign, Layers, Bell } from 'lucide-react';
+import { Activity, Cpu, DollarSign, Bell, Sliders, Package, Share2 } from 'lucide-react';
 
 interface MobileNavProps {
   activeTab: string;
@@ -17,14 +17,31 @@ export const MobileNav: React.FC<MobileNavProps> = ({
   isDarkTheme = false
 }) => {
   const isLight = !isDarkTheme;
+  const isAdmin = activeTab.startsWith('admin_');
 
-  const tabs = [
+  interface MobileTabItem {
+    id: string;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    badge?: number;
+  }
+
+  const fleetTabs: MobileTabItem[] = [
     { id: 'overview', label: 'Resumen', icon: Activity },
     { id: 'fleet', label: 'GPUs', icon: Cpu, badge: totalGpus },
     { id: 'economics', label: 'ROI & Excel', icon: DollarSign },
-    { id: 'apis', label: 'APIs & Bot', icon: Layers },
     { id: 'alerts', label: 'Alertas', icon: Bell, badge: unresolvedAlertsCount > 0 ? unresolvedAlertsCount : undefined },
   ];
+
+  const adminTabs: MobileTabItem[] = [
+    { id: 'admin_overview', label: 'Resumen', icon: Activity },
+    { id: 'admin_engine', label: 'Motor', icon: Sliders },
+    { id: 'admin_packages', label: 'Paquetes', icon: Package },
+    { id: 'admin_referrals', label: 'Referidos', icon: Share2 },
+    { id: 'admin_ledger', label: 'Ledger', icon: DollarSign },
+  ];
+
+  const tabs = isAdmin ? adminTabs : fleetTabs;
 
   return (
     <nav className={`md:hidden fixed bottom-0 left-0 right-0 z-50 border-t backdrop-blur-2xl px-2 py-2 pb-safe transition-all ${

@@ -9,6 +9,7 @@ import {
   Activity, 
   DollarSign, 
   AlertTriangle, 
+  AlertOctagon,
   ArrowUpRight, 
   ShieldCheck, 
   ShieldAlert, 
@@ -196,12 +197,6 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
     }
   }, [timeframe, summary]);
 
-  // Is the fleet currently profitable or burning?
-  const isActivelyBurning = currentNetProfit < -0.0001;
-  const isProfitable = currentNetProfit > 0.0001;
-  const isNetProfitable = isProfitable;
-  const isNearBreakeven = isProfitable && summary.totalHashrateTHs < (fleetBreakevenTHs * 1.15);
-
   const currentGrossRevenue = useMemo(() => {
     switch (timeframe) {
       case 'day':
@@ -225,6 +220,17 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         return summary.hourlySaladCostUSD;
     }
   }, [timeframe, summary]);
+
+  // Financial Health & Decadence Detection:
+  // 1. Quema Capital: Ganancia neta estrictamente negativa
+  const isActivelyBurning = currentNetProfit < -0.0001;
+  // 2. Decadencia Financiera: El costo de alquiler supera la ganancia neta o el margen cae del 50%
+  const isCostDominant = !isActivelyBurning && currentRentalCost > currentNetProfit && currentRentalCost > 0;
+  // 3. Margen Ajustado: Hashrate cerca del punto de equilibrio
+  const isNearBreakeven = !isActivelyBurning && !isCostDominant && currentNetProfit > 0 && summary.totalHashrateTHs < (fleetBreakevenTHs * 1.15);
+  // 4. ROI Positivo Saludable: Ganancia neta supera al costo y flujo positivo
+  const isProfitable = currentNetProfit > 0.0001 && !isCostDominant;
+  const isNetProfitable = currentNetProfit > 0.0001;
 
   // Sparkline data for KPI 3 (Total Hashrate)
   const sparklineData = useMemo(() => {
@@ -266,14 +272,23 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   }, [history, fleetBreakevenTHs]);
 
   // Circular progress metrics for KPI 2 (Fleet Efficiency)
+  const totalFleetCount = workers.length;
+  const offlineWorkersCount = workers.filter(w => !w.isMining || w.saladStatus !== 'running').length;
+  const offlineRatioPct = totalFleetCount > 0 ? (offlineWorkersCount / totalFleetCount) * 100 : 0;
+
   const efficiencyPct = Math.max(0, Math.min(100, summary.fleetEfficiencyPct || 0));
   const strokeDashoffset = 100 - efficiencyPct;
+
+  // Estado de degradación o alerta por caída de flota masiva o baja potencia
+  const isEfficiencyCritical = efficiencyPct < 60 || offlineRatioPct > 40;
+  const isEfficiencyWarning = !isEfficiencyCritical && (efficiencyPct < 85 || offlineRatioPct > 15);
+
   const efficiencyColor = 
-    efficiencyPct >= 90 
-      ? '#05F292' // Cyber Neon Emerald
-      : efficiencyPct >= 75 
+    isEfficiencyCritical
+      ? '#FF2A55' // Crimson Alert
+      : isEfficiencyWarning
       ? '#F59E0B' // Tactical Amber
-      : '#FF2A55'; // Crimson Alert
+      : '#05F292'; // Cyber Neon Emerald
 
   // Underperforming & Offline workers for immediate action
   const problematicWorkers = useMemo(() => {
@@ -419,7 +434,11 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             transition={{ duration: 0.35, delay: 0.05 }}
             whileHover={{ y: -5, transition: { duration: 0.2 } }}
             className={`relative overflow-hidden rounded-[28px] border p-5 sm:p-6 transition-shadow duration-300 hover:shadow-lg ${
-              isLight
+              isActivelyBurning
+                ? (isLight ? 'bg-rose-50/90 border-rose-300 text-slate-900 shadow-xs' : 'bg-[#200A10] border-rose-500/40 text-white shadow-xl')
+                : isCostDominant
+                ? (isLight ? 'bg-amber-50/90 border-amber-300 text-slate-900 shadow-xs' : 'bg-[#1C1608] border-amber-500/40 text-white shadow-xl')
+                : isLight
                 ? 'bg-[#F1EEFC] border-[#DDD5F5] text-slate-900 shadow-xs'
                 : 'bg-[#151226] border-purple-500/25 text-white shadow-xl'
             }`}
@@ -427,7 +446,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             {/* Subtle Ambient Glow */}
             <div 
               className={`absolute -top-12 -right-12 h-32 w-32 rounded-full blur-2xl pointer-events-none ${
-                isActivelyBurning ? 'bg-rose-500/20' : isProfitable ? 'bg-emerald-500/15' : 'bg-purple-500/15'
+                isActivelyBurning ? 'bg-rose-500/20' : isCostDominant ? 'bg-amber-500/25' : isProfitable ? 'bg-emerald-500/15' : 'bg-purple-500/15'
               }`} 
             />
 
@@ -445,6 +464,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                 className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase border ${
                   isActivelyBurning
                     ? 'bg-rose-500/15 text-rose-500 border-rose-500/30'
+                    : isCostDominant
+                    ? 'bg-amber-500/20 text-amber-600 dark:text-amber-300 border-amber-500/40 animate-pulse'
                     : isNearBreakeven
                     ? 'bg-amber-500/15 text-amber-500 border-amber-500/30'
                     : isProfitable
@@ -456,6 +477,11 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                   <>
                     <TrendingDown className="h-3 w-3 text-rose-500" />
                     <span>Quema Capital</span>
+                  </>
+                ) : isCostDominant ? (
+                  <>
+                    <AlertTriangle className="h-3 w-3 text-amber-500 animate-pulse" />
+                    <span>Costo &gt; Neto</span>
                   </>
                 ) : isNearBreakeven ? (
                   <>
@@ -480,7 +506,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             <div className="mt-4 flex items-baseline gap-2 relative z-10">
               <span 
                 className={`font-jetbrains text-3xl sm:text-4xl font-extrabold tracking-tight tabular-nums ${
-                  isActivelyBurning ? 'text-rose-500' : isLight ? 'text-slate-900' : 'text-white'
+                  isActivelyBurning ? 'text-rose-500' : isCostDominant ? 'text-amber-500 dark:text-amber-300' : isLight ? 'text-slate-900' : 'text-white'
                 }`}
               >
                 {currentNetProfit > 0 ? '+' : ''}${currentNetProfit.toFixed(3)}
@@ -511,8 +537,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 dark:bg-slate-950 text-white border border-transparent dark:border-white/10 px-3.5 py-1 text-xs font-semibold shadow-xs">
                 <span>{new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
                 <span className="text-slate-400">•</span>
-                <span className={isActivelyBurning ? 'text-rose-400' : 'text-[#05DF72]'}>
-                  {isActivelyBurning ? 'Costo Activo' : isProfitable ? 'ROI Positivo' : 'Modo Standby'}
+                <span className={isActivelyBurning ? 'text-rose-400 font-bold' : isCostDominant ? 'text-amber-400 font-bold' : 'text-[#05DF72]'}>
+                  {isActivelyBurning ? 'Costo Activo (Pérdida)' : isCostDominant ? 'Alerta: Costo Domina' : isProfitable ? 'ROI Positivo' : 'Modo Standby'}
                 </span>
               </div>
               <div className="flex -space-x-2 overflow-hidden">
@@ -536,12 +562,23 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             transition={{ duration: 0.35, delay: 0.1 }}
             whileHover={{ y: -5, transition: { duration: 0.2 } }}
             className={`relative overflow-hidden rounded-[28px] border p-5 sm:p-6 transition-shadow duration-300 hover:shadow-lg ${
-              isLight 
+              isEfficiencyCritical
+                ? (isLight ? 'bg-rose-50/90 border-rose-300 text-slate-900 shadow-xs' : 'bg-[#1C0910] border-rose-500/35 text-white shadow-xl')
+                : isEfficiencyWarning
+                ? (isLight ? 'bg-amber-50/90 border-amber-300 text-slate-900 shadow-xs' : 'bg-[#1C1508] border-amber-500/30 text-white shadow-xl')
+                : isLight 
                 ? 'bg-[#E0F2FE] border-sky-200/90 text-slate-900 shadow-xs' 
                 : 'bg-[#0B1E30] border-sky-500/25 text-white shadow-xl'
             }`}
           >
-            <div className="flex items-center justify-between gap-2">
+            {/* Subtle Ambient Glow */}
+            <div 
+              className={`absolute -top-12 -right-12 h-32 w-32 rounded-full blur-2xl pointer-events-none ${
+                isEfficiencyCritical ? 'bg-rose-500/20' : isEfficiencyWarning ? 'bg-amber-500/20' : 'bg-sky-500/15'
+              }`} 
+            />
+
+            <div className="flex items-center justify-between gap-2 relative z-10">
               <div>
                 <h4 className={`font-bold text-base tracking-tight font-sans ${isLight ? 'text-slate-900' : 'text-white'}`}>
                   Eficiencia de Silicio & Flota
@@ -552,23 +589,38 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               </div>
 
               <span 
-                className="text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase"
+                className="text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase flex items-center gap-1"
                 style={{
                   color: efficiencyColor,
                   backgroundColor: `${efficiencyColor}18`,
                   borderColor: `${efficiencyColor}40`
                 }}
               >
-                {efficiencyPct >= 90 ? 'Saludable' : efficiencyPct >= 75 ? 'Atención' : 'Crítico'}
+                {isEfficiencyCritical ? (
+                  <>
+                    <AlertOctagon className="h-3 w-3 animate-pulse" />
+                    <span>Crítico ({offlineRatioPct.toFixed(0)}% Caído)</span>
+                  </>
+                ) : isEfficiencyWarning ? (
+                  <>
+                    <AlertTriangle className="h-3 w-3" />
+                    <span>Atención ({offlineWorkersCount} Offline)</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="h-3 w-3" />
+                    <span>Saludable</span>
+                  </>
+                )}
               </span>
             </div>
 
-            <div className="mt-4 flex items-center justify-between gap-4">
+            <div className="mt-4 flex items-center justify-between gap-4 relative z-10">
               <div>
                 <div className="flex items-baseline gap-1.5">
                   <span 
                     className={`font-jetbrains text-3xl sm:text-4xl font-extrabold tracking-tight tabular-nums ${
-                      isLight ? 'text-slate-900' : 'text-white'
+                      isEfficiencyCritical ? 'text-rose-500' : isEfficiencyWarning ? 'text-amber-500' : isLight ? 'text-slate-900' : 'text-white'
                     }`}
                   >
                     {efficiencyPct.toFixed(1)}%
@@ -600,18 +652,22 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                   />
                 </svg>
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <Cpu className={`h-4 w-4 ${isLight ? 'text-slate-700' : 'text-sky-300'}`} />
+                  <Cpu className={`h-4 w-4 ${isEfficiencyCritical ? 'text-rose-400' : isEfficiencyWarning ? 'text-amber-400' : isLight ? 'text-slate-700' : 'text-sky-300'}`} />
                 </div>
               </div>
             </div>
 
             {/* Video-replica bottom bar: Solid Black Pill on left + Avatar rings on right */}
-            <div className={`mt-3.5 pt-2.5 border-t ${isLight ? 'border-sky-200/70' : 'border-sky-500/20'} flex items-center justify-between`}>
+            <div className={`mt-3.5 pt-2.5 border-t ${
+              isEfficiencyCritical ? (isLight ? 'border-rose-200' : 'border-rose-500/20') :
+              isEfficiencyWarning ? (isLight ? 'border-amber-200' : 'border-amber-500/20') :
+              isLight ? 'border-sky-200/70' : 'border-sky-500/20'
+            } flex items-center justify-between relative z-10`}>
               <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 dark:bg-slate-950 text-white border border-transparent dark:border-white/10 px-3.5 py-1 text-xs font-semibold shadow-xs">
                 <span>{summary.activeMiningGPUs} GPUs Activas</span>
                 <span className="text-slate-400">•</span>
-                <span className={efficiencyPct >= 80 ? 'text-[#05DF72]' : 'text-amber-400'}>
-                  {efficiencyPct >= 80 ? 'Saludable' : 'Alerta'}
+                <span className={isEfficiencyCritical ? 'text-rose-400 font-bold' : isEfficiencyWarning ? 'text-amber-400 font-bold' : 'text-[#05DF72]'}>
+                  {isEfficiencyCritical ? `${offlineWorkersCount} Caídas (Crítico)` : isEfficiencyWarning ? `${offlineWorkersCount} Offline (Alerta)` : 'Saludable'}
                 </span>
               </div>
               <div className="flex -space-x-2 overflow-hidden">
@@ -1358,7 +1414,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                           isLight ? 'bg-slate-50 border-slate-100 text-slate-500' : 'bg-[#06080D] border-white/[0.04] text-slate-400'
                         }`}>
                           <ShieldCheck className="h-6 w-6 text-[#05DF72]" />
-                          <span className="font-semibold text-slate-300">
+                          <span className={`font-semibold ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>
                             {fleetActiveTab === 'alerts' 
                               ? '¡Excelente! Sin alertas de rendimiento o nodos caídos.' 
                               : 'Sin trabajadores registrados.'}

@@ -11,6 +11,21 @@ import { LandingPage } from './components/LandingPage';
 import { FloatingHubWidget } from './components/FloatingHubWidget';
 import { AuthScreen } from './components/AuthScreen';
 
+// Admin Control Center Views (Unified Calculation Model & Hybrid Mining Architecture)
+import { AdminOverview } from './components/admin/AdminOverview';
+import { MiningEngineControlView } from './components/admin/MiningEngineControlView';
+import { PackageBuilderView } from './components/admin/PackageBuilderView';
+import { ContractsAllocationView } from './components/admin/ContractsAllocationView';
+import { VirtualWorkersView } from './components/admin/VirtualWorkersView';
+import { LedgerView } from './components/admin/LedgerView';
+import { UserManagementView } from './components/admin/UserManagementView';
+import { PromotionsManagerView } from './components/admin/PromotionsManagerView';
+import { AuditLogsView } from './components/admin/AuditLogsView';
+import { ReferralsView } from './components/admin/ReferralsView';
+import { WithdrawalsView } from './components/admin/WithdrawalsView';
+import { PackagePaymentsView } from './components/admin/PackagePaymentsView';
+import { MinerxProfitEngine } from './services/admin/minerxProfitEngine';
+
 import { 
   INITIAL_SALAD_ACCOUNTS, 
   INITIAL_KRYPTEX_CONFIG, 
@@ -201,8 +216,23 @@ export const App: React.FC = () => {
     setCurrentUser(null);
   };
 
+  // Operational Suite Mode (Fleet Management vs Admin Control Center)
+  const [suiteMode, setSuiteMode] = useState<'fleet' | 'admin'>(() => {
+    const saved = localStorage.getItem('minerx_suite_mode');
+    if (saved === 'admin' || saved === 'fleet') return saved;
+    return 'admin';
+  });
+
+  const handleToggleSuiteMode = (mode: 'fleet' | 'admin') => {
+    setSuiteMode(mode);
+    localStorage.setItem('minerx_suite_mode', mode);
+  };
+
   // UI State
-  const [activeTab, setActiveTab] = useState<string>('overview');
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    const savedSuite = localStorage.getItem('minerx_suite_mode');
+    return savedSuite === 'fleet' ? 'overview' : 'admin_overview';
+  });
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [reallocatingWorker, setReallocatingWorker] = useState<MergedGPUWorker | null>(null);
 
@@ -372,22 +402,73 @@ export const App: React.FC = () => {
           // 2a. Kryptex Pool Info & Spot Market Rates
           const primaryCoin = effectiveKryptexAccounts[0].coin || 'prl';
           const poolRes = await apiFetch(`/api/kryptex/pool?coin=${primaryCoin}`);
+          let liveFetchedPrlRate = prlRateUSD;
+          let poolJsonData: any = null;
           if (poolRes.ok) {
-            const pData = await poolRes.json();
-            setPoolInfo((prev) => ({ ...prev, ...pData }));
+            poolJsonData = await poolRes.json();
+            setPoolInfo((prev) => ({ ...prev, ...poolJsonData }));
           }
 
           try {
             const ratesRes = await apiFetch('/api/kryptex/rates');
             if (ratesRes.ok) {
               const rData = await ratesRes.json();
-              const rate = Number(rData?.crypto?.PRL || 0);
-              if (rate > 0) {
+              const rate = Number(
+                rData?.crypto?.PRL ??
+                rData?.crypto?.prl ??
+                rData?.rates?.crypto?.PRL ??
+                rData?.rates?.crypto?.prl ??
+                rData?.PRL ??
+                rData?.prl ??
+                rData?.rates?.PRL ??
+                0
+              );
+              if (rate > 0.05 && rate < 50) {
+                liveFetchedPrlRate = rate;
                 setPrlRateUSD(rate);
               }
             }
           } catch (rErr) {
             console.warn('Error fetching Kryptex rates:', rErr);
+          }
+
+          // Fallback a Kryptex daily-revenue o pool info si rates no entregó precio válido
+          if (!liveFetchedPrlRate || liveFetchedPrlRate < 0.05) {
+            try {
+              const revRes = await apiFetch('/api/kryptex/daily-revenue?hashrate=1000000000000');
+              if (revRes.ok) {
+                const revData = await revRes.json();
+                const first = Array.isArray(revData) ? revData[0] : revData;
+                const usd = Number(first?.usd);
+                const coins = Number(first?.coins);
+                if (usd > 0 && coins > 0) {
+                  const calculatedPrice = Number((usd / coins).toFixed(4));
+                  if (calculatedPrice > 0.05 && calculatedPrice < 50) {
+                    liveFetchedPrlRate = calculatedPrice;
+                    setPrlRateUSD(calculatedPrice);
+                  }
+                }
+              }
+            } catch {}
+          }
+
+          // Fallback adicional con poolJsonData
+          if ((!liveFetchedPrlRate || liveFetchedPrlRate < 0.05) && poolJsonData) {
+            const pPrice = Number(poolJsonData.usd_rate || poolJsonData.price || poolJsonData.prices?.usd || 0);
+            if (pPrice > 0.05 && pPrice < 50) {
+              liveFetchedPrlRate = pPrice;
+              setPrlRateUSD(pPrice);
+            }
+          }
+
+          // Sincronización bidireccional inmediata con el Motor Híbrido MinerX
+          try {
+            MinerxProfitEngine.getInstance().syncFromFleetTelemetry({
+              prlPriceUsd: liveFetchedPrlRate > 0.05 ? liveFetchedPrlRate : undefined,
+              poolInfo: poolJsonData
+            });
+          } catch (peErr) {
+            console.warn('No se pudo sincronizar Profit Engine desde telemetría de flota:', peErr);
           }
 
           // 2b, 2c, 2d. Concurrently query all connected Kryptex accounts & unify data
@@ -802,6 +883,37 @@ export const App: React.FC = () => {
           });
         }
       });
+
+      // Macro Alerts: Financial Decadence & Massive Fleet Outage
+      const totalSaladCostCalc = mergedWorkersList.reduce((acc, w) => acc + (w.hourlySaladCost || 0), 0);
+      const totalGrossRevCalc = mergedWorkersList.reduce((acc, w) => acc + (w.isMining ? w.currentHashrateTHs : 0), 0) * BASELINE_USD_PER_THS_HOUR;
+      const totalNetProfitCalc = totalGrossRevCalc - totalSaladCostCalc;
+      const offlineWorkersCount = mergedWorkersList.filter((w) => !w.isMining || w.saladStatus !== 'running').length;
+
+      if (totalSaladCostCalc > totalNetProfitCalc && totalSaladCostCalc > 0) {
+        liveAlerts.unshift({
+          id: 'macro-alert-cost-dominance',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          type: 'UNDERPERFORMING',
+          workerName: 'Alerta Financiera Flota',
+          gpuModel: 'Costo Alquiler > Ganancia Neta',
+          message: `Decadencia de Rentabilidad: El costo de alquiler ($${totalSaladCostCalc.toFixed(2)}/h) supera la ganancia neta ($${totalNetProfitCalc.toFixed(2)}/h). El margen está comprometido por máquinas inactivas o tarifas elevadas.`,
+          severity: 'critical'
+        });
+      }
+
+      if (offlineWorkersCount > 10 && (offlineWorkersCount / mergedWorkersList.length) > 0.15) {
+        liveAlerts.unshift({
+          id: 'macro-alert-fleet-offline',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          type: 'DISCONNECT',
+          workerName: 'Supervisión de Clúster',
+          gpuModel: `${offlineWorkersCount} de ${mergedWorkersList.length} GPUs Offline`,
+          message: `Decadencia de Flota: ${offlineWorkersCount} trabajadores están desconectados sin enviar shares (${((offlineWorkersCount / mergedWorkersList.length) * 100).toFixed(0)}% de la flota caída). La eficiencia de silicio está en nivel crítico.`,
+          severity: 'critical'
+        });
+      }
+
       setAlerts(liveAlerts);
 
       // Update telemetry history point
@@ -824,6 +936,14 @@ export const App: React.FC = () => {
           }];
           return next;
         });
+
+        // Sincronizar potencia total de flota y cotización viva con el Motor Híbrido
+        try {
+          MinerxProfitEngine.getInstance().syncFromFleetTelemetry({
+            prlPriceUsd: prlRateUSD > 0.05 ? prlRateUSD : undefined,
+            totalFleetHashrateThs: totalH
+          });
+        } catch {}
       }
     } finally {
       if (isManual) {
@@ -1137,7 +1257,12 @@ export const App: React.FC = () => {
         syncBackendConfig(accounts, kryptexConfig, settings, updated);
         return { success: true, message: `Conexión a Kryptex exitosa (${count} workers detectados)` };
       }
-      return { success: false, message: `Error HTTP ${res.status} al consultar pool de Kryptex` };
+      let errorMsg = `Error HTTP ${res.status} al consultar pool de Kryptex`;
+      try {
+        const errJson = await res.json();
+        if (errJson?.message) errorMsg = errJson.message;
+      } catch {}
+      return { success: false, message: errorMsg };
     } catch (e: any) {
       return { success: false, message: e.message || 'Error de red' };
     }
@@ -1298,6 +1423,8 @@ export const App: React.FC = () => {
           onLogout={handleLogout}
           isDarkTheme={themeMode === 'dark'}
           onToggleTheme={handleToggleTheme}
+          suiteMode={suiteMode}
+          onToggleSuiteMode={handleToggleSuiteMode}
           onOpenHub={() => {
             if ((window as any).electronAPI?.toggleDesktopWidget) {
               (window as any).electronAPI.toggleDesktopWidget();
@@ -1326,6 +1453,8 @@ export const App: React.FC = () => {
               isDarkTheme={themeMode === 'dark'}
             />
           )}
+
+
 
           {activeTab === 'fleet' && (
             <FleetTab
@@ -1389,6 +1518,82 @@ export const App: React.FC = () => {
               workers={workers}
               onClearAlerts={handleClearAlerts}
               onOpenReallocate={(w) => setReallocatingWorker(w)}
+              isDarkTheme={themeMode === 'dark'}
+            />
+          )}
+
+          {/* Admin Control Center Views */}
+          {activeTab === 'admin_overview' && (
+            <AdminOverview
+              onNavigateTab={(tabId) => setActiveTab(tabId)}
+              isDarkTheme={themeMode === 'dark'}
+            />
+          )}
+
+          {activeTab === 'admin_engine' && (
+            <MiningEngineControlView
+              isDarkTheme={themeMode === 'dark'}
+            />
+          )}
+
+          {activeTab === 'admin_referrals' && (
+            <ReferralsView
+              isDarkTheme={themeMode === 'dark'}
+            />
+          )}
+
+          {activeTab === 'admin_packages' && (
+            <PackageBuilderView
+              isDarkTheme={themeMode === 'dark'}
+              onNavigateToEngine={(_pkgId) => setActiveTab('admin_engine')}
+            />
+          )}
+
+          {activeTab === 'admin_orders' && (
+            <PackagePaymentsView
+              isDarkTheme={themeMode === 'dark'}
+            />
+          )}
+
+          {activeTab === 'admin_withdrawals' && (
+            <WithdrawalsView
+              isDarkTheme={themeMode === 'dark'}
+            />
+          )}
+
+          {activeTab === 'admin_allocations' && (
+            <ContractsAllocationView
+              isDarkTheme={themeMode === 'dark'}
+            />
+          )}
+
+          {activeTab === 'admin_workers' && (
+            <VirtualWorkersView
+              realWorkers={workers}
+              isDarkTheme={themeMode === 'dark'}
+            />
+          )}
+
+          {activeTab === 'admin_ledger' && (
+            <LedgerView
+              isDarkTheme={themeMode === 'dark'}
+            />
+          )}
+
+          {activeTab === 'admin_users' && (
+            <UserManagementView
+              isDarkTheme={themeMode === 'dark'}
+            />
+          )}
+
+          {activeTab === 'admin_promos' && (
+            <PromotionsManagerView
+              isDarkTheme={themeMode === 'dark'}
+            />
+          )}
+
+          {activeTab === 'admin_audit' && (
+            <AuditLogsView
               isDarkTheme={themeMode === 'dark'}
             />
           )}

@@ -1103,6 +1103,23 @@ app.get('/api/kryptex/rates', async (_req, res) => {
   }
 });
 
+// 12. Kryptex Daily Revenue Proxy (Direct hashrate -> USD and PRL coins yield)
+app.get('/api/kryptex/daily-revenue', async (req, res) => {
+  const hashrate = req.query.hashrate || '1000000000000'; // Default 1 TH/s
+  try {
+    const response = await fetch(`https://pool.kryptex.com/api/v2/daily-revenue/PRL?hashrate=${hashrate}`, {
+      headers: { Accept: 'application/json' }
+    });
+    if (response.ok) {
+      const data = await response.json();
+      return res.json(data);
+    }
+    res.status(response.status).json({ error: response.statusText });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 11. Dedicated Telegram Bot Test & Verification Endpoint
 app.post('/api/telegram/test', async (req, res) => {
   const { token, botToken, chatId, telegramChatId, customMessage } = req.body;

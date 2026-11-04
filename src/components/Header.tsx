@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import { apiFetch } from '../utils/apiConfig';
 import { 
   Activity, 
@@ -16,7 +15,15 @@ import {
   Sparkles, 
   Sun, 
   Moon,
-  AppWindow 
+  AppWindow,
+  Sliders,
+  Package,
+  Users,
+  ShieldCheck,
+  Server,
+  Share2,
+  ShoppingCart,
+  ArrowDownRight
 } from 'lucide-react';
 import type { FleetSummary, AppSettings, KryptexPoolInfo, SaladBalanceInfo } from '../types/minerx';
 
@@ -39,6 +46,8 @@ interface HeaderProps {
   isDarkTheme?: boolean;
   onToggleTheme?: () => void;
   onOpenHub?: () => void;
+  suiteMode?: 'fleet' | 'admin';
+  onToggleSuiteMode?: (mode: 'fleet' | 'admin') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -59,7 +68,9 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
   isDarkTheme = false,
   onToggleTheme,
-  onOpenHub
+  onOpenHub,
+  suiteMode = 'fleet',
+  onToggleSuiteMode
 }) => {
   const [isEditingWallet, setIsEditingWallet] = useState(false);
   const [walletInput, setWalletInput] = useState(walletAddress);
@@ -100,13 +111,39 @@ export const Header: React.FC<HeaderProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  const tabs = [
+  const currentSuite = suiteMode || (activeTab.startsWith('admin_') ? 'admin' : 'fleet');
+
+  interface NavTabItem {
+    id: string;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    badge?: number;
+  }
+
+  const fleetTabs: NavTabItem[] = [
     { id: 'overview', label: 'Resumen', icon: Activity },
     { id: 'fleet', label: 'Flota', icon: Cpu, badge: summary.totalAllocatedGPUs },
     { id: 'economics', label: 'Economía', icon: DollarSign },
     { id: 'apis', label: 'APIs', icon: Layers },
     { id: 'alerts', label: 'Alertas', icon: Bell, badge: unresolvedAlertsCount > 0 ? unresolvedAlertsCount : undefined },
   ];
+
+  const adminTabs: NavTabItem[] = [
+    { id: 'admin_overview', label: 'Dashboard', icon: Activity },
+    { id: 'admin_engine', label: 'Motor Híbrido', icon: Sliders },
+    { id: 'admin_packages', label: 'Paquetes', icon: Package },
+    { id: 'admin_orders', label: 'Pagos Paquetes', icon: ShoppingCart },
+    { id: 'admin_withdrawals', label: 'Retiros', icon: ArrowDownRight },
+    { id: 'admin_allocations', label: 'Potencia', icon: Cpu },
+    { id: 'admin_workers', label: 'Workers', icon: Server },
+    { id: 'admin_referrals', label: 'Referidos', icon: Share2 },
+    { id: 'admin_ledger', label: 'Ledger', icon: DollarSign },
+    { id: 'admin_users', label: 'Usuarios', icon: Users },
+    { id: 'admin_promos', label: 'Promos', icon: Sparkles },
+    { id: 'admin_audit', label: 'Auditoría', icon: ShieldCheck },
+  ];
+
+  const tabs = currentSuite === 'admin' ? adminTabs : fleetTabs;
 
   const handleSaveSalad = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -157,7 +194,7 @@ export const Header: React.FC<HeaderProps> = ({
       {/* MAIN LUXURY HEADER & FINTECH NAVIGATION BAR (Ref: Video Clean Single-Tier Header) */}
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 py-3.5">
         
-        {/* Left: Video-Cloned Squircle Logo Tile + "Dashboard" Title */}
+        {/* Left: Video-Cloned Squircle Logo Tile + Brand + Suite Switcher */}
         <div className="flex items-center gap-3">
           <div 
             onClick={onOpenLanding}
@@ -167,64 +204,50 @@ export const Header: React.FC<HeaderProps> = ({
             <Flame className="h-5 w-5 fill-[#05DF72]" />
           </div>
 
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className={`text-xl sm:text-2xl font-bold tracking-tight font-sans ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
-                {activeTab === 'overview' ? 'Dashboard' : activeTab === 'fleet' ? 'Flota GPUs' : activeTab === 'economics' ? 'Calculadora' : activeTab === 'apis' ? 'APIs & Bot' : 'Alertas'}
-              </h1>
-              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-[#05DF72] border border-emerald-500/20">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#05DF72] animate-pulse"></span>
-                <span>PoUW</span>
-              </span>
+          <div className="flex items-center gap-2">
+            <span className={`text-xl font-bold tracking-tight font-sans ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+              MinerX
+            </span>
+            <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-[#05DF72] border border-emerald-500/20">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#05DF72] animate-pulse"></span>
+              <span>{currentSuite === 'admin' ? 'ADMIN' : 'PoUW'}</span>
+            </span>
+
+            {/* Luxury Suite Switcher (Flota Kryptex vs Admin Center) */}
+            <div className={`flex items-center gap-1 p-0.5 rounded-2xl border ml-2 ${
+              isDarkTheme ? 'bg-[#0B0F19] border-white/10' : 'bg-slate-100 border-slate-200'
+            }`}>
+              <button
+                type="button"
+                onClick={() => {
+                  onToggleSuiteMode?.('fleet');
+                  setActiveTab('overview');
+                }}
+                className={`px-3 py-1 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer active:scale-[0.97] ${
+                  currentSuite === 'fleet'
+                    ? (isDarkTheme ? 'bg-[#05DF72] text-slate-950 shadow-sm' : 'bg-slate-900 text-[#05DF72]')
+                    : (isDarkTheme ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900')
+                }`}
+              >
+                ⚡ Flota
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onToggleSuiteMode?.('admin');
+                  setActiveTab('admin_overview');
+                }}
+                className={`px-3 py-1 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer active:scale-[0.97] ${
+                  currentSuite === 'admin'
+                    ? (isDarkTheme ? 'bg-[#05DF72] text-slate-950 shadow-sm' : 'bg-slate-900 text-[#05DF72]')
+                    : (isDarkTheme ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900')
+                }`}
+              >
+                🛡️ Admin
+              </button>
             </div>
           </div>
         </div>
-
-        {/* Center: Video-Cloned Pill Capsule Navigation with Framer Motion sliding pill */}
-        <nav className={`hidden md:flex items-center p-1.5 rounded-full border shadow-inner transition-colors ${
-          isDarkTheme ? 'bg-[#0B0F19] border-white/10' : 'bg-slate-100/90 border-slate-200/90'
-        }`}>
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className="relative flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer select-none"
-              >
-                {isActive && (
-                  <motion.div
-                    layoutId="header-active-pill"
-                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                    className={`absolute inset-0 rounded-full shadow-sm ${
-                      isDarkTheme ? 'bg-white' : 'bg-slate-900'
-                    }`}
-                  />
-                )}
-                <span className={`relative z-10 transition-colors ${
-                  isActive
-                    ? (isDarkTheme ? 'text-slate-950 font-bold' : 'text-white font-bold')
-                    : (isDarkTheme ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900')
-                }`}>
-                  {tab.label}
-                </span>
-                {tab.badge !== undefined && tab.badge > 0 && (
-                  <span
-                    className={`relative z-10 ml-0.5 rounded-full px-1.5 py-0.2 text-[9px] font-mono font-bold transition-colors ${
-                      tab.id === 'alerts' && unresolvedAlertsCount > 0
-                        ? 'bg-rose-500 text-white animate-pulse'
-                        : isActive
-                        ? (isDarkTheme ? 'bg-slate-900 text-[#05DF72]' : 'bg-[#05DF72] text-slate-950')
-                        : 'bg-emerald-500/20 text-[#05DF72]'
-                    }`}
-                  >
-                    {tab.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
 
         {/* Right: Video-Cloned Action Circles (Search, Notification Bell, User Avatar) */}
         <div className="flex items-center gap-2 sm:gap-2.5">
@@ -385,6 +408,53 @@ export const Header: React.FC<HeaderProps> = ({
             <span>{currentUser?.username ? currentUser.username.substring(0, 2).toUpperCase() : 'MX'}</span>
             <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-[#05DF72] ring-2 ring-white dark:ring-slate-900"></span>
           </div>
+        </div>
+      </div>
+
+      {/* TIER 2: EXPANSIVE FULL-WIDTH HORIZONTAL FINTECH NAVIGATION BAR */}
+      <div className={`w-full border-t transition-colors ${
+        isDarkTheme 
+          ? 'border-white/[0.06] bg-[#0A0D16]/95' 
+          : 'border-slate-200/80 bg-slate-50/90'
+      }`}>
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 py-2">
+          <nav className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
+            {tabs.map((tab) => {
+              const isActive = activeTab === tab.id;
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`relative flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-all cursor-pointer select-none shrink-0 active:scale-[0.97] ${
+                    isActive
+                      ? isDarkTheme 
+                        ? 'bg-white text-slate-950 font-bold shadow-sm' 
+                        : 'bg-slate-900 text-white font-bold shadow-sm'
+                      : isDarkTheme
+                        ? 'text-slate-400 hover:text-white hover:bg-white/5'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
+                  }`}
+                >
+                  <Icon className={`h-3.5 w-3.5 ${isActive ? (isDarkTheme ? 'text-slate-950' : 'text-[#05DF72]') : 'opacity-70'}`} />
+                  <span>{tab.label}</span>
+                  {tab.badge !== undefined && tab.badge > 0 && (
+                    <span
+                      className={`ml-1 rounded-full px-1.5 py-0.2 text-[9px] font-mono font-bold ${
+                        tab.id === 'alerts' && unresolvedAlertsCount > 0
+                          ? 'bg-rose-500 text-white animate-pulse'
+                          : isActive
+                          ? (isDarkTheme ? 'bg-slate-900 text-[#05DF72]' : 'bg-[#05DF72] text-slate-950')
+                          : 'bg-emerald-500/20 text-[#05DF72]'
+                      }`}
+                    >
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
         </div>
       </div>
     </header>
