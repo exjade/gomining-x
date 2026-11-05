@@ -1,19 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PublicKey, Transaction } from '@solana/web3.js'
 import { SOLANA_USDT_MINT, type PaymentNetworkId } from './paymentDestinations'
 import type { PaymentQuote } from './paymentQuote'
 import { getMetaMaskConnectClient, metaMaskChainId } from './metamaskConnect'
+import { getCoinbaseWalletProvider } from './coinbaseWallet'
 import { isWalletRejection } from './walletError'
 import { cancelPhantomMobileConnect, clearPhantomMobileSession, consumePhantomReturn, createPhantomConnectUrl, createPhantomPaymentUrl, readPhantomMobileSession, type PhantomMobileSession, type PhantomPaymentReturn } from './phantomMobile'
 import { cancelSolflareMobileConnect, clearSolflareMobileSession, consumeSolflareReturn, createSolflareConnectUrl, createSolflarePaymentUrl, readSolflareMobileSession, type SolflarePaymentReturn, type SolflareMobileSession } from './solflareMobile'
 import { hasWalletBrowserProvider, isMobileBrowser } from './walletAppLinks'
 
-export type WalletId = 'solflare' | 'phantom' | 'metamask' | 'coinbase' | 'trustwallet' | 'tronlink' | 'unisat'
+export type WalletId = 'solflare' | 'phantom' | 'metamask' | 'coinbase' | 'trustwallet' | 'keplr' | 'tronlink' | 'unisat'
 
 export type ConnectedWallet = {
   id: WalletId
   name: string
-  protocol: 'Solana' | 'EIP-1193' | 'Bitcoin' | 'TRON'
+  protocol: 'Solana' | 'EIP-1193' | 'Bitcoin' | 'TRON' | 'Cosmos'
   network: string
   address: string
   shortAddress: string
@@ -56,9 +57,15 @@ type EvmProvider = {
   isTrust?: boolean
   isTrustWallet?: boolean
   request: (request: { method: string; params?: unknown[] }) => Promise<unknown>
+  disconnect?: () => Promise<void> | void
   on?: (event: string, listener: (...args: unknown[]) => void) => void
   removeListener?: (event: string, listener: (...args: unknown[]) => void) => void
   providers?: EvmProvider[]
+}
+type KeplrAccount = { address: string }
+type KeplrProvider = {
+  enable: (chainId: string | string[]) => Promise<void>
+  getOfflineSigner?: (chainId: string) => { getAccounts: () => Promise<KeplrAccount[]> }
 }
 type Eip6963Provider = { info?: { name?: string; rdns?: string; uuid?: string }; provider: EvmProvider }
 type UniSatProvider = {
@@ -88,9 +95,9 @@ type TronProvider = {
 
 declare global {
   interface Window {
-    ethereum?: EvmProvider
     coinbaseWalletExtension?: EvmProvider
     trustwallet?: { ethereum?: EvmProvider }
+    keplr?: KeplrProvider
     phantom?: { solana?: SolanaProvider }
     solana?: SolanaProvider
     solflare?: SolanaProvider
@@ -120,6 +127,7 @@ export function useWalletSession(): WalletSession {
   const manualConnectingRef = useRef<WalletId | null>(null)
   const connectAttemptRef = useRef(0)
   const pendingMetaMaskClientRef = useRef<Awaited<ReturnType<typeof getMetaMaskConnectClient>> | null>(null)
+  const pendingCoinbaseProviderRef = useRef<EvmProvider | null>(null)
   const removeListenersRef = useRef<(() => void) | null>(null)
 
   const updateConnection = useCallback((next: ConnectedWallet | null) => {
@@ -129,6 +137,14 @@ export function useWalletSession(): WalletSession {
 
   const consumeSolflarePaymentReturn = useCallback(() => setSolflarePaymentReturn(null), [])
   const consumePhantomPaymentReturn = useCallback(() => setPhantomPaymentReturn(null), [])
+
+  useEffect(() => {
+    if (!isMobileBrowser() || !window.isSecureContext) return
+    // Warm the SDK clients before a tap so their dynamic imports do not delay
+    // the mobile-app handoff. Creating a provider does not request permission.
+    if (!hasWalletBrowserProvider('metamask')) void getMetaMaskConnectClient().catch(() => undefined)
+    if (!hasWalletBrowserProvider('coinbase')) void getCoinbaseWalletProvider().catch(() => undefined)
+  }, [])
 
   useEffect(() => {
     let returned: ReturnType<typeof consumeSolflareReturn>
@@ -191,6 +207,12 @@ export function useWalletSession(): WalletSession {
       const client = pendingMetaMaskClientRef.current
       pendingMetaMaskClientRef.current = null
       if (client) void client.disconnect().catch(() => undefined)
+    }
+    if (walletId === 'coinbase') {
+      try { window.localStorage.removeItem('gm:coinbase-sdk-used') } catch { /* storage can be disabled */ }
+      const provider = pendingCoinbaseProviderRef.current
+      pendingCoinbaseProviderRef.current = null
+      if (provider?.disconnect) void Promise.resolve(provider.disconnect()).catch(() => undefined)
     }
     if (walletId === 'solflare') cancelSolflareMobileConnect()
     if (walletId === 'phantom') cancelPhantomMobileConnect()
@@ -327,6 +349,45 @@ export function useWalletSession(): WalletSession {
         }
       }
 
+      // Coinbase Wallet SDK owns its persisted session. Restore only after a
+      // previous explicit connect attempt; never show a wallet prompt on load.
+      const coinbaseSdkWasUsed = (() => {
+        try { return window.localStorage.getItem('gm:coinbase-sdk-used') === '1' } catch { return false }
+      })()
+      if (coinbaseSdkWasUsed && !cancelled && !manualConnectingRef.current && !connectionRef.current) {
+        try {
+          const provider = await getCoinbaseWalletProvider() as unknown as EvmProvider
+          const accounts = await provider.request({ method: 'eth_accounts' }).catch(() => [])
+          const address = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : ''
+          if (address && !cancelled && !manualConnectingRef.current && !connectionRef.current) {
+            let activeAddress = address
+            let activeChainId: unknown = await provider.request({ method: 'eth_chainId' }).catch(() => '0x1')
+            const refresh = () => updateConnection(makeConnection('coinbase', 'Coinbase Wallet', 'EIP-1193', evmNetworkName(activeChainId), activeAddress, async () => {
+              try { window.localStorage.removeItem('gm:coinbase-sdk-used') } catch { /* storage can be disabled */ }
+              await provider.disconnect?.()
+            }, (quote) => sendEvmPayment(provider, activeAddress, quote)))
+            const onAccountsChanged = (next: unknown) => {
+              activeAddress = Array.isArray(next) && typeof next[0] === 'string' ? next[0] : ''
+              if (!activeAddress) updateConnection(null)
+              else refresh()
+            }
+            const onChainChanged = (next: unknown) => { activeChainId = next; refresh() }
+            provider.on?.('accountsChanged', onAccountsChanged)
+            provider.on?.('chainChanged', onChainChanged)
+            const remove = () => {
+              provider.removeListener?.('accountsChanged', onAccountsChanged)
+              provider.removeListener?.('chainChanged', onChainChanged)
+            }
+            adopt(makeConnection('coinbase', 'Coinbase Wallet', 'EIP-1193', evmNetworkName(activeChainId), activeAddress, async () => {
+              try { window.localStorage.removeItem('gm:coinbase-sdk-used') } catch { /* storage can be disabled */ }
+              await provider.disconnect?.()
+            }, (quote) => sendEvmPayment(provider, activeAddress, quote)), remove)
+          }
+        } catch {
+          // No persisted Coinbase Wallet session is a normal first-visit state.
+        }
+      }
+
       const tron = window.tron
       const tronWeb = tron?.tronWeb
       const tronAddress = tronWeb && typeof tronWeb === 'object' ? tronWeb.defaultAddress?.base58 : undefined
@@ -395,6 +456,7 @@ export function useWalletSession(): WalletSession {
     setError('')
     setConnectingWallet(walletId)
     let metaMaskConnectAttempted = false
+    let coinbaseSdkConnectAttempted = false
 
     // Solflare's /browse link opens this site inside its embedded browser. For
     // a regular mobile browser, use the encrypted native connect deeplink and
@@ -439,8 +501,13 @@ export function useWalletSession(): WalletSession {
     }
 
     try {
-      await disconnect()
-      if (!isCurrentAttempt()) return 'failed'
+      if (connectionRef.current) {
+        await disconnect()
+        if (!isCurrentAttempt()) return 'failed'
+      } else {
+        removeListenersRef.current?.()
+        removeListenersRef.current = null
+      }
 
       if (walletId === 'solflare') {
         const { default: Solflare } = await import('@solflare-wallet/sdk')
@@ -509,12 +576,55 @@ export function useWalletSession(): WalletSession {
         return 'connected'
       }
 
+      if (walletId === 'keplr') {
+        const provider = window.keplr
+        if (!provider) throw new Error('No se encontró Keplr. Abre esta página en su navegador DApp o habilita la extensión.')
+        const chainId = 'cosmoshub-4'
+        await provider.enable(chainId)
+        if (!isCurrentAttempt()) return 'failed'
+        const signer = provider.getOfflineSigner?.(chainId)
+        if (!signer) throw new Error('Keplr no expuso el lector de cuentas de Cosmos.')
+        const accounts = await signer.getAccounts()
+        if (!isCurrentAttempt()) return 'failed'
+        const address = accounts[0]?.address
+        if (!address) throw new Error('Keplr no devolvió una dirección de Cosmos Hub.')
+        const refreshConnection = (nextAddress: string) => updateConnection(makeConnection(
+          'keplr', 'Keplr', 'Cosmos', 'Cosmos Hub · cosmoshub-4', nextAddress,
+          () => undefined,
+          async () => { throw new Error('Keplr está conectado solo para consultar la dirección; Cosmos no está habilitado como red de pago.') },
+        ))
+        const onKeystoreChange = () => {
+          void signer.getAccounts().then((nextAccounts) => {
+            if (!isCurrentAttempt()) return
+            const nextAddress = nextAccounts[0]?.address
+            if (nextAddress) refreshConnection(nextAddress)
+            else updateConnection(null)
+          }).catch(() => updateConnection(null))
+        }
+        window.addEventListener('keplr_keystorechange', onKeystoreChange)
+        removeListenersRef.current = () => window.removeEventListener('keplr_keystorechange', onKeystoreChange)
+        refreshConnection(address)
+        return 'connected'
+      }
+
       if (walletId === 'metamask' || walletId === 'coinbase' || walletId === 'trustwallet') {
         const name = walletName(walletId)
-        const evmProviders = await discoverEvmProviders()
+        // Prefer an injected provider inside a wallet browser. On ordinary
+        // mobile browsers MetaMask Connect and Coinbase Wallet SDK carry an
+        // explicit connect request to their apps; opening an app link alone
+        // would only show its home screen.
+        const useSdkWithoutProviderDiscovery = isMobileBrowser()
+          && (walletId === 'metamask' || walletId === 'coinbase')
+          && !hasWalletBrowserProvider(walletId)
+        // Use a provider already injected by a mobile DApp browser immediately.
+        // This starts eth_requestAccounts in the same call stack as the tap;
+        // waiting for EIP-6963 discovery can lose the browser's user activation.
+        const injectedProvider = useSdkWithoutProviderDiscovery ? undefined : findNamedEvmProvider(walletId, collectInjectedEvmProviders())
+        const evmProviders = useSdkWithoutProviderDiscovery || injectedProvider ? [] : await discoverEvmProviders(walletId)
         if (!isCurrentAttempt()) return 'failed'
-        let provider = findNamedEvmProvider(walletId, evmProviders)
+        let provider = injectedProvider ?? findNamedEvmProvider(walletId, evmProviders)
         let metaMaskClient: Awaited<ReturnType<typeof getMetaMaskConnectClient>> | null = null
+        let coinbaseSdkProvider: EvmProvider | null = null
         let address = ''
         let activeChainId: unknown
         if (!provider && walletId === 'metamask') {
@@ -526,25 +636,52 @@ export function useWalletSession(): WalletSession {
           // during the app switch, a fresh page load can restore the SDK session.
           metaMaskConnectAttempted = true
           try { window.localStorage.setItem('gm:metamask-connect-used', '1') } catch { /* restore is unavailable when storage is disabled */ }
-          const result = await metaMaskClient.connect({ chainIds: [metaMaskChainId(network)], forceRequest: true })
+          // Use MetaMask Connect's standard cross-platform connect request.
+          // forceRequest is only needed to reselect an account in an existing
+          // session and is unnecessary for the initial mobile permission flow.
+          const result = await metaMaskClient.connect({ chainIds: [metaMaskChainId(network)] })
           if (!isCurrentAttempt()) { await metaMaskClient.disconnect().catch(() => undefined); return 'failed' }
           provider = metaMaskClient.getProvider() as unknown as EvmProvider
           address = result.accounts[0] ?? ''
           activeChainId = result.chainId
+        } else if (!provider && walletId === 'coinbase') {
+          coinbaseSdkProvider = await getCoinbaseWalletProvider() as unknown as EvmProvider
+          pendingCoinbaseProviderRef.current = coinbaseSdkProvider
+          if (!isCurrentAttempt()) { await coinbaseSdkProvider.disconnect?.(); return 'failed' }
+          coinbaseSdkConnectAttempted = true
+          try { window.localStorage.setItem('gm:coinbase-sdk-used', '1') } catch { /* restore is unavailable when storage is disabled */ }
+          const accounts = await coinbaseSdkProvider.request({ method: 'eth_requestAccounts' })
+          if (!isCurrentAttempt()) { await coinbaseSdkProvider.disconnect?.(); return 'failed' }
+          address = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : ''
+          activeChainId = await coinbaseSdkProvider.request({ method: 'eth_chainId' })
+          if (!isCurrentAttempt()) { await coinbaseSdkProvider.disconnect?.(); return 'failed' }
         } else {
-          if (!provider) throw new Error(`No se encontró ${name}. Instala o habilita su extensión e inténtalo de nuevo.`)
+          if (!provider) {
+            if (isMobileBrowser() && walletId === 'trustwallet') {
+              throw new Error('Trust Wallet abrió la página, pero su proveedor no está disponible. Confirma que sigues dentro de su navegador DApp y vuelve a tocar Conectar; el enlace no autoriza la dirección por sí solo.')
+            }
+            if (isMobileBrowser() && walletId === 'coinbase') {
+              throw new Error('No se detectó Coinbase Wallet. Abre la réplica desde un dominio HTTPS público sin intersticial e inténtalo de nuevo.')
+            }
+            throw new Error(`No se encontró ${name}. Instala o habilita su extensión e inténtalo de nuevo.`)
+          }
           const accounts = await provider.request({ method: 'eth_requestAccounts' })
           if (!isCurrentAttempt()) return 'failed'
           address = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : ''
           activeChainId = await provider.request({ method: 'eth_chainId' })
           if (!isCurrentAttempt()) return 'failed'
         }
+        if (!provider) throw new Error(`No se pudo inicializar el proveedor de ${name}.`)
         if (!address) throw new Error(`${name} no devolvió una dirección pública.`)
         let activeAddress = address
         const refreshConnection = () => updateConnection(makeConnection(walletId, name, 'EIP-1193', evmNetworkName(activeChainId), activeAddress, async () => {
           if (metaMaskClient) {
             try { window.localStorage.removeItem('gm:metamask-connect-used') } catch { /* storage can be disabled */ }
             await metaMaskClient.disconnect()
+          }
+          if (coinbaseSdkProvider) {
+            try { window.localStorage.removeItem('gm:coinbase-sdk-used') } catch { /* storage can be disabled */ }
+            await coinbaseSdkProvider.disconnect?.()
           }
         }, (quote) => sendEvmPayment(provider!, activeAddress, quote)))
         const onAccountsChanged = (next: unknown) => {
@@ -562,6 +699,7 @@ export function useWalletSession(): WalletSession {
         }
         refreshConnection()
         if (metaMaskClient && pendingMetaMaskClientRef.current === metaMaskClient) pendingMetaMaskClientRef.current = null
+        if (coinbaseSdkProvider && pendingCoinbaseProviderRef.current === coinbaseSdkProvider) pendingCoinbaseProviderRef.current = null
         return 'connected'
       }
 
@@ -629,6 +767,12 @@ export function useWalletSession(): WalletSession {
       if (metaMaskConnectAttempted) {
         try { window.localStorage.removeItem('gm:metamask-connect-used') } catch { /* storage can be disabled */ }
       }
+      if (coinbaseSdkConnectAttempted) {
+        try { window.localStorage.removeItem('gm:coinbase-sdk-used') } catch { /* storage can be disabled */ }
+        const provider = pendingCoinbaseProviderRef.current
+        pendingCoinbaseProviderRef.current = null
+        if (provider?.disconnect) void Promise.resolve(provider.disconnect()).catch(() => undefined)
+      }
       pendingMetaMaskClientRef.current = null
       removeListenersRef.current?.()
       removeListenersRef.current = null
@@ -645,7 +789,31 @@ export function useWalletSession(): WalletSession {
     }
   }, [disconnect, updateConnection])
 
-  return { connection, restoringWallet, connectingWallet, error, connect, cancelConnect, disconnect, solflarePaymentReturn, consumeSolflarePaymentReturn, phantomPaymentReturn, consumePhantomPaymentReturn }
+  return useMemo(() => ({
+    connection,
+    restoringWallet,
+    connectingWallet,
+    error,
+    connect,
+    cancelConnect,
+    disconnect,
+    solflarePaymentReturn,
+    consumeSolflarePaymentReturn,
+    phantomPaymentReturn,
+    consumePhantomPaymentReturn,
+  }), [
+    connection,
+    restoringWallet,
+    connectingWallet,
+    error,
+    connect,
+    cancelConnect,
+    disconnect,
+    solflarePaymentReturn,
+    consumeSolflarePaymentReturn,
+    phantomPaymentReturn,
+    consumePhantomPaymentReturn,
+  ])
 }
 
 function makeConnection(
@@ -714,7 +882,7 @@ function makeEvmProviderConnection(id: 'metamask' | 'coinbase' | 'trustwallet', 
 function makeTronProviderConnection(provider: TronProvider, address: string, chainId: unknown) {
   const network = isTronMainnet(chainId) ? 'TRON · Mainnet' : 'TRON · red sin verificar'
   return makeConnection('tronlink', 'TronLink', 'TRON', network, address, async () => undefined, async (quote) => {
-    if (quote.networkId !== 'tron') throw new Error('TronLink solo puede enviar pagos por la red TRON.')
+    if ((quote.networkId as string) !== 'tron') throw new Error('TronLink solo puede enviar pagos por la red TRON.')
     const currentChainId = await provider.request({ method: 'eth_chainId' }).catch(() => null)
     if (!isTronMainnet(currentChainId)) throw new Error('TronLink no confirma TRON Mainnet. Cambia a Mainnet y vuelve a revisar el pago.')
     const tronWeb = provider.tronWeb
@@ -856,32 +1024,62 @@ async function getUniSatNetwork(provider: UniSatProvider) {
   return network === 'livenet' ? 'mainnet' : network ?? 'desconocida'
 }
 
-async function discoverEvmProviders(): Promise<Eip6963Provider[]> {
+async function discoverEvmProviders(targetWalletId?: 'metamask' | 'coinbase' | 'trustwallet'): Promise<Eip6963Provider[]> {
   const announced: Eip6963Provider[] = []
   const handler = (event: Event) => {
     const detail = (event as CustomEvent<Eip6963Provider>).detail
     if (detail?.provider && !announced.some((item) => item.info?.uuid && item.info.uuid === detail.info?.uuid)) announced.push(detail)
   }
+  const collect = () => [...announced, ...collectInjectedEvmProviders()]
   window.addEventListener('eip6963:announceProvider', handler)
   window.dispatchEvent(new Event('eip6963:requestProvider'))
-  // Mobile wallet webviews can announce their injected provider later than a
-  // desktop extension. Give the in-app provider time to appear before falling
-  // back to a remote MetaMask Connect handoff.
-  await new Promise((resolve) => window.setTimeout(resolve, 500))
-  window.removeEventListener('eip6963:announceProvider', handler)
-  const trustWalletProvider = window.trustwallet?.ethereum
-  if (trustWalletProvider && !announced.some((item) => item.provider === trustWalletProvider)) {
-    // Trust Wallet's documented legacy injection does not always expose EIP-6963
-    // metadata or a brand flag; the namespaced property identifies its provider.
-    announced.push({ info: { name: 'Trust Wallet', rdns: 'com.trustwallet.app' }, provider: trustWalletProvider })
+  // Mobile wallet browsers can inject the selected provider after React has
+  // mounted. Wait for that wallet's announcement/readiness signal, not merely
+  // for any window.ethereum object, so a different extension cannot mask it.
+  if (targetWalletId && !findNamedEvmProvider(targetWalletId, collect())) {
+    await new Promise<void>((resolve) => {
+      let settled = false
+      const finish = () => {
+        if (settled || !findNamedEvmProvider(targetWalletId, collect())) return
+        settled = true
+        window.clearTimeout(timer)
+        window.removeEventListener('ethereum#initialized', finish)
+        window.removeEventListener('eip6963:announceProvider', finish)
+        resolve()
+      }
+      const timer = window.setTimeout(() => {
+        if (settled) return
+        settled = true
+        window.removeEventListener('ethereum#initialized', finish)
+        window.removeEventListener('eip6963:announceProvider', finish)
+        resolve()
+      }, 1500)
+      window.addEventListener('ethereum#initialized', finish)
+      window.addEventListener('eip6963:announceProvider', finish)
+      finish()
+    })
+  } else if (!targetWalletId) {
+    await new Promise((resolve) => window.setTimeout(resolve, 120))
   }
+  window.removeEventListener('eip6963:announceProvider', handler)
+  return collect()
+}
+
+function collectInjectedEvmProviders(): Eip6963Provider[] {
+  const providers: Eip6963Provider[] = []
+  const trustWalletProvider = window.trustwallet?.ethereum
+  if (trustWalletProvider) providers.push({ info: { name: 'Trust Wallet', rdns: 'com.trustwallet.app' }, provider: trustWalletProvider })
+
+  const rawEth = (window as unknown as { ethereum?: EvmProvider }).ethereum
   const injected = [
-    ...(window.ethereum?.providers ?? []),
-    ...(window.ethereum ? [window.ethereum] : []),
+    ...(rawEth?.providers ?? []),
+    ...(rawEth ? [rawEth] : []),
     ...(window.coinbaseWalletExtension ? [window.coinbaseWalletExtension] : []),
   ]
-  for (const provider of injected) if (!announced.some((item) => item.provider === provider)) announced.push({ provider })
-  return announced
+  for (const provider of injected) {
+    if (!providers.some((item) => item.provider === provider)) providers.push({ provider })
+  }
+  return providers
 }
 
 function findNamedEvmProvider(walletId: 'metamask' | 'coinbase' | 'trustwallet', providers: Eip6963Provider[]) {
@@ -891,7 +1089,7 @@ function findNamedEvmProvider(walletId: 'metamask' | 'coinbase' | 'trustwallet',
 }
 
 function walletName(id: 'metamask' | 'coinbase' | 'trustwallet') {
-  return id === 'metamask' ? 'MetaMask' : id === 'coinbase' ? 'Coinbase Wallet' : 'Trust Wallet'
+  return id === 'metamask' ? 'MetaMask' : id === 'coinbase' ? 'Base App · Coinbase Wallet' : 'Trust Wallet'
 }
 
 function evmNetworkName(chainId: unknown) {

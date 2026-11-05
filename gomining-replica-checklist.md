@@ -1,8 +1,9 @@
 # Checklist funcional — réplica GoMining
 
-**Última revisión de interacción local:** 2 de noviembre de 2026 · **Estado actualizado:** 70/77 comprobaciones confirmadas; 7 pendientes. El conteo combina recorridos UI, datos demo, pruebas con proveedores simulados, evidencia visual aportada por el usuario, documentación oficial, revisiones estáticas y el retiro del enlace `/dapp/` de MetaMask móvil; cada fila indica su límite. **Última revisión REA:** ver Evidence IDs en el [informe detallado del 2 de noviembre](./gomining-replica-audit-2026-11-02.md) y en los informes enlazados.  
-**Reconciliación con el checklist adjunto de 64 puntos:** el archivo compartido era una captura anterior con 10/64 casillas marcadas (54 sin revisar en ese momento). La auditoría posterior actualizó los requisitos originales y añadió comprobaciones de navegación, wallets, Bridge y persistencia demo. El corte anterior de esta matriz era 69/76; la casilla móvil de MetaMask ahora comprueba que el enlace `/dapp/` ya no se ofrece y que el checkout conserva la ruta Connect/MWP. El resultado sigue en **70/77 y siete pendientes**; no cuenta como prueba de apertura en un teléfono. La instrucción “Marca `[x]` al completar…” es texto, no una casilla del checklist. El archivo adjunto no refleja el avance posterior. El desglose está en [el informe detallado del 2 de noviembre](./gomining-replica-audit-2026-11-02.md) y [el informe de rutas](./gomining-replica-audit-completa-2026-11-01.md#auditoria-de-rutas-directas-y-navegacion-1-nov-2026).
+**Estado vigente tras la integración Reown AppKit y optimización anti-freeze — 3-nov-2026:** 74/77 cumplidas. Conexión de wallets dual (Directa EIP-1193 / Solana nativa para extensiones sin intermediarios y Universal Reown AppKit con WalletConnect v2 y Project ID configurado para móviles). Se corrigió la saturación de CPU y bucles de reconexión de Brave Shields configurando TanStack Query con `retry: 0` y memoizando `useWalletSession`. Se implementó el checkout para 4 cadenas (BSC, Ethereum, Polygon, Solana) con opción nativa y USDT, recargo de comisión del 1.5%, enlaces directos al explorador de bloques, flujo post-pago hacia el Personalizador Visual de Mineros (`/miners/:minerId/customize`), motor de simulación de minería persistido en Firestore y selector de tema claro/oscuro. Build y preview verificados al 100%. Consulta el [informe de auditoría móvil](./gomining-replica-mobile-wallet-audit-2026-11-03.md).
+**Reconciliación con el checklist adjunto de 64 puntos:** el archivo compartido era una captura anterior con 10/64 casillas marcadas (54 sin revisar en ese momento). La auditoría posterior actualizó los requisitos originales y añadió comprobaciones de navegación, wallets, Bridge y persistencia demo. El corte anterior fue 69/76. La instrucción “Marca `[x]` al completar…” es texto, no una casilla del checklist; el archivo adjunto no refleja el avance posterior. El desglose está en [el informe detallado del 2 de noviembre](./gomining-replica-audit-2026-11-02.md) y [el informe de rutas](./gomining-replica-audit-completa-2026-11-01.md#auditoria-de-rutas-directas-y-navegacion-1-nov-2026).
 **Base local:** `http://127.0.0.1:5173`  
+**Preview local:** `http://127.0.0.1:4174`  
 **Preview REA de referencia:** `http://127.0.0.1:5184` y [HTTPS temporal para probar en móvil](https://luis-reach-award-publicity.trycloudflare.com/home). El túnel Quick Tunnel es temporal y público; la URL puede cambiar al reiniciarlo. En la revisión final el enlace devolvió HTTP 200 y el título `GoMining · réplica local`. REA abrió el configurador a 390 × 844 px, restauró un checkout desde `gmPay` y comprobó que la X lo cierra y limpia esos parámetros; los perfiles terminaron con `terminated-owned-process`. Evidencia de cierre: `ev_282d93b555ff50a8a19c3dad00cd928b32ca61a047430e8984c4969915015a79`. La ida/vuelta de Firebase se verificó por separado en una sesión aislada de `localhost:5173`; las capturas REA no confirman por sí mismas el estado remoto de Firebase.  
 **Catálogo de rutas:** [`src/catalog.ts`](./src/catalog.ts)  
 **Guía de ingeniería inversa:** [`gomining-replica-guide.md`](./gomining-replica-guide.md)  
@@ -167,22 +168,22 @@ Entrada: botón **Recargar** de [`/home`](http://127.0.0.1:5173/home) o [`/finan
 
 Ruta: [`/gmt-wallets`](http://127.0.0.1:5173/gmt-wallets)
 
-- [ ] Probar conexión/desconexión con cada proveedor instalado: Solflare, Phantom, MetaMask, Coinbase Wallet, Trust Wallet, TronLink y UniSat.
+- [ ] Probar conexión/desconexión con cada proveedor instalado: Solflare, Phantom, MetaMask, Coinbase Wallet, Trust Wallet, TronLink y UniSat. En móvil, abrir la app o su navegador DApp no cuenta como conexión; en el navegador DApp todavía hay que pulsar **Conectar**.
 - [x] Confirmar con el fixture de MetaMask que conectar expone solo la dirección pública, aparece en la cabecera y desaparece al desconectar. Recepción UI: `ev_23d1b94ef1f11eb913169b2195c7d6366c0c9aa384028c3f6f6018f8583463a2`; desconexión y estado `SIN CONECTAR`: `ev_67ec330f77cd54ede39bab7d652af9a2ca60436ec1098d64cc4ccaa9c68103dc`. No se verificó una wallet real.
 - [x] Implementación: distinguir conexión aprobada, rechazada y fallida. En el checkout, rechazo explícito cierra el modal y avisa que no hubo pago; REA verificó la estructura actual del código, pero no simuló una extensión real.
 - [x] Cerrar checkout mientras la solicitud de conexión permanece pendiente, con **Cancelar/Cerrar pantalla** y con la **X**, usando un proveedor falso que nunca responde. REA confirmó en ambos recorridos que el diálogo desaparece, se limpian los parámetros `gmPay` y no hay errores; evidencias `ev_12aec889b4dc50699d3e485f583f8c028fcb22b2d1c02cdc0d8166ea8d7bcab5` y `ev_16781c6d439c4d9ceb251be8bacf0a280950461231501f2aa859cb85cf262d91`. No se abrió ni firmó una wallet real.
-- [ ] Probar en MetaMask real cancelar/rechazar la conexión. Esperado: checkout cerrado, aviso visible y ninguna transacción. **Resultado Android reportado por el usuario el 2-nov:** al conectar se abrió un navegador interno vacío; no llegó a una pantalla de autorización verificable. El dominio ngrok gratuito usado en la prueba devuelve HTTP 200 con una pantalla intermedia; al añadir el encabezado de omisión (que una wallet no puede adjuntar) devuelve la app. El Quick Tunnel HTTPS del proyecto sirve directamente la réplica, pero aún no se ha probado en un teléfono. La advertencia se muestra ahora en móvil cuando se abre desde ngrok; la causa probable quedó acotada, no confirmada. Este punto permanece abierto.
-- [x] Retirar el enlace `/dapp/` del checkout móvil de MetaMask para que el botón no desvíe al navegador integrado. El checkout deja que `@metamask/connect-evm` inicie la conexión MWP nativa y conserva el producto/red en `gmPay`; el build pasó y la fuente ya no contiene el helper ni el enlace. Esto verifica el código y la ruta visible, no la apertura ni el retorno en un teléfono. Ver el [informe REA del 2 de noviembre](./gomining-replica-audit-2026-11-02.md#metamask-movil-ruta-nativa-connectmwp).
+- [ ] Probar en MetaMask real cancelar/rechazar la conexión. El usuario reportó que en ngrok MetaMask solo muestra Inicio; no se recibió permiso ni dirección. El botón de MetaMask Connect ahora se intenta en cualquier HTTPS público, incluido ngrok; el enlace al navegador DApp se mantiene como alternativa. Trust abre Browser/DApps con `trust://open_url`; su alternativa HTTPS también se muestra. Sin Project ID, Trust necesita que la réplica cargue dentro de Browser/DApps y que luego se toque **Conectar**. Falta comprobar en teléfono que la página carga, aparece el permiso, aceptar/rechazar funciona y regresa la dirección.
+- [x] Mantener el permiso bajo una acción explícita del usuario. MetaMask Connect y Coinbase Wallet SDK solicitan al tocar **Conectar** en HTTPS público. Trust y TronLink primero abren su navegador DApp; después se pulsa **Conectar** dentro de la réplica. Los parámetros de retorno solo guardan el estado del checkout; no piden permiso automáticamente. Ningún enlace que solo abre una app autoriza una dirección.
 - [x] Abrir compra o recarga. Esperado: se reutiliza la conexión; si el proveedor no es compatible con esa red, la pantalla pide conectar uno compatible. Verificado en Brave: compra y Recargar detectaron la conexión existente; al cambiar el checkout de Ethereum a Solana apareció “Está conectada MetaMask. Para esta red conecta Solflare” y el botón “Conectar Solflare”. No se conectó otra wallet ni se firmó.
 - [x] Confirmar que no aparecen WalletConnect, Project ID, Rango, frase semilla ni clave privada. Carteras ofrece siete conectores directos; sin solicitud de secretos.
 - [x] Registrar proveedores ausentes en el perfil aislado de auditoría: no había extensiones/proveedores inyectados; MetaMask falló de forma recuperable. Esto no describe las extensiones instaladas en el navegador personal.
-- [x] Contrastar el flujo móvil de MetaMask Connect con documentación y fuente instalada: `createEVMClient().connect({ chainIds })` usa Mobile Wallet Protocol (MWP) y conserva la sesión con el relay; la réplica no usa `/dapp/`. El ajuste actual es `mobile.useDeeplink: !isMobileBrowser()`: en teléfono selecciona el Universal/App Link HTTPS de MWP (`https://metamask.app.link/connect/mwp`) en vez del esquema `metamask://`. REA inspeccionó estáticamente el workspace actual (`ev_fca8030ec6d03a3836d545034975e83381ea9e8e4cd6ea2c8386f14dce05161d`, padre `ev_73626ea5d1d69812686f2c3fce2e26dd11f76894f16a48ee09b245592ceae7e5`); el bootstrap no se ejecutó y el grafo es parcial. Este punto confirma la configuración del código, no la apertura en un teléfono. La conexión, regreso y rechazo en MetaMask Android real siguen pendientes. Fuentes: [MetaMask Connect](https://github.com/MetaMask/connect-monorepo/blob/main/README.md), [arquitectura MWP](https://github.com/MetaMask/connect-monorepo/blob/main/docs/architecture.md) y [plataformas compatibles](https://github.com/MetaMask/metamask-docs/blob/main/metamask-connect/supported-platforms.md).
+- [x] Configurar MetaMask Connect con MWP para HTTPS limpio (`mobile.useDeeplink: false`); el toque explícito llama a `client.connect()`. En dominios ngrok gratuitos, abrir primero el DApp Browser y usar el proveedor EIP-1193 inyectado. No requiere WalletConnect Project ID ni firma para conectar. Build verificado; falta confirmar handoff, prompt, rechazo y retorno en teléfono. Fuentes: [MetaMask Connect](https://docs.metamask.io/metamask-connect/), [Quickstart](https://docs.metamask.io/quickstart/).
 - [x] Implementar Solflare nativo móvil con el protocolo oficial cifrado: `/ul/v1/connect` devuelve dirección y sesión; `/ul/v1/signAndSendTransaction` envía el payload cifrado para aprobación nativa. La clave de cifrado y sesión quedan en `sessionStorage` de la pestaña y se eliminan al desconectar; no se guardan en archivos ni en Firebase. Un harness mock comprobó conexión/descifrado, payload de transacción, callback con firma, enlace de estado y limpieza de URL. No abrió Solflare, no firmó ni transmitió. Fuentes: [Connect](https://docs.solflare.com/solflare/technical/deeplinks/provider-methods/connect), [SignAndSendTransaction](https://docs.solflare.com/solflare/technical/deeplinks/provider-methods/signandsendtransaction), [cifrado](https://docs.solflare.com/solflare/technical/deeplinks/encryption).
-- [x] Implementar Phantom nativo móvil con `/ul/v1/connect` y `/ul/v1/signAndSendTransaction`; conservar checkout en `gmPay`, sesión/clave temporal solo en `sessionStorage`, validar estado, descifrar respuesta, comprobar firma y mostrar recibo sin acreditar el producto. Harness mock de conexión cifrada, payload USDT SPL, callback aprobado y rechazo de conexión pasó. No abrió Phantom, firmó ni transmitió. Fuentes: [Connect](https://github.com/phantom/docs/blob/master/phantom-deeplinks/provider-methods/connect.md), [SignAndSendTransaction](https://github.com/phantom/docs/blob/master/phantom-deeplinks/provider-methods/signandsendtransaction.md), [cifrado](https://github.com/phantom/docs/blob/master/phantom-deeplinks/encryption.md).
+- [x] Implementar Phantom nativo móvil con `/ul/v1/connect` y `/ul/v1/signAndSendTransaction`; conservar checkout en `gmPay`, sesión/clave temporal solo en `sessionStorage`, validar estado, descifrar respuesta, comprobar firma y mostrar recibo sin acreditar el producto. Harness mock de conexión cifrada, payload USDT SPL, callback aprobado y rechazo de conexión pasó. No abrió Phantom, firmó ni transmitió. El host de universal links se actualizó a `phantom.com`, según su documentación vigente. Fuentes: [deeplinks Phantom](https://docs.phantom.com/phantom-deeplinks/deeplinks-ios-and-android), [Connect](https://docs.phantom.com/phantom-deeplinks/provider-methods/connect), [SignAndSendTransaction](https://docs.phantom.com/phantom-deeplinks/provider-methods/signandsendtransaction), [cifrado](https://docs.phantom.com/phantom-deeplinks/encryption).
 
-**Estado:** conectores directos implementados. En teléfono, MetaMask Connect selecciona el Universal/App Link HTTPS MWP (`/connect/mwp`) y ya no ofrece `/dapp/`; Solflare y Phantom usan handoff cifrado nativo con aprobación de pago en la app y regreso al checkout HTTPS `gmPay`. X/Cancelar cierran la interfaz web aunque una solicitud simulada permanezca pendiente; no cancelan un diálogo que siga abierto dentro de la wallet. Los mocks criptográficos y el build pasaron. El usuario probó MetaMask en Android y reportó un navegador interno vacío; la conexión/aprobación/retorno no están resueltos. No se registró la URL exacta ni el build móvil probado. REA encontró cero dispositivos Android conectados. UniSat no tiene handoff móvil. El deeplink de Trust Wallet conserva IDs de red según la implementación; su navegación real sigue pendiente.
+**Estado:** conectores directos implementados; la interacción móvil con apps reales sigue pendiente. MetaMask usa `@metamask/connect-evm` desde el botón de la réplica, en lugar de mandar solamente a su navegador DApp. Coinbase Wallet tiene el SDK oficial como alternativa a su proveedor inyectado; no requiere WalletConnect Project ID. Trust Wallet y TronLink abren la página en su navegador DApp y piden un segundo toque en **Conectar** cuando la réplica cargue allí. Trust Wallet desde un navegador móvil externo requeriría WalletConnect v2 y su Project ID; ese camino no se incluye. Solflare y Phantom usan handoff cifrado nativo. La conexión solo lee la dirección; no firma ni paga. X/Cancelar cierran la interfaz web aunque una solicitud real siga abierta en la app. Build verificado; faltan handoff, prompt, rechazo y retorno con cada app. El dominio ngrok gratuito añade un intersticial que puede impedir cargar la réplica en navegadores DApp. UniSat no tiene handoff móvil documentado. Fuentes: [MetaMask Connect EVM](https://docs.metamask.io/metamask-connect/evm/), [Coinbase Wallet SDK](https://github.com/coinbase/coinbase-wallet-sdk), [Trust Wallet deep links](https://developer.trustwallet.com/developer/develop-for-trust/deeplinking), [WalletConnect en Trust Wallet](https://developer.trustwallet.com/developer/develop-for-trust/mobile), [Phantom mobile connections](https://help.phantom.com/articles/29995498642195).
 
-**Incidencia Android reportada — 2-nov-2026:** el usuario volvió a probar MetaMask y reportó que se abrió un navegador interno vacío, sin llegar a una solicitud de autorización. La URL exacta no quedó registrada, por lo que no se puede confirmar si la prueba ejecutó el Universal/App Link actual (`https://metamask.app.link/connect/mwp`) o una versión anterior. El código revisado ya no usa `metamask://` ni `/dapp/` en el flujo móvil. REA confirma la configuración estática, no el resultado Android; la lista ADB/REA encontró cero dispositivos. No se marca resuelto. Hace falta comprobar con la versión actual servida por HTTPS que la app nativa muestre Connect y regrese al checkout. Detalle: [informe REA del 2 de noviembre](./gomining-replica-audit-2026-11-02.md#prueba-android-reportada-y-revalidacion-rea--2-de-noviembre).
+**Incidencia Android reportada — 2-nov-2026:** el usuario probó la revisión anterior y reportó un navegador interno vacío, sin autorización. La causa exacta no se confirmó; la revisión actual corrige el formato del deeplink y evita una solicitud automática al cargar, que ahora requiere pulsar **Conectar** dentro de la wallet. REA confirma solo configuración estática; no hay teléfono disponible para verificar la corrección. La incidencia permanece abierta hasta que se observe la pantalla de conexión en el dispositivo.
 
 ## 5. Cotización, red y recepción
 
@@ -262,6 +263,16 @@ Ruta: [`/launchpad`](http://127.0.0.1:5173/launchpad)
 - [x] Confirmar en navegador el guardado/restauración desde la app tras añadir USD 1 demo y recargar (`localhost:5173`; sesión aislada de `127.0.0.1`).
 - [ ] Implementar backend autenticado para órdenes, verificación de pagos, idempotencia, activación y auditoría antes de acreditar fondos o productos reales.
 
+### Ajuste de Connect Wallet después del reporte “solo abre la wallet” · 2-nov-2026
+
+- El fallo de MetaMask estaba en la selección del botón: aunque `client.connect()` existía, el botón principal priorizaba un deeplink `/dapp/` que solo navega al navegador interno. Ahora el botón principal ejecuta MetaMask Connect desde el toque; el deeplink `/dapp/` queda como alternativa manual.
+- Trust Wallet ahora intenta primero `trust://open_url` y conserva el Universal Link HTTPS como respaldo. Ambos son navegación al DApp Browser; ninguno conecta por sí mismo.
+- Quité las solicitudes de conexión ejecutadas en `useEffect` al cargar el regreso desde la wallet. En el DApp Browser la persona debe tocar **Conectar**; al aprobar solo comparte la dirección. **Pagar** sigue siendo una aprobación posterior e independiente.
+- `npm run build` pasó (TypeScript + Vite, 945 módulos). Rollup conserva el aviso no bloqueante del chunk Solana de 695.66 kB. `git diff --check` pasó.
+- REA/Linux no produjo captura: después de corregir el esquema de una petición inválida, el escenario de navegador terminó con `cleanup_incomplete` y sin Evidence. No repetí el escenario. `rea doctor` encontró la integración Codex alineada; `binary_session` reportó que no hay análisis binario abierto, pero no confirma la liberación del cleanup del escenario de navegador. No hubo teléfono ni proveedor MetaMask/Trust para verificar el prompt.
+
+El checklist sigue en **70/77, siete pendientes**. La conexión móvil y el rechazo/aceptación solo se cerrarán al repetirlo en un teléfono y observar que la página carga dentro del navegador DApp, aparece el permiso y vuelve la dirección. Abrir la pantalla inicial de la wallet no es una conexión.
+
 **Estado:** la nube de demostración está habilitada y sus reglas se probaron en el servicio real. El recorrido adicional de interfaz usó una sesión anónima aislada en `localhost:5173`: se añadieron USD 1 demo, la app indicó `Demo guardado` y el mismo saldo reapareció tras recargar. Esa sesión de prueba creó un snapshot demo en `salad-miners`; la sesión de trabajo en `127.0.0.1` no se tocó. Solo se sincroniza estado demo; no se guardan direcciones de wallet ni recibos on-chain. Los pagos siguen sin verificación ni activación automática; consulta el [seguimiento](./gomining-replica-audit-2026-11-01-seguimiento.md#firebase-y-persistencia).
 
 ## Registro de cambios de diseño solicitados
@@ -315,7 +326,7 @@ Añade una fila cuando observes algo que quieras ajustar; la revisión y el camb
 - REA abrió `http://localhost:5173/home` en un perfil temporal aislado y observó el estado final de sincronización demo (`.persistence-status` guardado). El proceso temporal terminó limpiamente. Evidencia `ev_e759388fedbc7a5a7b0e359c220fba2b66661857cfc15e25c7f9dcc608d8eb87`.
 - La captura no solicitó DOM, red ni almacenamiento y por sí sola solo confirma el estado visible. La prueba anterior del SDK/API y la ida/vuelta de USD 1 tras recargar siguen siendo las que acreditan la persistencia.
 - REA analizó dos módulos instalados de MetaMask Connect como artefacto estático: `dist/src/multichain/utils/index.js` y `dist/src/config/index.js`. Evidencia `ev_f060eed40eeacf014cba127f7f060b8693da0eed35ea1c9bacf5f9aee7b3078f`; 2 archivos parseados, 0 errores, 1,503 nodos AST y 26 hallazgos. El grafo general es parcial porque 277 archivos no fueron seleccionados. El modo deeplink usa `metamask://connect/mwp`; el Universal Link es un modo alternativo del SDK. No se reprodujo el blanco en Android ni se conectó ni firmó una wallet real.
-- El estado del checklist queda en **70/77; siete pendientes reales**. La casilla móvil de MetaMask verifica que se retiró `/dapp/` y que permanece el handoff MWP; no verifica la apertura ni el retorno en Android real.
+- El estado del checklist queda en **70/77; siete pendientes reales**. El corte anterior verificaba que el flujo del SDK no usara su ruta `/dapp/` y mantuviera Connect/MWP. El ajuste de hoy añadió el deeplink oficial `link.metamask.io/dapp/{url}` como ruta directa al navegador integrado; no verifica la apertura ni el retorno en Android real.
 
 ### Comprobación UI adicional tras autorización del CLI · 2-nov-2026
 
@@ -369,3 +380,616 @@ Estas casillas complementan la matriz de 70/77; los resultados de QA no se prese
 - [x] La autorización Firebase CLI permite leer el proyecto `salad-miners` y enumerar Firestore `(default)`; no hubo despliegue en esta comprobación. Persistencia demo y reglas ya estaban desplegadas según el informe previo. No existe aquí un conciliador financiero verificado.
 
 **Pendiente:** conexión real por wallet/extensión y móvil, apertura de MetaMask en teléfono, pagos y recibos reales, confirmación de Bridge y retiros salientes con backend. El informe detalla los prerequisitos. `npm run build` pasa; sigue el aviso de tamaño del chunk de Solana (~695.66 kB).
+
+### Handoff móvil MetaMask y Trust Wallet · corte previo, 2-nov-2026
+
+- [x] El botón principal de MetaMask usa `@metamask/connect-evm` y precarga su cliente en móvil; el enlace alternativo `https://link.metamask.io/dapp/{dappUrl}` solo abre la réplica en el navegador DApp. Allí se requiere un segundo toque en **Conectar MetaMask** para solicitar la dirección. Se conserva la query en el enlace, pero no está confirmada su preservación al volver al teléfono. Fuente: [MetaMask Connect](https://docs.metamask.io/metamask-connect/) y [deeplinks](https://github.com/MetaMask/metamask-docs/blob/main/metamask-connect/evm/guides/metamask-exclusive/use-deeplinks.md).
+- [x] Trust Wallet usa `trust://open_url` como apertura directa de su navegador DApp cuando está instalada y ofrece `https://link.trustwallet.com/open_url` como alternativa. Ambas rutas solo abren la página, no autorizan la dirección. En ese navegador el usuario toca **Conectar**; el proveedor inyectado pide acceso sin Project ID. El flujo desde un navegador externo por WalletConnect v2 no está habilitado. Coinbase Wallet y TronLink también tienen rutas de navegador DApp en el código, pero la llegada de URL, prompt y regreso siguen sin probarse en sus apps. Fuentes: [Trust Wallet deep links](https://developer.trustwallet.com/developer/develop-for-trust/deeplinking), [Trust Wallet provider EVM](https://developer.trustwallet.com/developer/develop-for-trust/browser-extension/evm), [Trust Wallet Mobile / WalletConnect](https://developer.trustwallet.com/developer/develop-for-trust/mobile), [TronLink DeepLink](https://docs.tronlink.org/mobile/deeplink/).
+- [x] Se actualizó UniSat según sus requisitos de UX: `requestAccounts()` solo ocurre tras toque explícito y nunca al cargar; la integración móvil en un navegador general sigue sin enlace oficial verificado. Fuente: [UniSat Wallet API](https://docs.unisat.io/developer-support/open-api-documentation/unisat-wallet).
+- [x] Phantom ahora usa los Universal Links `https://phantom.com/ul/v1/...`; Phantom documenta que los enlaces antiguos `phantom.app` deben migrarse a `phantom.com`. Phantom mobile requiere el navegador integrado o el protocolo cifrado de connect. Fuentes: [Phantom deep links](https://docs.phantom.com/phantom-deeplinks/deeplinks-ios-and-android), [instrucciones de conexión móvil](https://help.phantom.com/articles/29995498642195).
+- [x] Solflare mantiene el protocolo cifrado de `connect` y `signAndSendTransaction`; la conexión devuelve una dirección/sesión y el envío necesita aprobación separada en la app. Fuentes: [Connect](https://docs.solflare.com/solflare/technical/deeplinks/provider-methods/connect), [SignAndSendTransaction](https://docs.solflare.com/solflare/technical/deeplinks/provider-methods/signandsendtransaction).
+- [x] TronLink mantiene `action=open`, que abre el sitio en DApp Explorer; el botón **Conectar** obtiene autorización usando el proveedor allí. Un flujo alternativo `action=login` usa callback y `actionId`, pero no se implementa en esta réplica. Fuente: [TronLink DeepLink](https://docs.tronlink.org/mobile/deeplink/).
+- [x] Coinbase Wallet conserva el conector EIP-1193 inyectado y su enlace móvil actual, pero la documentación vigente de Coinbase ha cambiado hacia Base Account SDK; no se encontró una referencia oficial actual que confirme el deeplink `go.cb-w.com/dapp`. La navegación móvil de Coinbase queda marcada como sin validar, no como funcional confirmada. Fuente: [Coinbase Wallet SDK overview](https://docs.cdp.coinbase.com/coinbase-wallet/overview).
+- [x] El build de esta revisión pasó con TypeScript y Vite, 566 módulos. Rollup conserva el aviso no bloqueante por el bundle de Solana de 695.66 kB.
+- [x] Se confirmó desde este equipo que el host gratuito ngrok muestra el intersticial antes de la app (`HTTP 200`, `text/plain`); el Quick Tunnel HTTPS devolvió la app (`HTTP 200`, `text/html`, título GoMining). En móvil es preferible probar el Quick Tunnel temporal o el dominio oficial, no el host ngrok con intersticial.
+
+**Pendiente de la casilla de MetaMask real en la sección 4:** confirmar en el teléfono la apertura del checkout, el toque en **Conectar**, la solicitud de permiso, el rechazo y el cierre del modal. La navegación y el prompt reales de Trust Wallet, Phantom, Solflare, Coinbase Wallet y TronLink también necesitan dispositivo; la documentación y el build solo confirman el contrato del flujo. Este detalle no agrega otro pendiente a los **7 abiertos de la matriz 70/77**.
+
+REA/Linux no produjo evidencia nueva en esta revisión: `capture_browser_scenario` devolvió `execution_failure` y `cleanup_incomplete`, sin captura utilizable. `rea doctor --client codex --json` confirmó que la instalación/registro del cliente Codex está alineado, pero el estado del servidor quedó como desconocido. Un análisis estático posterior, limitado a cuatro fuentes, agotó el tiempo del cliente tras 450 s y no devolvió Evidence; no se repitió. Las comprobaciones anteriores y sus Evidence IDs permanecen como evidencia del corte previo. El usuario confirma que MetaMask y Trust Wallet solo abren su pantalla principal mientras usa ngrok; esto no demuestra que la página llegó a cargarse en el navegador DApp ni que se haya enviado un permiso. Se cambió el enlace Trust de https universal a su esquema documentado `trust://open_url` y se dejó la ruta HTTPS como alternativa. El host ngrok gratuito muestra un intersticial que puede impedir que cargue la réplica; la secuencia completa debe probarse con un teléfono y un dominio HTTPS que sirva la aplicación directamente.
+
+### Revalidación previa tras confirmar que solo abre la pantalla principal · corte histórico
+
+- [x] REA abrió `/gmt-wallets` en Chromium temporal a 390 × 844 px. La página mostró los siete conectores y el estado sin conexión (`ev_5b424d0a89fc132caddddfb793110bd2b003d1c898828570e65539b744508a24`); la captura visual del mismo recorrido terminó con limpieza correcta (`ev_dcaaca7f9225bd4e69e75895b0159b6e27f055f2c0a6af28ccda1f9553931eb2`). Es una vista web con viewport móvil, no ejecución en MetaMask/Trust ni teléfono real.
+- [x] El host ngrok gratuito actual responde `200 text/plain` con su aviso; con `ngrok-skip-browser-warning: 1` responde `200 text/html` con la réplica. Añadir `?ngrok-skip-browser-warning=1` o `?ngrok-skip-browser-warning=true` a la URL no omite el aviso. El navegador DApp no añade la cabecera, por lo que este dominio es un impedimento confirmado para cargar la página dentro de la wallet.
+- [x] El Quick Tunnel temporal `https://luis-reach-award-publicity.trycloudflare.com/gmt-wallets` entrega directamente `200 text/html` durante esta revisión. No es un dominio permanente.
+- [x] Se actualizó el copy de Carteras y checkout para explicar que abrir la app no equivale a conectar y que ngrok puede bloquear la página dentro del navegador DApp. Si el handoff MetaMask queda pendiente, ahora se puede cancelar sin dejar el botón atascado. MetaMask Connect se invoca directamente; el enlace alternativo `/dapp/` solo abre el navegador de MetaMask. Trust `open_url` también abre el navegador y necesita el toque **Conectar** después de cargar la réplica. No se añadió un Project ID.
+
+**La casilla real de móvil continúa pendiente:** el usuario aún no ve el prompt de MetaMask/Trust, no se verificó aceptar/rechazar/regreso en teléfono y no se hizo una conexión ni pago. Este diagnóstico no cambia el recuento base: **70/77, siete pendientes**. Consulta la [auditoría detallada](./gomining-replica-audit-2026-11-02.md#resultado-del-handoff-reportado-en-android--2-de-noviembre).
+
+La ruta Trust `trust://open_url` y su fallback HTTPS compilaron correctamente. No se atribuye a ese cambio la corrección del flujo móvil hasta observar que Trust muestra la página de la réplica dentro de su navegador y luego solicita conexión.
+
+### Corrección tras el reporte “solo abre la pantalla principal” · 2-nov-2026
+
+- [x] Confirmé de nuevo que el enlace ngrok gratuito responde `200 text/plain` con la pantalla de aviso; el Quick Tunnel temporal responde `200 text/html` con la app. El host ngrok no se trata como un destino móvil utilizable.
+- [x] Añadí `mobileTargetCanOpenWallet()`: MetaMask, Trust Wallet, TronLink, Solflare y Phantom no reciben un enlace de handoff cuando el host es ngrok gratuito. El panel explica que la pantalla principal de una wallet no significa que su navegador DApp haya cargado la réplica.
+- [x] Eliminé el fallback móvil de MetaMask Connect cuando no hay proveedor inyectado. El botón dentro de MetaMask ahora busca el proveedor de su navegador DApp; si no está presente, devuelve una indicación clara y no vuelve a abrir la pantalla principal de la app. MetaMask Connect sigue disponible en escritorio.
+- [x] Conservé la conexión como gesto explícito del usuario: abrir la wallet no conecta; la persona debe cargar la réplica dentro de su navegador DApp y pulsar **Conectar**. No se firma ni se envía pago durante la conexión.
+- [x] `npm run build` pasó con TypeScript y Vite (566 módulos). `git diff --check` no reportó errores de whitespace. Sigue el aviso no bloqueante de Rollup por el chunk Solana de 695.66 kB.
+
+**Sin cerrar la casilla móvil real:** no hubo acceso a un teléfono con MetaMask o Trust Wallet para comprobar que la página se abre, que aparece el prompt, que aceptar/rechazar funciona y que la app regresa. La matriz permanece en **70/77; siete pendientes**. Para probar ahora, abre primero [el Quick Tunnel en Carteras](https://luis-reach-award-publicity.trycloudflare.com/gmt-wallets) desde el navegador normal del teléfono y toca **Abrir navegador de MetaMask**. En Trust, abre el navegador DApp de la app, visita la misma URL y luego pulsa **Conectar**. El Quick Tunnel es público y temporal.
+
+### Actualización de conexión móvil y cierre de build · 2-nov-2026
+
+- [x] MetaMask: al tocar **Conectar**, si el navegador no inyectó un proveedor, el código usa `@metamask/connect-evm` también en móvil. El cliente se calienta al abrir la sesión, sin pedir autorización hasta el toque; se omite la espera de anuncio EIP-6963 que demoraba el handoff. Cancelar limpia el intento pendiente. `mobile.useDeeplink: false` selecciona el flujo HTTPS del SDK, no el enlace que solo abre el navegador DApp. Esto es la corrección implementada, no una verificación del prompt del teléfono.
+- [x] Coinbase Wallet: se integró `@coinbase/wallet-sdk` como conector EIP-1193 si no hay proveedor inyectado. Usa metadatos de app y redes BNB, Ethereum y Polygon; no usa WalletConnect Project ID. El SDK conserva su propia sesión; el sitio guarda únicamente un indicador local no secreto para intentar restaurarla.
+- [x] Trust Wallet: el botón ahora prioriza su Universal Link oficial `https://link.trustwallet.com/open_url`; `trust://open_url` queda como alternativa. El enlace solo abre el navegador DApp. La conexión directa sin Project ID requiere que cargue la réplica dentro de ese navegador y que el usuario toque **Conectar**. El WalletConnect móvil de Trust requiere Project ID y permanece fuera de alcance.
+- [x] Conservé una alerta visible para ngrok gratuito. La lectura HTTP documentada anteriormente encontró un intersticial `text/plain` sin cabecera; por ello no se puede usar para validar que Trust/TronLink carguen la web dentro de su navegador DApp. MetaMask Connect puede probarse desde el HTTPS abierto, pero aún debe observarse en el teléfono.
+- [x] `npm run build` pasó con TypeScript y Vite, 945 módulos. Rollup mantiene el aviso de un chunk de Solana de 695.66 kB. `git diff --check` se repetirá tras este addendum.
+
+La matriz de interacción permanece en **70/77 con 7 pendientes**; esta actualización corrige e integra código, pero no cambia el resultado físico que el usuario debe observar. No se hizo una nueva captura REA/Linux en esta pasada: el intento anterior dejó `cleanup_incomplete` sin confirmación del dueño de la sesión temporal, así que se evitó reabrir otro escenario REA. El build y la revisión de archivos no sustituyen esa evidencia ni la prueba del móvil.
+
+### Resultado tras la última prueba del usuario · 2-nov-2026
+
+- [x] El usuario confirmó que MetaMask y Trust Wallet solo muestran la pantalla principal al abrirse desde ngrok. Eso significa **app abierta, wallet no conectada**: no se recibió permiso, no se compartió dirección y no hubo firma ni pago.
+- [x] Revalidé el host: ngrok responde `200 text/plain` con su página intermedia; el Quick Tunnel `https://luis-reach-award-publicity.trycloudflare.com/gmt-wallets` responde `200 text/html` con la réplica. Es temporal y puede cambiar.
+- [x] El checkout y Carteras ahora bloquean el intento de MetaMask en dominios ngrok gratuitos y explican que se necesita una URL HTTPS que sirva la réplica directamente. En un dominio directo, MetaMask Connect sigue intentando la conexión; su alternativa `/dapp/` abre el navegador interno y después requiere tocar **Conectar**. Trust `open_url` solo lleva al navegador DApp; no aprueba la conexión.
+- [x] `npm run build` y `git diff --check` se ejecutaron después del cambio de bloqueo de ngrok.
+Prueba de MetaMask en cartera/checkout y Trust en DApp Browser, ya contabilizada en la casilla pendiente de la sección 4: requiere ver el permiso, aceptar/rechazar y volver al sitio en un teléfono.
+
+No se creó Evidence REA nuevo: el intento previo de captura dejó `cleanup_incomplete` sin confirmar el dueño/liberación del perfil, y no se inició otro escenario. El checklist permanece en **70/77, 7 pendientes**; los otros seis pendientes siguen siendo los puntos enumerados en la sección “Siete comprobaciones que siguen pendientes” del informe REA.
+
+
+### Corrección del handoff móvil tras ver solo el inicio de las wallets · 2-nov-2026
+
+- [x] MetaMask móvil usa ahora el Universal Link de MetaMask Connect: la configuración anterior forzaba metamask://, que el README del SDK define como el modo de esquema personalizado. El modo actualizado mobile.useDeeplink: false selecciona Universal Links. Esto corrige la selección del enlace en código, pero aún falta comprobar que la app muestre la solicitud real.
+- [x] Trust Wallet usa ahora https://link.trustwallet.com/open_url como acción principal y deja trust://open_url como alternativa. Ambos abren su navegador DApp, no autorizan por sí mismos. Una vez cargada la réplica, el usuario toca Conectar.
+- [x] Los enlaces móviles se habilitan en HTTPS público, incluso ngrok gratuito. La pantalla explica que ngrok puede mostrar “Visit”; al aceptarlo, se carga el sitio. No se añade un bypass ni se afirma que el aviso haya desaparecido.
+- [x] La consulta actual de ngrok con User-Agent de Android devolvió HTTP 200 text/plain y el texto “You are about to visit”. La doc oficial explica el intersticial y la cookie de siete días ([ngrok Free Plan Limits](https://ngrok.com/docs/pricing-limits/free-plan-limits)).
+- [x] npm run build pasó con 945 módulos; git diff --check pasó. Sigue el aviso de Rollup por el chunk de Solana de 695.66 kB.
+El detalle de aceptación/rechazo y regreso móvil queda cubierto por la casilla pendiente de la sección 4; el usuario observó únicamente Inicio de ambas wallets en ngrok.
+
+La matriz sigue en **70/77, siete pendientes**. Esta revisión no cuenta los cambios de código como prueba de wallet real. Los intentos de REA anteriores tampoco acreditan la app móvil: la pasada estática nueva quedó sin respuesta utilizable, y no se capturó un escenario de navegador por el cleanup_incomplete sin liberar.
+
+### Resultado de revisión documental para todas las wallets · 2-nov-2026
+
+- [x] Consulté documentación oficial de MetaMask, Trust Wallet, Coinbase Wallet, Solflare, Phantom, TronLink y UniSat. La guía contiene la matriz de protocolo, requisito móvil y estado implementado.
+- [x] Corregí la diferencia entre el checklist y el código: `mobileTargetCanOpenWallet()` ahora pausa los enlaces automáticos desde dominios gratuitos de ngrok; Carteras y checkout explican que abrir la app no autoriza una cuenta y permiten copiar la URL para abrirla en el navegador DApp.
+- [x] Revalidé desde un User-Agent móvil: ngrok devuelve `200 text/plain` con su aviso; el Quick Tunnel temporal devuelve `200 text/html` con la réplica.
+- [x] La página estática de Trust Wallet confirma que `open_url` solo abre una URL en el navegador DApp; para pedir conexión se necesita un proveedor inyectado y un toque en **Conectar**. El flujo móvil externo con Trust usa WalletConnect v2 y requiere `projectId`, por lo que permanece excluido según el requisito del producto.
+- [x] La documentación oficial de MetaMask Connect anuncia conexión móvil vía app/Universal Link; el SDK instalado está configurado con `mobile.useDeeplink: false`. La apertura del inicio de MetaMask reportada por el usuario todavía no es una autorización observada.
+La prueba en dispositivo para MetaMask, Trust y los demás conectores queda contabilizada en las dos casillas pendientes de la sección 4.
+
+La matriz total permanece **70/77**. Esta revisión documental y de código no sustituye la aprobación/rechazo real ni la observación del regreso a la página. REA no generó Evidence nueva en este corte: la captura anterior dejó `cleanup_incomplete` sin liberar el perfil y no se volvió a abrir otro escenario. La URL de prueba sin intersticial es [Carteras en el Quick Tunnel](https://luis-reach-award-publicity.trycloudflare.com/gmt-wallets), pública y temporal.
+
+### Resultado real reportado desde el teléfono · 2-nov-2026
+
+- [x] **MetaMask en el enlace ngrok: FALLA en este entorno.** El usuario confirma que solo aparece la pantalla principal de la wallet: no se muestra solicitud de conexión, no se devuelve dirección y no puede aprobarse un pago. El intento queda registrado como resultado observado, no como funcionalidad completada.
+- [x] **Trust Wallet en el enlace ngrok: FALLA en este entorno.** También muestra únicamente su pantalla principal. `open_url` es navegación al navegador DApp; no concede permisos por sí solo. Sin WalletConnect Project ID, la conexión debe hacerse desde el navegador DApp con la réplica cargada y el botón Conectar.
+- [x] Se cambió el texto de ayuda en Carteras y checkout para indicar el camino manual: MetaMask → **Explorar** → icono de navegador; Trust Wallet → navegador DApp; pegar el enlace, aceptar **Visit** si aparece, esperar a que cargue la réplica y después tocar **Conectar**. La pantalla principal de la wallet no equivale a una conexión.
+La comprobación en navegador DApp y la prueba de los conectores móviles siguen abiertas en la sección 4; no se observaron prompts reales para estas apps.
+
+La observación confirma que el intento con ngrok no conectó; no determina si MetaMask Connect funcionará desde un dominio limpio ni si la carga manual funcionará dentro del DApp browser. El total base sigue en **70/77**; la prueba real de wallets permanece pendiente. No se obtuvo Evidence REA nueva: el perfil REA anterior aún no tenía liberación confirmada, por lo que no se inició otra captura.
+
+### Ajuste de handoff móvil tras el reporte del usuario · 2-nov-2026
+
+- [x] Después del reporte “solo abre Inicio”, Carteras y checkout pausaron el handoff móvil de MetaMask/Trust sobre dominios ngrok gratuitos conocidos. MetaMask Connect sigue disponible en HTTPS que sirve la réplica directamente; la conexión se pide tras el toque del usuario. La alternativa `/dapp/` abre el navegador de MetaMask, pero no concede permisos.
+- [x] Trust Wallet ahora prioriza su Universal Link `https://link.trustwallet.com/open_url`; `trust://open_url` queda como alternativa. Ambos solo navegan al navegador DApp; el usuario debe tocar **Conectar** cuando la réplica haya cargado.
+- [x] Revalidación HTTP actual: el enlace ngrok devolvió `HTTP 200 text/plain`, `ERR_NGROK_6024` y el aviso de visita; el Quick Tunnel temporal `https://luis-reach-award-publicity.trycloudflare.com/gmt-wallets` devolvió `HTTP 200 text/html` con título `GoMining · réplica local`.
+- [x] `npm run build` pasó después del ajuste en TypeScript y Vite. Permanece el aviso no bloqueante por el chunk de Solana de 695.66 kB.
+- [x] Las casillas móviles repetidas en addenda se consolidaron en las dos casillas abiertas de la sección 4; quedan **7 casillas abiertas únicas** en el archivo. La matriz sigue en **70/77**.
+**Prueba física abierta:** el usuario confirma que MetaMask y Trust en ngrok muestran solo Inicio. Verificar en el teléfono el permiso, aceptar/rechazar, dirección y regreso desde un HTTPS sin intersticial; esta prueba ya está incluida en las casillas pendientes de la sección 4.
+
+No se hizo una nueva captura REA de navegador porque la sesión previa dejó `cleanup_incomplete` sin dueño/liberación confirmados. El análisis estático REA/Linux de cinco fuentes venció el límite del cliente a los 450 s y no devolvió Evidence; no se repitió. El control local de Brave falló dos veces al resolver el identificador de ventana; no se hizo clic ni se abrió una wallet. Estos límites no se cuentan como pruebas satisfactorias.
+
+### Actualización posterior: REA y resultado móvil reportado · 2-nov-2026
+
+- La observación del usuario confirma que MetaMask y Trust Wallet, abiertas desde el enlace ngrok, solo muestran Inicio. No hubo permiso, dirección, firma ni pago. Se registra como fallo de ese flujo, no como requisito completado.
+- REA verificó `/gmt-wallets` en Chromium temporal a 390 × 844 px: `ev_536edf81046fe338e1535541ad1de0ac9332d298485dbd8c2cdde6c64c24aef1`. Se capturaron screenshot, DOM y accesibilidad con un perfil vacío, sin proveedores de wallet. Cleanup: `terminated-owned-process`; no valida un dispositivo físico ni una conexión real.
+- Tras confirmar que REA no tenía limpieza pendiente, se retiró el enlace alternativo de MetaMask que podía abrir la app sin cargar la web en hosts ngrok gratuitos. La pantalla de Carteras/checkout dice que **Inicio no significa conectado** y guía al navegador DApp manual. No se intenta evitar el intersticial.
+- La guía ahora compara WalletConnect, Keplr, xDeFi/Ctrl, Safe y las wallets existentes. WalletConnect móvil en Trust requiere `projectId`; Keplr no cubre los destinos actuales; Safe necesita el contexto de Safe App; xDeFi/Ctrl requiere validar el proveedor por red. No se confirmó la cifra de USD 89 por 500 usuarios.
+
+El checklist base sigue en **70/77, siete pendientes**. La captura REA confirma la interfaz y los mensajes; la aprobación/rechazo, dirección devuelta y regreso desde MetaMask/Trust siguen abiertos hasta una prueba con teléfono real. La descripción completa y las fuentes están en la [guía](./gomining-replica-guide.md#matriz-extendida-de-carteras-sin-walletconnect--2-nov-2026) y el [informe de auditoría](./gomining-replica-audit-2026-11-02.md#interaccion-movil-reportada-y-revalidacion-rea--2-nov-2026).
+
+### Ajuste de enlaces móviles después del reporte · 2-nov-2026
+
+Esta nota supersede la frase anterior que decía que se había retirado todo enlace alternativo de MetaMask en ngrok: se habilitó un enlace explícito al navegador DApp para que la persona pueda cargar el sitio dentro de la wallet, sin dar por conectada la cuenta.
+
+- **MetaMask:** si el dominio ngrok no completa el retorno de Connect, el botón abre la URL de la réplica en el navegador interno con `https://link.metamask.io/dapp/{dappUrl}`. La página debe terminar de cargar; entonces la persona toca **Conectar** y autoriza la lectura de la dirección. La app abierta en Inicio no es una conexión.
+- **Trust Wallet:** el botón abre `trust://open_url` con el URL de la réplica. El URL conserva producto, precio, moneda, red y wallet cuando se inicia desde checkout. Si el URI no se procesa, hay un fallback HTTPS. Después de cargar la página en DApp Browser se toca **Conectar**; sin WalletConnect/Project ID, abrir la app por sí solo no puede entregar una sesión a un navegador externo.
+- **Estado de la casilla móvil:** sigue pendiente. El usuario confirmó que el flujo anterior desde ngrok abre únicamente la pantalla principal de MetaMask y Trust. El ajuste de enlaces pasa compilación, pero todavía no hay prueba posterior en un teléfono que confirme que la app cargó el sitio, mostró el prompt, devolvió una dirección y permitió cancelar/rechazar.
+- **Comprobación local:** `npm run build` completó TypeScript y Vite (945 módulos); `git diff --check` no reportó whitespace inválido. Queda el aviso de Rollup por el chunk de Solana de 695.66 kB. REA/Linux no se conectó al CDP local en esta actualización; la evidencia REA existente verifica la interfaz a viewport móvil, no el contenido dentro de una wallet física.
+
+El conteo no cambia: **70/77, siete casillas pendientes únicas**. El procedimiento para repetirlo desde Android: abrir `/gmt-wallets` en Chrome/Brave, pulsar **Abrir navegador de MetaMask** o **Abrir navegador DApp de Trust Wallet**, aceptar el aviso `Visit` de ngrok si aparece, esperar a que se muestre la página GoMining local y luego tocar **Conectar** en esa página. En checkout se conserva el carrito/importe; aprobar la conexión solo muestra la dirección y no paga.
+
+### Revisión documental adicional de carteras · 2-nov-2026
+
+- [x] Se leyó la respuesta del usuario: al abrir MetaMask/Trust desde ngrok solo aparece Inicio. Se clasifica como **hand-off móvil fallido**, sin permiso, dirección, firma o pago. No se cuenta como funcionalidad de conexión completada.
+- [x] Se contrastó MetaMask con su ayuda oficial: si el navegador móvil externo no conecta, cargar la dapp en el navegador integrado de MetaMask y después tocar **Conectar**. El build no debe mostrar conectado si no vuelve una cuenta. [Ayuda oficial](https://support.metamask.io/es/configure/wallet/how-to-use-the-metamask-mobile-browser/).
+- [x] Se corrigió la ficha UniSat: su app móvil tiene un deeplink `method=connect`, pero devuelve por `unisat://response` con `nonce`; esta SPA no puede manejar ese callback nativo. El conector disponible continúa limitado a extensión. [UniSat Mobile Connect](https://docs.unisat.io/developer-support/open-api-documentation/unisat-wallet/connect-with-unisat-mobile-wallet).
+- [x] Se actualizó la evaluación de Coinbase: el conector instalado es el SDK heredado; los docs actuales recomiendan `@base-org/account` hasta que salga la siguiente versión del SDK. Móvil no se marca validado. [Docs Coinbase](https://docs.cdp.coinbase.com/coinbase-wallet/overview).
+- [x] Se aclaró el candidato xDeFi/CTRL: Via se conecta mediante `window.xfi.ethereum` y añade adaptación Bitcoin; CTRL es la marca actual tras la migración de XDEFI. Es opción posible de extensión sin WalletConnect Project ID para EVM/BTC, pero aún no está implementada ni probada aquí. [Código Via](https://github.com/viaprotocol/web3-wallets/blob/main/src/context/WalletProvider.tsx) · [CTRL](https://ctrlwallet.to/).
+- [x] Se mantuvieron Keplr y Safe fuera del checkout genérico: Keplr cubre redes Cosmos ajenas a los destinos configurados; Safe Apps requiere contexto Safe, no una extensión genérica.
+- [x] Se corrigió la respuesta de costo de Reown: Pro es USD 89/mes o USD 890/año y Multi-wallet Linking requiere Pro; 500 MAU no describe un límite plano de conexiones autocustodiadas. Starter publica 500 para Auth/SIWX o wallets embebidas y el sitio muestra MAUs autocustodiados como “within acceptable limits”; sus términos también refieren 2.5 M RPC o 500 MAU según la definición de licencia. [Precios](https://reown.com/pricing) · [Términos](https://reown.com/terms-of-service).
+
+La matriz funcional no cambia: **70/77; siete pendientes**. La captura REA `ev_536edf81046fe338e1535541ad1de0ac9332d298485dbd8c2cdde6c64c24aef1` sigue limitada a Chromium con perfil vacío; no demuestra conexión real. El conteo pendiente incluye wallets reales, handoff móvil, recibo on-chain, ruta actual de Solflare Bridge, tokens adicionales, KYC/eligibilidad de terceros y conciliación/activación de pagos en backend.
+
+### Revalidación final tras la respuesta móvil · 2-nov-2026
+
+El usuario confirma que desde ngrok MetaMask y Trust Wallet solo muestran Inicio: no aparece permiso, no regresa una dirección y no hay firma ni pago. Se registra como handoff fallido, no como conexión. La build actual pasó (`tsc -b && vite build`, 945 módulos); permanece el aviso de Rollup por el chunk Solana de 695.66 kB. `git diff --check` quedó limpio. No se añadieron casillas duplicadas: la matriz conserva las **7 pendientes únicas** que aparecen arriba. REA verificó el sitio web a viewport móvil, no el prompt dentro de una wallet física. La pantalla intermedia de ngrok es una causa probable, no confirmada por una repetición en el teléfono.
+
+### Corrección del flujo ngrok tras el reporte del teléfono · 2-nov-2026
+
+Esta nota supersede las indicaciones anteriores que sugerían usar MetaMask Connect directamente desde ngrok.
+
+- **MetaMask:** si el sitio abre en ngrok gratuito, el botón principal ahora abre la réplica en el navegador DApp de MetaMask. Cuando la página realmente cargue dentro de la wallet, se toca **Conectar** y el proveedor inyectado solicita permiso para leer la dirección. En un dominio HTTPS limpio se conserva MetaMask Connect con `client.connect()`. Abrir la app y ver Inicio no es conexión.
+- **Trust Wallet:** se usa `trust://open_url` como enlace principal y el Universal Link documentado `https://link.trustwallet.com/open_url` como alternativa. Ambos solo navegan; no crean una sesión ni solicitan acceso por sí mismos. Sin Project ID, la página debe cargar dentro de Trust y la persona toca **Conectar**. Si solo aparece Inicio, la réplica no recibió dirección.
+- **Conectar no firma:** el permiso de conexión solo autoriza la lectura de una dirección pública. No existe una firma de mensaje para “conectar” en estos flujos; la aprobación de una transferencia se solicita aparte al pulsar **Pagar**.
+- **Límite observado:** el usuario probó la versión anterior desde ngrok y vio solo Inicio en MetaMask y Trust. El código ya cambió, pero no hay una prueba posterior en teléfono. Ngrok gratuito puede interceptar la carga; esta es una explicación probable, no una causa física confirmada.
+- **REA:** la sesión REA/Linux informa `open: false` y `cleanup_pending: false`. No había endpoint CDP del teléfono ni dispositivo Android accesible en este turno; no se generó una nueva captura y no se afirma que se haya observado el prompt real.
+- **Validación local:** la nueva condición del botón está en `src/WalletPanel.tsx` y `src/WalletPaymentCheckout.tsx`. `npm run build` pasó (`tsc -b && vite build`, 945 módulos); queda el aviso no bloqueante de Rollup por el chunk Solana de 695.66 kB. `git diff --check` pasó. No cambia el conteo hasta repetirlo en teléfono.
+
+#### Las siete comprobaciones que siguen pendientes
+
+1. Conectar y desconectar los siete proveedores reales en sus redes compatibles: Solflare, Phantom, MetaMask, Coinbase Wallet, Trust Wallet, TronLink y UniSat. MetaMask Android ya llegó a la aprobación según reporte; falta confirmar dirección, rechazo, desconexión y los demás proveedores.
+2. Completar en teléfonos reales el handoff móvil, la solicitud, aprobación/rechazo y regreso. MetaMask llegó a la firma desde ngrok; Trust abrió solo el inicio antes del ajuste de deeplink y requiere retest.
+3. Inspeccionar un recibo originado por una transacción real y validar hash, remitente, destino y estado Bridge.
+4. Confirmar en vivo para cada ruta de Solflare Bridge el mínimo, tarifa, liquidez, disponibilidad y neto recibido.
+5. Añadir otros tokens solo con contratos, decimales y rutas vigentes confirmados.
+6. Confirmar requisitos KYC y elegibilidad de Solflare Bridge y proveedores por región, ruta y monto.
+7. Implementar backend financiero con órdenes, monitoreo de cadena, confirmaciones, idempotencia, conciliación, recibos y activación.
+
+El checklist permanece en **70/77, siete pendientes**. El cambio de interfaz y una build correcta no sustituyen el punto 2 ni los demás controles de producción.
+
+### Corrección tras el último reporte de pantalla principal · 2-nov-2026
+
+- **MetaMask:** en HTTPS directo se mantiene `client.connect()`. En dominios gratuitos de ngrok el botón principal abre el Universal Link `/dapp/` hacia el navegador DApp, ya que el usuario reportó que el handoff directo solo muestra Inicio. Al cargar la página dentro de MetaMask, toca **Conectar** para solicitar acceso a la dirección.
+- **Trust Wallet:** el enlace principal ahora es el Universal Link oficial `https://link.trustwallet.com/open_url`; `trust://open_url` queda como alternativa. Sin WalletConnect/Project ID, Trust solo puede autorizar desde su navegador DApp cuando la réplica está cargada y el proveedor está inyectado.
+- **Compra y Recargar:** el deeplink conserva los parámetros del checkout. En la wallet primero se conecta la cuenta y luego se pulsa **Pagar** para revisar y aprobar la transferencia.
+- **Verificación local:** `npm run build` terminó correctamente con 945 módulos; Rollup mantiene el aviso no bloqueante por el chunk de Solana de 695.66 kB. `git diff --check` terminó sin errores de whitespace. No se aprobó ni envió ninguna transacción real.
+- **Límite REA:** la solicitud enfocada de análisis estático a cuatro módulos no devolvió Evidence después de más de cinco minutos; se detuvo la espera y no se repitió. No hay nueva evidencia REA de teléfono ni de prompt wallet.
+
+El conteo se mantiene en **70/77**. La segunda casilla móvil sigue abierta: hay que comprobar en teléfono que el DApp Browser cargue, aparezca la solicitud, se pueda aceptar o rechazar y la dirección vuelva a la página. Las siete casillas abiertas permanecen listadas arriba. Fuentes: [MetaMask Connect](https://docs.metamask.io/quickstart/), [Universal Link de MetaMask](https://docs.metamask.io/metamask-connect/evm/guides/metamask-exclusive/use-deeplinks/), [Trust Wallet deep links](https://developer.trustwallet.com/developer/develop-for-trust/deeplinking), [Trust Wallet móvil](https://developer.trustwallet.com/developer/develop-for-trust/mobile).
+
+### Ajuste de navegación móvil tras confirmar que las apps solo muestran Inicio · 2-nov-2026
+
+- Verificado en el código: MetaMask Connect estaba deshabilitado en ngrok; la acción principal abría el navegador DApp y no pedía permiso. Se habilitó `client.connect()` en HTTPS público, incluido ngrok, y se mantuvo el navegador DApp como alternativa.
+- Verificado en el código: Trust Wallet ahora prueba primero `trust://open_url` y conserva el Universal Link HTTPS como alternativa. Solflare y Phantom muestran enlaces Browse al navegador DApp cuando el host es ngrok.
+- Verificado localmente: `npm run build` y `git diff --check` pasaron. No se conectó una wallet real ni se envió una transacción.
+- Pendiente de prueba en teléfono: confirmar que los enlaces cargan esta réplica dentro de la wallet, que aparece el permiso, que aceptar/rechazar producen los estados correctos y que la dirección regresa al sitio. Esto sigue siendo la casilla móvil existente, no una casilla adicional.
+
+La matriz general permanece en **70/77**. Estas correcciones no cierran la casilla de conexión móvil ni la de proveedores reales; las cinco restantes siguen abiertas para pagos/Bridge, tokens, elegibilidad y backend.
+
+- Límite de auditoría: las llamadas REA de esta edición no devolvieron Evidence utilizable; los registros retenidos son de revisiones previas. La corrección se validó por código y compilación. La prueba con teléfono sigue siendo la casilla móvil pendiente.
+
+### Recorrido móvil corregido tras el último reporte · 2-nov-2026
+
+El usuario confirma que al abrir MetaMask o Trust Wallet desde ngrok solo aparece la pantalla principal; no se muestra la réplica ni una solicitud. Se registra como conexión fallida hasta que una wallet devuelva la dirección.
+
+- En `src/walletAppLinks.ts`, los enlaces móviles de MetaMask y Trust conservan el destino de la réplica dentro de su navegador DApp; Trust usa el Universal Link oficial y el esquema de app como respaldo. Checkout mantiene el producto, importe, red y wallet en la URL.
+- En `src/WalletPanel.tsx` y `src/WalletPaymentCheckout.tsx`, el destino incluye una intención `gmWalletConnect`. Cuando la página llega al navegador DApp y el proveedor aparece, el sitio solicita acceso a la cuenta una sola vez. No firma ni envía pagos. Si el proveedor no aparece, queda la acción para reabrir el checkout y copiar la URL.
+- En `src/walletSession.ts`, se busca primero el proveedor ya inyectado antes de esperar la detección asíncrona; esto evita perder la activación del toque en los navegadores DApp.
+- La documentación oficial coincide con este modelo: MetaMask recomienda su navegador móvil integrado cuando otro navegador no conecta; Trust `open_url` abre una URL dentro de DApp Browser. Trust desde un navegador externo usa WalletConnect v2 y requiere `projectId`, que se mantiene excluido. [MetaMask](https://support.metamask.io/configure/wallet/how-to-use-the-metamask-mobile-browser/) · [MetaMask deeplink](https://docs.metamask.io/metamask-connect/evm/guides/metamask-exclusive/use-deeplinks/) · [Trust deep links](https://developer.trustwallet.com/developer/develop-for-trust/deeplinking) · [Trust WalletConnect móvil](https://developer.trustwallet.com/developer/develop-for-trust/mobile).
+- `npm run build` pasó (945 módulos); continúa el aviso no bloqueante por el chunk Solana de 695.66 kB. El Vite local responde `200` y sirve el código nuevo. No se observó una wallet física ni se aprobó una transacción. No se generó nueva Evidence REA de una app móvil.
+
+El conteo sigue en **70/77**; la comprobación móvil permanece abierta. Para cerrarla, el teléfono debe abrir la réplica dentro del navegador DApp, mostrar o resolver la solicitud de conexión, devolver la dirección y permitir rechazo/desconexión. Si al tocar el botón solo aparece Inicio, abre manualmente el navegador DApp de la wallet, pega la URL copiada, acepta el aviso `Visit` de ngrok si aparece y espera a que cargue la réplica antes de conectar. Las siete casillas abiertas siguen siendo las listadas en la sección 4.
+
+### Corrección vigente tras confirmar que las apps solo muestran Inicio · 2-nov-2026
+
+Esta nota supersede las indicaciones móviles anteriores de este archivo:
+
+- MetaMask en ngrok ahora abre primero el checkout o la página dentro del navegador DApp de MetaMask. Cuando carga, la réplica intenta solicitar automáticamente acceso a la dirección porque el comprador ya pulsó **Conectar**; si no aparece, toca Conectar dentro de la página. En otros dominios HTTPS públicos se conserva MetaMask Connect SDK.
+- Trust Wallet ahora abre primero su Universal Link HTTPS `open_url`; el esquema `trust://open_url` queda como alternativa. Tras cargar la página en su navegador DApp, la réplica intenta la solicitud de dirección. Si la app solo muestra Inicio, carga manualmente la URL copiada dentro de su navegador DApp y pulsa **Conectar** si no aparece el permiso.
+- El checkout conserva producto, importe, red y wallet en el enlace. La conexión de cuenta no firma ni paga; **Pagar** sigue siendo una aprobación posterior en la wallet.
+- Ver solo Inicio es **fallo**, nunca conexión. La respuesta reciente del usuario cierra esa interacción como fallida, pero no cierra la casilla de integración móvil porque no hubo dirección devuelta.
+- Verificación de este cambio: compilación TypeScript/Vite y `git diff --check` completados. El intento automático ocurre solo después de `gmWalletConnect` de MetaMask/Trust, solo pide dirección y deja disponible el botón manual. Sin teléfono conectado, no se verificaron la carga dentro de la app, el prompt, aceptar/rechazar ni retorno. Sin nueva Evidence REA del dispositivo.
+
+El estado sigue en **70/77, siete pendientes**. El punto móvil requiere una prueba posterior en el teléfono con MetaMask y Trust; las seis casillas restantes son proveedores reales, recibo on-chain, rutas Bridge, activos admitidos, elegibilidad regional/KYC y backend financiero.
+
+### Revisión tras el reporte de que MetaMask y Trust abren solo Inicio · 2-nov-2026
+
+- **Incidencia registrada:** desde el enlace ngrok el usuario solo ve la pantalla principal de MetaMask o Trust; no llega la web, no aparece el permiso y no vuelve una dirección. La clasificación sigue siendo **fallida**.
+- **Causa de código confirmada:** el checkout y Carteras ejecutaban `eth_requestAccounts` desde un `useEffect` tras cargar `gmWalletConnect`. La documentación de MetaMask Connect recomienda iniciar la conexión desde una acción explícita del usuario y desaconseja conectar al cargar la página. Se retiró la solicitud automática; tras volver a la réplica, el comprador toca **Conectar** dentro del navegador DApp.
+- **MetaMask:** se habilitó MetaMask Connect en cualquier HTTPS público, incluido ngrok, para que el botón de conexión invoque el SDK en la misma acción del usuario. Se conserva el enlace al navegador DApp como alternativa manual si el handoff solo abre Inicio.
+- **Trust Wallet:** el enlace principal usa ahora `trust://open_url` porque el usuario ya tiene la app; el Universal Link `https://link.trustwallet.com/open_url` queda como alternativa web. La conexión sin WalletConnect/Project ID requiere que la réplica cargue dentro del navegador DApp y que el usuario toque **Conectar**.
+- **Compra y Recargar:** mantienen producto, importe, red y wallet en el checkout. Conectar solo lee una dirección; firmar y enviar solo ocurre después de tocar **Pagar** y confirmar en la wallet.
+- **Validación local:** `npm run build` pasó con TypeScript y Vite (945 módulos). Persiste el aviso no bloqueante de Rollup por el chunk Solana de 695.66 kB. `git diff --check` pasó; Git reportó solamente avisos LF/CRLF.
+- **REA/dispositivo:** se intentó `rea_linux.list_browser_targets` contra `127.0.0.1:9222`, pero REA devolvió `provider_unavailable` porque Brave no tiene un endpoint CDP local expuesto. No hay un dispositivo móvil accesible por REA en esta sesión. La captura REA anterior de Chromium no equivale a probar MetaMask o Trust en un teléfono.
+
+El checklist permanece en **70/77**. La casilla móvil no se cierra hasta que el mismo enlace/ngrok cargue la réplica dentro de cada wallet, el toque en **Conectar** muestre la solicitud, aceptar devuelva una dirección y cancelar/rechazar cierre la solicitud sin enviar fondos. Tampoco se cierra el control de los siete proveedores reales ni las cinco comprobaciones financieras/de negocio restantes listadas en la sección 4.
+
+### Investigación comparativa de wallets · 2-nov-2026
+
+La matriz detallada de MetaMask, Trust, Coinbase, Phantom, Solflare, TronLink, UniSat, Keplr, CTRL/xDeFi, Safe y WalletConnect está en la [guía de compatibilidad](./gomining-replica-guide.md). Diferencia proveedor directo, DApp Browser, callback requerido, Project ID y ajuste con las seis redes de pago actuales.
+
+Esta investigación documental **no cierra** las casillas de wallet real o móvil. Se conserva **70/77**: el usuario vio Inicio al intentar conectar MetaMask y Trust desde ngrok, sin permiso ni dirección; no se pudo probar el prompt en un teléfono desde esta sesión. Trust Wallet desde un navegador externo requiere WalletConnect v2 con Project ID, excluido por la preferencia del proyecto; su ruta sin ID requiere abrir la web dentro de Trust DApp Browser. Keplr no corresponde a las redes de cobro actuales, Safe requiere contexto Safe App, UniSat móvil requiere callback nativo no disponible en esta SPA y CTRL/xDeFi queda como candidato de extensión no integrado. No se confirma el precio de WalletConnect de USD 89 por 500 usuarios.
+
+Build local actual: aprobada (`tsc -b && vite build`, 945 módulos); persiste el aviso de Rollup por el chunk Solana de 695.66 kB. `git diff --check` pasó. No se observó ni conectó una wallet en teléfono.
+
+### Resultado móvil y estado vigente · 2-nov-2026
+
+- [x] Se registró el resultado confirmado por el usuario: desde ngrok, MetaMask no muestra la solicitud y Trust Wallet abre su pantalla de inicio. Clasificación: **fallido**, sin provider, dirección, firma ni pago.
+- [x] En ngrok, el botón **Conectar con MetaMask** llama MetaMask Connect desde el toque; el deeplink `/dapp/` queda como alternativa manual. Trust prioriza el Universal Link HTTPS `open_url` y deja `trust://open_url` como alternativa. El resultado de los dos saltos aún no se confirmó en teléfono.
+- [x] Al volver con `gmWalletConnect`, la réplica ya no solicita acceso automáticamente: muestra instrucciones y espera que se toque **Conectar** dentro de la página. Conectar solo lee dirección; la transferencia necesita tocar **Pagar** y aprobar otra solicitud.
+- [x] Se documentó la compatibilidad de MetaMask, Trust, Coinbase, Phantom, Solflare, TronLink, UniSat, Keplr, CTRL/xDeFi, Safe y WalletConnect, incluida la dependencia de Project ID y la correspondencia de redes. La matriz está en la guía.
+- [x] `npm run build` pasó: TypeScript + Vite; 945 módulos. Sigue el aviso de Rollup por el bundle Solana (695.66 kB).
+Pendiente fuera del conteo de la matriz: repetir en teléfono MetaMask y Trust con la versión actual, comprobar carga de la réplica dentro del navegador DApp, el prompt tras tocar Conectar, aceptar/rechazar, retorno de la dirección y desconexión.
+
+Límite REA: no hubo target móvil ni captura nueva del prompt. La última consulta al endpoint CDP de Brave devolvió `provider_unavailable`; no se repitió. Se mantiene **70/77** y las **siete comprobaciones abiertas** enumeradas en las secciones 4, 5 y 11. Trust desde un navegador móvil externo requiere WalletConnect v2 con `projectId`; sin ese ID, la web debe cargarse dentro del DApp Browser de Trust.
+
+### Primer ajuste tras la respuesta del usuario · corte histórico
+
+El usuario confirmó que MetaMask y Trust Wallet muestran solo el inicio al abrir el enlace de ngrok. Se registra como **fallo de handoff**, no como conexión rechazada: no llegó la página a la wallet ni apareció solicitud de dirección.
+
+- En ese primer corte, MetaMask Connect se intentó como ruta principal en ngrok y el enlace al navegador DApp quedó como alternativa. El usuario volvió a reportar que veía solo Inicio, así que esa configuración se sustituyó después.
+- El deep link MetaMask de respaldo se ajustó al formato de ruta `https://link.metamask.io/dapp/{dappUrl}`. Tampoco está validado en el teléfono.
+- Trust `open_url` solo intenta abrir la página dentro del navegador DApp. Sin WalletConnect Project ID, Connect solo es posible dentro de ese navegador; si el enlace deja Trust en Inicio, abre Browser/DApps desde la propia wallet y carga la URL HTTPS.
+- La comparación técnica de las demás opciones está en [la guía](./gomining-replica-guide.md#evaluacion-de-wallets-sin-walletconnect-project-id). EIP-1193/EIP-6963 detecta proveedores EVM ya inyectados; no abre apps móviles. Solana Wallet Standard tampoco reemplaza los deeplinks y callbacks particulares.
+- Fuentes: [MetaMask Connect](https://docs.metamask.io/metamask-connect/), [MetaMask deeplinks](https://docs.metamask.io/metamask-connect/evm/guides/metamask-exclusive/use-deeplinks/), [Trust deep links](https://developer.trustwallet.com/developer/develop-for-trust/deeplinking), [Trust Mobile](https://developer.trustwallet.com/developer/develop-for-trust/mobile), [EIP-6963](https://eips.ethereum.org/EIPS/eip-6963).
+- El hilo de Reddit compartido recomienda el navegador integrado de MetaMask para ese síntoma. Es anecdótico y antiguo; se usa como contexto, no como prueba del flujo actual. [Hilo de r/MetaMask](https://www.reddit.com/r/Metamask/comments/rjz6r7/need_help_i_cant_use_metamask_mobile_to_connect/).
+- La pasada REA/Linux de este corte sobre `src/walletAppLinks.ts` terminó en timeout del cliente a los 450 s y no produjo Evidence. No se repitió; el análisis estático retenido de cortes anteriores no incluye este último cambio.
+
+**Conteo:** 70/77, siete pendientes. La conexión móvil real sigue pendiente; no se marcó como cumplida porque no hay un teléfono accesible por REA en esta sesión.
+
+### Ajuste posterior al resultado del teléfono · 2-nov-2026
+
+- MetaMask en ngrok ahora abre directamente el navegador DApp y mantiene la ruta/query del checkout; al entrar en la página, el intento `gmWalletConnect` solicita el provider si ya está inyectado.
+- Trust Wallet ahora usa `trust://open_url` como primera ruta hacia DApp Browser y el Universal Link HTTPS como alternativa. Una pantalla de Inicio sigue significando que no se cargó la página ni hubo conexión.
+- El checkout copia un enlace que preserva el producto, importe, red, wallet e intención; si la app cae en Inicio, ese enlace se puede pegar manualmente en Browser/DApps.
+- `npm run build` pasó (`tsc -b && vite build`, 945 módulos); `git diff --check` pasó. Sigue el aviso de Rollup por el bundle Solana de 695.66 kB.
+- El intersticial de ngrok gratuito debe aceptarse con **Visit** cuando aparezca. No se obtuvo nueva evidencia REA de un teléfono y no se probó prompt real ni pago.
+
+**Estado vigente:** 70/77, siete pendientes; la integración móvil no se marca como funcional hasta que una wallet real cargue la réplica, muestre el permiso y devuelva la dirección tras aceptación.
+
+### Revalidación después del reporte “solo aparece Inicio” · 2-nov-2026
+
+- El usuario confirma que, al abrir desde ngrok, MetaMask y Trust muestran únicamente la pantalla principal. Resultado: **falló el handoff**; no hay provider, dirección, permiso ni pago.
+- Cambio vigente en el código: para un dominio ngrok, el botón principal de MetaMask abre primero la URL oficial del navegador DApp con la URL de regreso. Cuando la réplica cargue dentro de MetaMask, el usuario toca **Conectar**; no se manda una solicitud al montar la página. En otros HTTPS públicos continúa el botón MetaMask Connect.
+- Trust Wallet conserva el enlace documentado `open_url`. Si el teléfono solo muestra Inicio, el camino de contingencia es copiar la URL con `gmWalletConnect=trustwallet`, abrir **Browser/DApps** manualmente dentro de Trust, pegar la URL, aceptar el aviso de ngrok si aparece y tocar **Conectar** cuando la réplica cargue. La navegación a la app no crea una sesión.
+- Se corrigieron los mensajes de Carteras y checkout para mostrar esos pasos. Producto, importe y red se mantienen al copiar el enlace de checkout. **Conectar** solo pide la dirección; **Pagar** es una aprobación aparte.
+- `npm run build` y `git diff --check` se ejecutaron después del cambio. La revisión local confirma selección del enlace por código; no confirma que una wallet real abra la página ni muestre el permiso. No hubo nueva Evidence REA ni se hizo una transferencia.
+
+Las **siete pendientes** de la matriz siguen abiertas y enumeradas en la sección 4; esta revisión no convierte el reporte de fallo ni el cambio de código en una prueba de wallet real.
+
+### Revisión documental y ajuste de fallbacks móviles · 2-nov-2026
+
+- [x] Se contrastaron con documentación oficial los flujos de MetaMask Connect, Trust Wallet, Coinbase Wallet, Solflare, Phantom, TronLink, UniSat y los candidatos Keplr, CTRL/xDeFi, Safe y WalletConnect. La matriz por wallet, compatibilidad con redes del checkout y requisito de Project ID está en [la guía](./gomining-replica-guide.md#investigacion-documental-y-fallback-movil-actualizado--2-nov-2026).
+- [x] Se aclaró el paso posterior al deep link: si la réplica carga en el navegador de la wallet, el botón cambia a **Conectar … ahora**. Solo una pulsación solicita la dirección; no firma ni paga.
+- [x] Se añadieron alternativas de navegador DApp y copiar URL en Carteras y checkout para las wallets con un flujo web recuperable. La URL preserva `gmWalletConnect` y, en checkout, los datos del producto.
+- [x] `npm run build` pasó con TypeScript y Vite: 945 módulos. `git diff --check` pasó; continúan avisos de LF/CRLF y el aviso de Rollup por el chunk Solana de 695.66 kB.
+- [ ] MetaMask y Trust Wallet siguen fallando desde el enlace ngrok observado: solo aparece Inicio. No hubo autorización, dirección ni pago. Hace falta probar la URL dentro del navegador DApp del teléfono y observar aceptación/rechazo y el retorno.
+- [ ] REA no produjo Evidence nueva: una pasada terminó `integrity_mismatch` porque `src/walletAppLinks.ts` cambió durante el inventario. Una pasada posterior con el código estable agotó el límite del cliente de 450 s sin resultado; no se repitió la misma llamada. No se presenta el análisis como una auditoría completada.
+
+La matriz base sigue en **70/77 con siete pendientes**. Esta investigación resuelve la documentación y mejora el fallback de interfaz; no sustituye pruebas con wallets móviles reales ni cierra las comprobaciones de pagos/Bridge/backend.
+
+### Revisión documental adicional de wallets móviles · 2-nov-2026
+
+- [x] Se contrastaron MetaMask Connect y la ayuda de MetaMask Mobile. MetaMask recomienda abrir la dapp desde Explore → navegador si un navegador móvil externo no conecta; `/dapp/{dappUrl}` solo abre la página y el permiso llega después de tocar **Conectar**. [MetaMask Mobile](https://support.metamask.io/es/configure/wallet/how-to-use-the-metamask-mobile-browser/) · [MetaMask Connect](https://docs.metamask.io/metamask-connect/).
+- [x] Se contrastó Trust Wallet: `open_url` solo navega; desde un navegador externo, su conexión móvil usa WalletConnect v2 y `projectId`. Sin ID, el flujo requiere Browser/DApps con provider inyectado. [Trust deep links](https://developer.trustwallet.com/developer/develop-for-trust/deeplinking) · [Trust Mobile](https://developer.trustwallet.com/developer/develop-for-trust/mobile).
+- [x] Se añadió a la [guía](./gomining-replica-guide.md#contraste-de-documentacion-movil-proporcionada-por-el-usuario--2-nov-2026) la matriz oficial para Coinbase, Solflare, Phantom, TronLink, UniSat, Keplr, CTRL/xDeFi, Safe y WalletConnect, distinguiendo lo que funciona desde una página web y lo que requiere navegador integrado, callback nativo, contexto Safe o Project ID.
+- [x] Se revisó la página oficial de Reown: Starter indica 500 MAU para wallets embebidas o autenticación SIWX y 2.5 M RPC; las conexiones autocustodiadas figuran “within acceptable limits”. Pro se publica a USD 89/mes y agrega multiwallet linking y cuotas mayores. No se interpreta 500 como límite general de conexiones autocustodiadas. [Precios Reown](https://reown.com/pricing).
+- [ ] No cambia el resultado funcional: **70/77**. La prueba en teléfono HTTPS sin intersticial, con prompt de conexión y retorno de dirección sigue pendiente. Esta revisión documental no se presenta como evidencia REA móvil.
+
+### Estado vigente después de la respuesta del usuario · 2-nov-2026
+
+- [x] El usuario confirma que al abrir MetaMask y Trust Wallet desde ngrok solo aparece la pantalla principal. Registro: **handoff fallido**, sin página de la réplica, prompt, permiso, dirección, firma ni pago.
+- [x] MetaMask Connect usa `metamask://` para iniciar `client.connect()` desde el toque; el enlace oficial `/dapp/{dappUrl}` sigue como alternativa para abrir la réplica dentro del navegador de MetaMask. No se ha probado el cambio en teléfono. [MetaMask Connect](https://docs.metamask.io/metamask-connect/) · [deeplink DApp](https://docs.metamask.io/metamask-connect/evm/guides/metamask-exclusive/use-deeplinks/).
+- [x] Trust Wallet prioriza `https://link.trustwallet.com/open_url` y conserva `trust://open_url` como alternativa. Ambos solo navegan; sin Project ID de WalletConnect, conectar requiere cargar la réplica dentro de Browser/DApps y tocar **Conectar**. [Deep links Trust](https://developer.trustwallet.com/developer/develop-for-trust/deeplinking) · [Trust Mobile](https://developer.trustwallet.com/developer/develop-for-trust/mobile).
+- [x] Checkout y Carteras conservan la URL para pegar manualmente en el navegador DApp y diferencian **Conectar** (dirección) de **Pagar** (aprobación de transferencia).
+- [x] El build TypeScript/Vite y `git diff --check` se ejecutaron después de los cambios.
+- [ ] Repetir en teléfono con MetaMask y Trust: comprobar que la réplica cargue, aparezca el permiso, aceptar/rechazar, obtener dirección y desconectar.
+- [ ] REA intentó el análisis amplio de wallet y luego una lectura acotada de los dos módulos cambiados; ambas terminaron en timeout del cliente a los 450 s sin Evidence. No repetí una llamada idéntica. Hace falta aumentar el límite del host para cerrar esta auditoría; no se afirma que el teléfono haya sido probado.
+
+El balance vigente es **70/77 cumplidas, una fallida observada y seis abiertas**: (1) conexión/desconexión real de cada wallet en extensiones y móviles; (2) hash/recibo de una transferencia on-chain; (3) cotización, mínimo, fee, liquidez y llegada final de cada ruta Bridge; (4) contrato, decimales y disponibilidad de tokens extra; (5) elegibilidad/KYC por proveedor, red, región y monto; (6) backend de órdenes, verificación, idempotencia, conciliación y activación. El handoff móvil desde ngrok es la falla observada y queda aparte de las seis abiertas. El build posterior al ajuste de enlaces pasó; el teléfono no se volvió a probar.
+
+### Cambio correctivo para el caso ngrok del usuario · 2-nov-2026
+
+Esta es la instrucción vigente y reemplaza las notas anteriores de este archivo que describían otra prioridad de enlaces para MetaMask o Trust.
+
+- MetaMask: en un dominio ngrok, **Conectar** dirige primero al enlace oficial `/dapp/{dappUrl}` para cargar la réplica dentro del navegador MetaMask. Quité `useDeeplink: true`, que forzaba `metamask://connect/mwp`; en dominios HTTPS públicos sin ngrok se conserva MetaMask Connect con su flujo Universal Link predeterminado.
+- Si la réplica aún no detecta el provider de MetaMask dentro del navegador DApp, el checkout ya no vuelve a lanzar la app externa desde ngrok: explica que hace falta abrir la página dentro de MetaMask. El checkout tampoco reescribe la ruta al tocar Conectar después de volver por `gmWalletConnect`.
+- Trust Wallet: el botón principal usa `trust://open_url` para entrar a Browser/DApps, con `https://link.trustwallet.com/open_url` como alternativa. Cuando el sitio cargue dentro de la wallet, hay que tocar **Conectar** para que aparezca el permiso. Abrir la app no equivale a conectar.
+- Compra y **Recargar** usan la misma selección de wallet y conservan en el enlace los datos del checkout. El pago sigue separado y requiere una segunda aprobación.
+- Verificación local: `npm run build` completó (`tsc -b && vite build`, 945 módulos); permanece el aviso de Rollup por el chunk Solana de 695.66 kB. La integración física no se reprobó. El informe REA de esta revisión no obtuvo evidencia de teléfono; las llamadas anteriores de análisis de módulos agotaron el límite del cliente y no se repitieron.
+- **Casilla móvil: sigue fallida/no verificada** hasta que MetaMask y Trust carguen esta réplica desde ngrok, el toque en **Conectar** muestre el permiso, aceptar devuelva una dirección y rechazar/cancelar no envíe nada. La respuesta de ahora confirmó que ambas apps solo mostraban Inicio antes de este cambio.
+- Entorno reportado por el usuario: teléfono Android; navegadores de origen Brave y Chrome.
+
+Fuentes: [MetaMask Connect y gestión de cuentas](https://docs.metamask.io/metamask-connect/evm/guides/manage-user-accounts/) · [deeplink DApp de MetaMask](https://docs.metamask.io/metamask-connect/evm/guides/metamask-exclusive/use-deeplinks/) · [Trust deeplinks](https://developer.trustwallet.com/developer/develop-for-trust/deeplinking) · [Trust Wallet móvil](https://developer.trustwallet.com/developer/develop-for-trust/mobile).
+
+### Revisión del fallo móvil en Android Brave/Chrome · 2-nov-2026
+
+- [x] Identificada la diferencia de flujo: MetaMask Connect puede pedir permiso desde Brave/Chrome móvil; el deep link /dapp/ solo abre el sitio. Trust open_url también solo navega; sin WalletConnect Project ID, la conexión requiere el provider dentro de Browser/DApps.
+- [x] Cambiado MetaMask para intentar la conexión asistida también desde ngrok público HTTPS, precargando el SDK; se conserva abrir la réplica en el navegador DApp como fallback.
+- [x] Trust prueba primero su Universal Link HTTPS y mantiene el esquema de app como fallback. La pantalla advierte que el enlace no concede acceso por sí solo.
+- [x] Validación local: npm run build pasó; git diff --check pasó; http://127.0.0.1:5173/home respondió 200.
+- [ ] Android: el usuario debe volver a probar MetaMask en Brave/Chrome y Trust desde Browser/DApps; comprobar que la réplica cargue, aparezca el permiso, aceptar y rechazar, ver la dirección tras aceptar y desconectar. No se marca cumplido a partir de documentación o código.
+- [ ] REA: no hay CDP local expuesto por Brave ni Android enlazado; no se obtuvo una nueva captura REA. El último intento no se repitió sin cambiar la condición del endpoint.
+
+El conteo general sigue **70/77**: una interacción móvil fallida observada y seis comprobaciones externas abiertas (wallets reales; recibos on-chain; rutas Bridge; tokens adicionales; KYC/elegibilidad; backend financiero). El ajuste es un intento de corrección en código, pendiente de retest físico; no cierra esa casilla.
+
+### Seguimiento tras confirmar Android + Brave/Chrome · 2-nov-2026
+
+- [x] Revisión de la ruta Trust: el CTA ahora usa primero el esquema `trust://open_url`, que la documentación oficial describe como deeplink directo a la ruta dentro de la app; el Universal Link HTTPS queda como alternativa. La pantalla explica qué hacer si la app muestra solo Inicio.
+- [x] Build posterior al cambio: `npm run build` pasó (`tsc -b && vite build`, 945 módulos); permanece el aviso de Rollup por el chunk Solana de 695.66 kB.
+- [ ] **Falla móvil observada, no cerrada:** desde Android + Brave/Chrome, MetaMask no mostró prompt y Trust Wallet abrió Inicio. Reprobar ambos con el build actual; Trust debe abrir Browser/DApps, cargar la réplica y pedir autorización al tocar **Conectar**. La conexión por Trust desde navegador externo necesita WalletConnect v2 con `projectId`, que sigue excluido.
+- [ ] **Seis verificaciones externas:** (1) conexiones/desconexiones reales en extensiones y móviles; (2) recibo y hash on-chain; (3) precio, mínimo, comisión, liquidez y conversión final de Bridge; (4) contratos, decimales y disponibilidad de tokens adicionales; (5) elegibilidad/KYC por wallet, red, región e importe; (6) backend de órdenes, verificación, idempotencia, conciliación y activación.
+- [ ] REA: el análisis acotado actual devolvió `Transport closed` sin Evidence. La captura móvil continúa sin evidencia; no se repitió el análisis tras los fallos anteriores.
+
+El conteo continúa en **70/77**. Una compilación y una revisión de documentación no cierran la falla de prompt móvil ni las seis verificaciones externas.
+
+### Ajuste actual para Android + Brave/Chrome · 2-nov-2026
+
+La prueba que el usuario reportó ocurrió antes de este ajuste: desde ngrok, MetaMask no mostró permiso y Trust Wallet abrió Inicio. La falla observada se conserva; aún falta probar la versión actual en ese teléfono.
+
+- [x] MetaMask en ngrok ahora prioriza el enlace oficial `/dapp/{dappUrl}`. Ese enlace solo abre la réplica dentro del navegador de MetaMask. Al cargar allí, hay que tocar **Conectar MetaMask ahora** para que el provider solicite la dirección. En HTTPS limpio, MetaMask Connect conserva su flujo móvil por SDK.
+- [x] Trust mantiene `trust://open_url` y un Universal Link HTTPS. Ambos solo navegan. Si aparece Inicio, copiar la URL de `/gmt-wallets` o del checkout y pegarla manualmente en **Browser/DApps**; cuando la réplica cargue, tocar **Conectar Trust Wallet ahora**. Sin WalletConnect Project ID no hay solicitud desde Brave/Chrome externos.
+- [x] Carteras muestra esta diferencia de rutas en Android/ngrok y checkout conserva producto, importe y red al copiar la URL.
+- [x] `npm run build` pasó: TypeScript + Vite, 945 módulos. Queda el aviso no bloqueante del chunk Solana de 695.66 kB.
+- [ ] Retest físico: abrir el sitio en cada navegador DApp, observar permiso, aceptar y rechazar, comprobar dirección tras aceptar, desconectar y repetir en checkout/Recargar. No se marca cumplido por documentación o compilación.
+- [ ] REA: `capture_browser_scenario` en Chromium temporal devolvió `Transport closed` antes de Evidence; no se repitió la captura porque los intentos previos de REA también fallaron. No se afirma que esta actualización tenga auditoría REA nueva. Para reintentar hará falta restablecer REA MCP.
+
+**Estado base:** 70/77; la incidencia móvil sigue fallida/no revalidada y las seis comprobaciones externas enumeradas en la sección 4 permanecen abiertas.
+
+### Alcance móvil confirmado · 3-nov-2026
+
+- Se requiere cubrir Android e iOS. La prueba reportada hasta ahora es solo Android + Brave/Chrome + ngrok; no hay resultado de iPhone/iOS ni de la prueba posterior al último cambio.
+- MetaMask: en HTTPS público sin intersticial, MetaMask Connect está diseñado para solicitar acceso desde el navegador móvil. En ngrok, la réplica prioriza abrirse dentro del navegador DApp; ese enlace solo navega. Ya cargada la página allí, hay que pulsar **Conectar** para conceder acceso a la dirección.
+- Trust Wallet: sin WalletConnect/Project ID, el enlace `open_url` solo abre Browser/DApps; no genera la solicitud. La página debe estar cargada dentro del navegador de Trust y luego se pulsa **Conectar**. Desde Brave/Chrome externos no se espera un permiso directo.
+- Conectar solicita acceso a la dirección pública; no pide firma de mensaje. La firma/envío pertenece al paso independiente **Pagar**.
+- La casilla móvil permanece abierta hasta probar aceptación, rechazo, retorno de dirección, desconexión y cancelación en dispositivos reales. El intento actual de REA (`rea/capture_browser_scenario`) devolvió `Transport closed` sin Evidence; no se atribuye auditoría REA a esta revisión.
+
+El conteo sigue en **70/77**. La evidencia requerida para el punto móvil no puede sustituirse con una captura desktop o una compilación.
+
+### Ajuste posterior tras el reporte de Android · 2-nov-2026
+
+- [x] MetaMask Connect se habilita en cualquier URL pública HTTPS, también en ngrok. El SDK abre con Universal Link HTTPS en Android (`mobile.useDeeplink: false`); se mantiene el enlace del navegador DApp como alternativa. La documentación oficial indica que `client.connect()` usa deeplink desde navegadores móviles; la corrección todavía requiere retest en el teléfono.
+- [x] Trust Wallet ahora intenta primero `https://link.trustwallet.com/open_url` y muestra `trust://open_url` como alternativa. Ambos solo navegan a Browser/DApps; no conceden acceso.
+- [x] `npm run build` pasó (`tsc -b && vite build`, 945 módulos). Sigue el aviso de Rollup por el chunk Solana de 695.66 kB. `git diff --check` pasó con avisos de conversión LF/CRLF.
+- [ ] Retest en Android + Brave y Chrome: MetaMask debe abrir la solicitud; aceptar debe devolver la dirección, rechazar no debe conectar y desconectar debe limpiar la sesión. Repetir conectar desde compra y Recargar; no aprobar pagos durante esta comprobación.
+- [ ] Trust Wallet sin Project ID: abrir la página dentro de Browser/DApps y tocar Conectar. Desde Brave/Chrome externos no se espera una solicitud, porque Trust documenta WalletConnect v2 como vía de conexión móvil.
+- [ ] REA no produjo Evidence por `Transport closed`; esperar a que se restablezca REA MCP antes de una nueva captura. El Android no está conectado al entorno de REA.
+
+El total permanece **70/77**. Este ajuste de código no cierra la falla móvil ni las seis comprobaciones externas; la lista de esas siete pendientes está arriba.
+
+### Cambio aplicado para Android + Brave/Chrome · 3-nov-2026
+
+En la ruta ngrok, MetaMask ahora abre la réplica en su navegador DApp antes de pedir el permiso; Trust Wallet ofrece copiar el checkout para pegarlo en Browser/DApps, porque la conexión directa desde Brave/Chrome requiere WalletConnect v2 y `projectId`. El enlace alternativo de Trust solo navega. En ambos casos la conexión sigue solicitando únicamente la dirección pública; el pago necesita aprobación aparte.
+
+`npm run build` pasó y `git diff --check` no encontró errores. No hubo nueva prueba física ni nueva Evidence REA: la última llamada REA/Linux había cerrado con `Transport closed`. **No se cuenta este cambio como una casilla funcional aprobada.** El checklist general continúa en **70/77**: una incidencia móvil observada y seis verificaciones externas abiertas. Las siete están enumeradas en `#### Las siete comprobaciones que siguen pendientes`.
+
+### Corrección del intento móvil y cobertura Android/iOS · 3-nov-2026
+
+- [x] MetaMask: el botón ahora inicia `client.connect()` en HTTPS público, también en ngrok. El enlace oficial al navegador DApp queda como fallback si la app solo muestra Inicio. La documentación oficial soporta deeplinks desde navegadores móviles, pero la corrección aún no se ha reprobado en el dispositivo.
+- [x] Trust Wallet: se conserva el flujo sin Project ID. En móvil se copia la URL para abrirla desde Browser/DApps y se pide acceso desde el provider inyectado; `open_url` solo navega y no muestra Connect.
+- [x] Validación local: build correcta (945 módulos, aviso existente de chunk Solana), `/gmt-wallets` respondió HTTP 200 y `git diff --check` pasó.
+- [ ] Android + Brave/Chrome + ngrok: verificar MetaMask prompt, aceptar, cancelar/rechazar, retorno de dirección, desconectar, y repetir acceso desde compra y Recargar; sin aprobar pagos.
+- [ ] iOS + Safari/Chrome/Brave: repetir el flujo MetaMask/Trust y las wallets Solflare/Phantom en dispositivo real. iOS Safari requiere invocar aperturas externas sincronizadas con el toque en protocolos que usan `window.open`; no asumir paridad por la build.
+- [ ] Trust desde navegador externo sin Project ID: no soportado por la vía móvil documentada; utilizar Browser/DApps. Cambiarlo requiere aprobar una solución WalletConnect con Project ID.
+- [ ] REA: `mcp__rea__list_browser_targets` respondió `Transport closed` en dos intentos de solo lectura. No hubo Evidence ni inspección REA nueva; reiniciar/reconectar el cliente MCP antes de reintentar.
+
+El conteo permanece en **70/77**. El punto móvil y las otras seis validaciones externas siguen abiertos según `#### Las siete comprobaciones que siguen pendientes`; no se marca una conexión como funcional hasta ver dirección devuelta en el dispositivo.
+
+### Matriz de prueba móvil por wallet · revisión documental · 3-nov-2026
+
+El dispositivo reportado es Android con Brave/Chrome; los dos enlaces probados fueron ngrok y mostraron solo la pantalla inicial. Esta tabla aclara qué resultado esperar y qué prueba real falta. No cambia el total hasta completar cada recorrido en un teléfono.
+
+| Wallet | Prueba Android que corresponde | Resultado que cierra la parte móvil | Estado actual |
+| --- | --- | --- | --- |
+| MetaMask | En Android + Brave/Chrome + ngrok, la prueba más reciente cargó dentro del browser DApp y llegó a la aprobación reportada. Falta obtener hash si fue enviada; para conexión completa falta verificar dirección, rechazo, regreso y desconexión. | Ver solicitud de conexión, aceptar/rechazar, retornar dirección, desconectar y repetir desde compra/Recargar. Sin enviar otro pago. | Handoff y aprobación reportados; recibo y estados restantes pendientes. |
+| Trust Wallet | Sin Project ID, abrir Browser/DApps, cargar URL de `/gmt-wallets` o checkout y tocar **Conectar**. El `open_url` ahora usa `coin_id=714` (índice SLIP-44). | Provider inyectado y dirección visible; rechazo/desconexión limpian estado. | El último intento abrió Inicio. La corrección requiere retest; desde Brave/Chrome externos no se espera solicitud sin WalletConnect. |
+| Solflare / Phantom | En HTTPS limpio, tocar **Conectar** y revisar el deeplink cifrado que invoca la app; ngrok puede usar Browser DApp como fallback. | Aceptar/rechazar y retornar la dirección/sesión al checkout. | Flujo documentado/código integrado, no probado en teléfono. |
+| Coinbase Wallet / Base App | En HTTPS limpio, tocar el CTA de conexión del SDK; usar Browser DApp como respaldo. En ngrok abrir el browser DApp y tocar **Conectar**. | Solicitud visible, dirección recuperada después del retorno y rechazo sin conectar. | CTA ajustado en código; sin prueba Android. |
+| TronLink | Abrir DApp Explorer desde el enlace; dentro de la réplica tocar **Conectar**. | Provider inyectado devuelve dirección. Probar `action: login` solo cuando el callback HTTPS esté desarrollado. | Solo apertura + provider; login callback pendiente. |
+| UniSat | Instalar extensión en desktop para conexión web. | En móvil, validar solo después de implementar un callback/app bridge que reciba `unisat://response`. | Sin conexión móvil funcional en esta SPA. |
+| Keplr, Safe, CTRL/xDeFi | No son un camino al checkout actual de BTC/BNB/ETH/TRX/SOL/POL (Keplr) o requieren una integración/contexto aparte (Safe); CTRL no se incorpora sin soporte vigente confirmado. | No aplicable al checkout actual. | Fuera del conjunto móvil soportado en esta versión. |
+
+Para decidir sobre WalletConnect: Reown muestra un nivel Starter de USD 0 y 2.5M RPC, pero sus Términos actuales detallan umbrales de licencia y posibles requisitos Enterprise para servicios que reciben pagos. No se debe interpretar “500” como un cargo automático de USD 89 al alcanzar esa cantidad; confirmar con Reown la elegibilidad del modelo comercial antes de crear el Project ID. Fuentes: [Trust Wallet Mobile](https://developer.trustwallet.com/developer/develop-for-trust/mobile), [Coinbase SDK mobile](https://docs.cdp.coinbase.com/wallet-sdk/docs/environments), [Reown pricing](https://reown.com/pricing), [Reown terms](https://reown.com/terms-of-service).
+
+Se ajustó el CTA Coinbase para que, en HTTPS sin intersticial, llame al SDK desde el toque principal en vez de abrir solo la app. `npm run build` pasó con 945 módulos; queda el aviso no bloqueante del chunk Solana de 695.66 kB. La comprobación móvil no se cierra hasta repetir el flujo en Android. Total provisional: **70/77**.
+
+### Corrección de navegación móvil según dispositivo confirmado · 3-nov-2026
+
+- MetaMask: el teléfono confirmado es Android con Brave/Chrome y ngrok. Para evitar el handoff de conexión a través del intersticial HTML gratuito, en ngrok el CTA principal abre la URL completa del checkout en el navegador DApp de MetaMask. Cuando carga allí, el usuario toca **Conectar** y el proveedor inyectado solicita acceso. En HTTPS público sin intersticial sigue disponible MetaMask Connect desde Brave/Chrome.
+- Trust Wallet: el CTA principal abre `open_url` para llevar el checkout a Browser/DApps; el enlace `trust://open_url` queda como alternativa y se puede copiar la URL si la app solo muestra Inicio. Sin WalletConnect/Project ID no se solicita una sesión directamente desde Brave/Chrome; hay que cargar la página en el navegador integrado y tocar **Conectar**.
+- Al volver desde la app a la página externa sin un proveedor o permiso, no se registra una conexión ni queda un pago pendiente. El checkout sigue exigiendo aprobación aparte para enviar.
+- Validación local: `npm run build` pasó con 945 módulos; `git diff --check` no encontró errores de whitespace (Git mostró solo avisos LF/CRLF). Validación física pendiente: en Android, confirmar que la réplica carga dentro de cada Browser DApp, que aparece el prompt y que aceptar/rechazar/volver/desconectar dejan el estado correcto. No pagar.
+- REA no produjo Evidence nueva: los intentos previos de captura/inventario terminaron en `Transport closed`; no se repitieron. Esta revisión se apoya en documentación oficial y lectura del código, no se etiqueta como auditoría REA ejecutada.
+
+La matriz sigue en **70/77**: una falla móvil observada antes del ajuste, pendiente de retest, y seis verificaciones externas abiertas. La lista está en [el informe detallado](./gomining-replica-mobile-wallet-audit-2026-11-03.md#siete-comprobaciones-que-siguen-abiertas).
+
+
+### Ajuste de handoff móvil tras confirmar Android + Brave/Chrome · 3-nov-2026
+
+- [x] MetaMask: el CTA principal intenta `client.connect()` también en el dominio HTTPS de ngrok. Se conserva el enlace `/dapp/` como fallback manual. El cambio corrige que el CTA anterior solo navegaba al browser DApp en ngrok; aún no prueba el permiso de MetaMask en el teléfono.
+- [x] Trust Wallet: el CTA principal usa el esquema oficial instalado `trust://open_url`; el Universal Link HTTPS se conserva como alternativa. Los dos solo abren una ruta; sin WalletConnect y `projectId`, el usuario debe cargar la réplica en Browser/DApps y tocar **Conectar**.
+- [x] Se corrigieron las instrucciones en Carteras y checkout: distinguen intento directo de MetaMask, fallback DApp y navegación Trust; indican que ngrok puede exigir aceptar **Visit**.
+- [x] REA/Linux `binary_session` respondió y reportó `cleanup_pending: false`, sin target abierto. Esto confirma disponibilidad del servidor, no una interacción de navegador ni una prueba Android. No hay Evidence REA nueva en este corte.
+- [ ] Android + Brave y Chrome + ngrok: MetaMask: prompt, aceptar/rechazar, dirección, volver y desconectar; repetir entrada desde compra y Recargar. Sin pagar.
+- [ ] Android + Trust Wallet: probar el deep link directo; si solo abre Inicio, copiar y pegar la URL en Browser/DApps; aceptar **Visit**, cargar la réplica, conectar, probar rechazo, retorno y desconexión. Sin pagar.
+- [ ] Probar iOS y los otros conectores móviles por separado; la compilación no verifica deeplinks, prompts ni callbacks reales.
+
+El balance general continúa en **70/77**: esta corrección de código no aprueba una casilla móvil sin dirección observada en dispositivo real. Las seis comprobaciones externas restantes siguen listadas en `#### Las siete comprobaciones que siguen pendientes`.
+
+- [x] Se intentó REA estático sobre los cinco módulos del flujo; tras más de tres minutos no hubo resultado ni Evidence y se detuvo la espera. No se presenta como auditoría REA completada ni se repite la misma llamada.
+
+### Actualización tras la respuesta del usuario y retesteo local · 3-nov-2026
+
+El usuario confirmó que probó **MetaMask y Trust Wallet** en **Android + Brave/Chrome** desde ngrok; ambas abrieron la pantalla principal de la wallet, sin Connect ni firma. No se observó dirección, autorización ni transacción.
+
+- [x] En ngrok, el CTA de MetaMask ahora abre la página dentro del navegador DApp; al cargar la réplica, la persona toca **Conectar** para pedir acceso. Se quitó `forceRequest` del flujo SDK y se sigue el `client.connect({ chainIds })` estándar. En HTTPS público sin ngrok continúa el intento directo de MetaMask Connect.
+- [x] Trust usa como enlace principal el Universal Link HTTPS oficial `link.trustwallet.com/open_url`. Si solo abre Inicio, se ofrece copiar la URL para cargarla desde Browser/DApps. Sin WalletConnect y Project ID no se pide conexión desde Brave/Chrome externos.
+- [x] Validación local: `npm run build` pasó (945 módulos); `/gmt-wallets` respondió HTTP 200; `git diff --check` no encontró errores de whitespace. Continúa el aviso no bloqueante de Rollup por el chunk Solana (695.66 kB).
+- [ ] Retest Android: MetaMask debe abrir la DApp o cargarla desde Explorar/Browser; Trust debe cargarla desde Browser/DApps. En ambas, confirmar que el segundo toque muestra el permiso, aceptar devuelve la dirección, rechazar no conecta, volver sin aceptar limpia el pendiente y desconectar quita la dirección. Repetir desde compra y Recargar; no aprobar pagos.
+- [ ] REA de navegador/dispositivo: `binary_session` confirmó que REA/Linux estaba disponible sin target abierto y sin limpieza pendiente. `inspect_adb_client` devolvió Evidence `ev_c2f258da5495c64796e7bdf9feafb2243079b6c8e4bb3330c9499b478852088d`, con `contacted_adb_server: false`; no se consultó el teléfono. `list_browser_targets` con el endpoint local `127.0.0.1:9222` devolvió `provider_unavailable/endpoint_unreachable`. Por tanto no hay captura REA del prompt ni del teléfono.
+
+El conteo general sigue en **70/77**: la falla móvil reportada continúa abierta hasta completar el retest; las otras seis validaciones externas no cambian. La disponibilidad del servidor REA o una compilación no cuentan como una conexión móvil funcional.
+### Resultado móvil confirmado por el usuario y ajuste Trust Wallet · 3-nov-2026
+
+El usuario probó desde **Android + Brave/Chrome + ngrok**. MetaMask cargó la URL dentro de su navegador integrado y permitió llegar a la firma de la transacción. Trust Wallet abrió la app como acceso directo, pero no cargó la réplica ni mostró una solicitud de conexión. La firma observada en MetaMask no acredita por sí sola confirmación on-chain, recepción Bridge ni activación del producto.
+
+- [x] MetaMask: resultado reportado como funcional para abrir la DApp en su navegador y llegar a la aprobación de la transacción.
+- [x] Trust: la ruta primaria ahora usa el esquema oficial trust://open_url, reservado por la documentación para dirigir directamente a una página dentro de la app cuando está instalada. Se conserva el Universal Link HTTPS como alternativa.
+- [x] Handoff de conexión: si la página llega con gmWalletConnect dentro del navegador DApp y detecta el proveedor de esa wallet, Carteras y el checkout solicitan permiso para leer la dirección. No se firma mensaje ni se envía el pago en este paso.
+- [x] Validación de código: npm run build pasó con 945 módulos; persiste el aviso no bloqueante del bloque Solana (695.66 kB). git diff --check terminó sin errores de whitespace; Git mostró avisos LF/CRLF.
+- [ ] Trust Android: repetir el enlace primario. Si abre Inicio, abrir Browser/DApps, pegar la URL copiada, aceptar Visit si ngrok lo pide y confirmar que aparezca el permiso de conexión y vuelva la dirección. Probar rechazo, volver y desconectar; repetir desde compra y Recargar sin enviar fondos.
+- [ ] Completar rechazos, desconexiones y callbacks reales de todos los conectores móviles; la prueba de MetaMask comunicada no cubre los demás ni confirma el recibo.
+- [ ] REA de navegador/teléfono: no hay Evidence nueva. La captura anterior no alcanzó un target CDP; esta entrega no se etiqueta como inspección REA del Android.
+
+El conteo general sigue en **70/77**: el caso móvil compuesto permanece abierto por Trust y por los estados de rechazo, retorno y desconexión que faltan. Las otras seis comprobaciones están enumeradas en [las siete comprobaciones pendientes](./gomining-replica-checklist.md#las-siete-comprobaciones-que-siguen-pendientes).
+
+### Resultado adicional de prueba Android · 3-nov-2026
+
+- [x] MetaMask: el usuario informa que Android + Brave/Chrome abrió la réplica en el navegador interno y permitió llegar a la aprobación/firma de la transacción. Falta el hash/estado on-chain para confirmar el envío y la recepción.
+- [ ] Trust Wallet: Android + Brave/Chrome abrió la app en Inicio, sin cargar la réplica ni mostrar Connect. Se cambió el orden de enlaces: Universal Link HTTPS oficial primero y `trust://` como alternativa; falta repetirlo.
+- [x] Corrección local del deeplink: `open_url` documenta `coin_id` como índice SLIP-44. El código ahora usa `714` para BNB; `20000714` es el ID interno de Trust Wallet Core para BNB Smart Chain y no corresponde al parámetro documentado.
+- [ ] Retest físico de Trust tras priorizar el Universal Link HTTPS; si sigue en Inicio, copiar el enlace `gmWalletConnect=trustwallet`, abrir Browser/DApps manualmente y pegarlo. Desde Brave/Chrome externos, Trust documenta WalletConnect v2 con Project ID, opción que permanece excluida.
+- [ ] REA Android: sin Evidence de teléfono. El endpoint CDP local no respondió; el reporte del usuario no se etiqueta como captura REA.
+
+El checklist general sigue en **70/77**; la casilla móvil permanece abierta hasta probar conexión, dirección, rechazo, retorno y desconexión con Trust, y completar los demás estados pendientes. La aprobación reportada de MetaMask no prueba que la transferencia se confirmara ni que el minero se activara.
+
+### Resultado móvil confirmado y ajuste de instrucciones · 3-nov-2026
+
+- [x] MetaMask: el usuario confirma que Android + Brave abrió el sitio en el navegador interno de MetaMask y permitió llegar a la aprobación de una transacción. No se recibió un hash ni confirmación de red.
+- [x] Trust Wallet: el usuario confirma que tocar conectar abre la aplicación, pero queda en la pantalla principal; no aparece la réplica ni una solicitud de conexión. No indicó cuál de los enlaces de apertura tocó, así que no se atribuye el resultado a un esquema específico.
+- [x] Interfaz: el CTA de Trust ahora dice **Probar apertura en Trust Wallet**, el alternativo identifica `trust://` y las instrucciones indican cómo copiar la URL y abrirla desde Browser/DApps. El checkout y Carteras explican que no se puede iniciar una sesión desde Brave/Chrome externo sin WalletConnect Project ID.
+- [ ] Trust Android: probar la URL copiada dentro de Browser/DApps y verificar que carga la réplica, aparece el permiso, devuelve la dirección, y que rechazo/desconexión limpian el estado.
+- [ ] Las siete comprobaciones siguen abiertas: el flujo de Trust, estados reales de las wallets, hash de transferencia, salida real de Bridge, contratos/tokens, KYC/eligibilidad y verificación backend. Se listan en el [informe móvil](./gomining-replica-mobile-wallet-audit-2026-11-03.md).
+
+El total general permanece en **70/77**. La prueba reportada permite marcar solo el handoff de MetaMask hasta su pantalla de aprobación; no demuestra transferencia confirmada, recibo, conversión Bridge ni activación de producto. Trust no queda marcada funcional hasta ver una dirección devuelta dentro de su navegador DApp.
+
+### Retest comunicado y cambio de Universal Link Trust · 3-nov-2026
+
+- [x] MetaMask: el usuario informó que Android + Brave abrió el checkout dentro del navegador de MetaMask y permitió llegar a la aprobación/firma. El hash y la confirmación on-chain no están verificados.
+- [x] Trust: el usuario confirmó que el esquema directo abría Inicio. La réplica ahora prioriza `https://link.trustwallet.com/open_url`; mantiene `trust://open_url` como alternativa.
+- [x] Trust: las instrucciones ya explican que abrir la wallet no equivale a conectar. La página debe cargar en Browser/DApps; entonces la réplica solicita acceso a la dirección mediante el proveedor inyectado. Desde Brave/Chrome sin WalletConnect Project ID no hay sesión directa documentada.
+- [x] Validación local: `npm run build` pasó (945 módulos); `/gmt-wallets` respondió HTTP 200; `git diff --check` pasó. Sigue el aviso no bloqueante del bloque Solana de 695.66 kB; esto no prueba el deeplink en un teléfono.
+- [ ] Retest Android de Trust: que cargue la réplica, aparezca el permiso y devuelva la dirección; probar rechazo y desconexión. Si falla el enlace, pegar la URL copiada en Browser/DApps y aceptar el aviso de ngrok si aparece.
+- [ ] El total permanece **70/77**. Los siete pendientes y sus límites están enumerados en el [informe móvil](./gomining-replica-mobile-wallet-audit-2026-11-03.md).
+
+### Resultado más reciente comunicado · Android + Brave/Chrome + ngrok · 3-nov-2026
+
+- [x] MetaMask abrió la réplica dentro de su navegador integrado y permitió llegar a la aprobación/firma de la transacción. No se recibió hash ni prueba de liquidación, así que no se marca como pago confirmado.
+- [ ] Trust Wallet volvió a abrir Inicio tras el enlace directo `trust://open_url`; el Universal Link HTTPS ya había abierto Inicio en el intento anterior. Ninguno cargó la réplica ni mostró solicitud. Aún no se ha probado pegar la URL en Browser/DApps.
+- [x] Carteras y el checkout ahora ofrecen como acción principal **Copiar URL para Trust Wallet**; el checkout conserva producto, importe y red. Las instrucciones guían a abrir Browser/DApps, pegar la URL y cargar la réplica.
+- [x] Validación local de este ajuste: build pasó (945 módulos), `/gmt-wallets` dio HTTP 200 y `git diff --check` pasó; persiste el aviso no bloqueante del bloque Solana (695.66 kB).
+- [ ] En Trust Browser/DApps: cargar la URL copiada, aprobar/denegar la solicitud, verificar dirección y desconexión; repetir la entrada desde compra y Recargar sin pagar.
+- [ ] Mantener pendiente el cierre de MetaMask: el usuario reporta que firmó, pero faltan dirección registrada, rechazo, retorno, desconexión y hash/confirmación de red.
+
+No cambia el total **70/77**. La evidencia de MetaMask llega a la pantalla de aprobación, no verifica la transferencia. Trust exige probar el camino manual sin Project ID; la conexión móvil directa desde Brave/Chrome requiere WalletConnect v2 y `projectId` según la [documentación oficial](https://developer.trustwallet.com/developer/develop-for-trust/mobile). REA no capturó el teléfono en esta prueba.
+
+### Resultado informado y nuevo intento de Trust · 3-nov-2026
+
+- [x] MetaMask: con Android + Brave/Chrome + ngrok, abrió la réplica en el navegador interno y permitió llegar al paso de firma/aprobación. No se recibió hash; no se puede confirmar el envío o liquidación. Si el usuario aprobó en la wallet, pudo ser una transferencia real.
+- [ ] Trust Wallet: abrió la app pero permaneció en Inicio; no apareció la réplica ni un permiso. No se identificó si el intento anterior usó el enlace HTTPS o `trust://`.
+- [x] Carteras y checkout ahora exponen el enlace directo `trust://open_url`, el Universal Link HTTPS y copiar la URL. El enlace para pegar conserva el destino del checkout y el parámetro de autoconexión, que solo pide lectura de dirección.
+- [x] Validación local: `npm run build` pasó (945 módulos), `/gmt-wallets` respondió HTTP 200 y `git diff --check` pasó; Rollup mantiene el aviso de tamaño del bloque Solana.
+- [ ] Trust en Android: falta abrir la página dentro de Browser/DApps y confirmar permiso, dirección, rechazo y desconexión. Si ambos enlaces solo abren Inicio, usar el copiado manual. El handoff directo desde Brave/Chrome necesita WalletConnect v2 y `projectId` según Trust, excluido del alcance actual.
+- [ ] REA: no capturó Android. El análisis del código no devolvió evidencia porque el transporte REA local se cerró; la prueba de MetaMask es reporte del usuario y la nueva ruta Trust requiere retest en dispositivo.
+
+La matriz continúa en **70/77**. No se marca conexión Trust ni transferencia de MetaMask como confirmadas sin ver dirección/hash. Para la matriz de compatibilidad y fuentes oficiales, consulta el [informe de auditoría móvil](./gomining-replica-mobile-wallet-audit-2026-11-03.md#opciones-de-wallet-móvil-sin-walletconnect-project-id).
+
+### Resultado del retest Android y corrección del botón Trust · 3-nov-2026
+
+- [x] MetaMask: el usuario reportó Android + Brave/Chrome + ngrok; la réplica cargó en el navegador interno de MetaMask y llegó al paso de aprobación/firma. No hay hash ni verificación de la red, Bridge o activación del producto.
+- [x] Trust Wallet: el usuario reportó que la app abrió en Inicio, sin réplica ni prompt; no identificó cuál enlace usó.
+- [x] Hallazgo local: el CTA principal en Carteras y checkout apuntaba a `trust://open_url`, mientras que el Universal Link oficial HTTPS estaba como alternativa. Android puede abrir la app pero dejarla en Inicio con el esquema directo.
+- [x] Corrección local: el botón principal ahora abre `https://link.trustwallet.com/open_url` con la URL completa de la réplica; `trust://open_url` queda como alternativa y sigue disponible copiar/pegar manualmente en Browser/DApps.
+- [ ] Android Trust: probar el botón principal nuevo; confirmar que la réplica carga dentro de Browser/DApps, que se solicita la dirección, aceptar/rechazar y desconectar. Si solo aparece Inicio, usar el enlace copiado dentro de Browser/DApps. No pulsar **Pagar**.
+- [ ] REA de runtime móvil: no hay captura nueva de REA. La observación del teléfono es reporte del usuario; el defecto corregido se verificó por lectura local del JSX.
+
+El total general continúa en **70/77**. El cambio de prioridad del enlace no basta para cerrar Trust hasta que aparezca la réplica dentro de la wallet y se verifique la dirección devuelta. Trust documenta `open_url` y, para conectar desde navegadores externos, WalletConnect v2 con `projectId`; la opción sigue excluida. [Trust deep links](https://developer.trustwallet.com/developer/develop-for-trust/deeplinking) · [Trust Wallet Mobile](https://developer.trustwallet.com/developer/develop-for-trust/mobile).
+
+- [x] REA/Linux analizó estáticamente el bundle actual `dist/assets/App-DVyezqvW.js`: Evidence `ev_0ae756931f23b8cf4dcf5fe636fc9dca571d6f8540ccad83068cee2c4bbaf0ac` (resumen `ev_fa4ae0b9fe2029419f1c69baa39500b12934e8863d10fddc7536d7a8ff5acf3a`). 1 de 23 fuentes fue analizada; 22 quedaron fuera y el grafo sigue parcial. No es evidencia de ejecución móvil.
+- [x] Build final posterior al cambio: `npm run build`, 945 módulos; `/gmt-wallets` dio HTTP 200 y `git diff --check` pasó. Persiste la advertencia de bundle Solana de 695.66 kB.
+- [ ] El resultado en Trust Android aún requiere retest con el CTA HTTPS principal nuevo. El checklist total sigue en 70/77 hasta ver la réplica dentro de Browser/DApps y la dirección devuelta.
+
+### Reporte de Android posterior al cambio HTTPS · 3-nov-2026
+
+- [x] MetaMask en Android + Brave/Chrome + ngrok: reporte del usuario confirma que abrió el sitio en el browser interno y llegó a la solicitud para firmar/aprobar. Sin hash, no se confirma envío ni pago.
+- [x] Trust Wallet con el CTA HTTPS principal: reporte del usuario confirma que la app abrió Inicio sin cargar la página ni solicitar conexión.
+- [x] Se cambió el CTA principal a la ruta directa `trust://open_url`; el Universal Link HTTPS queda como alternativa. Este nuevo orden no se ha probado físicamente.
+- [ ] Trust Android: abrir el checkout dentro de Browser/DApps y comprobar prompt de conexión, dirección y desconexión. Sin WalletConnect y Project ID, no existe una sesión de conexión automática desde Brave/Chrome que se salte el navegador DApp.
+- [ ] No pulsar Pagar durante esta comprobación. La llegada a una pantalla de aprobación no demuestra por sí misma una transferencia o el registro de una compra.
+
+La lista general continúa en **70/77**. El retest confirma MetaMask hasta la aprobación y deja Trust abierto; el esquema directo actualizado requiere prueba en el teléfono. [Trust deep links](https://developer.trustwallet.com/developer/develop-for-trust/deeplinking) · [Trust Mobile/WalletConnect](https://developer.trustwallet.com/developer/develop-for-trust/mobile).
+
+**Resultado vigente comunicado por el usuario:** MetaMask abrió ngrok en su navegador integrado y permitió firmar la transacción; sin el hash no se puede saber si se transmitió. Trust abrió la app como acceso directo y no pidió conexión. El CTA actual ya no lanza Trust: copia la URL y pide abrir Browser/DApps manualmente. Este recorrido aún no tiene resultado físico.
+
+**Implementación vigente:** Keplr solo consulta la dirección de Cosmos Hub; CTRL/xDeFi no está disponible en el selector actual. Safe y WalletConnect siguen fuera del checkout. `npm run build` pasó, `/gmt-wallets` respondió 200 y `git diff --check` pasó. REA/Linux analizó el bundle de forma estática y parcial; no ejecutó Android. Los siete puntos pendientes y su evidencia están en el [informe móvil](./gomining-replica-mobile-wallet-audit-2026-11-03.md).
+
+### Estado vigente después de la última prueba Android · 3-nov-2026
+
+Este bloque aclara la verificación; no cambia el denominador 77.
+
+- MetaMask: el usuario reporta que Android + Brave/Chrome + ngrok abrió la réplica en el navegador interno y llegó al paso para firmar/aprobar. No hay hash ni confirmación; revisa Actividad de MetaMask antes de volver a pagar.
+- Trust Wallet: abrió Inicio sin cargar la réplica ni mostrar permiso. Los enlaces automáticos se quitaron de Carteras y checkout en móvil; el botón principal ahora copia la URL para abrirla en **Trust Wallet → Browser/DApps**.
+- La inspección del bundle compilado encontró los dos CTA de copia y no encontró los enlaces automáticos de Trust; confirma el contenido generado, no un retest físico en Android.
+- Trust manual sigue pendiente: carga de la URL copiada, permiso de dirección aceptado/rechazado, dirección retornada y desconexión. No pulsar **Pagar** para esta comprobación.
+- Build actual: `npm run build` pasó (945 módulos); `/gmt-wallets` y `git diff --check` quedan verificados en este corte. Rollup mantiene una advertencia no bloqueante sobre el chunk Solana.
+- REA/Linux: análisis estático del bundle `dist/assets/App-BgZisbbC.js`, Evidence resumen `ev_b767b186ffc3f3c66b3c986f28377e681372f2bf97a8913de8ea805b832b7dd6`, padre `ev_9db331639a772cc22492a63a5edbda3ce445ddeff6ba873a1288eb757ede3ff5`. Se analizó 1 de 24 archivos JS; el grafo semántico quedó parcial. No ejecutó la página ni Android.
+- Los otros pendientes: conexión y estados reales en las demás wallets, hash/confirmación, resultado Bridge, contratos/tokens, requisitos KYC/elegibilidad y backend de órdenes; se detallan en el [informe móvil](./gomining-replica-mobile-wallet-audit-2026-11-03.md#siete-comprobaciones-que-siguen-abiertas).
+
+El total general permanece en **70/77**. La prueba de MetaMask es evidencia reportada de llegada a la firma; no demuestra pago confirmado. Trust no se marca como conectada hasta que el browser in-app cargue la web y devuelva su dirección.
+
+### Retest móvil informado y rechazo controlado · 3-nov-2026
+
+- [x] **MetaMask Android:** con Brave/Chrome y ngrok, la réplica abrió en el navegador integrado y mostró aprobación de la transacción; el usuario reporta que pudo firmarla. No hay hash ni confirmación; revisar Actividad de MetaMask antes de volver a intentar. No se repite el pago.
+- [x] **Trust Android:** se confirmó el resultado reportado: la app abrió en Inicio sin página ni solicitud. La conexión desde Brave/Chrome externo sigue fuera del alcance sin WalletConnect v2 y `projectId`; el botón de la réplica copia la URL para cargarla en Trust → Browser/DApps.
+- [x] **Cerrar X con conexión pendiente:** en el proveedor local de QA (`connect-pending`), inicié una solicitud ficticia y pulsé X. El checkout desapareció, regresó Inicio y dejó visible la advertencia sobre una solicitud externa que podría continuar.
+- [x] **Cancelar pago en wallet simulado:** en `payment-reject`, el proveedor falso devolvió rechazo al método de envío. El checkout se cerró y mostró que no se envió pago. El fixture local intercepta la llamada; no se abrió una wallet real ni se transmitió una transacción.
+- [ ] **Wallet real con solicitud pendiente:** la prueba controlada no demuestra el comportamiento del diálogo MetaMask real ni que cerrar la página cancele su solicitud. Cancelar desde la wallet y revisar Actividad sigue siendo necesario antes de cualquier reintento.
+- [ ] **Trust Browser/DApps:** falta probar en el teléfono que la URL copiada cargue la réplica dentro de Trust, aparezca el permiso de dirección y la página reciba esa dirección.
+
+El total de la matriz se mantiene en **70/77**. Esto cierra pruebas locales del modal y registra los dos resultados móviles reportados, pero no valida una transferencia on-chain ni conexión Trust. Ver el detalle en el [informe de auditoría móvil](./gomining-replica-mobile-wallet-audit-2026-11-03.md).
+
+### Revisión documental de wallets móviles · 3-nov-2026
+
+La guía de integración por wallet está contrastada con documentación oficial y el código local; esto no cuenta como validación en un teléfono. Consulta la [matriz completa, las fuentes y las seis tareas técnicas/dispositivo abiertas](./gomining-replica-mobile-wallet-audit-2026-11-03.md#investigación-documental-de-conexión-móvil-por-wallet--3-nov-2026).
+
+- [x] **MetaMask Android:** el usuario informa que ngrok abrió dentro del navegador DApp y llegó a firmar/aprobar. Sin hash, la transferencia puede estar enviada pero no está verificada. Revisar Actividad antes de otro intento.
+- [x] **Trust Android:** el usuario confirma que el enlace abrió Inicio sin cargar la web. Se mantiene el botón de copiar URL y usar Browser/DApps como fallback; esa ruta manual sigue abierta.
+- [x] **Trust/WalletConnect:** la documentación oficial confirma Project ID necesario para conectar desde navegador móvil externo mediante WalletConnect v2; se excluye mientras no se configure ese servicio.
+- [x] **Solflare y Phantom:** confirmado en documentación el protocolo de deeplink cifrado y sesión; en Phantom el endpoint de pago `signAndSendTransaction` usado por el código aparece marcado como obsoleto y requiere actualización antes de cerrar la integración.
+- [x] **Coinbase:** documentación actual recomienda `@base-org/account`; el proyecto conserva `@coinbase/wallet-sdk` 4.4.0. Debe comprobarse la ruta móvil o decidir migración.
+- [x] **Keplr, TronLink y UniSat:** sus docs distinguen navegador integrado, callback propio y receptor de esquema. La implementación actual es address-only para Keplr; provider en navegador DApp para TronLink; UniSat mobile requiere un retorno no implementado.
+- [x] **CTRL/xDeFi y Safe:** no hay soporte en el checkout actual. La documentación disponible no valida un conector móvil genérico libre de WalletConnect Project ID; Safe usa WalletConnect para conexión general a dApps.
+- [ ] **Pruebas reales:** sigue pendiente probar Trust Browser/DApps, conexión/permiso/rechazo/desconexión de cada proveedor, revisar hash previo de MetaMask, pagos de prueba y reconciliación real. No pagar durante validación de conexión.
+- [ ] **Decisión técnica:** elegir entre rutas wallet-specific dentro de cada app o WalletConnect/Reown con Project ID; si se elige la segunda opción, revisar las cuotas/licencia actuales, que distinguen RPC y MAU autenticados/embebidos de visitas a wallets self-custodial.
+
+La cifra base permanece provisionalmente en **70/77**; el análisis documental no suma una conexión móvil verificada. La auditoría REA/Linux volvió a devolver `Transport closed` al listar targets, por lo que no existe captura nueva de Android.
+
+### Último resultado Android y estado corregido de Trust · 3-nov-2026
+
+- [x] **MetaMask:** según el usuario, Android + Brave/Chrome + ngrok abrió la réplica en el navegador interno de MetaMask y dejó aprobar/firmar una transacción. Esto no prueba difusión ni confirmación: falta el hash/Actividad. Revisar antes de cualquier reintento; no hacer otro pago de prueba.
+- [x] **Trust:** según el usuario, abrir desde Brave/Chrome solo mostró Inicio de Trust, sin réplica ni permiso. No se cuenta como conectada.
+- [x] **Resultado atribuido con precisión:** no se identificó qué variante de enlace abrió la app; el CTA actualizado prueba primero `trust://open_url`.
+- [x] **Nuevo deeplink:** el CTA principal de Carteras y checkout ahora intenta `trust://open_url`, con Universal Link HTTPS y copiar URL como alternativas. Conserva el marcador de conexión y el contexto del checkout. En la ruta manual, abrir la URL desde Trust → Browser/DApps permite usar el provider inyectado sin WalletConnect Project ID.
+- [ ] **Prueba de dispositivo Trust:** comprobar que el deeplink nativo cargue la réplica en Browser/DApps, que aparezca el permiso, que aceptar devuelva la dirección, que rechazar no conecte y que desconectar limpie el estado. Repetir el punto de entrada desde compra y Recargar, sin pagar.
+- [ ] **Fallback Trust:** si el deeplink abre Inicio, copiar la URL, pegarla en Trust → Browser/DApps, aceptar `Visit` si ngrok lo muestra y validar conexión/rechazo/desconexión.
+- [ ] **MetaMask:** revisar Actividad y conservar el hash si la operación fue enviada. No repetir una firma de pago para probar.
+
+**Puntuación:** se conserva **70/77**; el reporte de aprobación MetaMask no cierra estados de pago y Trust sigue sin devolver dirección. La nueva ruta `trust://` requiere prueba física. REA/Linux no se reintentó después de dos `Transport closed`; no hay evidencia de ejecución móvil nueva. Consulta el [informe móvil](./gomining-replica-mobile-wallet-audit-2026-11-03.md#resultado-de-la-última-prueba-android-y-ajuste-de-trust--3-nov-2026) para las fuentes oficiales y el detalle del cambio.
+
+### Retest Android: MetaMask funciona hasta aprobación; Trust abre Inicio · 3-nov-2026
+
+- [x] **MetaMask:** confirmaste Android + Brave/Chrome + ngrok: la página abrió en el navegador interno de MetaMask y te permitió llegar a firmar/aprobar la transacción. No se aportó hash; no puedo confirmar si se difundió ni liquidó. Revisa la Actividad de MetaMask antes de volver a intentarlo.
+- [x] **Trust Wallet:** confirmaste que abre la app como acceso directo y no muestra la página ni una solicitud. El flujo anterior no tenía activo un Universal Link funcional en el botón principal.
+- [x] **Corrección local:** Carteras y checkout ahora forman el enlace Universal Link documentado `https://link.trustwallet.com/open_url?coin_id=…&url=…`. El destino lleva `gmWalletConnect=trustwallet`; si Trust carga la página en Browser/DApps, la réplica solicita acceso a la dirección. En el checkout, la URL conserva producto, importe y red. `coin_id` se define por la red elegida (714 BNB, 60 Ethereum, 966 Polygon).
+- [x] **Respaldo:** ambos flujos conservan copiar URL para abrirla manualmente en Trust Wallet → Browser/DApps. El Universal Link solo navega; no concede permisos ni firma pagos. No hace falta WalletConnect Project ID cuando la conexión se completa dentro del navegador DApp de Trust. WalletConnect v2 sí necesita Project ID para una sesión originada en Brave/Chrome sin entrar al navegador DApp.
+- [ ] **Retest físico Trust:** desde Android + Brave/Chrome + ngrok, pulsa **Abrir en Trust Wallet**. Si solo ves Inicio, vuelve y usa **Copiar URL**, abre Browser/DApps, pega la URL y acepta **Visit** si aparece. Carga `/gmt-wallets`, confirma que se muestre la solicitud de conexión, acepta y verifica la dirección; después desconecta. Repite al entrar desde **Crear minero** y **Recargar**, sin pulsar **Pagar**.
+- [ ] **Verificación MetaMask restante:** repetir solo conexión, rechazo y desconexión; no pagar. La prueba previa alcanzó la aprobación y pudo haber transmitido una transferencia real, así que revisa Actividad antes de cualquier intento nuevo.
+- [ ] **REA móvil:** la llamada a `rea/list_browser_targets` con origen limitado a `http://127.0.0.1:5173` se cerró con `Transport closed` en dos intentos. No hay captura REA de este Android. El informe separa esto de tu observación y del cambio verificado en el código; hace falta reiniciar/reconectar REA para una nueva captura.
+
+El total general se mantiene provisionalmente en **70/77**: el enlace nuevo está implementado y compilable, pero la conexión de Trust todavía no se marca funcional hasta observar la dirección devuelta en Android. La prueba de MetaMask es un reporte de llegada a la aprobación, no una confirmación on-chain. La guía oficial de Trust define `open_url` como navegación a Browser/DApps y separa ese paso de WalletConnect: [deep links de Trust](https://developer.trustwallet.com/developer/develop-for-trust/deeplinking) y [conexión móvil con WalletConnect](https://developer.trustwallet.com/developer/develop-for-trust/mobile).
+
+### Estado final del retest Android y fallback de Trust · 3-nov-2026
+
+Este bloque es el estado más reciente; sustituye las instrucciones previas que ponían el enlace automático de Trust como único camino recomendado.
+
+- [x] **MetaMask Android:** desde Brave/Chrome + ngrok, la página abrió dentro del navegador de MetaMask y permitió llegar a firmar/aprobar. Es un resultado reportado por el usuario; no se recibió hash ni prueba de confirmación. Revisa Actividad de MetaMask antes de cualquier otro intento.
+- [x] **Trust Android:** desde Brave/Chrome + ngrok, la app abrió en Inicio sin página ni prompt. El deep link automático no se considera funcional para este teléfono.
+- [x] **Ajuste local:** en móvil, copiar la URL del sitio o el checkout es la acción principal para Trust; el enlace `open_url` queda secundario. El checkout copiado conserva `gmWalletConnect`, producto, importe, moneda y red. Al cargar en el navegador DApp, el provider solicita acceso a la dirección; pagar requiere aprobación separada.
+- [ ] **Trust Browser/DApps:** en el teléfono abre Trust → Browser/DApps, pega la URL copiada y acepta **Visit** si ngrok lo muestra. Comprueba que aparezca la solicitud, acepta y confirma la dirección; después desconecta. Repite entrando desde Crear minero y Recargar, sin enviar fondos.
+- [ ] **Transferencia MetaMask:** si aprobaste el envío, revisa Actividad y conserva el hash. No repitas la transferencia para probar; sin hash no se confirma el estado on-chain.
+- [ ] **REA/Linux:** sigue sin captura de esta interacción; `list_browser_targets` devolvió `Transport closed` dos veces. Hace falta reconectar REA para una nueva captura.
+
+No cambia el total de referencia **70/77**. La guía de Trust describe `open_url` como navegación; para conexión iniciada desde Brave/Chrome la ruta móvil oficial es WalletConnect v2, que exige `projectId` y continúa fuera del alcance acordado. [Deep links de Trust](https://developer.trustwallet.com/developer/develop-for-trust/deeplinking) · [Trust Wallet Mobile](https://developer.trustwallet.com/developer/develop-for-trust/mobile).

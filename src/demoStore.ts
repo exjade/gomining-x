@@ -2,6 +2,19 @@ import { useSyncExternalStore } from 'react'
 import type { DemoOrder } from './purchase'
 
 export type DemoCycle = 'monthly' | 'annual'
+
+export type MinerCustomization = {
+  wallColor: string
+  bodyColor: string
+  bottomColor: string
+  fansColor: string
+  screenColor: string
+  buttonsColor: string
+  topColor: string
+  stickers: string
+  updatedAt: string
+}
+
 export type DemoMiner = {
   id: string
   name: string
@@ -13,6 +26,8 @@ export type DemoMiner = {
   expiresAt?: string
   workerId: string
   ownerWallet?: string
+  customization?: MinerCustomization
+  status?: 'mining' | 'pending' | 'customizing'
 }
 
 export type DemoWorker = {
@@ -315,6 +330,36 @@ export function buyDemoMiner(input: DemoMinerPurchaseInput): OperationResult {
   state = { ...state, balance, miners: [miner, ...state.miners], workers: [makeDemoWorker(miner), ...state.workers], receipts: [receipt, ...state.receipts].slice(0, 50) }
   notify()
   return { ok: true, receipt }
+}
+
+export function registerWalletMinerPurchase(input: DemoMinerPurchaseInput, txHash: string, networkName: string): DemoMiner {
+  const price = roundCurrency(input.price)
+  const miner = makeDemoMiner({ ...input, price })
+  miner.status = 'customizing'
+  const worker = makeDemoWorker(miner)
+  const receipt = makeReceipt(
+    'miner',
+    `Compra on-chain (${networkName})`,
+    price,
+    `${input.name} · ${input.powerTh.toFixed(2)} TH · Tx: ${txHash.slice(0, 10)}...`,
+    state.balance,
+  )
+  state = {
+    ...state,
+    miners: [miner, ...state.miners],
+    workers: [worker, ...state.workers],
+    receipts: [receipt, ...state.receipts].slice(0, 50),
+  }
+  notify()
+  return miner
+}
+
+export function updateDemoMinerCustomization(minerId: string, customization: MinerCustomization) {
+  state = {
+    ...state,
+    miners: state.miners.map((m) => m.id === minerId ? { ...m, customization, status: 'mining' } : m),
+  }
+  notify()
 }
 
 /** Marks a local worker as activated in the demo admin panel only. */

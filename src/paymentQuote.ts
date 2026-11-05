@@ -1,6 +1,6 @@
-import { PAYMENT_DESTINATIONS, type PaymentNetworkId } from './paymentDestinations'
+import { PAYMENT_DESTINATIONS, USDT_CONTRACTS, type PaymentNetworkId } from './paymentDestinations'
 
-export type PaymentAsset = 'BNB' | 'BTC' | 'ETH' | 'TRX' | 'USDT' | 'POL'
+export type PaymentAsset = 'BNB' | 'ETH' | 'POL' | 'SOL' | 'USDT' | 'BTC' | 'TRX'
 export type PaymentCurrency = 'USD' | 'MXN'
 
 export type PaymentQuote = {
@@ -15,6 +15,7 @@ export type PaymentQuote = {
   fxDate: string | null
   assetUsd: number
   amount: string
+  decimals: number
   estimatedBridgeFeeUsd: number
   bridgeFeeRate: number
   expectedNetUsd: number
@@ -23,24 +24,31 @@ export type PaymentQuote = {
   expiresAt: number
 }
 
-const SPOT_SYMBOLS: Partial<Record<PaymentNetworkId, string>> = {
-  bnb: 'BNBUSDT',
-  bitcoin: 'BTCUSDT',
-  ethereum: 'ETHUSDT',
-  tron: 'TRXUSDT',
-  polygon: 'POLUSDT',
+const SPOT_SYMBOLS: Partial<Record<PaymentAsset, string>> = {
+  BNB: 'BNBUSDT',
+  ETH: 'ETHUSDT',
+  POL: 'POLUSDT',
+  SOL: 'SOLUSDT',
+  BTC: 'BTCUSDT',
+  TRX: 'TRXUSDT',
 }
 
-const ASSETS: Record<PaymentNetworkId, { asset: PaymentAsset; decimals: number }> = {
-  bnb: { asset: 'BNB', decimals: 8 },
-  bitcoin: { asset: 'BTC', decimals: 8 },
-  ethereum: { asset: 'ETH', decimals: 8 },
-  tron: { asset: 'TRX', decimals: 6 },
-  solana: { asset: 'USDT', decimals: 6 },
-  polygon: { asset: 'POL', decimals: 8 },
+export const DEFAULT_ASSET_BY_NETWORK: Record<PaymentNetworkId, PaymentAsset> = {
+  bnb: 'BNB',
+  ethereum: 'ETH',
+  polygon: 'POL',
+  solana: 'SOL',
 }
 
-const BRIDGE_FEE_RATE = 0.01
+export const ASSET_DECIMALS: Record<PaymentNetworkId, Record<string, number>> = {
+  bnb: { BNB: 18, USDT: 18 },
+  ethereum: { ETH: 18, USDT: 6 },
+  polygon: { POL: 18, USDT: 6 },
+  solana: { SOL: 9, USDT: 6 },
+}
+
+// 1.5% trasladado al usuario para cubrir comisiones de gas y slippage del swap posterior a USDT en BSC
+export const SWAP_FEE_RATE = 0.015
 const QUOTE_TTL_MS = 30_000
 
 export async function convertCatalogPriceToUsd(value: number, currency: PaymentCurrency): Promise<number> {
@@ -50,16 +58,24 @@ export async function convertCatalogPriceToUsd(value: number, currency: PaymentC
   return value / fx.rate
 }
 
-export async function fetchPaymentQuote(catalogValue: number, catalogCurrency: PaymentCurrency, networkId: PaymentNetworkId): Promise<PaymentQuote> {
+export async function fetchPaymentQuote(
+  catalogValue: number,
+  catalogCurrency: PaymentCurrency,
+  networkId: PaymentNetworkId,
+  selectedAsset?: PaymentAsset,
+): Promise<PaymentQuote> {
   if (!Number.isFinite(catalogValue) || catalogValue <= 0) throw new Error('El precio del producto debe ser mayor que cero.')
   const destination = PAYMENT_DESTINATIONS.find((item) => item.id === networkId)
   if (!destination) throw new Error('No hay un destino configurado para esta red.')
 
-  const { asset, decimals } = ASSETS[networkId]
+  const asset: PaymentAsset = selectedAsset ?? DEFAULT_ASSET_BY_NETWORK[networkId] ?? 'USDT'
+  const decimals = ASSET_DECIMALS[networkId]?.[asset] ?? (asset === 'USDT' ? USDT_CONTRACTS[networkId]?.decimals ?? 6 : 18)
+
   let catalogUsd = catalogValue
   let usdMxnRate: number | null = null
   let fxDate: string | null = null
   let fxSource = ''
+
   if (catalogCurrency === 'MXN') {
     const fx = await fetchUsdMxnRate()
     usdMxnRate = fx.rate
@@ -69,12 +85,12 @@ export async function fetchPaymentQuote(catalogValue: number, catalogCurrency: P
   }
 
   let assetUsd = 1
-  let quoteSource = 'Paridad nominal USDT/USD; no garantiza que el mercado mantenga 1:1.'
-  let bridgeFeeRate = 0
+  let quoteSource = 'Paridad nominal USDT/USD (1:1)'
 
-  if (networkId !== 'solana') {
-    const symbol = SPOT_SYMBOLS[networkId]
-    if (!symbol) throw new Error('No existe una fuente de cotización para este activo.')
+  if (asset !== 'USDT') {
+    const symbol = SPOT_SYMBOLS[asset]
+    if (!symbol) throw new Error(`No existe una fuente de cotización para ${asset}.`)
+
     const controller = new AbortController()
     const timeout = window.setTimeout(() => controller.abort(), 8_000)
     let response: Response
@@ -89,6 +105,7 @@ export async function fetchPaymentQuote(catalogValue: number, catalogCurrency: P
     } finally {
       window.clearTimeout(timeout)
     }
+
     if (!response.ok) throw new Error(`La fuente de precios respondió ${response.status}; no se puede cotizar este pago.`)
     const ticker = await response.json() as { symbol?: string; price?: string }
     const parsed = Number(ticker.price)
@@ -97,17 +114,14 @@ export async function fetchPaymentQuote(catalogValue: number, catalogCurrency: P
     }
     assetUsd = parsed
     quoteSource = `Binance Spot · ${symbol}${fxSource}`
-    bridgeFeeRate = BRIDGE_FEE_RATE
   }
 
-  if (networkId === 'solana' && fxSource) quoteSource = `USDT nominal USD${fxSource}`
-
   const updatedAt = Date.now()
-  const grossUsd = catalogUsd / (1 - bridgeFeeRate)
+  // Recargo de 1.5% trasladado al usuario para cubrir comisiones de swap posterior a USDT en BSC
+  const grossUsd = catalogUsd * (1 + SWAP_FEE_RATE)
   const amount = roundUp(grossUsd / assetUsd, decimals)
-  const numericAmount = Number(amount)
-  const estimatedBridgeFeeUsd = numericAmount * assetUsd * bridgeFeeRate
-  const expectedNetUsd = numericAmount * assetUsd - estimatedBridgeFeeUsd
+  const estimatedBridgeFeeUsd = catalogUsd * SWAP_FEE_RATE
+  const expectedNetUsd = catalogUsd
 
   return {
     networkId,
@@ -121,10 +135,11 @@ export async function fetchPaymentQuote(catalogValue: number, catalogCurrency: P
     fxDate,
     assetUsd,
     amount,
+    decimals,
     estimatedBridgeFeeUsd,
-    bridgeFeeRate,
+    bridgeFeeRate: SWAP_FEE_RATE,
     expectedNetUsd,
-    quoteSource,
+    quoteSource: `${quoteSource} · Incluye 1.5% comisiones de red/swap`,
     updatedAt,
     expiresAt: updatedAt + QUOTE_TTL_MS,
   }
@@ -163,7 +178,7 @@ export function formatCatalogPrice(value: number, currency: PaymentCurrency) {
 }
 
 export function formatAssetAmount(value: string, asset: PaymentAsset) {
-  const decimals = asset === 'TRX' || asset === 'USDT' ? 6 : 8
+  const decimals = asset === 'SOL' ? 4 : asset === 'USDT' ? 2 : 6
   return `${new Intl.NumberFormat('en-US', { maximumFractionDigits: decimals }).format(Number(value))} ${asset}`
 }
 

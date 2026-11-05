@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Visor PRL · Kryptex</title>
+<style>
+:root{font-family:system-ui,sans-serif;color:#e8f1f4;background:#0b1520}body{max-width:1050px;margin:auto;padding:32px 20px}header{margin-bottom:28px}h1{font-size:clamp(2rem,5vw,3rem);margin:.2em 0}h2{font-size:1.1rem;color:#b7cbd3}p{color:#adc1ca;line-height:1.5}.tag{color:#47ddbc;letter-spacing:.15em;font-weight:700;font-size:.75rem}.panel{background:#122330;border:1px solid #27404e;border-radius:18px;padding:22px;margin:16px 0}.form{display:flex;flex-wrap:wrap;gap:14px;align-items:end}label{display:grid;gap:6px;color:#b7cbd3}input,button{font:inherit;border-radius:9px;padding:11px;border:1px solid #385363}input{background:#0b1821;color:white;width:130px}button{background:#47ddbc;color:#07231f;font-weight:700;cursor:pointer;border:0}button:disabled{opacity:.5}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px}.metric{background:#0d1b25;border-radius:12px;padding:16px;overflow-wrap:anywhere}.metric small{display:block;color:#9bb0ba}.metric strong{display:block;margin-top:8px;font-size:1.2rem}.speed{font-size:2.4rem!important;color:#47ddbc}.notice{border-left:3px solid #e7b963;padding-left:14px}a{color:#65e5c8}#error{color:#ffb3aa;white-space:pre-wrap}#status{color:#83d6c3}dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}dt{color:#9bb0ba}dd{margin:4px 0;overflow-wrap:anywhere}
+</style></head><body><header><span class="tag">POOL MONITOR / PRL</span><h1>Buscador de workers</h1><p>Consulta estadísticas públicas de Kryptex y encuentra el worker más cercano a tu objetivo.</p></header>
+<section class="panel"><form id="form" class="form"><label>Objetivo · TH/s<input id="target" type="number" value="40" min="0.000001" step="any" required></label><label>Margen superior · TH/s<input id="margin" type="number" value="10" min="0" step="any" required></label><button id="submit">Buscar ahora</button></form><p id="status" role="status">Introduce un objetivo y comienza la búsqueda.</p><p id="error" role="alert"></p><p id="times">Último intento: — · Última búsqueda completa: —</p></section>
+<section class="panel notice"><p>Seguimiento continuo del worker seleccionado. Conexión local SSE; Kryptex se consulta por HTTP cada 5 segundos después de completar la consulta anterior. Hashrate: promedio de 30 minutos. La cobertura del descubrimiento inicial corresponde al ranking público.</p><p id="live">Esperando selección…</p><p id="shares"></p></section>
+<section class="panel"><h2>WORKER SELECCIONADO</h2><div class="grid"><div class="metric"><small>Promedio de 30 minutos</small><strong class="speed" id="speed">—</strong></div><div class="metric"><small>Worker</small><strong id="name">—</strong></div><div class="metric"><small>Estado</small><strong id="workerStatus">—</strong></div><div class="metric"><small>Selección</small><strong id="selection">—</strong></div></div><dl><div><dt>Dirección PRL</dt><dd id="address">—</dd></div><div><dt>Esquema</dt><dd id="scheme">—</dd></div><div><dt>Intervalo</dt><dd id="range">—</dd></div></dl><a id="link" hidden target="_blank" rel="noopener noreferrer">Abrir estadísticas del worker ↗</a></section>
+<section class="panel"><h2>ESTADÍSTICAS DEL WORKER</h2><div style="overflow-x:auto"><table style="width:100%;text-align:left;border-spacing:16px"><thead><tr><th>Name</th><th>Mode</th><th>30 min.</th><th>24 hours</th><th>Valid</th><th>Stale</th><th>Invalid</th><th>Miner</th></tr></thead><tbody id="stats"><tr><td colspan="8">Selecciona un worker online para ver sus estadísticas.</td></tr></tbody></table></div></section>
+<section class="panel"><h2>Hashrate · últimas 24 horas</h2><p>Azul: 30 min. · Verde: 3 h · Unidad: TH/s</p><svg id="hashChart" viewBox="0 0 900 260" role="img" aria-label="Histórico de hashrate" style="width:100%"></svg><h2>Shares · por intervalo del pool</h2><p>Verde: Valid · Amarillo: Stale · Rojo: Invalid</p><svg id="shareChart" viewBox="0 0 900 260" role="img" aria-label="Histórico de shares" style="width:100%"></svg><p id="chartStatus" role="status">Esperando selección…</p></section>
+<section class="panel"><h2>COBERTURA DEL DESCUBRIMIENTO INICIAL</h2><div class="grid" id="coverage"></div><p id="failures"></p></section>
+<script>
+const $ = id => document.getElementById(id); let running=false, stream, chartTimer, chartController, lastSuccess='—', lastAttempt='—';
+function displayMetrics(m){
+ const rate = value => value === null ? '—' : value.toFixed(2)+' TH/s';
+ const mode = m.mode === 'pps' ? 'PPS+' : m.mode.toUpperCase();
+ const row=document.createElement('tr');
+ for(const value of [m.name,mode,rate(m.hashrateTh),rate(m.hashrate24hTh),m.valid,m.stale,m.invalid,m.miner]){const cell=document.createElement('td');cell.textContent=value===null?'—':value;row.append(cell);}
+ $('stats').replaceChildren(row); $('scheme').textContent=mode;
+}
+function drawChart(id,points,series){
+ const svg=$(id), ns='http://www.w3.org/2000/svg';svg.replaceChildren();
+ const available=series.filter(s=>points.some(p=>p[s.key]!==null));
+ function el(tag,attrs,text){const node=document.createElementNS(ns,tag);for(const [k,v]of Object.entries(attrs))node.setAttribute(k,v);if(text!==undefined)node.textContent=text;svg.append(node);return node;}
+ if(!points.length || !available.length){el('text',{x:30,y:80,fill:'#adc1ca'},'Serie no disponible');return;}
+ const first=points[0].timestamp,last=points[points.length-1].timestamp;
+ const max=Math.max(1,...points.flatMap(p=>available.map(s=>(p[s.key]===null?0:p[s.key])/s.divisor)));
+ const x=t=>65+(t-first)/Math.max(1,last-first)*810,y=v=>215-v/max*185;
+ for(let i=0;i<=4;i++){const value=max*i/4;el('line',{x1:65,x2:875,y1:y(value),y2:y(value),stroke:'#29404e'});el('text',{x:2,y:y(value)+4,fill:'#adc1ca','font-size':12},value.toFixed(1));}
+ for(const s of available){let path='';for(const p of points){if(p[s.key]===null){path+=' ';continue;}const px=x(p.timestamp),py=y(p[s.key]/s.divisor);if(id==='shareChart')el('line',{x1:px,x2:px,y1:215,y2:py,stroke:s.color,'stroke-width':Math.max(1,600/points.length)});else{const previous=points.indexOf(p);path+=(previous===0||points[previous-1][s.key]===null?'M':'L')+px+','+py;}}if(id!=='shareChart')el('path',{d:path,fill:'none',stroke:s.color,'stroke-width':2});}
+ for(let i=0;i<=3;i++){const time=first+(last-first)*i/3;el('text',{x:x(time),y:245,fill:'#adc1ca','font-size':12,'text-anchor':i===3?'end':'start'},new Date(time).toLocaleString([], {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}));}
+}
+async function loadCharts(worker){
+ const controller=new AbortController();chartController=controller;
+ try{const response=await fetch('/api/chart?'+new URLSearchParams({address:worker.address,name:worker.name,scheme:worker.scheme}),{signal:controller.signal});const data=await response.json();if(!response.ok)throw new Error(data.error);
+ drawChart('hashChart',data.points,[{key:'avg_hashrate_30m',divisor:1e12,color:'#21aaff'},{key:'avg_hashrate_3h',divisor:1e12,color:'#40cc89'}]);
+ drawChart('shareChart',data.points,[{key:'valid',divisor:1,color:'#40cc89'},{key:'stale',divisor:1,color:'#e4c433'},{key:'invalid',divisor:1,color:'#e55061'}]);
+ $('chartStatus').textContent='Histórico Kryptex · '+data.points.length+' puntos · Recibido: '+when(data.receivedAt);
+ }catch(error){if(controller.signal.aborted)return;$('chartStatus').textContent='Error de histórico: '+error.message+' · Se conserva el gráfico anterior.';}
+ if(!controller.signal.aborted)chartTimer=setTimeout(()=>loadCharts(worker),60000);
+}
+function watch(worker){
+ if(stream)stream.close();
+ clearTimeout(chartTimer);if(chartController)chartController.abort();$('hashChart').replaceChildren();$('shareChart').replaceChildren();$('chartStatus').textContent='Cargando histórico…';loadCharts(worker);
+ stream=new EventSource('/api/watch?'+new URLSearchParams({address:worker.address,name:worker.name,scheme:worker.scheme}));
+ $('status').textContent='Conectando al seguimiento…';
+ stream.onopen=()=>{$('status').textContent='Conectado · seguimiento automático';};
+ stream.onmessage=event=>{const d=JSON.parse(event.data);displayMetrics(d.metrics); $('speed').textContent=d.metrics.hashrateTh.toFixed(3)+' TH/s'; $('workerStatus').textContent=d.metrics.status; $('error').textContent=''; $('status').textContent=d.metrics.status==='online'?'Conectado · worker online':'Worker '+d.metrics.status+' · seguimiento de la misma identidad'; $('live').textContent=`Última consulta: ${when(d.attemptedAt)} · Dato recibido: ${when(d.receivedAt)} · Último cambio: ${when(d.changedAt)} · Fuente: ${d.transport}`; $('shares').textContent=`Última share: ${when(d.metrics.lastShare)}`;};
+ stream.addEventListener('upstream-error',event=>{const d=JSON.parse(event.data);$('error').textContent=d.error;$('status').textContent='Error de Kryptex · reintentando automáticamente';$('live').textContent=`Última consulta fallida: ${when(d.attemptedAt)}. Se conserva el último dato.`;});
+ stream.onerror=()=>{$('status').textContent='Reconectando al seguimiento…';};
+}
+const when = value => value === null ? 'No disponible' : new Date(value).toLocaleString();
+async function search(target,margin){
+ if(running)return; running=true; $('submit').disabled=true; lastAttempt=when(Date.now()); $('times').textContent=`Último intento: ${lastAttempt} · Última búsqueda completa: ${lastSuccess}`; $('status').textContent='Consultando Kryptex…'; $('error').textContent='';
+ try{const response=await fetch(`/api/search?target=${encodeURIComponent(target)}&margin=${encodeURIComponent(margin)}`,{cache:'no-store'}); const data=await response.json(); if(!response.ok)throw new Error(data.error || 'Error de consulta');
+ const c=data.coverage; const partial=c.failedAccounts.length>0 || c.walletAccounts===0 || c.validWorkers===0;
+ if(partial){const details=`Resultado incompleto: ${c.failedAccounts.length} cuentas fallaron. ${c.failedAccounts.map(x=>`${x.address}: ${x.error}`).join('; ')}`; if(lastSuccess!=='—' || !data.worker)throw new Error(details); $('error').textContent=details;}
+ const w=data.worker; if(w){$('speed').textContent=`${w.hashrateTh.toFixed(3)} TH/s`; $('name').textContent=w.name; $('workerStatus').textContent=w.status; $('address').textContent=w.address; $('scheme').textContent=w.scheme; $('link').href=w.statsUrl; $('link').hidden=false;} else {$('speed').textContent='—';$('name').textContent='—';$('workerStatus').textContent='—';$('address').textContent='—';$('scheme').textContent='—';$('link').hidden=true;}
+ $('selection').textContent=data.selection==='within_range'?'Dentro del rango':data.selection==='nearest_outside_range'?'Más cercano fuera del rango':'Sin resultado'; $('range').textContent=`${data.rangeTh[0]}–${data.rangeTh[1]} TH/s`;
+ $('coverage').replaceChildren(...[['Ranking',c.rankingEntries],['Cuentas',c.walletAccounts],['Consultadas',c.successfulAccounts],['Fallidas',c.failedAccounts.length],['Registros',c.examinedRecords],['Válidos',c.validWorkers],['Inválidos',c.invalidRecords]].map(([label,value])=>{const div=document.createElement('div');div.className='metric';const small=document.createElement('small');small.textContent=label;const strong=document.createElement('strong');strong.textContent=value;div.append(small,strong);return div;}));
+ $('failures').textContent=c.failedAccounts.map(x=>`${x.address}: ${x.error}`).join(' · '); if(!partial)lastSuccess=when(data.retrievedAt); $('times').textContent=`Descubrimiento: ${lastAttempt} · Última búsqueda completa: ${lastSuccess}`; if(w)watch(w);
+ }catch(error){$('error').textContent=error.message; $('status').textContent='No se pudo completar la actualización. Se conserva el último resultado.';}finally{running=false;$('submit').disabled=false;}
+}
+$('form').addEventListener('submit',event=>{event.preventDefault();if(stream)stream.close();clearTimeout(chartTimer);if(chartController)chartController.abort();$('stats').replaceChildren();search($('target').value,$('margin').value);});
+</script></body></html>

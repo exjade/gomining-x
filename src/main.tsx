@@ -2,7 +2,10 @@ import './buffer-polyfill'
 import React, { lazy, Suspense } from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, useLocation } from 'react-router-dom'
+import { WagmiProvider } from 'wagmi'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { AppRouteSkeleton } from './Skeletons'
+import { queryClient, wagmiAdapter } from './appkitConfig'
 import './styles.css'
 
 const App = lazy(() => import('./App'))
@@ -53,13 +56,17 @@ async function startApplication() {
   }
   ReactDOM.createRoot(rootElement).render(
     <React.StrictMode>
-      <BrowserRouter>
-        <AppErrorBoundary>
-          <Suspense fallback={<RouteLoadingFallback />}>
-            <App />
-          </Suspense>
-        </AppErrorBoundary>
-      </BrowserRouter>
+      <WagmiProvider config={wagmiAdapter.wagmiConfig}>
+        <QueryClientProvider client={queryClient}>
+          <BrowserRouter>
+            <AppErrorBoundary>
+              <Suspense fallback={<RouteLoadingFallback />}>
+                <App />
+              </Suspense>
+            </AppErrorBoundary>
+          </BrowserRouter>
+        </QueryClientProvider>
+      </WagmiProvider>
     </React.StrictMode>,
   )
 }

@@ -117,11 +117,30 @@ export default defineConfig({
   plugins: [react(), readOnlyPoolApi()],
   server: {
     host: '127.0.0.1',
-    allowedHosts: ['sprinkler-wooing-graceful.ngrok-free.dev'],
+    port: 5173,
+    allowedHosts: [
+      'sprinkler-wooing-graceful.ngrok-free.dev',
+      '.ngrok-free.dev',
+      '.ngrok-free.app',
+      '.ngrok.io',
+      'luis-reach-award-publicity.trycloudflare.com',
+      '.trycloudflare.com',
+      'localhost',
+      '127.0.0.1',
+    ],
   },
   preview: {
-    // Exact host for the temporary, read-only production preview tunnel.
-    // Keep the Vite host allowlist narrow; never enable all hosts.
-    allowedHosts: ['luis-reach-award-publicity.trycloudflare.com'],
+    host: '127.0.0.1',
+    port: 4174,
+    allowedHosts: [
+      'sprinkler-wooing-graceful.ngrok-free.dev',
+      '.ngrok-free.dev',
+      '.ngrok-free.app',
+      '.ngrok.io',
+      'luis-reach-award-publicity.trycloudflare.com',
+      '.trycloudflare.com',
+      'localhost',
+      '127.0.0.1',
+    ],
   },
 })

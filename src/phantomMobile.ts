@@ -62,7 +62,7 @@ export function createPhantomConnectUrl(target: string) {
     redirect_link: redirect.toString(),
     cluster: 'mainnet-beta',
   })
-  return `https://phantom.app/ul/v1/connect?${params.toString()}`
+  return `https://phantom.com/ul/v1/connect?${params.toString()}`
 }
 
 export async function createPhantomPaymentUrl(input: {
@@ -109,7 +109,7 @@ export async function createPhantomPaymentUrl(input: {
     redirect_link: redirect.toString(),
     payload: bs58.encode(encrypted),
   })
-  return `https://phantom.app/ul/v1/signAndSendTransaction?${params.toString()}`
+  return `https://phantom.com/ul/v1/signAndSendTransaction?${params.toString()}`
 }
 
 export function consumePhantomReturn(href: string): PhantomReturn | null {

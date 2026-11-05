@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { useAccount, useDisconnect as useWagmiDisconnect } from 'wagmi'
+import { useAppKit, useAppKitAccount } from '@reown/appkit/react'
 import { getScreen, isDisabledRoute, navGroups, type NavItem, type ScreenDefinition } from './catalog'
 import { getSessionSnapshot } from './readAdapter'
 import { getPrimaryPurchaseProduct, getProductById, getProductsForRoute, type CartLine, type DemoOrder, type DemoProduct } from './purchase'
@@ -7,6 +9,7 @@ import { WalletPanel } from './WalletPanel'
 import { useWalletSession, type WalletId } from './walletSession'
 import { useDemoFirestorePersistence } from './firestoreDemoSync'
 import { WalletPaymentCheckout, initialWallet, networkForConnection, networks, walletOptions, type PaymentReceipt } from './WalletPaymentCheckout'
+import { MinerCustomizer } from './MinerCustomizer'
 import { CryptoIcon } from './CryptoIcon'
 import { isPaymentNetworkId, type PaymentNetworkId } from './paymentDestinations'
 import { MetricValueSkeleton, PoolTableSkeleton, Skeleton, WalletIdentitySkeleton } from './Skeletons'
@@ -53,9 +56,71 @@ function App() {
   const [minerBuilderOpen, setMinerBuilderOpen] = useState(false)
   const [walletCheckout, setWalletCheckout] = useState<{ productName: string; amount: number; currency: PaymentCurrency; networkId?: PaymentNetworkId; walletId?: WalletId } | null>(null)
   const [paymentReceipts, setPaymentReceipts] = useState<PaymentReceipt[]>([])
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    if (typeof window === 'undefined') return 'dark'
+    return (localStorage.getItem('gomining_theme') as 'dark' | 'light') ?? 'dark'
+  })
   const walletSession = useWalletSession()
+  const { address: wagmiAddress, isConnected: isWagmiConnected, chain } = useAccount()
+  const { address: appKitAddress, isConnected: isAppKitConnected } = useAppKitAccount()
+  const { open: openAppKit } = useAppKit()
+  const { disconnect: disconnectWagmi } = useWagmiDisconnect()
+
+  const activeWalletAddress = wagmiAddress || appKitAddress || walletSession.connection?.address || ''
+  const isWalletConnected = isWagmiConnected || isAppKitConnected || Boolean(walletSession.connection)
+  const shortWalletAddress = activeWalletAddress
+    ? `${activeWalletAddress.slice(0, 6)}...${activeWalletAddress.slice(-4)}`
+    : ''
+
+  const unifiedConnection = useMemo(() => {
+    if (walletSession.connection && (!wagmiAddress || walletSession.connection.address.toLowerCase() === wagmiAddress.toLowerCase())) {
+      return walletSession.connection
+    }
+    if (activeWalletAddress) {
+      const short = `${activeWalletAddress.slice(0, 6)}...${activeWalletAddress.slice(-4)}`
+      return {
+        id: (walletSession.connection?.id ?? 'metamask') as WalletId,
+        name: chain?.name ?? (walletSession.connection?.name ?? 'Wallet Web3'),
+        protocol: (walletSession.connection?.protocol ?? 'EIP-1193') as 'Solana' | 'EIP-1193' | 'Bitcoin' | 'TRON' | 'Cosmos',
+        network: chain?.name ?? (walletSession.connection?.network ?? 'EVM'),
+        address: activeWalletAddress,
+        shortAddress: short,
+        disconnectProvider: async () => {
+          try { await disconnectWagmi() } catch { /* ignore */ }
+          try { await walletSession.disconnect() } catch { /* ignore */ }
+        },
+        sendPayment: async (quote: any, context?: any) => {
+          if (walletSession.connection) return walletSession.connection.sendPayment(quote, context)
+          throw new Error('Usa el checkout directo para pagar.')
+        },
+      }
+    }
+    return null
+  }, [
+    walletSession.connection,
+    wagmiAddress,
+    activeWalletAddress,
+    chain?.name,
+    disconnectWagmi,
+    walletSession.disconnect,
+  ])
+
+  const effectiveWalletSession = useMemo(() => ({
+    ...walletSession,
+    connection: unifiedConnection,
+  }), [walletSession, unifiedConnection])
+
   const demo = useDemoSession()
   const persistence = useDemoFirestorePersistence()
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('gomining_theme', theme)
+  }, [theme])
+
+  const toggleTheme = () => {
+    setTheme((curr) => (curr === 'dark' ? 'light' : 'dark'))
+  }
 
   useEffect(() => {
     if (!toast) return
@@ -162,10 +227,44 @@ function App() {
             </nav>
           </div>
           <div className="topbar-actions">
+            <button
+              type="button"
+              className="theme-toggle-btn"
+              onClick={toggleTheme}
+              title={`Cambiar a modo ${theme === 'dark' ? 'claro' : 'oscuro'}`}
+              aria-label="Cambiar tema claro/oscuro"
+            >
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
             <Link className="header-balance" to="/finance/wallets/virtual" aria-label={`Saldo local ${formatWalletBalance(demo.balance)}; abrir saldo local`} title="Saldo local; no es la wallet conectada"><span className="header-balance-label">LOCAL</span><strong>{formatWalletBalance(demo.balance)}</strong></Link>
-            {walletSession.restoringWallet ? <Link className="wallet-topbar-loading" to="/gmt-wallets" aria-label="Detectando wallet autorizada"><WalletIdentitySkeleton compact /></Link> : <Link className={`wallet-topbar-button ${walletSession.connection ? 'wallet-topbar-connected' : ''}`} to="/gmt-wallets" aria-label={walletSession.connection ? `Wallet conectada: ${walletSession.connection.shortAddress}` : 'Conectar una wallet'} title={walletSession.connection?.address ?? 'Conectar una wallet'}>
-              <ConnectionGlyph /><span className="wallet-topbar-value">{walletSession.connection?.shortAddress ?? 'Conectar'}</span>
-            </Link>}
+            {walletSession.restoringWallet && !isWalletConnected ? (
+              <Link className="wallet-topbar-loading" to="/gmt-wallets" aria-label="Detectando wallet autorizada"><WalletIdentitySkeleton compact /></Link>
+            ) : isWalletConnected ? (
+              <button
+                type="button"
+                className="wallet-topbar-button wallet-topbar-connected"
+                onClick={() => {
+                  if (isWagmiConnected || isAppKitConnected) {
+                    openAppKit({ view: 'Account' })
+                  } else {
+                    navigate('/gmt-wallets')
+                  }
+                }}
+                aria-label={`Wallet conectada: ${shortWalletAddress}`}
+                title={activeWalletAddress}
+              >
+                <ConnectionGlyph /><span className="wallet-topbar-value">{shortWalletAddress}</span>
+              </button>
+            ) : (
+              <Link
+                className="wallet-topbar-button"
+                to="/gmt-wallets"
+                aria-label="Conectar una wallet"
+                title="Conectar una wallet"
+              >
+                <ConnectionGlyph /><span className="wallet-topbar-value">Conectar</span>
+              </Link>
+            )}
             <Link className="avatar" to="/profile" aria-label="Perfil">G</Link>
           </div>
         </header>
@@ -184,10 +283,12 @@ function App() {
             <span>La transferencia no acredita saldo ni activa productos automáticamente.</span>
           </div>
           <div key={location.pathname} className="route-transition">
-          {screen ? (
+          {location.pathname.startsWith('/miners/') && location.pathname.endsWith('/customize') ? (
+            <MinerCustomizer />
+          ) : screen ? (
           <Page screen={screen} pathname={location.pathname} openAction={openAction} addProduct={addProduct} openMinerBuilder={openMinerBuilder} openTopUp={() => setTopUpOpen(true)} onPayWithWallet={(productName, amount, currency = 'USD') => {
             setWalletCheckout({ productName, amount, currency })
-          }} sessionEvents={sessionEvents} walletSession={walletSession} paymentReceipts={paymentReceipts} />
+          }} sessionEvents={sessionEvents} walletSession={effectiveWalletSession} paymentReceipts={paymentReceipts} />
           ) : (
             <UnknownRoute pathname={location.pathname} />
           )}
@@ -218,14 +319,14 @@ function App() {
           setToast("Compra simulada completa; inventario y saldo actualizados")
         }}
       />}
-      {topUpOpen && <DemoTopUpDialog walletSession={walletSession} onClose={() => setTopUpOpen(false)} onPayWithWallet={(amount, networkId, walletId) => { setTopUpOpen(false); setWalletCheckout({ productName: 'Recarga de saldo', amount, currency: 'USD', networkId, walletId }) }} onConfirm={(amount) => { addDemoFunds(amount); setTopUpOpen(false) }} />}
-      {minerBuilderOpen && <MinerBuilderDialog balance={demo.balance} walletSession={walletSession} onClose={closeMinerBuilder} onPayWithWallet={(productName, amount, currency) => {
+      {topUpOpen && <DemoTopUpDialog walletSession={effectiveWalletSession} onClose={() => setTopUpOpen(false)} onPayWithWallet={(amount, networkId, walletId) => { setTopUpOpen(false); setWalletCheckout({ productName: 'Recarga de saldo', amount, currency: 'USD', networkId, walletId }) }} onConfirm={(amount) => { addDemoFunds(amount); setTopUpOpen(false) }} />}
+      {minerBuilderOpen && <MinerBuilderDialog balance={demo.balance} walletSession={effectiveWalletSession} onClose={closeMinerBuilder} onPayWithWallet={(productName, amount, currency) => {
         closeMinerBuilder()
         setMinerBuilderOpen(false)
         setWalletCheckout({ productName, amount, currency })
       }} onComplete={async (input) => {
         const priceUsd = await convertCatalogPriceToUsd(input.price, input.currency)
-        const demoInput = { ...input, price: priceUsd, ownerWallet: walletSession.connection?.address }
+        const demoInput = { ...input, price: priceUsd, ownerWallet: activeWalletAddress || effectiveWalletSession.connection?.address }
         const result = buyDemoMiner(demoInput)
         if (!result.ok) return { ok: false, message: result.message }
         setSessionEvents((items) => [`${input.name} · ${input.powerTh.toFixed(2)} TH añadidos a la granja`, ...items].slice(0, 5))
@@ -239,14 +340,20 @@ function App() {
         setToast("Pedido local registrado; el saldo se descuenta al pagarlo desde Mis mineros")
         return { ok: true, receipt: result.receipt }
       }} />}
-      {walletCheckout && <WalletPaymentCheckout productName={walletCheckout.productName} amount={walletCheckout.amount} currency={walletCheckout.currency} initialNetworkId={walletCheckout.networkId} initialWalletId={walletCheckout.walletId} session={walletSession} onClose={closeWalletCheckout} onResumeWalletConnect={(url) => {
+      {walletCheckout && <WalletPaymentCheckout productName={walletCheckout.productName} amount={walletCheckout.amount} currency={walletCheckout.currency} initialNetworkId={walletCheckout.networkId} initialWalletId={walletCheckout.walletId} session={effectiveWalletSession} onClose={closeWalletCheckout} onResumeWalletConnect={(url) => {
         const resume = new URL(url, window.location.origin)
         navigate({ pathname: resume.pathname, search: resume.search, hash: resume.hash }, { replace: true })
       }} onPaid={(receipt: PaymentReceipt) => {
         setPaymentReceipts((items) => [receipt, ...items].slice(0, 20))
         const receiptEvent = `${receipt.id} · ${receipt.quote.networkName} · ${receipt.transactionHash.slice(0, 14)}…`
         setSessionEvents((items) => [receiptEvent, ...items].slice(0, 5))
-        setToast('Transferencia enviada desde la wallet. El producto aún no se activa ni se verifica automáticamente.')
+        setToast('¡Pago verificado y enviado on-chain! Redirigiendo a customización...')
+        if (receipt.minerId) {
+          window.setTimeout(() => {
+            setWalletCheckout(null)
+            navigate(`/miners/${receipt.minerId}/customize`)
+          }, 1400)
+        }
       }} />}
       {toast && <div className="toast" role="status"><span>✓</span>{toast}</div>}
     </div>
@@ -392,13 +499,13 @@ function HomeDashboard({ openMinerBuilder, openTopUp }: { openMinerBuilder: () =
         <DashboardCard tone="purple" kicker="RESUMEN DE GANANCIAS" title="Consulta tu actividad" body="Las recompensas solo aparecerán cuando exista una fuente verificada." action="Abrir resumen" to="/finance/earn-summary" icon="▥" />
         <DashboardCard tone="teal" kicker="MINERÍA" title="Pool y operaciones" body="Consulta las lecturas públicas y su fuente." action="Ver trazabilidad" to="/data-centers" icon="♧" />
         <DashboardCard tone="blue" kicker="POTENCIA EN GRANJA" title={`${mining.total.toFixed(2)} TH`} body={`${demo.miners.length} mineros en sesión local.`} action="Ver mineros" to="/nft-miners" icon="▧" />
-        <DashboardCard tone="gold" kicker="NIVEL VIP" title="Bronze II" body="Explora los beneficios de suscripción." action="Ver beneficios" to="/subscriptions" icon="◈" />
+        <DashboardCard tone="gold" kicker="NIVEL VIP · DEMO" title="Bronze II" body="Explora los beneficios de suscripción." action="Ver beneficios" to="/subscriptions" icon="◈" />
         <DashboardCard tone="platinum" kicker="PLATINUM+" title={demo.subscription ? `Activo · ${demo.subscription.cycle === 'monthly' ? 'mensual' : 'anual'}` : 'Suscripción'} body={demo.subscription ? "+1% sobre potencia activa durante esta sesión." : 'Activa una suscripción local para consultar el beneficio.'} action="Ver suscripciones" to="/subscriptions" icon="✦" />
         <DashboardCard tone="green" kicker="PROMOCIONES" title="Novedades de la plataforma" body="Consulta las promociones vigentes del MVP." action="Ver promos" to="/promos" icon="✦" />
       </div>
 
       <section className="explore-section">
-        <div className="section-heading"><div><p className="eyebrow">SIGUE EXPLORANDO</p><h2>Más para descubrir</h2></div><span className="section-counter">2 / 4</span></div>
+        <div className="section-heading"><div><p className="eyebrow">SIGUE EXPLORANDO</p><h2>Más para descubrir</h2></div><span className="section-counter">2 / 2</span></div>
         <div className="explore-grid">
           <ExploreCard icon="▧" title="Crear un minero" subtitle="Configura la potencia y revisa la compra" badge="LOCAL" onClick={openMinerBuilder} />
           <ExploreCard icon="∑" title="Calculadora de minería" subtitle="Hashrate e ingreso bruto estimado por modelo" badge="ESTIMACIÓN" to="/mining-calculator" />
@@ -433,7 +540,7 @@ function HomeDashboard({ openMinerBuilder, openTopUp }: { openMinerBuilder: () =
 
 function MiningQuestBoard() {
   const demo = useDemoSession()
-  const minerGoal = 3
+  const minerGoal = 1
   const minerProgress = Math.min(demo.miners.length, minerGoal)
   const subscriptionComplete = Boolean(demo.subscription)
   const completed = Number(minerProgress > 0) + Number(subscriptionComplete)
@@ -451,7 +558,7 @@ function MiningQuestBoard() {
     <div className="quest-cards">
       <Link to="/nft-miners" className={`quest-card ${minerProgress > 0 ? 'quest-card-complete' : ''}`}>
         <span className="quest-icon">{minerProgress > 0 ? '✓' : '01'}</span>
-        <span className="quest-copy"><strong>Crea tu primer minero</strong><small>{minerProgress > 0 ? `${minerProgress} de ${minerGoal} espacios explorados` : "Explora tu granja de simulación"}</small></span>
+        <span className="quest-copy"><strong>Crea tu primer minero</strong><small>{minerProgress > 0 ? 'Primer minero local creado' : "Explora tu granja de simulación"}</small></span>
         <span className="quest-arrow">↗</span>
       </Link>
       <Link to="/subscriptions" className={`quest-card ${subscriptionComplete ? 'quest-card-complete' : ''}`}>

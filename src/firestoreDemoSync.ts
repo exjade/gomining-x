@@ -22,7 +22,7 @@ function isConfigured() {
   return Object.values(firebaseConfig).every(Boolean)
 }
 
-async function getFirebaseClient() {
+export async function getFirebaseClient() {
   const [firebaseApp, firebaseAuth, firebaseStore] = await Promise.all([
     import('firebase/app'),
     import('firebase/auth'),
