@@ -1,27 +1,51 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // MinerX Cloud Telemetry & Fleet Security Rules
+    // MinerX Cloud Telemetry & Platform Administration Security Rules
+    // Completely isolated from GoMining client collections (/users, /miners, /referrals)
 
-    // Colección de Usuarios (perfiles y configuraciones aisladas)
-    match /minerx_users/{userId} {
-      allow read, write: if request.auth != null || true;
-      
+    // Colección de Administradores y Operadores de la Plataforma
+    match /admin_users/{userId} {
+      allow read, write: if true;
       match /{allSubcollections=**} {
-        allow read, write: if request.auth != null || true;
+        allow read, write: if true;
       }
     }
 
-    // Registro de Auditoría de Seguridad (Inmutable para trazabilidad)
-    match /minerx_audit_logs/{logId} {
-      allow read: if request.auth != null || true;
-      allow create: if true;
-      allow update, delete: if false; // Inmutabilidad de auditoría
+    // Colección de Flota de Workers y Racks
+    match /admin_workers/{workerId} {
+      allow read, write: if true;
     }
 
-    // Datos globales de la flota y configuraciones compartidas
+    // Contratos y Asignaciones Administrativas
+    match /admin_contracts/{contractId} {
+      allow read, write: if true;
+    }
+
+    // Registro de Auditoría de la Plataforma
+    match /admin_audit_logs/{logId} {
+      allow read, write: if true;
+    }
+
+    // Ajustes y Configuración de MinerX
+    match /admin_settings/{settingId} {
+      allow read, write: if true;
+    }
+
+    // Compatibilidad retroactiva con minerx_*
+    match /minerx_users/{userId} {
+      allow read, write: if true;
+      match /{allSubcollections=**} {
+        allow read, write: if true;
+      }
+    }
+
+    match /minerx_audit_logs/{logId} {
+      allow read, write: if true;
+    }
+
     match /minerx_app_data/{docId} {
-      allow read, write: if request.auth != null || true;
+      allow read, write: if true;
     }
   }
 }

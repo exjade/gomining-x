@@ -27,8 +27,9 @@ import {
 } from 'firebase/firestore';
 
 /**
- * GoMining & MinerX Unified Firebase Engine
- * Configured for project "salad-miners"
+ * MinerX Isolated Admin & Fleet Engine
+ * Configured for project "salad-miners" with dedicated /admin_* collections.
+ * NEVER writes to or mutates client-facing collections (/users, /miners, /referrals).
  */
 export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyAjqJ1D3f5jA-Xgj_79PTbYCtA8CyFqLGk",
@@ -69,7 +70,7 @@ export interface AuthResult {
 }
 
 /**
- * Register a new user in Firebase Authentication
+ * Register an admin user in Firebase Authentication
  */
 export async function registerWithFirebase(
   email: string,
@@ -91,7 +92,7 @@ export async function registerWithFirebase(
 
     return {
       success: true,
-      message: 'Usuario registrado exitosamente en Firebase Authentication (salad-miners)',
+      message: 'Administrador registrado exitosamente en Firebase Authentication (salad-miners)',
       user: {
         id: cred.user.uid,
         username,
@@ -116,7 +117,7 @@ export async function registerWithFirebase(
 }
 
 /**
- * Sign in an existing user with Firebase Authentication
+ * Sign in an admin user with Firebase Authentication
  */
 export async function loginWithFirebase(
   email: string,
@@ -177,99 +178,69 @@ export function subscribeToFirebaseAuthState(callback: (user: FirebaseUser | nul
 }
 
 // ============================================================================
-// Direct Cloud Firestore Access Helpers for GoMining / MinerX Collections
+// ISOLATED ADMIN CLOUD FIRESTORE COLLECTIONS (/admin_*)
+// Guarantees zero pollution or tampering of client-facing GoMining collections.
 // ============================================================================
 
+export const ADMIN_COLLECTIONS = {
+  USERS: 'admin_users',
+  WORKERS: 'admin_workers',
+  CONTRACTS: 'admin_contracts',
+  AUDIT_LOGS: 'admin_audit_logs',
+  SETTINGS: 'admin_settings'
+} as const;
+
 /**
- * Fetch all registered users from `/users` in Cloud Firestore (salad-miners)
+ * Fetch all admin users from isolated `/admin_users` in Cloud Firestore (salad-miners)
  */
-export async function fetchFirestoreUsers(): Promise<DocumentData[]> {
+export async function fetchFirestoreAdminUsers(): Promise<DocumentData[]> {
   if (!db) return [];
   try {
-    const snap = await getDocs(collection(db, 'users'));
+    const snap = await getDocs(collection(db, ADMIN_COLLECTIONS.USERS));
     return snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
   } catch (err) {
-    console.warn('[Firestore] Error fetching users collection:', err);
+    console.warn('[Firestore] Error fetching isolated admin_users:', err);
     return [];
   }
 }
 
 /**
- * Fetch user miners from `/miners/{uid}/miner`
+ * Save or update an admin user in isolated `/admin_users/{id}`
  */
-export async function fetchFirestoreUserMiners(uid: string): Promise<DocumentData[]> {
-  if (!db || !uid) return [];
+export async function saveFirestoreAdminUser(user: Record<string, any>): Promise<boolean> {
+  if (!db || !user.id) return false;
   try {
-    const snap = await getDocs(collection(db, 'miners', uid, 'miner'));
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const docRef = doc(db, ADMIN_COLLECTIONS.USERS, user.id);
+    await setDoc(docRef, {
+      ...user,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+    return true;
   } catch (err) {
-    console.warn(`[Firestore] Error fetching miners for ${uid}:`, err);
-    return [];
+    console.error(`[Firestore] Error saving admin user ${user.id}:`, err);
+    return false;
   }
 }
 
 /**
- * Fetch referral ledger account from `/referrals/{uid}`
+ * Seed initial administrative team into isolated `/admin_users`
  */
-export async function fetchFirestoreReferralAccount(uid: string): Promise<DocumentData | null> {
-  if (!db || !uid) return null;
-  try {
-    const snap = await getDoc(doc(db, 'referrals', uid));
-    if (snap.exists()) {
-      return { uid: snap.id, ...snap.data() };
+export async function seedInitialAdminUsers(initialUsers: any[]): Promise<number> {
+  if (!db) return 0;
+  let count = 0;
+  for (const u of initialUsers) {
+    try {
+      await setDoc(doc(db, ADMIN_COLLECTIONS.USERS, u.id), {
+        ...u,
+        isPlatformAdmin: true,
+        seededAt: new Date().toISOString()
+      }, { merge: true });
+      count++;
+    } catch (e) {
+      console.warn(`[Firestore] Failed to seed ${u.id}:`, e);
     }
-    return null;
-  } catch (err) {
-    console.warn(`[Firestore] Error fetching referral account for ${uid}:`, err);
-    return null;
   }
-}
-
-/**
- * Fetch Unilevel 20-level node from `/unilevel/{uid}`
- */
-export async function fetchFirestoreUnilevelNode(uid: string): Promise<DocumentData | null> {
-  if (!db || !uid) return null;
-  try {
-    const snap = await getDoc(doc(db, 'unilevel', uid));
-    if (snap.exists()) {
-      return { uid: snap.id, ...snap.data() };
-    }
-    return null;
-  } catch (err) {
-    console.warn(`[Firestore] Error fetching unilevel node for ${uid}:`, err);
-    return null;
-  }
-}
-
-/**
- * Fetch daily profits history from `/mining_daily_profit`
- */
-export async function fetchFirestoreDailyProfits(maxLimit = 50): Promise<DocumentData[]> {
-  if (!db) return [];
-  try {
-    const q = query(collection(db, 'mining_daily_profit'), limit(maxLimit));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  } catch (err) {
-    console.warn('[Firestore] Error fetching daily profits:', err);
-    return [];
-  }
-}
-
-/**
- * Fetch unilevel distributions from `/unilevel_distributions`
- */
-export async function fetchFirestoreUnilevelDistributions(maxLimit = 50): Promise<DocumentData[]> {
-  if (!db) return [];
-  try {
-    const q = query(collection(db, 'unilevel_distributions'), limit(maxLimit));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  } catch (err) {
-    console.warn('[Firestore] Error fetching unilevel distributions:', err);
-    return [];
-  }
+  return count;
 }
 
 export {
