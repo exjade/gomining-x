@@ -110,7 +110,7 @@ export const MiningEngineControlView: React.FC<MiningEngineControlViewProps> = (
   const simAnnualRoiPct = estimatedContractCostUsd > 0 ? ((simMonthlyNetUsd * 12) / estimatedContractCostUsd) * 100 : 89.6;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300 pb-16">
+    <div className="minerx-admin-view space-y-6 animate-in fade-in duration-300 pb-16">
       {/* 1. HEADER SECTION & SYNC BAR */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>

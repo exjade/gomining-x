@@ -36,10 +36,146 @@ const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const CYCLES_FILE = path.join(DATA_DIR, 'mining_cycles.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const AUDIT_LOGS_FILE = path.join(DATA_DIR, 'audit_logs.json');
+const PACKAGES_FILE = path.join(DATA_DIR, 'commercial_packages.json');
+const CONTRACTS_FILE = path.join(DATA_DIR, 'admin_contracts.json');
+const ORDERS_FILE = path.join(DATA_DIR, 'admin_orders.json');
 
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+export function readPackages(): any[] {
+  try {
+    if (fs.existsSync(PACKAGES_FILE)) {
+      return JSON.parse(fs.readFileSync(PACKAGES_FILE, 'utf-8'));
+    }
+  } catch (err) {
+    console.error('Error reading packages file:', err);
+  }
+  return [
+    {
+      id: 'pkg-miner-1',
+      name: 'Minero 1 Entry',
+      powerTh: 48,
+      priceUsdt: 561.99,
+      durationDays: 365,
+      status: 'ACTIVE',
+      isPublished: true,
+      variablePct: 0.0,
+      commissionPct: 2.0,
+      version: 1,
+      description: 'Paquete de entrada optimizado para minería continua de PearlHash.',
+      createdAt: '2026-10-01T00:00:00Z',
+      updatedAt: '2026-10-01T00:00:00Z'
+    },
+    {
+      id: 'pkg-miner-2',
+      name: 'Minero 2 Standard',
+      powerTh: 64,
+      priceUsdt: 744.99,
+      durationDays: 365,
+      status: 'ACTIVE',
+      isPublished: true,
+      variablePct: 2.5,
+      commissionPct: 2.0,
+      version: 1,
+      description: 'Rendimiento equilibrado con multiplicador variable del +2.5%.',
+      createdAt: '2026-10-01T00:00:00Z',
+      updatedAt: '2026-10-01T00:00:00Z'
+    },
+    {
+      id: 'pkg-miner-3',
+      name: 'Minero 3 Pro',
+      powerTh: 96,
+      priceUsdt: 1111.99,
+      durationDays: 365,
+      status: 'ACTIVE',
+      isPublished: true,
+      variablePct: 5.0,
+      commissionPct: 1.8,
+      version: 1,
+      description: 'Alta potencia para operadores profesionales con +5.0% de variable.',
+      createdAt: '2026-10-01T00:00:00Z',
+      updatedAt: '2026-10-01T00:00:00Z'
+    },
+    {
+      id: 'pkg-miner-4',
+      name: 'Minero 4 Master',
+      powerTh: 128,
+      priceUsdt: 1474.99,
+      durationDays: 365,
+      status: 'ACTIVE',
+      isPublished: true,
+      variablePct: 7.5,
+      commissionPct: 1.5,
+      version: 1,
+      description: 'Potencia industrial con tasa preferencial de comisión reducida.',
+      createdAt: '2026-10-01T00:00:00Z',
+      updatedAt: '2026-10-01T00:00:00Z'
+    },
+    {
+      id: 'pkg-miner-5',
+      name: 'Minero 5 Enterprise',
+      powerTh: 192,
+      priceUsdt: 2201.99,
+      durationDays: 365,
+      status: 'ACTIVE',
+      isPublished: true,
+      variablePct: 10.0,
+      commissionPct: 1.0,
+      version: 1,
+      description: 'Máxima capacidad computacional con variable premium del +10.0%.',
+      createdAt: '2026-10-01T00:00:00Z',
+      updatedAt: '2026-10-01T00:00:00Z'
+    }
+  ];
+}
+
+export function writePackages(packages: any[]): void {
+  try {
+    fs.writeFileSync(PACKAGES_FILE, JSON.stringify(packages, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error writing packages file:', err);
+  }
+}
+
+export function readContracts(): any[] {
+  try {
+    if (fs.existsSync(CONTRACTS_FILE)) {
+      return JSON.parse(fs.readFileSync(CONTRACTS_FILE, 'utf-8'));
+    }
+  } catch (err) {
+    console.error('Error reading contracts file:', err);
+  }
+  return [];
+}
+
+export function writeContracts(contracts: any[]): void {
+  try {
+    fs.writeFileSync(CONTRACTS_FILE, JSON.stringify(contracts, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error writing contracts file:', err);
+  }
+}
+
+export function readOrders(): any[] {
+  try {
+    if (fs.existsSync(ORDERS_FILE)) {
+      return JSON.parse(fs.readFileSync(ORDERS_FILE, 'utf-8'));
+    }
+  } catch (err) {
+    console.error('Error reading orders file:', err);
+  }
+  return [];
+}
+
+export function writeOrders(orders: any[]): void {
+  try {
+    fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error writing orders file:', err);
+  }
 }
 
 export interface UserAccount {
@@ -291,6 +427,104 @@ app.post('/api/config', (req, res) => {
   }
   writeConfig(newConfig, userId);
   res.json({ success: true, message: 'Configuración guardada para tu usuario', userId });
+});
+
+// 2a. Commercial Packages Endpoints (Platform Admin Packages)
+app.get(['/api/packages', '/api/commercial-packages'], (_req, res) => {
+  const packages = readPackages();
+  res.json(packages);
+});
+
+app.post(['/api/packages', '/api/commercial-packages'], (req, res) => {
+  const pkg = req.body;
+  if (!pkg || !pkg.name || !pkg.powerTh) {
+    return res.status(400).json({ error: 'Nombre y potencia requeridos para el paquete' });
+  }
+  const packages = readPackages();
+  const now = new Date().toISOString();
+  let saved: any;
+
+  if (pkg.id) {
+    const idx = packages.findIndex(p => p.id === pkg.id);
+    if (idx >= 0) {
+      saved = {
+        ...packages[idx],
+        ...pkg,
+        version: (packages[idx].version || 1) + 1,
+        updatedAt: now
+      };
+      packages[idx] = saved;
+    } else {
+      saved = { ...pkg, version: 1, updatedAt: now };
+      packages.push(saved);
+    }
+  } else {
+    saved = {
+      ...pkg,
+      id: `pkg-${Date.now()}`,
+      version: 1,
+      status: pkg.status || 'ACTIVE',
+      isPublished: pkg.isPublished ?? true,
+      createdAt: now,
+      updatedAt: now
+    };
+    packages.unshift(saved);
+  }
+
+  writePackages(packages);
+  res.json({ success: true, package: saved });
+});
+
+// 2b. Admin Contracts Endpoints (Client-purchased miners allocated to platform)
+app.get('/api/admin/contracts', (_req, res) => {
+  const contracts = readContracts();
+  res.json(contracts);
+});
+
+app.post('/api/admin/contracts', (req, res) => {
+  const contract = req.body;
+  if (!contract || !contract.id) {
+    return res.status(400).json({ error: 'ID de contrato requerido' });
+  }
+  const contracts = readContracts();
+  const idx = contracts.findIndex(c => c.id === contract.id);
+  if (idx >= 0) {
+    contracts[idx] = { ...contracts[idx], ...contract, updatedAt: new Date().toISOString() };
+  } else {
+    contracts.unshift({
+      ...contract,
+      status: contract.status || 'ACTIVE',
+      createdAt: contract.createdAt || new Date().toISOString()
+    });
+  }
+  writeContracts(contracts);
+  res.json({ success: true, contract });
+});
+
+// 2c. Admin Package Orders & Payments Endpoints
+app.get('/api/admin/orders', (_req, res) => {
+  const orders = readOrders();
+  res.json(orders);
+});
+
+app.post('/api/admin/orders', (req, res) => {
+  const order = req.body;
+  if (!order || !order.orderId) {
+    return res.status(400).json({ error: 'orderId requerido' });
+  }
+  const orders = readOrders();
+  const idx = orders.findIndex(o => o.orderId === order.orderId);
+  if (idx >= 0) {
+    orders[idx] = { ...orders[idx], ...order, updatedAt: new Date().toISOString() };
+  } else {
+    orders.unshift({
+      ...order,
+      status: order.status || 'SETTLED',
+      createdAt: order.createdAt || new Date().toISOString()
+    });
+  }
+  writeOrders(orders);
+  res.json({ success: true, order });
 });
 
 // 2b. Resilient Alert Dispatcher (Discord & Telegram)

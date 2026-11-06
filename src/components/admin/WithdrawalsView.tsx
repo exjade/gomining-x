@@ -126,7 +126,7 @@ export const WithdrawalsView: React.FC<WithdrawalsViewProps> = ({ isDarkTheme = 
   };
 
   return (
-    <div className="space-y-6">
+    <div className="minerx-admin-view space-y-6">
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-white/[0.08]">
         <div>

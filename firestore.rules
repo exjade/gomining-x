@@ -12,6 +12,14 @@ service cloud.firestore {
       }
     }
 
+    // Colección de Usuarios y Clientes de la Plataforma (/users)
+    match /users/{userId} {
+      allow read, write: if true;
+      match /{allSubcollections=**} {
+        allow read, write: if true;
+      }
+    }
+
     // Colección de Flota de Workers y Racks
     match /admin_workers/{workerId} {
       allow read, write: if true;
@@ -29,6 +37,16 @@ service cloud.firestore {
 
     // Ajustes y Configuración de MinerX
     match /admin_settings/{settingId} {
+      allow read, write: if true;
+    }
+
+    // Paquetes comerciales de minería disponibles para la plataforma
+    match /commercial_packages/{packageId} {
+      allow read, write: if true;
+    }
+
+    // Órdenes y pagos de paquetes
+    match /admin_orders/{orderId} {
       allow read, write: if true;
     }
 

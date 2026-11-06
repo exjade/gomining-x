@@ -18,38 +18,50 @@ export class VirtualWorkerService {
   }
 
   private loadRawWorkers(): VirtualWorker[] {
+    let workers: VirtualWorker[] = [];
     try {
       const raw = localStorage.getItem(STORAGE_VIRTUAL_WORKERS_KEY);
-      if (raw) return JSON.parse(raw);
+      if (raw) workers = JSON.parse(raw);
     } catch {}
 
-    // Fallback: intentar migración desde v3
-    try {
-      const legacy = localStorage.getItem('minerx_admin_virtual_workers_v3');
-      if (legacy) return JSON.parse(legacy);
-    } catch {}
+    if (workers.length === 0) {
+      try {
+        const legacy = localStorage.getItem('minerx_admin_virtual_workers_v3');
+        if (legacy) workers = JSON.parse(legacy);
+      } catch {}
+    }
 
-    // Initial sync from contracts
     const contracts = this.allocationService.getContracts();
-    const initialWorkers: VirtualWorker[] = contracts.map((c, idx) => ({
-      id: c.workerId || `vwk-${c.id}-01`,
-      contractId: c.id,
-      userId: c.userId,
-      name: `${c.packageName.replace(/\s+/g, '_').toLowerCase()}_${idx + 1}`,
-      assignedTh: c.allocatedTh,
-      status: c.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED',
-      provenance: 'MINERX_VIRTUAL',
-      mode: 'REAL',
-      sharesAccepted: Math.floor(c.allocatedTh * 14.2),
-      sharesRejected: Math.floor(c.allocatedTh * 0.05),
-      accumulatedPrl: c.accumulatedProductionPrl,
-      currentHashrateTh: c.allocatedTh,
-      uptimeSeconds: 86400 * 14,
-      lastHeartbeat: new Date().toISOString()
-    }));
+    const existingContractIds = new Set(workers.map(w => w.contractId));
+    let hasChanges = false;
 
-    localStorage.setItem(STORAGE_VIRTUAL_WORKERS_KEY, JSON.stringify(initialWorkers));
-    return initialWorkers;
+    for (let idx = 0; idx < contracts.length; idx++) {
+      const c = contracts[idx];
+      if (!existingContractIds.has(c.id)) {
+        workers.push({
+          id: c.workerId || `vwk-${c.id.replace(/[^a-zA-Z0-9]/g, '')}-01`,
+          contractId: c.id,
+          userId: c.userId,
+          name: `${c.packageName.replace(/\s+/g, '_').toLowerCase()}_${idx + 1}`,
+          assignedTh: c.allocatedTh,
+          status: c.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED',
+          provenance: 'MINERX_VIRTUAL',
+          mode: 'REAL',
+          sharesAccepted: Math.floor(c.allocatedTh * 14.2),
+          sharesRejected: Math.floor(c.allocatedTh * 0.05),
+          accumulatedPrl: c.accumulatedProductionPrl,
+          currentHashrateTh: c.allocatedTh,
+          uptimeSeconds: 86400 * 14,
+          lastHeartbeat: new Date().toISOString()
+        });
+        hasChanges = true;
+      }
+    }
+
+    if (hasChanges || !localStorage.getItem(STORAGE_VIRTUAL_WORKERS_KEY)) {
+      localStorage.setItem(STORAGE_VIRTUAL_WORKERS_KEY, JSON.stringify(workers));
+    }
+    return workers;
   }
 
   public getVirtualWorkers(): VirtualWorker[] {

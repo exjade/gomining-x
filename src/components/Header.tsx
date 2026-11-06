@@ -186,7 +186,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className={`sticky top-0 z-40 w-full transition-all backdrop-blur-xl ${
+    <header className={`minerx-admin-header sticky top-0 z-40 w-full transition-all backdrop-blur-xl ${
       isDarkTheme 
         ? 'border-b border-white/[0.08] bg-[#06070A]/90 text-white' 
         : 'border-b border-slate-200/80 bg-white/95 text-slate-900 shadow-xs'
@@ -198,7 +198,7 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-3">
           <div 
             onClick={onOpenLanding}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-[#05DF72] shadow-sm hover:scale-105 active:scale-95 transition-all cursor-pointer"
+            className="minerx-admin-brandmark flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-[#05DF72] shadow-sm hover:scale-105 active:scale-95 transition-all cursor-pointer"
             title={onOpenLanding ? "Ver Landing Page & Descargas (.EXE / .APK)" : "MinerX Telemetry Hub"}
           >
             <Flame className="h-5 w-5 fill-[#05DF72]" />
@@ -208,13 +208,13 @@ export const Header: React.FC<HeaderProps> = ({
             <span className={`text-xl font-bold tracking-tight font-sans ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
               MinerX
             </span>
-            <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-[#05DF72] border border-emerald-500/20">
+            <span className="minerx-admin-badge hidden sm:inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-[#05DF72] border border-emerald-500/20">
               <span className="h-1.5 w-1.5 rounded-full bg-[#05DF72] animate-pulse"></span>
               <span>{currentSuite === 'admin' ? 'ADMIN' : 'PoUW'}</span>
             </span>
 
             {/* Luxury Suite Switcher (Flota Kryptex vs Admin Center) */}
-            <div className={`flex items-center gap-1 p-0.5 rounded-2xl border ml-2 ${
+            <div className={`minerx-admin-suite-switcher flex items-center gap-1 p-0.5 rounded-2xl border ml-2 ${
               isDarkTheme ? 'bg-[#0B0F19] border-white/10' : 'bg-slate-100 border-slate-200'
             }`}>
               <button
@@ -223,13 +223,14 @@ export const Header: React.FC<HeaderProps> = ({
                   onToggleSuiteMode?.('fleet');
                   setActiveTab('overview');
                 }}
-                className={`px-3 py-1 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer active:scale-[0.97] ${
+                className={`minerx-admin-suite-option ${currentSuite === 'fleet' ? 'is-active' : ''} px-3 py-1 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer active:scale-[0.97] ${
                   currentSuite === 'fleet'
                     ? (isDarkTheme ? 'bg-[#05DF72] text-slate-950 shadow-sm' : 'bg-slate-900 text-[#05DF72]')
                     : (isDarkTheme ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900')
                 }`}
               >
-                ⚡ Flota
+                <Cpu className="h-3.5 w-3.5" />
+                Flota
               </button>
               <button
                 type="button"
@@ -237,13 +238,14 @@ export const Header: React.FC<HeaderProps> = ({
                   onToggleSuiteMode?.('admin');
                   setActiveTab('admin_overview');
                 }}
-                className={`px-3 py-1 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer active:scale-[0.97] ${
+                className={`minerx-admin-suite-option ${currentSuite === 'admin' ? 'is-active' : ''} px-3 py-1 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer active:scale-[0.97] ${
                   currentSuite === 'admin'
                     ? (isDarkTheme ? 'bg-[#05DF72] text-slate-950 shadow-sm' : 'bg-slate-900 text-[#05DF72]')
                     : (isDarkTheme ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900')
                 }`}
               >
-                🛡️ Admin
+                <ShieldCheck className="h-3.5 w-3.5" />
+                Admin
               </button>
             </div>
           </div>
@@ -412,13 +414,13 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* TIER 2: EXPANSIVE FULL-WIDTH HORIZONTAL FINTECH NAVIGATION BAR */}
-      <div className={`w-full border-t transition-colors ${
+      <div className={`minerx-admin-header-secondary w-full border-t transition-colors ${
         isDarkTheme 
           ? 'border-white/[0.06] bg-[#0A0D16]/95' 
           : 'border-slate-200/80 bg-slate-50/90'
       }`}>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-2">
-          <nav className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
+          <nav className="minerx-admin-nav flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.id;
               const Icon = tab.icon;
@@ -426,7 +428,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`relative flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-all cursor-pointer select-none shrink-0 active:scale-[0.97] ${
+                  className={`minerx-admin-nav-item ${isActive ? 'is-active' : ''} relative flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-all cursor-pointer select-none shrink-0 active:scale-[0.97] ${
                     isActive
                       ? isDarkTheme 
                         ? 'bg-white text-slate-950 font-bold shadow-sm' 

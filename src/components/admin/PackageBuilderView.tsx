@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, 
   Edit3, 
@@ -6,27 +6,113 @@ import {
   X,
   Zap,
   ShieldCheck,
-  ArrowRight
+  ArrowRight,
+  RefreshCw,
+  UploadCloud,
+  Globe,
+  Users,
+  Search,
+  ShoppingCart
 } from 'lucide-react';
 import { CommercialPackageService } from '../../services/admin/commercialPackageService';
+import { HashrateAllocationService } from '../../services/admin/hashrateAllocationService';
 import { MinerxProfitEngine } from '../../services/admin/minerxProfitEngine';
-import type { CommercialPackage } from '../../types/admin';
+import type { CommercialPackage, MiningContract } from '../../types/admin';
 
 interface PackageBuilderViewProps {
   isDarkTheme?: boolean;
   onNavigateToEngine?: (packageId?: string) => void;
+  onNavigateTab?: (tabId: string) => void;
 }
 
 export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
   isDarkTheme = true,
-  onNavigateToEngine
+  onNavigateToEngine,
+  onNavigateTab
 }) => {
   const packageService = CommercialPackageService.getInstance();
+  const allocationService = HashrateAllocationService.getInstance();
   const profitEngine = MinerxProfitEngine.getInstance();
 
   const [packages, setPackages] = useState<CommercialPackage[]>(packageService.getPackages());
+  const [contracts, setContracts] = useState<MiningContract[]>(allocationService.getContracts());
+  const [activeViewSubTab, setActiveViewSubTab] = useState<'catalog' | 'purchases'>('catalog');
+  const [purchasesSearchTerm, setPurchasesSearchTerm] = useState<string>('');
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingPkg, setEditingPkg] = useState<Partial<CommercialPackage> | null>(null);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+
+  // Load from Cloud Firestore on mount and subscribe to live changes
+  useEffect(() => {
+    setIsSyncing(true);
+    packageService.fetchFirestorePackages()
+      .then((pkgs) => {
+        setPackages(pkgs);
+        setIsSyncing(false);
+      })
+      .catch(() => {
+        setIsSyncing(false);
+      });
+
+    allocationService.fetchFirestoreContracts()
+      .then((ctrs) => {
+        setContracts(ctrs);
+      })
+      .catch(() => {});
+
+    const unsubPackages = packageService.subscribeToFirestorePackages((pkgs) => {
+      setPackages(pkgs);
+    });
+
+    const unsubContracts = allocationService.subscribeToFirestoreContracts((ctrs) => {
+      setContracts(ctrs);
+    });
+
+    return () => {
+      unsubPackages();
+      unsubContracts();
+    };
+  }, []);
+
+  const handleSyncFirestore = async () => {
+    setIsSyncing(true);
+    setSyncFeedback(null);
+    try {
+      const [remote, remoteContracts] = await Promise.all([
+        packageService.fetchFirestorePackages(),
+        allocationService.fetchFirestoreContracts()
+      ]);
+      setPackages(remote);
+      setContracts(remoteContracts);
+      setSyncFeedback(`Sincronizado: ${remote.length} paquetes y ${remoteContracts.length} contratos/mineros en Cloud Firestore.`);
+    } catch {
+      setSyncFeedback('Error al sincronizar con Cloud Firestore.');
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setSyncFeedback(null), 3500);
+    }
+  };
+
+  const handleSeedDefaults = async () => {
+    setIsSyncing(true);
+    try {
+      const count = await packageService.seedInitialPackagesToFirestore();
+      const refreshed = await packageService.fetchFirestorePackages();
+      setPackages(refreshed);
+      setSyncFeedback(`${count} paquetes iniciales publicados en Cloud Firestore.`);
+    } catch {
+      setSyncFeedback('Error al sembrar paquetes.');
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setSyncFeedback(null), 3500);
+    }
+  };
+
+  const handleTogglePublish = (id: string) => {
+    packageService.togglePublish(id);
+    setPackages(packageService.getPackages());
+  };
 
   // Modal de Simulación de Motor Híbrido
   const [simulationPkg, setSimulationPkg] = useState<CommercialPackage | null>(null);
@@ -130,7 +216,7 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
   const formAnnualRoi = formData.priceUsdt > 0 ? ((formAnnualUsd - formData.priceUsdt) / formData.priceUsdt) * 100 : 0;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300 pb-12">
+    <div className="minerx-admin-view space-y-6 animate-in fade-in duration-300 pb-12">
       {/* HEADER */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -145,9 +231,37 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
           <p className={`text-xs font-mono mt-1 ${isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}`}>
             Gestión comercial de hardware, TH/s, precios USDT, variables de rendimiento y simulación en tiempo real.
           </p>
+          <div className="flex items-center gap-2 mt-1.5 text-[11px] font-mono text-cyan-400">
+            <Globe className="h-3 w-3" />
+            <span>Colección Cloud Firestore: <code className="text-[#05DF72]">/commercial_packages</code> (consumido en vivo por GoMining)</span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={handleSyncFirestore}
+            disabled={isSyncing}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl border text-xs font-mono font-bold transition-all active:scale-[0.97] cursor-pointer ${
+              isDarkTheme ? 'bg-white/5 border-white/10 text-slate-300 hover:text-white hover:bg-white/10' : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
+            }`}
+            title="Sincronizar paquetes en vivo con Cloud Firestore"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin text-[#05DF72]' : 'text-slate-400'}`} />
+            <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar Firestore'}</span>
+          </button>
+
+          <button
+            onClick={handleSeedDefaults}
+            disabled={isSyncing}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl border text-xs font-mono font-bold transition-all active:scale-[0.97] cursor-pointer ${
+              isDarkTheme ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20' : 'bg-cyan-50 border-cyan-200 text-cyan-700 hover:bg-cyan-100'
+            }`}
+            title="Subir paquetes iniciales a Cloud Firestore si la colección está vacía"
+          >
+            <UploadCloud className="h-3.5 w-3.5" />
+            <span>Sembrar Paquetes</span>
+          </button>
+
           {onNavigateToEngine && (
             <button
               onClick={() => onNavigateToEngine()}
@@ -156,7 +270,7 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
               }`}
             >
               <Zap className="h-3.5 w-3.5 text-[#05DF72]" />
-              <span>Consola del Motor Híbrido</span>
+              <span>Consola del Motor</span>
             </button>
           )}
 
@@ -170,120 +284,354 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
         </div>
       </div>
 
-      {/* PACKAGES GRID */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {packages.map((pkg) => {
-          const isArchived = pkg.status === 'ARCHIVED';
-          
-          // Cálculo de rendimiento para cada paquete usando la tasa canónica
-          const basePrl = pkg.powerTh * formBaseRate * 24;
-          const netDailyPrl = basePrl * (1 + pkg.variablePct / 100) * (1 - pkg.commissionPct / 100);
-          const netDailyUsd = netDailyPrl * effectivePrlPrice;
-          const pkgAnnualRoi = pkg.priceUsdt > 0 ? (((netDailyUsd * 365) - pkg.priceUsdt) / pkg.priceUsdt) * 100 : 0;
+      {/* SYNC FEEDBACK BANNER */}
+      {syncFeedback && (
+        <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-2 text-emerald-400 font-mono text-xs animate-in fade-in">
+          <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0" />
+          <span>{syncFeedback}</span>
+        </div>
+      )}
 
-          return (
-            <div
-              key={pkg.id}
-              className={`p-6 rounded-3xl border flex flex-col justify-between transition-all ${
-                isArchived
-                  ? 'opacity-60 bg-slate-900/40 border-white/5'
-                  : isDarkTheme
-                  ? 'bg-[#0E1320]/80 border-white/[0.08] backdrop-blur-xl text-white shadow-lg'
-                  : 'bg-white border-slate-200 text-slate-900 shadow-sm'
-              }`}
-            >
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="flex items-center gap-1.5 text-xs font-mono font-bold text-[#05DF72]">
-                    <Cpu className="h-4 w-4" />
-                    {pkg.powerTh} TH/s
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full border ${
-                      isDarkTheme ? 'bg-white/5 border-white/10 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-700 font-semibold'
-                    }`}>
-                      v{pkg.version}
-                    </span>
-                    <span className={`h-2 w-2 rounded-full ${isArchived ? 'bg-amber-500' : 'bg-[#05DF72]'}`} />
-                  </div>
-                </div>
+      {/* EXECUTIVE SUMMARY CARDS */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+        <div className={`p-4 rounded-2xl border ${isDarkTheme ? 'bg-[#0E1320]/80 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900 shadow-sm'}`}>
+          <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-1">
+            <span className="uppercase">Paquetes Totales</span>
+            <Cpu className="h-3.5 w-3.5 text-[#05DF72]" />
+          </div>
+          <div className="text-2xl font-bold font-mono">{packages.length}</div>
+          <div className="text-[10px] font-mono text-[#05DF72] mt-0.5">
+            {packages.filter(p => p.status === 'ACTIVE' && p.isPublished !== false).length} activos en tienda
+          </div>
+        </div>
 
-                <h3 className={`text-lg font-bold font-sans ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>{pkg.name}</h3>
-                <p className={`text-xs font-mono mt-1 line-clamp-2 ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>
-                  {pkg.description || 'Contrato de potencia garantizada en PearlHash.'}
-                </p>
+        <div className={`p-4 rounded-2xl border ${isDarkTheme ? 'bg-[#0E1320]/80 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900 shadow-sm'}`}>
+          <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-1">
+            <span className="uppercase">Mineros Vendidos</span>
+            <Users className="h-3.5 w-3.5 text-cyan-400" />
+          </div>
+          <div className="text-2xl font-bold font-mono text-cyan-400">{contracts.length}</div>
+          <div className="text-[10px] font-mono text-slate-400 mt-0.5">
+            adquiridos en GoMining
+          </div>
+        </div>
 
-                <div className={`my-4 p-4 rounded-2xl border space-y-2 font-mono text-xs ${
-                  isDarkTheme ? 'bg-white/[0.03] border-white/5' : 'bg-slate-50 border-slate-200'
-                }`}>
-                  <div className="flex justify-between items-center">
-                    <span className={isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}>Precio Comercial:</span>
-                    <span className="font-bold text-[#05DF72] text-sm">${pkg.priceUsdt} USDT</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className={isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}>Rendimiento Estimado:</span>
-                    <span className="font-bold text-cyan-400">
-                      {netDailyPrl.toFixed(4)} PRL/d <span className="text-[10px] text-amber-400">($ {netDailyUsd.toFixed(2)}/d)</span>
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className={isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}>Variable / Comisión:</span>
-                    <span className="font-semibold text-purple-400">
-                      {pkg.variablePct >= 0 ? `+${pkg.variablePct}%` : `${pkg.variablePct}%`} var / -{pkg.commissionPct}% com
-                    </span>
-                  </div>
-                  <div className={`flex justify-between items-center pt-1 border-t ${isDarkTheme ? 'border-white/5' : 'border-slate-200'}`}>
-                    <span className={isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}>ROI Anual Proyectado:</span>
-                    <span className={`font-bold ${pkgAnnualRoi >= 0 ? 'text-[#05DF72]' : 'text-rose-400'}`}>
-                      {pkgAnnualRoi >= 0 ? `+${pkgAnnualRoi.toFixed(1)}%` : `${pkgAnnualRoi.toFixed(1)}%`} / año
-                    </span>
-                  </div>
-                </div>
-              </div>
+        <div className={`p-4 rounded-2xl border ${isDarkTheme ? 'bg-[#0E1320]/80 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900 shadow-sm'}`}>
+          <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-1">
+            <span className="uppercase">Potencia Vendida</span>
+            <Zap className="h-3.5 w-3.5 text-amber-400" />
+          </div>
+          <div className="text-2xl font-bold font-mono text-amber-400">
+            {contracts.reduce((sum, c) => sum + (c.contractedTh || 0), 0)} <span className="text-xs font-normal">TH/s</span>
+          </div>
+          <div className="text-[10px] font-mono text-slate-400 mt-0.5">
+            {contracts.reduce((sum, c) => sum + (c.allocatedTh || 0), 0)} TH/s asignados
+          </div>
+        </div>
 
-              <div className={`pt-3 border-t space-y-2 ${isDarkTheme ? 'border-white/5' : 'border-slate-200'}`}>
-                {/* BOTÓN PRIMARIO: SIMULAR EN MOTOR HÍBRIDO */}
-                <button
-                  type="button"
-                  onClick={() => handleOpenSimulation(pkg)}
-                  className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-xs font-mono font-bold transition-all active:scale-[0.98] cursor-pointer"
-                  title="Abrir Simulador del Motor Híbrido con los parámetros de este paquete"
-                >
-                  <Zap className="h-3.5 w-3.5 text-cyan-400" />
-                  <span>Simular en Motor</span>
-                </button>
-
-                <div className="flex items-center justify-between gap-2">
-                  <button
-                    onClick={() => handleToggleArchive(pkg.id)}
-                    className={`px-3 py-1.5 rounded-xl border text-[11px] font-mono font-bold transition-all active:scale-[0.97] cursor-pointer ${
-                      isArchived
-                        ? 'border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10'
-                        : isDarkTheme
-                        ? 'border-white/10 text-slate-300 hover:text-white hover:bg-white/5'
-                        : 'border-slate-300 text-slate-700 hover:text-slate-900 hover:bg-slate-100'
-                    }`}
-                  >
-                    {isArchived ? 'Reactivar' : 'Archivar'}
-                  </button>
-
-                  <button
-                    onClick={() => handleOpenEdit(pkg)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[11px] font-mono font-bold transition-all active:scale-[0.97] cursor-pointer ${
-                      isDarkTheme
-                        ? 'bg-white/[0.05] hover:bg-[#05DF72]/20 hover:text-[#05DF72] border-white/10 text-slate-200'
-                        : 'bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 border-slate-300 text-slate-800'
-                    }`}
-                  >
-                    <Edit3 className="h-3.5 w-3.5" />
-                    Editar Versión
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+        <div className={`p-4 rounded-2xl border ${isDarkTheme ? 'bg-[#0E1320]/80 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900 shadow-sm'}`}>
+          <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-1">
+            <span className="uppercase">Volumen Cobrado</span>
+            <ShoppingCart className="h-3.5 w-3.5 text-emerald-400" />
+          </div>
+          <div className="text-2xl font-bold font-mono text-emerald-400">
+            ${contracts.reduce((sum, c) => sum + (c.pricePaidUsdt || 0), 0).toLocaleString()} <span className="text-xs font-normal">USDT</span>
+          </div>
+          <div className="text-[10px] font-mono text-slate-400 mt-0.5">
+            recaudado en ventas
+          </div>
+        </div>
       </div>
+
+      {/* VIEW SUBTAB TOGGLE */}
+      <div className={`flex items-center gap-2 p-1 rounded-2xl border w-fit ${
+        isDarkTheme ? 'bg-white/[0.03] border-white/10' : 'bg-slate-100 border-slate-200'
+      }`}>
+        <button
+          type="button"
+          onClick={() => setActiveViewSubTab('catalog')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
+            activeViewSubTab === 'catalog'
+              ? isDarkTheme ? 'bg-white text-slate-950 shadow-sm' : 'bg-slate-900 text-white shadow-sm'
+              : isDarkTheme ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Cpu className="h-3.5 w-3.5" />
+          <span>Catálogo de Paquetes ({packages.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveViewSubTab('purchases')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
+            activeViewSubTab === 'purchases'
+              ? isDarkTheme ? 'bg-white text-slate-950 shadow-sm' : 'bg-slate-900 text-white shadow-sm'
+              : isDarkTheme ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Users className="h-3.5 w-3.5" />
+          <span>Mineros Adquiridos por Clientes ({contracts.length})</span>
+          {contracts.length > 0 && (
+            <span className="h-2 w-2 rounded-full bg-[#05DF72] animate-pulse"></span>
+          )}
+        </button>
+      </div>
+
+      {activeViewSubTab === 'catalog' ? (
+        /* PACKAGES GRID */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {packages.map((pkg) => {
+            const isArchived = pkg.status === 'ARCHIVED';
+            
+            // Cálculo de rendimiento para cada paquete usando la tasa canónica
+            const basePrl = pkg.powerTh * formBaseRate * 24;
+            const netDailyPrl = basePrl * (1 + pkg.variablePct / 100) * (1 - pkg.commissionPct / 100);
+            const netDailyUsd = netDailyPrl * effectivePrlPrice;
+            const pkgAnnualRoi = pkg.priceUsdt > 0 ? (((netDailyUsd * 365) - pkg.priceUsdt) / pkg.priceUsdt) * 100 : 0;
+
+            return (
+              <div
+                key={pkg.id}
+                className={`p-6 rounded-3xl border flex flex-col justify-between transition-all ${
+                  isArchived
+                    ? 'opacity-60 bg-slate-900/40 border-white/5'
+                    : isDarkTheme
+                    ? 'bg-[#0E1320]/80 border-white/[0.08] backdrop-blur-xl text-white shadow-lg'
+                    : 'bg-white border-slate-200 text-slate-900 shadow-sm'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="flex items-center gap-1.5 text-xs font-mono font-bold text-[#05DF72]">
+                      <Cpu className="h-4 w-4" />
+                      {pkg.powerTh} TH/s
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                        pkg.isPublished !== false && !isArchived
+                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                          : 'bg-slate-500/10 text-slate-400 border-slate-500/20'
+                      }`}>
+                        {pkg.isPublished !== false && !isArchived ? 'En GoMining' : 'Oculto'}
+                      </span>
+                      <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full border ${
+                        isDarkTheme ? 'bg-white/5 border-white/10 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-700 font-semibold'
+                      }`}>
+                        v{pkg.version}
+                      </span>
+                      <span className={`h-2 w-2 rounded-full ${isArchived ? 'bg-amber-500' : 'bg-[#05DF72]'}`} />
+                    </div>
+                  </div>
+
+                  <h3 className={`text-lg font-bold font-sans ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>{pkg.name}</h3>
+                  <p className={`text-xs font-mono mt-1 line-clamp-2 ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>
+                    {pkg.description || 'Contrato de potencia garantizada en PearlHash.'}
+                  </p>
+
+                  <div className={`my-4 p-4 rounded-2xl border space-y-2 font-mono text-xs ${
+                    isDarkTheme ? 'bg-white/[0.03] border-white/5' : 'bg-slate-50 border-slate-200'
+                  }`}>
+                    <div className="flex justify-between items-center">
+                      <span className={isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}>Precio Comercial:</span>
+                      <span className="font-bold text-[#05DF72] text-sm">${pkg.priceUsdt} USDT</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className={isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}>Rendimiento Estimado:</span>
+                      <span className="font-bold text-cyan-400">
+                        {netDailyPrl.toFixed(4)} PRL/d <span className="text-[10px] text-amber-400">($ {netDailyUsd.toFixed(2)}/d)</span>
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className={isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}>Variable / Comisión:</span>
+                      <span className="font-semibold text-purple-400">
+                        {pkg.variablePct >= 0 ? `+${pkg.variablePct}%` : `${pkg.variablePct}%`} var / -{pkg.commissionPct}% com
+                      </span>
+                    </div>
+                    <div className={`flex justify-between items-center pt-1 border-t ${isDarkTheme ? 'border-white/5' : 'border-slate-200'}`}>
+                      <span className={isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}>ROI Anual Proyectado:</span>
+                      <span className={`font-bold ${pkgAnnualRoi >= 0 ? 'text-[#05DF72]' : 'text-rose-400'}`}>
+                        {pkgAnnualRoi >= 0 ? `+${pkgAnnualRoi.toFixed(1)}%` : `${pkgAnnualRoi.toFixed(1)}%`} / año
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={`pt-3 border-t space-y-2 ${isDarkTheme ? 'border-white/5' : 'border-slate-200'}`}>
+                  {/* BOTÓN PRIMARIO: SIMULAR EN MOTOR HÍBRIDO */}
+                  <button
+                    type="button"
+                    onClick={() => handleOpenSimulation(pkg)}
+                    className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-xs font-mono font-bold transition-all active:scale-[0.98] cursor-pointer"
+                    title="Abrir Simulador del Motor Híbrido con los parámetros de este paquete"
+                  >
+                    <Zap className="h-3.5 w-3.5 text-cyan-400" />
+                    <span>Simular en Motor</span>
+                  </button>
+
+                  <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                    <button
+                      onClick={() => handleTogglePublish(pkg.id)}
+                      title={pkg.isPublished !== false ? 'Ocultar de la app GoMining' : 'Publicar a la app GoMining'}
+                      className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-mono font-bold transition-all active:scale-[0.97] cursor-pointer flex items-center gap-1 ${
+                        pkg.isPublished !== false && !isArchived
+                          ? 'border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10'
+                          : 'border-slate-500/30 text-slate-400 hover:bg-slate-500/10'
+                      }`}
+                    >
+                      <Globe className="h-3 w-3" />
+                      <span>{pkg.isPublished !== false && !isArchived ? 'En Tienda' : 'Oculto'}</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleToggleArchive(pkg.id)}
+                      className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-mono font-bold transition-all active:scale-[0.97] cursor-pointer ${
+                        isArchived
+                          ? 'border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10'
+                          : isDarkTheme
+                          ? 'border-white/10 text-slate-300 hover:text-white hover:bg-white/5'
+                          : 'border-slate-300 text-slate-700 hover:text-slate-900 hover:bg-slate-100'
+                      }`}
+                    >
+                      {isArchived ? 'Reactivar' : 'Archivar'}
+                    </button>
+
+                    <button
+                      onClick={() => handleOpenEdit(pkg)}
+                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-[11px] font-mono font-bold transition-all active:scale-[0.97] cursor-pointer ${
+                        isDarkTheme
+                          ? 'bg-white/[0.05] hover:bg-[#05DF72]/20 hover:text-[#05DF72] border-white/10 text-slate-200'
+                          : 'bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 border-slate-300 text-slate-800'
+                      }`}
+                    >
+                      <Edit3 className="h-3 w-3" />
+                      <span>Editar</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* CLIENT PURCHASED MINERS TABLE (Real-time synchronization from GoMining client app) */
+        <div className={`p-6 rounded-3xl border transition-all space-y-4 ${
+          isDarkTheme ? 'bg-[#0E1320]/80 border-white/[0.08] text-white shadow-xl' : 'bg-white border-slate-200 text-slate-900 shadow-sm'
+        }`}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold font-sans flex items-center gap-2">
+                <span>Mineros Adquiridos por Clientes</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#05DF72]/15 text-[#05DF72] border border-[#05DF72]/30">
+                  En Vivo Cloud Firestore
+                </span>
+              </h3>
+              <p className={`text-xs font-mono mt-0.5 ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>
+                Registro administrativo central de cada máquina minera adquirida desde la app de clientes (GoMining).
+              </p>
+            </div>
+
+            <div className="relative min-w-[240px]">
+              <Search className={`absolute left-3 top-2.5 h-3.5 w-3.5 ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`} />
+              <input
+                type="text"
+                placeholder="Buscar por usuario, ID o paquete..."
+                value={purchasesSearchTerm}
+                onChange={(e) => setPurchasesSearchTerm(e.target.value)}
+                className={`w-full pl-9 pr-3 py-1.5 rounded-xl text-xs font-mono border focus:outline-none focus:border-[#05DF72] ${
+                  isDarkTheme ? 'bg-white/5 border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                }`}
+              />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left font-mono text-xs">
+              <thead>
+                <tr className={`border-b text-[11px] ${
+                  isDarkTheme ? 'border-white/10 text-slate-400' : 'border-slate-200 text-slate-700 font-bold'
+                }`}>
+                  <th className="py-2.5 px-3">MINERO / USUARIO</th>
+                  <th className="py-2.5 px-3">PAQUETE ASOCIADO</th>
+                  <th className="py-2.5 px-3">POTENCIA</th>
+                  <th className="py-2.5 px-3">IMPORTE</th>
+                  <th className="py-2.5 px-3">ESTADO</th>
+                  <th className="py-2.5 px-3">FECHA ACTIVACIÓN</th>
+                  <th className="py-2.5 px-3 text-right">ACCIONES</th>
+                </tr>
+              </thead>
+              <tbody className={`divide-y ${isDarkTheme ? 'divide-white/5' : 'divide-slate-100'}`}>
+                {contracts
+                  .filter((c) => {
+                    const q = purchasesSearchTerm.toLowerCase();
+                    return (
+                      c.id.toLowerCase().includes(q) ||
+                      c.userEmail.toLowerCase().includes(q) ||
+                      c.packageName.toLowerCase().includes(q)
+                    );
+                  })
+                  .map((c) => (
+                    <tr key={c.id} className={`transition-colors ${isDarkTheme ? 'hover:bg-white/[0.02]' : 'hover:bg-slate-50'}`}>
+                      <td className="py-3 px-3">
+                        <div className={`font-bold ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>{c.id}</div>
+                        <div className={`text-[11px] ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>{c.userEmail}</div>
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className="font-bold text-cyan-400">{c.packageName}</span>
+                        <div className={`text-[10px] ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>ID: {c.packageId}</div>
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className="font-bold text-[#05DF72]">{c.contractedTh} TH/s</span>
+                        <div className={`text-[10px] ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>{c.allocatedTh} TH asignados</div>
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className="font-bold">${c.pricePaidUsdt} USDT</span>
+                        <div className={`text-[10px] ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>{c.workerId || 'Worker Auto'}</div>
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          c.status === 'ACTIVE'
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                            : c.status === 'PARTIALLY_ALLOCATED'
+                            ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                            : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                        }`}>
+                          {c.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-[11px] text-slate-400">
+                        {c.activatedAt ? new Date(c.activatedAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : 'Reciente'}
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {onNavigateTab && (
+                            <button
+                              type="button"
+                              onClick={() => onNavigateTab('admin_allocations')}
+                              className="px-2 py-1 rounded-lg border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10 text-[11px] font-bold transition-all cursor-pointer"
+                              title="Gestionar potencia en Asignación Centralizada"
+                            >
+                              Potencia
+                            </button>
+                          )}
+                          {onNavigateTab && (
+                            <button
+                              type="button"
+                              onClick={() => onNavigateTab('admin_orders')}
+                              className="px-2 py-1 rounded-lg border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 text-[11px] font-bold transition-all cursor-pointer"
+                              title="Ver pago y liquidación de este paquete"
+                            >
+                              Pago
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================
           MODAL DE MOTOR: SIMULADOR DE GANANCIA CON PARÁMETROS REALES

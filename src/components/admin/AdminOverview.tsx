@@ -48,9 +48,20 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
 
   useEffect(() => {
     setGlobalConfig(engine.getGlobalConfig());
-    setAllocation(allocationService.getAllocationSummary(1200));
+    allocationService.fetchFirestoreContracts().then(() => {
+      setAllocation(allocationService.getAllocationSummary(1200));
+    }).catch(() => {});
+    packageService.fetchFirestorePackages().then((pkgs) => {
+      setPackagesCount(pkgs.length);
+    }).catch(() => {});
     setUsersCount(userService.getUsers().length);
-    setPackagesCount(packageService.getPackages().length);
+
+    const unsubscribe = allocationService.subscribeToFirestoreContracts(() => {
+      setAllocation(allocationService.getAllocationSummary(1200));
+    });
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   // Cálculo de producción canónica unificada
@@ -62,7 +73,7 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
   const dailyNetUsd = netHourlyPrl * 24 * (globalConfig.prlManualOverridePrice ?? globalConfig.prlPriceUsd);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300 pb-16">
+    <div className="minerx-admin-view space-y-6 animate-in fade-in duration-300 pb-16">
       {/* 1. TOP EXECUTIVE KPI BANNER */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
         {/* KPI 1: Usuarios & Contratos */}

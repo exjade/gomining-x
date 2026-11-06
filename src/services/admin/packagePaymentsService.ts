@@ -1,8 +1,11 @@
 import type { PackageOrderPayment } from '../../types/admin';
 import { AdminAuditService } from './adminAuditService';
 import { FinancialLedgerService } from './financialLedgerService';
+import { db, collection, doc, getDocs, setDoc, onSnapshot } from '../../utils/firebaseAuth';
+import { apiFetch } from '../../utils/apiConfig';
 
 const STORAGE_PAYMENTS_KEY = 'minerx_package_payments_v2';
+export const ADMIN_ORDERS_COLLECTION = 'admin_orders';
 
 export const INITIAL_PACKAGE_PAYMENTS: PackageOrderPayment[] = [
   {
@@ -165,6 +168,148 @@ export class PackagePaymentsService {
     return INITIAL_PACKAGE_PAYMENTS;
   }
 
+  /**
+   * Fetches package payment orders from Cloud Firestore (/admin_orders),
+   * merging any client-purchased miners with local admin orders.
+   */
+  public async fetchFirestorePayments(): Promise<PackageOrderPayment[]> {
+    if (!db) return this.getPayments();
+    try {
+      const snap = await getDocs(collection(db, ADMIN_ORDERS_COLLECTION));
+      if (!snap.empty) {
+        const firestoreOrders: PackageOrderPayment[] = snap.docs.map(d => {
+          const data = d.data();
+          return {
+            orderId: d.id,
+            attemptId: data.attemptId || `att_${d.id}`,
+            createdAt: data.createdAt || new Date().toISOString(),
+            userId: data.userId || 'usr_client',
+            userEmail: data.userEmail || 'cliente@gomining.cloud',
+            userName: data.userName || data.userEmail?.split('@')[0] || 'Cliente',
+            packageId: data.packageId || 'pkg-custom',
+            packageName: data.packageName || 'Minero Digital',
+            contractedTh: Number(data.contractedTh ?? data.powerTh ?? 0),
+            amountUsd: Number(data.amountUsd ?? data.price ?? 0),
+            cryptoAsset: data.cryptoAsset || 'USDT',
+            cryptoAmount: data.cryptoAmount || `${Number(data.amountUsd ?? data.price ?? 0)} USDT`,
+            paymentNetwork: data.paymentNetwork || 'USDT',
+            recipientAddress: data.recipientAddress || 'PLATFORM_TREASURY',
+            txHash: data.txHash || 'tx_internal',
+            confirmations: Number(data.confirmations ?? 12),
+            requiredConfirmations: Number(data.requiredConfirmations ?? 12),
+            status: data.status || 'SETTLED',
+            bridgeStatus: data.bridgeStatus || 'NONE',
+            activatedMinerId: data.activatedMinerId || d.id,
+            idempotencyKey: data.idempotencyKey || `idem_${d.id}`,
+            settledAt: data.settledAt || data.createdAt || new Date().toISOString()
+          };
+        });
+
+        const local = this.getPayments();
+        const mergedMap = new Map<string, PackageOrderPayment>();
+        // Add firestore orders first
+        for (const fo of firestoreOrders) {
+          mergedMap.set(fo.orderId, fo);
+        }
+        // Add local orders if not already present
+        for (const lo of local) {
+          if (!mergedMap.has(lo.orderId)) {
+            mergedMap.set(lo.orderId, lo);
+          }
+        }
+        const mergedList = Array.from(mergedMap.values());
+        localStorage.setItem(STORAGE_PAYMENTS_KEY, JSON.stringify(mergedList));
+        return mergedList;
+      }
+    } catch (err) {
+      console.warn('[PackagePaymentsService] Notice fetching from Firestore, checking Express API:', err);
+    }
+
+    // Secondary fallback: Express API Server
+    try {
+      const res = await apiFetch('/api/admin/orders');
+      if (res.ok) {
+        const remoteOrders = await res.json();
+        if (Array.isArray(remoteOrders) && remoteOrders.length > 0) {
+          const local = this.getPayments();
+          const mergedMap = new Map<string, PackageOrderPayment>();
+          for (const ro of remoteOrders) {
+            mergedMap.set(ro.orderId, ro);
+          }
+          for (const lo of local) {
+            if (!mergedMap.has(lo.orderId)) {
+              mergedMap.set(lo.orderId, lo);
+            }
+          }
+          const mergedList = Array.from(mergedMap.values());
+          localStorage.setItem(STORAGE_PAYMENTS_KEY, JSON.stringify(mergedList));
+          return mergedList;
+        }
+      }
+    } catch {}
+
+    return this.getPayments();
+  }
+
+  /**
+   * Real-time subscription to Cloud Firestore collection /admin_orders
+   */
+  public subscribeToFirestorePayments(callback: (payments: PackageOrderPayment[]) => void): () => void {
+    if (!db) return () => {};
+    try {
+      const colRef = collection(db, ADMIN_ORDERS_COLLECTION);
+      return onSnapshot(colRef, (snap) => {
+        if (!snap.empty) {
+          const firestoreOrders: PackageOrderPayment[] = snap.docs.map(d => {
+            const data = d.data();
+            return {
+              orderId: d.id,
+              attemptId: data.attemptId || `att_${d.id}`,
+              createdAt: data.createdAt || new Date().toISOString(),
+              userId: data.userId || 'usr_client',
+              userEmail: data.userEmail || 'cliente@gomining.cloud',
+              userName: data.userName || data.userEmail?.split('@')[0] || 'Cliente',
+              packageId: data.packageId || 'pkg-custom',
+              packageName: data.packageName || 'Minero Digital',
+              contractedTh: Number(data.contractedTh ?? data.powerTh ?? 0),
+              amountUsd: Number(data.amountUsd ?? data.price ?? 0),
+              cryptoAsset: data.cryptoAsset || 'USDT',
+              cryptoAmount: data.cryptoAmount || `${Number(data.amountUsd ?? data.price ?? 0)} USDT`,
+              paymentNetwork: data.paymentNetwork || 'USDT',
+              recipientAddress: data.recipientAddress || 'PLATFORM_TREASURY',
+              txHash: data.txHash || 'tx_internal',
+              confirmations: Number(data.confirmations ?? 12),
+              requiredConfirmations: Number(data.requiredConfirmations ?? 12),
+              status: data.status || 'SETTLED',
+              bridgeStatus: data.bridgeStatus || 'NONE',
+              activatedMinerId: data.activatedMinerId || d.id,
+              idempotencyKey: data.idempotencyKey || `idem_${d.id}`,
+              settledAt: data.settledAt || data.createdAt || new Date().toISOString()
+            };
+          });
+
+          const local = this.getPayments();
+          const mergedMap = new Map<string, PackageOrderPayment>();
+          for (const fo of firestoreOrders) {
+            mergedMap.set(fo.orderId, fo);
+          }
+          for (const lo of local) {
+            if (!mergedMap.has(lo.orderId)) {
+              mergedMap.set(lo.orderId, lo);
+            }
+          }
+          const mergedList = Array.from(mergedMap.values());
+          localStorage.setItem(STORAGE_PAYMENTS_KEY, JSON.stringify(mergedList));
+          callback(mergedList);
+        }
+      }, (err) => {
+        console.warn('[PackagePaymentsService] onSnapshot subscription notice:', err);
+      });
+    } catch {
+      return () => {};
+    }
+  }
+
   public confirmAndSettlePayment(orderId: string, txHash: string, operatorUid = 'admin_sys'): boolean {
     const list = this.getPayments();
     const item = list.find(p => p.orderId === orderId);
@@ -181,6 +326,20 @@ export class PackagePaymentsService {
     }
 
     localStorage.setItem(STORAGE_PAYMENTS_KEY, JSON.stringify(list));
+
+    if (db) {
+      setDoc(doc(db, ADMIN_ORDERS_COLLECTION, orderId), item, { merge: true }).catch(err => {
+        console.error('[PackagePaymentsService] Error syncing settled payment to Firestore:', err);
+      });
+    }
+
+    try {
+      apiFetch('/api/admin/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(item)
+      }).catch(() => {});
+    } catch {}
 
     // Reflejar en Ledger Contable
     this.ledger.addEntry({

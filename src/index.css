@@ -222,3 +222,502 @@ body.light-theme .card-cyber-hover:hover {
 .mining-pulse {
   animation: radar-pulse 2s infinite ease-in-out;
 }
+
+/* Calm, data-first administration workspace. Scoped to the MinerX admin suite. */
+.minerx-admin-page {
+  --admin-font: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --admin-page: #F6F8FA;
+  --admin-surface: #FFFFFF;
+  --admin-surface-subtle: #F1F3F5;
+  --admin-border: #E3E8EE;
+  --admin-border-strong: #C9D1DA;
+  --admin-text: #1A1F36;
+  --admin-muted: #4F566B;
+  --admin-tertiary: #8792A2;
+  --admin-on-accent: #FFFFFF;
+  --admin-accent: #4F46E5;
+  --admin-accent-hover: #4338CA;
+  --admin-accent-soft: color-mix(in srgb, var(--admin-accent) 10%, var(--admin-surface));
+  --admin-success: #137A3F;
+  --admin-success-soft: #E6F4EA;
+  --admin-warning: #9A5B00;
+  --admin-warning-soft: #FFF4E0;
+  --admin-danger: #B3261E;
+  --admin-danger-soft: #FDECEA;
+  --admin-info: #1F5FBF;
+  --admin-info-soft: #E8F0FE;
+  --admin-focus: #4F46E5;
+  --admin-radius-control: 6px;
+  --admin-radius-card: 8px;
+  --admin-space-1: 4px;
+  --admin-space-2: 8px;
+  --admin-space-3: 12px;
+  --admin-space-4: 16px;
+  --admin-space-5: 24px;
+  --admin-space-6: 32px;
+  --admin-motion: 130ms ease;
+  --admin-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  background: var(--admin-page) !important;
+  color: var(--admin-text) !important;
+  font-family: var(--admin-font);
+  padding: 32px 24px !important;
+  -webkit-font-smoothing: antialiased;
+}
+
+.minerx-admin-page.is-dark {
+  --admin-page: #111318;
+  --admin-surface: #1A1D23;
+  --admin-surface-subtle: #22262E;
+  --admin-border: #2E333D;
+  --admin-border-strong: #47505D;
+  --admin-text: #ECEEF2;
+  --admin-muted: #A3A9B5;
+  --admin-tertiary: #6F7683;
+  --admin-on-accent: #FFFFFF;
+  --admin-success: #75D69A;
+  --admin-warning: #F0BE70;
+  --admin-danger: #F28B82;
+  --admin-info: #8AB4F8;
+  --admin-accent-soft: color-mix(in srgb, var(--admin-accent) 18%, var(--admin-surface));
+  --admin-success-soft: color-mix(in srgb, var(--admin-success) 12%, var(--admin-surface));
+  --admin-warning-soft: color-mix(in srgb, var(--admin-warning) 12%, var(--admin-surface));
+  --admin-danger-soft: color-mix(in srgb, var(--admin-danger) 12%, var(--admin-surface));
+  --admin-info-soft: color-mix(in srgb, var(--admin-info) 12%, var(--admin-surface));
+  --admin-shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
+}
+
+.minerx-admin-shell {
+  min-height: calc(100vh - 40px);
+  overflow: visible !important;
+  border: 1px solid var(--admin-border) !important;
+  border-radius: 16px !important;
+  background: var(--admin-surface-subtle) !important;
+  color: var(--admin-text) !important;
+  box-shadow: 0 8px 28px rgba(16, 24, 40, 0.06) !important;
+}
+
+.minerx-admin-page.is-dark .minerx-admin-shell {
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22) !important;
+}
+
+.minerx-admin-page .minerx-admin-header {
+  position: relative !important;
+  background: var(--admin-surface) !important;
+  color: var(--admin-text) !important;
+  border-color: var(--admin-border) !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+.minerx-admin-page .minerx-admin-header-secondary {
+  background: var(--admin-surface) !important;
+  border-color: var(--admin-border) !important;
+}
+
+.minerx-admin-page .minerx-admin-brandmark {
+  color: #ffffff !important;
+  background: var(--admin-accent) !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+}
+
+.minerx-admin-page .minerx-admin-brandmark svg {
+  fill: none !important;
+  color: #ffffff !important;
+}
+
+.minerx-admin-page .minerx-admin-badge {
+  color: var(--admin-accent) !important;
+  background: var(--admin-accent-soft) !important;
+  border-color: transparent !important;
+  font-family: var(--admin-font) !important;
+  letter-spacing: 0.02em;
+}
+
+.minerx-admin-page .minerx-admin-badge .animate-pulse {
+  background: var(--admin-accent) !important;
+  animation: none !important;
+}
+
+.minerx-admin-page .minerx-admin-suite-switcher {
+  background: var(--admin-surface-subtle) !important;
+  border-color: var(--admin-border) !important;
+  border-radius: 9px !important;
+}
+
+.minerx-admin-page .minerx-admin-suite-option {
+  border-radius: 7px !important;
+  font-family: var(--admin-font) !important;
+}
+
+.minerx-admin-page .minerx-admin-suite-option svg {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.minerx-admin-page .minerx-admin-suite-option.is-active {
+  color: #ffffff !important;
+  background: var(--admin-accent) !important;
+  box-shadow: none !important;
+}
+
+.minerx-admin-page .minerx-admin-nav {
+  gap: 4px !important;
+}
+
+.minerx-admin-page .minerx-admin-nav-item {
+  border-radius: 7px !important;
+  padding: 8px 10px !important;
+  color: var(--admin-muted) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+.minerx-admin-page .minerx-admin-nav-item:hover {
+  color: var(--admin-text) !important;
+  background: var(--admin-surface-subtle) !important;
+}
+
+.minerx-admin-page .minerx-admin-nav-item.is-active {
+  color: var(--admin-accent) !important;
+  background: var(--admin-accent-soft) !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+}
+
+.minerx-admin-page .minerx-admin-nav-item.is-active svg {
+  color: var(--admin-accent) !important;
+}
+
+.minerx-admin-page .minerx-admin-main {
+  background: var(--admin-page) !important;
+  color: var(--admin-text) !important;
+  padding: 24px 28px 36px !important;
+}
+
+.minerx-admin-view {
+  --tw-text-opacity: 1;
+  color: var(--admin-text);
+  font-family: var(--admin-font);
+}
+
+.minerx-admin-view .font-mono,
+.minerx-admin-view .font-mono-num,
+.minerx-admin-page .minerx-admin-header .font-mono {
+  font-family: var(--admin-font) !important;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: normal;
+}
+
+.minerx-admin-view .uppercase {
+  text-transform: none !important;
+  letter-spacing: 0.01em !important;
+}
+
+.minerx-admin-view [class*="text-[9px]"],
+.minerx-admin-view [class*="text-[10px]"],
+.minerx-admin-view [class*="text-[11px]"] {
+  font-size: 12px !important;
+  line-height: 1.45 !important;
+}
+
+.minerx-admin-view [class~="text-xs"] {
+  font-size: 13px !important;
+  line-height: 1.5 !important;
+}
+
+.minerx-admin-view h1,
+.minerx-admin-view h2,
+.minerx-admin-view h3,
+.minerx-admin-view h4 {
+  color: var(--admin-text);
+  font-family: var(--admin-font) !important;
+  letter-spacing: -0.015em;
+}
+
+.minerx-admin-view h1 { font-size: clamp(22px, 2vw, 28px) !important; line-height: 1.25 !important; }
+.minerx-admin-view h2 { font-size: 19px !important; line-height: 1.35 !important; }
+.minerx-admin-view h3 { font-size: 15px !important; line-height: 1.4 !important; }
+
+.minerx-admin-view [class*="bg-[#0E1320"],
+.minerx-admin-view [class*="bg-[#0A0E17"],
+.minerx-admin-view [class*="bg-[#060912"],
+.minerx-admin-view [class*="bg-[#0B0F19"],
+.minerx-admin-view [class*="bg-[#080B12"] {
+  background: var(--admin-surface) !important;
+}
+
+.minerx-admin-page.is-dark .minerx-admin-view [class*="bg-white"],
+.minerx-admin-page.is-dark .minerx-admin-view [class*="bg-slate-50"] {
+  background: var(--admin-surface) !important;
+}
+
+.minerx-admin-view [class*="text-[#05DF72]"] {
+  color: var(--admin-accent) !important;
+}
+
+.minerx-admin-view [class*="text-cyan-"] {
+  color: var(--admin-muted) !important;
+}
+
+.minerx-admin-page.is-light .minerx-admin-view [class*="text-emerald-"] {
+  color: #067647 !important;
+}
+
+.minerx-admin-page.is-light .minerx-admin-view [class*="text-amber-"] {
+  color: #b54708 !important;
+}
+
+.minerx-admin-page.is-light .minerx-admin-view [class*="text-rose-"] {
+  color: #b42318 !important;
+}
+
+.minerx-admin-page.is-dark .minerx-admin-view [class*="text-emerald-"] {
+  color: #75e0a7 !important;
+}
+
+.minerx-admin-page.is-dark .minerx-admin-view [class*="text-amber-"] {
+  color: #fdb022 !important;
+}
+
+.minerx-admin-page.is-dark .minerx-admin-view [class*="text-rose-"] {
+  color: #fda29b !important;
+}
+
+.minerx-admin-view [class*="bg-[#05DF72]"],
+.minerx-admin-view [class*="bg-[#04C965]"] {
+  color: #ffffff !important;
+  background: var(--admin-accent) !important;
+  border-color: var(--admin-accent) !important;
+  box-shadow: none !important;
+}
+
+.minerx-admin-view span[class*="rounded-full"][class*="bg-[#05DF72]"] {
+  color: #067647 !important;
+  background: #ecfdf3 !important;
+  border-color: #abefc6 !important;
+}
+
+.minerx-admin-page.is-dark .minerx-admin-view span[class*="rounded-full"][class*="bg-[#05DF72]"] {
+  color: #a6f4c5 !important;
+  background: #123c2b !important;
+  border-color: #176b48 !important;
+}
+
+.minerx-admin-view [class*="bg-gradient-to-r"][class*="from-emerald-"][class*="to-cyan-"] {
+  background: var(--admin-accent) !important;
+  background-image: none !important;
+}
+
+.minerx-admin-view [class*="text-[#05DF72]"],
+.minerx-admin-view [class*="text-cyan-"] {
+  font-variant-numeric: tabular-nums;
+}
+
+.minerx-admin-view [class*="rounded-3xl"][class*="border"],
+.minerx-admin-view [class*="rounded-2xl"][class*="border"] {
+  border-color: var(--admin-border) !important;
+  border-radius: 12px !important;
+  box-shadow: var(--admin-shadow) !important;
+  backdrop-filter: none !important;
+}
+
+.minerx-admin-view [class*="glow-"],
+.minerx-admin-view [class*="shadow-[0_0_"],
+.minerx-admin-view .animate-pulse {
+  box-shadow: none !important;
+  animation: none !important;
+}
+
+.minerx-admin-view input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.minerx-admin-view select,
+.minerx-admin-view textarea {
+  min-height: 38px;
+  border-color: var(--admin-border-strong) !important;
+  border-radius: 7px !important;
+  background: var(--admin-surface) !important;
+  color: var(--admin-text) !important;
+  font-family: var(--admin-font) !important;
+  font-size: 13px !important;
+  box-shadow: none !important;
+}
+
+.minerx-admin-view input::placeholder,
+.minerx-admin-view textarea::placeholder {
+  color: var(--admin-muted) !important;
+  opacity: 0.8;
+}
+
+.minerx-admin-view input:focus,
+.minerx-admin-view select:focus,
+.minerx-admin-view textarea:focus {
+  border-color: var(--admin-accent) !important;
+  outline: 3px solid color-mix(in srgb, var(--admin-accent) 18%, transparent) !important;
+  outline-offset: 1px;
+}
+
+.minerx-admin-view input[type="checkbox"],
+.minerx-admin-view input[type="radio"] {
+  accent-color: var(--admin-accent);
+}
+
+.minerx-admin-view input[type="range"] {
+  accent-color: var(--admin-accent) !important;
+}
+
+.minerx-admin-view table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: var(--admin-text);
+  font-family: var(--admin-font) !important;
+  font-size: 13px !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.minerx-admin-view thead th {
+  padding-top: 11px !important;
+  padding-bottom: 11px !important;
+  color: var(--admin-muted) !important;
+  background: var(--admin-surface-subtle);
+  border-bottom: 1px solid var(--admin-border) !important;
+  font-family: var(--admin-font) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  text-transform: none !important;
+  letter-spacing: 0.01em !important;
+  white-space: nowrap;
+}
+
+.minerx-admin-view tbody td {
+  border-bottom: 1px solid var(--admin-border) !important;
+  vertical-align: middle;
+}
+
+.minerx-admin-view tbody tr:last-child td {
+  border-bottom: 0 !important;
+}
+
+.minerx-admin-view button {
+  font-family: var(--admin-font) !important;
+  letter-spacing: normal;
+}
+
+.minerx-admin-page [class*="from-[#070A14]"],
+.minerx-admin-page [class*="from-[#0B1020]"] {
+  border: 1px solid var(--admin-border) !important;
+  background: var(--admin-surface) !important;
+  background-image: none !important;
+  color: var(--admin-text) !important;
+  box-shadow: var(--admin-shadow) !important;
+  backdrop-filter: none !important;
+  --tw-ring-shadow: none !important;
+}
+
+.minerx-admin-page [class*="from-[#070A14]"] .text-white,
+.minerx-admin-page [class*="from-[#0B1020]"] .text-white {
+  color: var(--admin-text) !important;
+}
+
+.minerx-admin-page [class*="from-[#070A14]"] .text-slate-400,
+.minerx-admin-page [class*="from-[#0B1020]"] .text-slate-400,
+.minerx-admin-page [class*="from-[#070A14]"] .text-slate-500,
+.minerx-admin-page [class*="from-[#0B1020]"] .text-slate-500 {
+  color: var(--admin-muted) !important;
+}
+
+.minerx-admin-page [class*="from-[#070A14]"] [class*="text-[#05F292]"],
+.minerx-admin-page [class*="from-[#0B1020]"] [class*="text-[#05F292]"],
+.minerx-admin-page [class*="from-[#070A14]"] .text-cyan-300,
+.minerx-admin-page [class*="from-[#0B1020]"] .text-cyan-300,
+.minerx-admin-page [class*="from-[#070A14]"] .text-emerald-400,
+.minerx-admin-page [class*="from-[#0B1020]"] .text-emerald-400 {
+  color: var(--admin-accent) !important;
+}
+
+.minerx-admin-page [class*="from-[#070A14]"] [class*="border-[#05F292]"],
+.minerx-admin-page [class*="from-[#0B1020]"] [class*="border-[#05F292]"] {
+  border-color: var(--admin-border) !important;
+}
+
+.minerx-admin-page [class*="from-[#070A14]"] .animate-ping,
+.minerx-admin-page [class*="from-[#0B1020]"] .animate-ping,
+.minerx-admin-page [class*="via-[#05F292]"] {
+  display: none !important;
+  animation: none !important;
+}
+
+.minerx-admin-page .select-none.font-sans > div[class*="rounded-full"] {
+  border-color: var(--admin-border) !important;
+  background: var(--admin-surface) !important;
+  background-image: none !important;
+  color: var(--admin-text) !important;
+  box-shadow: var(--admin-shadow) !important;
+  backdrop-filter: none !important;
+}
+
+.minerx-admin-page .select-none.font-sans [class*="text-[#05DF72]"],
+.minerx-admin-page .select-none.font-sans [class*="text-[#05F292]"],
+.minerx-admin-page .select-none.font-sans .text-cyan-300,
+.minerx-admin-page .select-none.font-sans .text-cyan-400,
+.minerx-admin-page .select-none.font-sans .text-emerald-400 {
+  color: var(--admin-accent) !important;
+}
+
+.minerx-admin-page .select-none.font-sans [class*="border-[#05F292]"] {
+  border-color: var(--admin-border) !important;
+}
+
+.minerx-admin-page .select-none.font-sans .animate-ping {
+  display: none !important;
+  animation: none !important;
+}
+
+.minerx-admin-page .minerx-admin-mobile-nav.is-admin {
+  background: var(--admin-surface) !important;
+  border-color: var(--admin-border) !important;
+  box-shadow: 0 -2px 10px rgba(16, 24, 40, 0.08) !important;
+  backdrop-filter: none !important;
+}
+
+.minerx-admin-page .minerx-admin-mobile-nav.is-admin button[class*="text-[#05DF72]"],
+.minerx-admin-page .minerx-admin-mobile-nav.is-admin button:has(svg[class*="text-[#05DF72]"]) {
+  color: var(--admin-accent) !important;
+}
+
+.minerx-admin-page .minerx-admin-mobile-nav.is-admin svg[class*="text-[#05DF72]"],
+.minerx-admin-page .minerx-admin-mobile-nav.is-admin span[class*="bg-[#05DF72]"] {
+  color: var(--admin-accent) !important;
+  background-color: var(--admin-accent) !important;
+  filter: none !important;
+}
+
+@media (max-width: 767px) {
+  .minerx-admin-page { padding: 0 !important; }
+  .minerx-admin-shell {
+    min-height: 100vh;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+  .minerx-admin-page .minerx-admin-main { padding: 18px 16px 112px !important; }
+  .minerx-admin-page .minerx-admin-header > div:first-child {
+    padding: 12px 16px !important;
+    flex-wrap: wrap;
+    row-gap: 10px !important;
+  }
+  .minerx-admin-page .minerx-admin-header > div:first-child > div:first-child { gap: 8px !important; }
+  .minerx-admin-page .minerx-admin-header > div:first-child > div:last-child {
+    flex-wrap: wrap;
+    gap: 8px !important;
+    margin-left: auto;
+  }
+  .minerx-admin-page .minerx-admin-header .minerx-admin-brandmark { width: 36px !important; height: 36px !important; }
+  .minerx-admin-page .minerx-admin-header .minerx-admin-suite-switcher { margin-left: 0 !important; }
+  .minerx-admin-page .minerx-admin-suite-option { padding: 6px 8px !important; }
+  .minerx-admin-view div:has(> h2 + span) { flex-wrap: wrap; }
+  .minerx-admin-view h2 { min-width: 0; font-size: 18px !important; }
+  .minerx-admin-view h2 + span { flex: 0 0 auto; white-space: nowrap; }
+  .minerx-admin-view { overflow-wrap: anywhere; }
+  .minerx-admin-view table { min-width: 640px; }
+}

@@ -189,6 +189,7 @@ export interface CommercialPackage {
   version: number;
   maxPurchasesPerUser?: number;
   description?: string;
+  isPublished?: boolean;
   createdAt: string;
   updatedAt: string;
 }

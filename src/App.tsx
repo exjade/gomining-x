@@ -55,6 +55,10 @@ import type {
   SaladBalanceInfo 
 } from './types/minerx';
 
+// Helper to parse initial tab from URL params or pathname
+export { resolveTabFromUrl } from './utils/urlRouting';
+import { resolveTabFromUrl } from './utils/urlRouting';
+
 export const App: React.FC = () => {
   // 1. Persistent State
   const [accounts, setAccounts] = useState<SaladAccountConfig[]>(() => {
@@ -216,8 +220,15 @@ export const App: React.FC = () => {
     setCurrentUser(null);
   };
 
+  const getInitialTabFromUrl = (): { tab: string; suite: 'fleet' | 'admin' } | null => {
+    return resolveTabFromUrl(window.location.search, window.location.pathname);
+  };
+
+  const initialUrlRouting = getInitialTabFromUrl();
+
   // Operational Suite Mode (Fleet Management vs Admin Control Center)
   const [suiteMode, setSuiteMode] = useState<'fleet' | 'admin'>(() => {
+    if (initialUrlRouting) return initialUrlRouting.suite;
     const saved = localStorage.getItem('minerx_suite_mode');
     if (saved === 'admin' || saved === 'fleet') return saved;
     return 'admin';
@@ -230,9 +241,21 @@ export const App: React.FC = () => {
 
   // UI State
   const [activeTab, setActiveTab] = useState<string>(() => {
+    if (initialUrlRouting) return initialUrlRouting.tab;
     const savedSuite = localStorage.getItem('minerx_suite_mode');
     return savedSuite === 'fleet' ? 'overview' : 'admin_overview';
   });
+
+  // Keep URL query parameter ?tab=... synchronized with active tab
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get('tab') !== activeTab) {
+        url.searchParams.set('tab', activeTab);
+        window.history.replaceState({}, '', url.toString());
+      }
+    } catch {}
+  }, [activeTab]);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [reallocatingWorker, setReallocatingWorker] = useState<MergedGPUWorker | null>(null);
 
@@ -1391,11 +1414,11 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen font-sans selection:bg-[#05DF72]/20 selection:text-[#05DF72] transition-colors p-0 sm:p-3 md:p-6 lg:p-8 flex justify-center items-start ${
+    <div className={`min-h-screen ${suiteMode === 'admin' ? `minerx-admin-page ${themeMode === 'dark' ? 'is-dark' : 'is-light'}` : ''} font-sans selection:bg-[#05DF72]/20 selection:text-[#05DF72] transition-colors p-0 sm:p-3 md:p-6 lg:p-8 flex justify-center items-start ${
       themeMode === 'light' ? 'bg-[#EDEFF8] text-slate-900' : 'bg-[#07090F] text-slate-100'
     }`}>
       {/* MAIN ELEVATED CARD CONTAINER (Edge-to-edge on mobile, elevated card on desktop) */}
-      <div className={`w-full max-w-7xl flex flex-col rounded-none sm:rounded-[32px] md:rounded-[36px] border-0 sm:border shadow-none sm:shadow-2xl overflow-hidden transition-all ${
+      <div className={`w-full max-w-7xl ${suiteMode === 'admin' ? 'minerx-admin-shell' : ''} flex flex-col rounded-none sm:rounded-[32px] md:rounded-[36px] border-0 sm:border shadow-none sm:shadow-2xl overflow-hidden transition-all ${
         themeMode === 'light'
           ? 'bg-white/95 border-slate-200/90 shadow-slate-300/40 text-slate-900'
           : 'bg-[#080B12]/95 border-white/[0.08] shadow-black/80 text-white'
@@ -1435,7 +1458,7 @@ export const App: React.FC = () => {
         />
 
         {/* Content Area - Generous bottom padding (pb-28) ensures MobileNav never covers content */}
-        <main className="flex-1 w-full px-3 sm:px-6 md:px-8 pt-3 sm:pt-5 pb-28 md:pb-8 overflow-y-auto">
+        <main className="minerx-admin-main flex-1 w-full px-3 sm:px-6 md:px-8 pt-3 sm:pt-5 pb-28 md:pb-8 overflow-y-auto">
           {activeTab === 'overview' && (
             <OverviewTab
               summary={fleetSummary}
@@ -1546,6 +1569,7 @@ export const App: React.FC = () => {
             <PackageBuilderView
               isDarkTheme={themeMode === 'dark'}
               onNavigateToEngine={(_pkgId) => setActiveTab('admin_engine')}
+              onNavigateTab={(tabId) => setActiveTab(tabId)}
             />
           )}
 

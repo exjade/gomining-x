@@ -1,7 +1,10 @@
 import type { MiningContract, ContractStatus, AllocationSummary } from '../../types/admin';
 import { AdminAuditService } from './adminAuditService';
+import { db, collection, doc, getDocs, setDoc, onSnapshot } from '../../utils/firebaseAuth';
+import { apiFetch } from '../../utils/apiConfig';
 
 const STORAGE_CONTRACTS_KEY = 'minerx_admin_contracts_v3';
+export const ADMIN_CONTRACTS_COLLECTION = 'admin_contracts';
 
 export const INITIAL_CONTRACTS: MiningContract[] = [
   {
@@ -127,6 +130,140 @@ export class HashrateAllocationService {
     };
   }
 
+  /**
+   * Fetches contracts from Cloud Firestore /admin_contracts,
+   * merging any client-purchased miners with local admin contracts.
+   * Falls back to Express REST endpoint (/api/admin/contracts).
+   */
+  public async fetchFirestoreContracts(): Promise<MiningContract[]> {
+    if (db) {
+      try {
+        const snap = await getDocs(collection(db, ADMIN_CONTRACTS_COLLECTION));
+        if (!snap.empty) {
+          const firestoreContracts: MiningContract[] = snap.docs.map(d => {
+            const data = d.data();
+            return {
+              id: d.id,
+              userId: data.userId || 'usr_client',
+              userEmail: data.userEmail || 'cliente@gomining.cloud',
+              packageId: data.packageId || 'pkg-custom',
+              packageName: data.packageName || data.name || 'Minero Digital',
+              contractedTh: Number(data.contractedTh ?? data.powerTh ?? 0),
+              allocatedTh: Number(data.allocatedTh ?? data.contractedTh ?? data.powerTh ?? 0),
+              status: (data.status as ContractStatus) || 'ACTIVE',
+              pricePaidUsdt: Number(data.pricePaidUsdt ?? data.price ?? 0),
+              variablePct: Number(data.variablePct) || 0,
+              commissionPct: Number(data.commissionPct) || 2,
+              workerId: data.workerId || `vwk-${d.id.slice(0, 8)}`,
+              activatedAt: data.activatedAt || data.createdAt || new Date().toISOString(),
+              expiresAt: data.expiresAt || new Date(Date.now() + 365 * 86400000).toISOString(),
+              accumulatedProductionPrl: Number(data.accumulatedProductionPrl) || 0,
+              accumulatedNetProfitUsd: Number(data.accumulatedNetProfitUsd) || 0,
+              lastCalculatedAt: data.lastCalculatedAt || new Date().toISOString()
+            };
+          });
+
+          const local = this.getContracts();
+          const mergedMap = new Map<string, MiningContract>();
+          for (const fc of firestoreContracts) {
+            mergedMap.set(fc.id, fc);
+          }
+          for (const lc of local) {
+            if (!mergedMap.has(lc.id)) {
+              mergedMap.set(lc.id, lc);
+            }
+          }
+
+          const mergedList = Array.from(mergedMap.values());
+          localStorage.setItem(STORAGE_CONTRACTS_KEY, JSON.stringify(mergedList));
+          return mergedList;
+        }
+      } catch (err) {
+        console.warn('[HashrateAllocationService] Notice fetching from Firestore, checking Express API:', err);
+      }
+    }
+
+    // Secondary fallback: Express API Server
+    try {
+      const res = await apiFetch('/api/admin/contracts');
+      if (res.ok) {
+        const remoteContracts = await res.json();
+        if (Array.isArray(remoteContracts) && remoteContracts.length > 0) {
+          const local = this.getContracts();
+          const mergedMap = new Map<string, MiningContract>();
+          for (const rc of remoteContracts) {
+            mergedMap.set(rc.id, rc);
+          }
+          for (const lc of local) {
+            if (!mergedMap.has(lc.id)) {
+              mergedMap.set(lc.id, lc);
+            }
+          }
+          const mergedList = Array.from(mergedMap.values());
+          localStorage.setItem(STORAGE_CONTRACTS_KEY, JSON.stringify(mergedList));
+          return mergedList;
+        }
+      }
+    } catch {}
+
+    return this.getContracts();
+  }
+
+  /**
+   * Real-time subscription to Cloud Firestore collection /admin_contracts
+   */
+  public subscribeToFirestoreContracts(callback: (contracts: MiningContract[]) => void): () => void {
+    if (!db) return () => {};
+    try {
+      const colRef = collection(db, ADMIN_CONTRACTS_COLLECTION);
+      return onSnapshot(colRef, (snap) => {
+        if (!snap.empty) {
+          const firestoreContracts: MiningContract[] = snap.docs.map(d => {
+            const data = d.data();
+            return {
+              id: d.id,
+              userId: data.userId || 'usr_client',
+              userEmail: data.userEmail || 'cliente@gomining.cloud',
+              packageId: data.packageId || 'pkg-custom',
+              packageName: data.packageName || data.name || 'Minero Digital',
+              contractedTh: Number(data.contractedTh ?? data.powerTh ?? 0),
+              allocatedTh: Number(data.allocatedTh ?? data.contractedTh ?? data.powerTh ?? 0),
+              status: (data.status as ContractStatus) || 'ACTIVE',
+              pricePaidUsdt: Number(data.pricePaidUsdt ?? data.price ?? 0),
+              variablePct: Number(data.variablePct) || 0,
+              commissionPct: Number(data.commissionPct) || 2,
+              workerId: data.workerId || `vwk-${d.id.slice(0, 8)}`,
+              activatedAt: data.activatedAt || data.createdAt || new Date().toISOString(),
+              expiresAt: data.expiresAt || new Date(Date.now() + 365 * 86400000).toISOString(),
+              accumulatedProductionPrl: Number(data.accumulatedProductionPrl) || 0,
+              accumulatedNetProfitUsd: Number(data.accumulatedNetProfitUsd) || 0,
+              lastCalculatedAt: data.lastCalculatedAt || new Date().toISOString()
+            };
+          });
+
+          const local = this.getContracts();
+          const mergedMap = new Map<string, MiningContract>();
+          for (const fc of firestoreContracts) {
+            mergedMap.set(fc.id, fc);
+          }
+          for (const lc of local) {
+            if (!mergedMap.has(lc.id)) {
+              mergedMap.set(lc.id, lc);
+            }
+          }
+
+          const mergedList = Array.from(mergedMap.values());
+          localStorage.setItem(STORAGE_CONTRACTS_KEY, JSON.stringify(mergedList));
+          callback(mergedList);
+        }
+      }, (err) => {
+        console.warn('[HashrateAllocationService] onSnapshot subscription notice:', err);
+      });
+    } catch {
+      return () => {};
+    }
+  }
+
   public updateContractAllocation(contractId: string, newAllocatedTh: number, reason: string): boolean {
     const list = this.getContracts();
     const contract = list.find(c => c.id === contractId);
@@ -150,6 +287,20 @@ export class HashrateAllocationService {
       reason
     });
 
+    if (db) {
+      setDoc(doc(db, ADMIN_CONTRACTS_COLLECTION, contractId), contract, { merge: true }).catch(err => {
+        console.error('[HashrateAllocationService] Error syncing allocation to Firestore:', err);
+      });
+    }
+
+    try {
+      apiFetch('/api/admin/contracts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contract)
+      }).catch(() => {});
+    } catch {}
+
     return true;
   }
 
@@ -168,6 +319,42 @@ export class HashrateAllocationService {
       reason
     });
 
+    if (db) {
+      setDoc(doc(db, ADMIN_CONTRACTS_COLLECTION, contractId), contract, { merge: true }).catch(err => {
+        console.error('[HashrateAllocationService] Error syncing status to Firestore:', err);
+      });
+    }
+
+    try {
+      apiFetch('/api/admin/contracts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contract)
+      }).catch(() => {});
+    } catch {}
+
     return true;
+  }
+
+  public async registerContract(contract: MiningContract): Promise<MiningContract> {
+    const list = this.getContracts();
+    const existingIdx = list.findIndex(c => c.id === contract.id);
+    if (existingIdx >= 0) {
+      list[existingIdx] = contract;
+    } else {
+      list.unshift(contract);
+    }
+    localStorage.setItem(STORAGE_CONTRACTS_KEY, JSON.stringify(list));
+    if (db) {
+      await setDoc(doc(db, ADMIN_CONTRACTS_COLLECTION, contract.id), contract, { merge: true }).catch(() => {});
+    }
+    try {
+      apiFetch('/api/admin/contracts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contract)
+      }).catch(() => {});
+    } catch {}
+    return contract;
   }
 }

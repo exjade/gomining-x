@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   ShoppingCart, 
   Search, 
@@ -30,10 +30,27 @@ export const PackagePaymentsView: React.FC<PackagePaymentsViewProps> = ({ isDark
   const [selectedPayment, setSelectedPayment] = useState<PackageOrderPayment | null>(null);
   const [settleModalItem, setSettleModalItem] = useState<PackageOrderPayment | null>(null);
   const [manualTxHash, setManualTxHash] = useState('');
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
-  const refreshList = () => {
-    setPayments(service.getPayments());
+  const refreshList = async () => {
+    setIsSyncing(true);
+    try {
+      const updated = await service.fetchFirestorePayments();
+      setPayments(updated);
+    } finally {
+      setIsSyncing(false);
+    }
   };
+
+  useEffect(() => {
+    refreshList();
+    const unsubscribe = service.subscribeToFirestorePayments((updated) => {
+      setPayments(updated);
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   const summary = useMemo(() => service.getSummary(), [payments]);
 
@@ -107,25 +124,37 @@ export const PackagePaymentsView: React.FC<PackagePaymentsViewProps> = ({ isDark
     }
   };
 
-  const getNetworkBadge = (network: PackageOrderPayment['paymentNetwork']) => {
-    switch (network) {
-      case 'TRON':
-        return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">TRON TRC20</span>;
-      case 'ETHEREUM':
-        return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">ETH ERC20</span>;
-      case 'SOLANA':
-        return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">SOLANA</span>;
-      case 'BITCOIN':
-        return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">BITCOIN</span>;
-      case 'POLYGON':
-        return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">POLYGON</span>;
-      case 'BRIDGE_SPEI':
-        return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">PUENTE SPEI</span>;
+  const getNetworkBadge = (network: PackageOrderPayment['paymentNetwork'] | string) => {
+    const net = String(network || '').toUpperCase();
+    if (net.includes('TRON') || net === 'TRC20') {
+      return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">TRON TRC20</span>;
     }
+    if (net.includes('ETH') || net === 'ERC20') {
+      return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">ETH ERC20</span>;
+    }
+    if (net.includes('SOL')) {
+      return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">SOLANA</span>;
+    }
+    if (net.includes('BTC') || net.includes('BITCOIN')) {
+      return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">BITCOIN</span>;
+    }
+    if (net.includes('POLY') || net.includes('POL')) {
+      return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">POLYGON</span>;
+    }
+    if (net.includes('BNB') || net.includes('BSC')) {
+      return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">BNB CHAIN</span>;
+    }
+    if (net.includes('LOCAL') || net.includes('BALANCE')) {
+      return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">SALDO LOCAL</span>;
+    }
+    if (net.includes('SPEI')) {
+      return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">PUENTE SPEI</span>;
+    }
+    return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-slate-500/10 text-slate-400 border border-slate-500/20">{network || 'CRYPTO'}</span>;
   };
 
   return (
-    <div className="space-y-6">
+    <div className="minerx-admin-view space-y-6">
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-white/[0.08]">
         <div>
@@ -147,14 +176,16 @@ export const PackagePaymentsView: React.FC<PackagePaymentsViewProps> = ({ isDark
         <div className="flex items-center gap-2">
           <button
             onClick={refreshList}
+            disabled={isSyncing}
             className={`px-3 py-2 rounded-xl border text-xs font-mono font-bold flex items-center gap-1.5 transition-all active:scale-[0.98] cursor-pointer ${
               isLight 
                 ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shadow-xs' 
                 : 'bg-white/[0.04] hover:bg-white/[0.08] border-white/10 text-slate-200'
             }`}
+            title="Sincronizar órdenes y pagos de paquetes desde Cloud Firestore (/admin_orders)"
           >
-            <RefreshCw className="h-3.5 w-3.5" />
-            <span>Actualizar</span>
+            <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin text-[#05DF72]' : ''}`} />
+            <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar Firestore'}</span>
           </button>
         </div>
       </div>

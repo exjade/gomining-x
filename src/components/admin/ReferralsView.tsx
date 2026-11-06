@@ -169,7 +169,7 @@ export const ReferralsView: React.FC<ReferralsViewProps> = ({
   const simEstimatedCommissionPrl = simEstimatedCommissionUsd / 1.47;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300 pb-16">
+    <div className="minerx-admin-view space-y-6 animate-in fade-in duration-300 pb-16">
       {/* 1. HEADER TITLE SECTION */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>

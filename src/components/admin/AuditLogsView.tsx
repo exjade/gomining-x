@@ -28,7 +28,7 @@ export const AuditLogsView: React.FC<AuditLogsViewProps> = ({
   });
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300 pb-12">
+    <div className="minerx-admin-view space-y-6 animate-in fade-in duration-300 pb-12">
       {/* HEADER */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>

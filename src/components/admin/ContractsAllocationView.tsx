@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ShieldAlert, 
   Search, 
   Play, 
-  Pause
+  Pause,
+  RefreshCw
 } from 'lucide-react';
 import { HashrateAllocationService } from '../../services/admin/hashrateAllocationService';
 import type { MiningContract, AllocationSummary, ContractStatus } from '../../types/admin';
@@ -21,6 +22,29 @@ export const ContractsAllocationView: React.FC<ContractsAllocationViewProps> = (
   const [summary, setSummary] = useState<AllocationSummary>(allocationService.getAllocationSummary(1000));
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
+  const refreshContractsFromFirestore = async () => {
+    setIsSyncing(true);
+    try {
+      const updated = await allocationService.fetchFirestoreContracts();
+      setContracts(updated);
+      setSummary(allocationService.getAllocationSummary(backedCapacity));
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshContractsFromFirestore();
+    const unsubscribe = allocationService.subscribeToFirestoreContracts((updated) => {
+      setContracts(updated);
+      setSummary(allocationService.getAllocationSummary(backedCapacity));
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [backedCapacity]);
 
   const handleUpdateAllocation = (contractId: string, val: number) => {
     allocationService.updateContractAllocation(contractId, val, 'Ajuste manual de potencia');
@@ -46,7 +70,7 @@ export const ContractsAllocationView: React.FC<ContractsAllocationViewProps> = (
   });
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300 pb-12">
+    <div className="minerx-admin-view space-y-6 animate-in fade-in duration-300 pb-12">
       {/* HEADER */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -58,23 +82,37 @@ export const ContractsAllocationView: React.FC<ContractsAllocationViewProps> = (
           </p>
         </div>
 
-        {/* Global Capacity Gauge Input */}
-        <div className="flex items-center gap-2">
-          <span className={`text-xs font-mono font-semibold ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>Capacidad de Respaldo:</span>
-          <input
-            type="number"
-            step="50"
-            value={backedCapacity}
-            onChange={(e) => {
-              const val = parseInt(e.target.value) || 0;
-              setBackedCapacity(val);
-              setSummary(allocationService.getAllocationSummary(val));
-            }}
-            className={`w-28 px-3 py-1.5 rounded-xl text-xs font-mono font-bold border focus:outline-none focus:border-[#05DF72] ${
-              isDarkTheme ? 'bg-[#0E1320] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900 focus:bg-white'
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={refreshContractsFromFirestore}
+            disabled={isSyncing}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl border text-xs font-mono font-bold transition-all active:scale-[0.97] cursor-pointer ${
+              isDarkTheme ? 'bg-white/5 border-white/10 text-slate-300 hover:text-white hover:bg-white/10' : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
             }`}
-          />
-          <span className="text-xs font-mono font-bold text-cyan-400">TH/s</span>
+            title="Sincronizar mineros y contratos adquiridos por clientes desde Cloud Firestore (/admin_contracts)"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin text-[#05DF72]' : 'text-slate-400'}`} />
+            <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar Firestore'}</span>
+          </button>
+
+          {/* Global Capacity Gauge Input */}
+          <div className="flex items-center gap-2">
+            <span className={`text-xs font-mono font-semibold ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>Capacidad de Respaldo:</span>
+            <input
+              type="number"
+              step="50"
+              value={backedCapacity}
+              onChange={(e) => {
+                const val = parseInt(e.target.value) || 0;
+                setBackedCapacity(val);
+                setSummary(allocationService.getAllocationSummary(val));
+              }}
+              className={`w-28 px-3 py-1.5 rounded-xl text-xs font-mono font-bold border focus:outline-none focus:border-[#05DF72] ${
+                isDarkTheme ? 'bg-[#0E1320] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900 focus:bg-white'
+              }`}
+            />
+            <span className="text-xs font-mono font-bold text-cyan-400">TH/s</span>
+          </div>
         </div>
       </div>
 
