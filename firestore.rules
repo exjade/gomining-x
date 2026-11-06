@@ -141,6 +141,16 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Commercial packages created by platform admins for client purchase
+    match /commercial_packages/{packageId} {
+      allow read, write: if true;
+    }
+
+    // Client package orders and payments recorded for administration
+    match /admin_orders/{orderId} {
+      allow read, write: if true;
+    }
+
     // Default deny all other paths
     match /{document=**} {
       allow read, write: if false;

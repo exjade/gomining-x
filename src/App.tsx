@@ -28,6 +28,14 @@ import { LandingPage } from './LandingPage'
 import { ReferralPage } from './ReferralPage'
 import { usePersonalization } from './personalization'
 import {
+  subscribeToPublishedCommercialPackages,
+  recordMinerPurchaseToAdmin,
+  savePurchasedMiner,
+  DEFAULT_COMMERCIAL_PACKAGES,
+  type PublishedCommercialPackage,
+  type StoredMiner,
+} from './firebase'
+import {
   activateDemoSubscription,
   addDemoBalance,
   activateDemoWorker,
@@ -425,6 +433,25 @@ function AppContent() {
             setToast(result.message)
             return
           }
+          // Record any miners purchased in cart order to admin platform
+          order.items.forEach(({ product, quantity }) => {
+            if (product.id.startsWith('miner-')) {
+              const powerTh = product.powerTh ?? (product.id === 'miner-plus' ? 1.2 : 0.6)
+              for (let i = 1; i <= quantity; i++) {
+                const minerId = `${order.id}-${product.id}-${i}`
+                recordMinerPurchaseToAdmin({
+                  minerId,
+                  uid: user?.uid,
+                  email: user?.email || '',
+                  name: product.title,
+                  powerTh,
+                  price: product.price,
+                  txHash: `sim_order_${order.id}`,
+                  network: 'LOCAL_BALANCE',
+                }).catch(() => {})
+              }
+            }
+          })
           setCart([])
           setSessionEvents((items) => [`Pedido ${order.id} · simulación local`, ...items].slice(0, 5))
           setToast("Compra simulada completa; inventario y saldo actualizados")
@@ -440,6 +467,47 @@ function AppContent() {
         const demoInput = { ...input, price: priceUsd, ownerWallet: activeWalletAddress || effectiveWalletSession.connection?.address }
         const result = buyDemoMiner(demoInput)
         if (!result.ok) return { ok: false, message: result.message }
+        const minerId = result.receipt?.id ? `miner_${result.receipt.id}` : `miner_${Date.now()}`
+        if (user) {
+          const storedMiner: StoredMiner = {
+            id: minerId,
+            uid: user.uid,
+            name: input.name,
+            powerTh: input.powerTh,
+            efficiency: input.efficiency,
+            efficiencyWattsPerTh: input.efficiency,
+            price: priceUsd,
+            currency: 'USD',
+            status: 'active',
+            txHash: `sim_${minerId}`,
+            createdAt: null,
+            network: 'LOCAL_BALANCE',
+            ownerWallet: demoInput.ownerWallet || 'INTERNAL',
+            visualTraits: {
+              wallColor: '#7c3aed',
+              bodyColor: '#1e1b4b',
+              bottomColor: '#e2e8f0',
+              fansColor: '#1e293b',
+              screenColor: '#22c55e',
+              buttonsColor: '#64748b',
+              topColor: '#0f172a',
+              stickers: 'gomining-classic',
+            },
+          }
+          await savePurchasedMiner(user.uid, storedMiner).catch(() => {})
+        }
+        await recordMinerPurchaseToAdmin({
+          minerId,
+          uid: user?.uid,
+          email: user?.email || '',
+          name: input.name,
+          powerTh: input.powerTh,
+          price: priceUsd,
+          txHash: `sim_${minerId}`,
+          network: 'LOCAL_BALANCE',
+          ownerWallet: demoInput.ownerWallet,
+          packageId: input.packageId,
+        }).catch(() => {})
         setSessionEvents((items) => [`${input.name} · ${input.powerTh.toFixed(2)} TH añadidos a la granja`, ...items].slice(0, 5))
         setToast("Minero añadido a la granja local; saldo y comprobante actualizados")
         return { ok: true, receipt: result.receipt }
@@ -1152,6 +1220,7 @@ function CatalogPanel({ screen, pathname, openAction, addProduct }: { screen: Sc
 }
 
 function MinerPanel({ openMinerBuilder, openTopUp }: { openMinerBuilder: () => void; openTopUp: () => void }) {
+  const { user } = useAuth()
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [applied, setApplied] = useState(false)
   const [pendingFeedback, setPendingFeedback] = useState('')
@@ -1163,7 +1232,28 @@ function MinerPanel({ openMinerBuilder, openTopUp }: { openMinerBuilder: () => v
         <div className="panel-toolbar"><div><h2>Pedidos locales pendientes</h2><p>El minero se añade a la granja al completar el pago con saldo local.</p></div><span className="checkout-local-badge">LOCAL</span></div>
         <div className="pending-miner-list">{demo.pendingMinerOrders.map((order) => <article className="pending-miner-row" key={order.id}>
           <div><span className="card-kicker">PAGO PENDIENTE · {order.purchaseMode === 'monthly' ? 'MENSUAL' : 'UNA SOLA VEZ'}</span><strong>{order.name} · {order.powerTh.toFixed(2)} TH</strong><small>{formatDemoCurrency(order.price)} · creado {order.createdAt}</small></div>
-          <div className="pending-miner-actions"><button className="button button-primary button-small" type="button" onClick={() => { const result = payPendingDemoMiner(order.id); if (!result.ok) { setPendingFeedback(result.message); if (result.required > result.available) openTopUp(); return } setPendingFeedback(`Pedido local completado · ${result.receipt.id}`) }}>Pagar con saldo local</button><button className="button button-quiet button-small" type="button" onClick={() => { cancelPendingDemoMiner(order.id); setPendingFeedback('Pedido local cancelado.') }}>Cancelar</button></div>
+          <div className="pending-miner-actions"><button className="button button-primary button-small" type="button" onClick={() => {
+            const result = payPendingDemoMiner(order.id)
+            if (!result.ok) {
+              setPendingFeedback(result.message)
+              if (result.required > result.available) openTopUp()
+              return
+            }
+            const minerId = result.receipt?.id ? `miner_${result.receipt.id}` : `miner_${order.id}`
+            recordMinerPurchaseToAdmin({
+              minerId,
+              uid: user?.uid,
+              email: user?.email || '',
+              name: order.name,
+              powerTh: order.powerTh,
+              price: order.price,
+              txHash: `sim_pending_${order.id}`,
+              network: 'LOCAL_BALANCE',
+              ownerWallet: order.ownerWallet || 'INTERNAL',
+              packageId: order.packageId,
+            }).catch(() => {})
+            setPendingFeedback(`Pedido local completado · ${result.receipt?.id}`)
+          }}>Pagar con saldo local</button><button className="button button-quiet button-small" type="button" onClick={() => { cancelPendingDemoMiner(order.id); setPendingFeedback('Pedido local cancelado.') }}>Cancelar</button></div>
         </article>)}</div>
         {pendingFeedback && <p className="inline-feedback" role="status">{pendingFeedback}</p>}
       </section>}
@@ -1419,11 +1509,12 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
   walletSession: ReturnType<typeof useWalletSession>
   onClose: () => void
   onPayWithWallet: (productName: string, amount: number, currency: PaymentCurrency) => void
-  onComplete: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; durationDays?: number }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
-  onDefer: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; durationDays?: number }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
+  onComplete: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; durationDays?: number; packageId?: string }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
+  onDefer: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; durationDays?: number; packageId?: string }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
 }) {
-  const [categoryTab, setCategoryTab] = useState<'presale' | 'launch' | 'monthly'>('presale')
-  const [presetId, setPresetId] = useState<string>('presale-1')
+  const [commercialPackages, setCommercialPackages] = useState<PublishedCommercialPackage[]>(DEFAULT_COMMERCIAL_PACKAGES)
+  const [categoryTab, setCategoryTab] = useState<'packages' | 'presale' | 'launch' | 'monthly'>('packages')
+  const [presetId, setPresetId] = useState<string>('pkg-miner-1')
   const [customPowerIndex, setCustomPowerIndex] = useState(0)
   const [maintenanceToken, setMaintenanceToken] = useState<'PEARL' | 'USDT'>('PEARL')
   const [roiPeriod, setRoiPeriod] = useState<'daily' | 'monthly' | 'annual'>('daily')
@@ -1433,20 +1524,49 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
   const [receipt, setReceipt] = useState<DemoReceipt | null>(null)
   const [feedback, setFeedback] = useState('')
 
+  useEffect(() => {
+    const unsubscribe = subscribeToPublishedCommercialPackages((pkgs) => {
+      if (pkgs && pkgs.length > 0) {
+        setCommercialPackages(pkgs)
+      }
+    })
+    return () => {
+      if (unsubscribe) unsubscribe()
+    }
+  }, [])
+
   const activePlans = useMemo(() => {
+    if (categoryTab === 'packages') {
+      return commercialPackages.map((pkg) => ({
+        id: pkg.id,
+        label: pkg.name,
+        powerTh: pkg.powerTh,
+        price: pkg.priceUsdt,
+        btcPerDay: pkg.powerTh * 0.0000004245,
+        roi: Number((55 + (pkg.variablePct || 0)).toFixed(2)),
+        variablePct: pkg.variablePct,
+        commissionPct: pkg.commissionPct,
+        description: pkg.description,
+      }))
+    }
     if (categoryTab === 'presale') return presaleMinerPlans
     if (categoryTab === 'launch') return launchMinerPlans
     return monthlyMinerPlans
-  }, [categoryTab])
+  }, [categoryTab, commercialPackages])
 
-  const selected = activePlans.find((plan) => plan.id === presetId)
+  const selected = activePlans.find((plan) => plan.id === presetId) || activePlans[0]
   const isCustom = categoryTab === 'launch' && presetId === 'custom'
   const customTier = customMinerPriceTiers[customPowerIndex]
-  const powerTh = isCustom ? customTier.powerTh : (selected?.powerTh ?? 1.46)
-  const total = isCustom ? customTier.priceUsd : (selected?.price ?? 18.99)
+  const powerTh = isCustom ? customTier.powerTh : (selected?.powerTh ?? 48)
+  const total = isCustom ? customTier.priceUsd : (selected?.price ?? 561.99)
   const currency: PaymentCurrency = 'USD'
   const purchaseMode: 'once' | 'monthly' = categoryTab === 'monthly' ? 'monthly' : 'once'
-  const productName = isCustom ? `Minero personalizado · ${powerTh} TH` : `Minero ${selected?.label ?? `${powerTh} TH`}`
+  const selectedLabel = selected?.label ?? `${powerTh} TH`
+  const productName = isCustom
+    ? `Minero personalizado · ${powerTh} TH`
+    : selectedLabel.toLowerCase().startsWith('minero')
+      ? `${selectedLabel} · ${powerTh} TH`
+      : `Minero ${selectedLabel} · ${powerTh} TH`
   const observedAtLabel = new Date(MINER_CATALOG_OBSERVED_AT).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })
 
   // Calculations for dynamic ROI & maintenance card
@@ -1474,6 +1594,7 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
       currency,
       purchaseMode,
       durationDays: purchaseMode === 'monthly' ? 30 : undefined,
+      packageId: categoryTab === 'packages' ? selected?.id : undefined,
     }
     try {
       const result = await (kind === 'buy' ? onComplete(input) : onDefer(input))
@@ -1518,7 +1639,7 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
             <div className="builder-review-grid">
               <div><span>Potencia</span><strong>{powerTh.toFixed(2)} TH</strong></div>
               <div><span>Eficiencia</span><strong>15 W/TH</strong></div>
-              <div><span>Modalidad</span><strong>{categoryTab === 'presale' ? 'Preventa (Edición limitada)' : categoryTab === 'monthly' ? 'Mensual · 30 días' : 'Lanzamiento · Propiedad'}</strong></div>
+              <div><span>Modalidad</span><strong>{categoryTab === 'packages' ? 'Paquete Oficial MinerX' : categoryTab === 'presale' ? 'Preventa (Edición limitada)' : categoryTab === 'monthly' ? 'Mensual · 30 días' : 'Lanzamiento · Propiedad'}</strong></div>
               <div><span>Token de mantenimiento</span><strong>{maintenanceToken} {maintenanceToken === 'PEARL' ? '(-20% dto)' : ''}</strong></div>
             </div>
             <div className="purchase-total">
@@ -1568,8 +1689,15 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
               <p className="purchase-muted">Elige tu minero digital respaldado por potencia real. Todos los precios en USD ($).</p>
             </header>
 
-            {/* Categoría: Preventa vs Lanzamiento vs Mensual */}
-            <div className="builder-mode-tabs" style={{ marginBottom: '14px' }}>
+            {/* Categoría: Paquetes MinerX vs Preventa vs Lanzamiento vs Mensual */}
+            <div className="builder-mode-tabs" style={{ marginBottom: '14px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              <button
+                type="button"
+                className={categoryTab === 'packages' ? 'builder-mode-active' : ''}
+                onClick={() => { setCategoryTab('packages'); setPresetId(commercialPackages[0]?.id ?? 'pkg-miner-1') }}
+              >
+                Paquetes MinerX ({commercialPackages.length})
+              </button>
               <button
                 type="button"
                 className={categoryTab === 'presale' ? 'builder-mode-active' : ''}
@@ -1592,6 +1720,48 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
                 Mensual
               </button>
             </div>
+
+            {/* Cards for Official MinerX Commercial Packages */}
+            {categoryTab === 'packages' && (
+              <div style={{ marginBottom: '14px' }}>
+                <div className="builder-list-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <small style={{ color: '#a5a7b8' }}>
+                    Paquetes oficiales de la administración MinerX · Potencia garantizada y liquidación diaria
+                  </small>
+                  <span className="checkout-local-badge" style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', border: '1px solid #3b82f6' }}>
+                    OFICIAL MINERX
+                  </span>
+                </div>
+                <div className="builder-plan-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+                  {commercialPackages.map((pkg) => (
+                    <button
+                      key={pkg.id}
+                      type="button"
+                      className={`builder-plan-option ${presetId === pkg.id ? 'builder-plan-option-active' : ''}`}
+                      onClick={() => setPresetId(pkg.id)}
+                      style={{ position: 'relative', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '4px' }}
+                    >
+                      <span className="builder-plan-title">
+                        <span>{pkg.name}</span>
+                        {pkg.variablePct > 0 && (
+                          <small style={{ color: '#60a5fa', fontSize: '9px', fontWeight: 600 }}>+{pkg.variablePct}% var</small>
+                        )}
+                      </span>
+                      <strong className="builder-plan-price">{formatCatalogPrice(pkg.priceUsdt, 'USD')}</strong>
+                      <small className="builder-plan-yield" style={{ color: '#e2e8f0', fontWeight: 600 }}>{pkg.powerTh} TH/s</small>
+                      <small className="builder-plan-roi" style={{ color: '#22c55e', fontSize: '9px' }}>
+                        {(pkg.powerTh * 0.0000004245).toFixed(8)} BTC/d
+                      </small>
+                      {pkg.description && (
+                        <span style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px', lineHeight: '1.2' }}>
+                          {pkg.description}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Cards for Presale */}
             {categoryTab === 'presale' && (

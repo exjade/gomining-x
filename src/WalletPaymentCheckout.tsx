@@ -11,7 +11,7 @@ import { buildSolanaPaymentTransaction } from './solanaPayment'
 import { registerWalletMinerPurchase } from './demoStore'
 import { startMiningSimulation } from './miningSimulation'
 import { useAuth } from './AuthContext'
-import { savePurchasedMiner, creditDirectReferralCommission, type StoredMiner } from './firebase'
+import { savePurchasedMiner, creditDirectReferralCommission, recordMinerPurchaseToAdmin, type StoredMiner } from './firebase'
 import type { WalletId, WalletSession } from './walletSession'
 
 export type PaymentReceipt = {
@@ -248,10 +248,25 @@ export function WalletPaymentCheckout({
       const parsedTh = (() => {
         const match = productName.match(/([\d.]+)\s*TH/i)
         if (match) return Number(match[1])
-        if (productName.toLowerCase().includes('pro')) return 21.05
-        if (productName.toLowerCase().includes('max')) return 42.44
-        if (productName.toLowerCase().includes('esencial')) return 5.83
+        const lower = productName.toLowerCase()
+        if (lower.includes('enterprise')) return 192
+        if (lower.includes('master')) return 128
+        if (lower.includes('pro')) return 96
+        if (lower.includes('standard')) return 64
+        if (lower.includes('entry')) return 48
+        if (lower.includes('max')) return 42.44
+        if (lower.includes('esencial')) return 5.83
         return Number((amount / 12.99).toFixed(2)) || 1.46
+      })()
+
+      const derivedPackageId = (() => {
+        const lower = productName.toLowerCase()
+        if (lower.includes('entry')) return 'pkg-miner-1'
+        if (lower.includes('standard')) return 'pkg-miner-2'
+        if (lower.includes('pro')) return 'pkg-miner-3'
+        if (lower.includes('master')) return 'pkg-miner-4'
+        if (lower.includes('enterprise')) return 'pkg-miner-5'
+        return undefined
       })()
 
       const miner = registerWalletMinerPurchase(
@@ -303,6 +318,24 @@ export function WalletPaymentCheckout({
         } catch (persistErr) {
           console.error('Error persisting miner or referral commission to Firestore:', persistErr)
         }
+      }
+
+      // Record purchased miner to platform admin dashboard (/admin_contracts & /admin_orders)
+      try {
+        await recordMinerPurchaseToAdmin({
+          minerId: createdMinerId,
+          uid: user?.uid,
+          email: user?.email || '',
+          name: productName,
+          powerTh: parsedTh,
+          price: quote?.catalogUsd ?? amount,
+          txHash,
+          network: activeDestination.name,
+          ownerWallet: activeAddress,
+          packageId: derivedPackageId,
+        })
+      } catch (adminErr) {
+        console.warn('Error recording miner purchase to admin platform:', adminErr)
       }
     }
 

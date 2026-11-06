@@ -49,6 +49,7 @@ export type DemoMinerPurchaseInput = {
   purchaseMode: 'once' | 'monthly'
   durationDays?: number
   ownerWallet?: string
+  packageId?: string
 }
 
 export type PendingDemoMinerOrder = DemoMinerPurchaseInput & {
@@ -226,6 +227,8 @@ export function restoreDemoSession(value: unknown): boolean {
       || (item.purchaseMode !== 'once' && item.purchaseMode !== 'monthly')) return []
     return [{ id: item.id.slice(0, 120), name: item.name.slice(0, 120), powerTh: Number(item.powerTh), efficiency: Number(item.efficiency),
       price: Math.max(0, Number(item.price)), purchaseMode: item.purchaseMode, durationDays: Number.isFinite(Number(item.durationDays)) ? Number(item.durationDays) : undefined,
+      ownerWallet: typeof item.ownerWallet === 'string' ? item.ownerWallet.slice(0, 120) : undefined,
+      packageId: typeof item.packageId === 'string' ? item.packageId.slice(0, 120) : undefined,
       createdAt: item.createdAt.slice(0, 80) }]
   }) : []
 

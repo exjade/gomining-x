@@ -19,6 +19,7 @@ import {
   query,
   where,
   getDocs,
+  onSnapshot,
   serverTimestamp,
   arrayUnion,
   increment,
@@ -863,6 +864,326 @@ export async function savePurchasedMiner(uid: string, minerData: StoredMiner) {
     ...minerData,
     createdAt: serverTimestamp(),
   })
+}
+
+export interface AdminContractRecord {
+  id: string
+  userId: string
+  userEmail: string
+  packageId: string
+  packageName: string
+  contractedTh: number
+  allocatedTh: number
+  status: 'ACTIVE' | 'PENDING' | 'PARTIALLY_ALLOCATED' | 'SUSPENDED'
+  pricePaidUsdt: number
+  variablePct: number
+  commissionPct: number
+  workerId: string
+  activatedAt: string
+  expiresAt: string
+  accumulatedProductionPrl: number
+  accumulatedNetProfitUsd: number
+  lastCalculatedAt: string
+  txHash: string
+  network: string
+  source: string
+}
+
+export interface AdminOrderRecord {
+  orderId: string
+  attemptId: string
+  createdAt: string
+  userId: string
+  userEmail: string
+  userName: string
+  packageId: string
+  packageName: string
+  contractedTh: number
+  amountUsd: number
+  cryptoAsset: string
+  cryptoAmount: string
+  paymentNetwork: string
+  recipientAddress: string
+  txHash: string
+  confirmations: number
+  requiredConfirmations: number
+  status: 'SETTLED' | 'CONFIRMED' | 'PENDING'
+  bridgeStatus: string
+  activatedMinerId: string
+  idempotencyKey: string
+  settledAt: string
+}
+
+export interface PublishedCommercialPackage {
+  id: string
+  name: string
+  powerTh: number
+  priceUsdt: number
+  durationDays: number
+  status: 'ACTIVE' | 'ARCHIVED' | 'DRAFT'
+  isPublished?: boolean
+  variablePct: number
+  commissionPct: number
+  version: number
+  description?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export const DEFAULT_COMMERCIAL_PACKAGES: PublishedCommercialPackage[] = [
+  {
+    id: 'pkg-miner-1',
+    name: 'Minero 1 Entry',
+    powerTh: 48,
+    priceUsdt: 561.99,
+    durationDays: 365,
+    status: 'ACTIVE',
+    isPublished: true,
+    variablePct: 0.0,
+    commissionPct: 2.0,
+    version: 1,
+    description: 'Paquete de entrada optimizado para minería continua de PearlHash.',
+  },
+  {
+    id: 'pkg-miner-2',
+    name: 'Minero 2 Standard',
+    powerTh: 64,
+    priceUsdt: 744.99,
+    durationDays: 365,
+    status: 'ACTIVE',
+    isPublished: true,
+    variablePct: 2.5,
+    commissionPct: 2.0,
+    version: 1,
+    description: 'Rendimiento equilibrado con multiplicador variable del +2.5%.',
+  },
+  {
+    id: 'pkg-miner-3',
+    name: 'Minero 3 Pro',
+    powerTh: 96,
+    priceUsdt: 1111.99,
+    durationDays: 365,
+    status: 'ACTIVE',
+    isPublished: true,
+    variablePct: 5.0,
+    commissionPct: 1.8,
+    version: 1,
+    description: 'Alta potencia para operadores profesionales con +5.0% de variable.',
+  },
+  {
+    id: 'pkg-miner-4',
+    name: 'Minero 4 Master',
+    powerTh: 128,
+    priceUsdt: 1474.99,
+    durationDays: 365,
+    status: 'ACTIVE',
+    isPublished: true,
+    variablePct: 7.5,
+    commissionPct: 1.5,
+    version: 1,
+    description: 'Potencia industrial con tasa preferencial de comisión reducida.',
+  },
+  {
+    id: 'pkg-miner-5',
+    name: 'Minero 5 Enterprise',
+    powerTh: 192,
+    priceUsdt: 2201.99,
+    durationDays: 365,
+    status: 'ACTIVE',
+    isPublished: true,
+    variablePct: 10.0,
+    commissionPct: 1.0,
+    version: 1,
+    description: 'Máxima capacidad computacional con variable premium del +10.0%.',
+  },
+]
+
+function parseCommercialPackageDoc(id: string, data: any): PublishedCommercialPackage {
+  return {
+    id,
+    name: data.name || 'Paquete Minero',
+    powerTh: Number(data.powerTh) || 0,
+    priceUsdt: Number(data.priceUsdt) || 0,
+    durationDays: Number(data.durationDays) || 365,
+    status: data.status || 'ACTIVE',
+    isPublished: data.isPublished ?? (data.status === 'ACTIVE'),
+    variablePct: Number(data.variablePct) || 0,
+    commissionPct: Number(data.commissionPct) || 2,
+    version: Number(data.version) || 1,
+    description: data.description || '',
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
+  }
+}
+
+/**
+ * Subscribes to published commercial packages from Cloud Firestore /commercial_packages in real-time.
+ * Automatically triggers callback on live updates made by the admin in MinerX.
+ */
+export function subscribeToPublishedCommercialPackages(
+  callback: (packages: PublishedCommercialPackage[]) => void
+): () => void {
+  try {
+    const colRef = collection(db, 'commercial_packages')
+    const unsubscribe = onSnapshot(
+      colRef,
+      (snap) => {
+        if (!snap.empty) {
+          const active = snap.docs
+            .map((d) => parseCommercialPackageDoc(d.id, d.data()))
+            .filter((p) => p.status === 'ACTIVE' && p.isPublished !== false)
+          if (active.length > 0) {
+            callback(active)
+            return
+          }
+        }
+        callback(DEFAULT_COMMERCIAL_PACKAGES)
+      },
+      (err) => {
+        console.warn('[GoMining] Real-time subscription error for commercial packages, falling back:', err)
+        fetchPublishedCommercialPackages().then(callback).catch(() => callback(DEFAULT_COMMERCIAL_PACKAGES))
+      }
+    )
+    return unsubscribe
+  } catch (err) {
+    console.warn('[GoMining] Could not initialize commercial packages listener:', err)
+    fetchPublishedCommercialPackages().then(callback).catch(() => callback(DEFAULT_COMMERCIAL_PACKAGES))
+    return () => {}
+  }
+}
+
+/**
+ * Fetches published commercial packages from Cloud Firestore /commercial_packages.
+ * Falls back to Express REST API and DEFAULT_COMMERCIAL_PACKAGES if empty or uninitialized.
+ */
+export async function fetchPublishedCommercialPackages(): Promise<PublishedCommercialPackage[]> {
+  try {
+    const colRef = collection(db, 'commercial_packages')
+    const snap = await getDocs(colRef)
+    if (!snap.empty) {
+      const active = snap.docs
+        .map((d) => parseCommercialPackageDoc(d.id, d.data()))
+        .filter((p) => p.status === 'ACTIVE' && p.isPublished !== false)
+
+      if (active.length > 0) return active
+    }
+  } catch (err) {
+    console.warn('[GoMining] Error fetching published commercial packages from Firestore:', err)
+  }
+
+  // Dual fallback: Attempt Express REST backend endpoint if running locally
+  try {
+    const res = await fetch('http://127.0.0.1:3001/api/packages', { signal: AbortSignal.timeout(1200) })
+    if (res.ok) {
+      const data = await res.json()
+      if (Array.isArray(data) && data.length > 0) {
+        const active = data
+          .map((p: any) => parseCommercialPackageDoc(p.id, p))
+          .filter((p: any) => p.status === 'ACTIVE' && p.isPublished !== false)
+        if (active.length > 0) return active
+      }
+    }
+  } catch {
+    // REST backend is optional/offline, fall back to default catalog
+  }
+
+  return DEFAULT_COMMERCIAL_PACKAGES
+}
+
+/**
+ * Records a client miner purchase into the platform administration collections
+ * (/admin_contracts and /admin_orders) so it immediately displays on the MinerX Admin Dashboard.
+ * Dual-syncs to Cloud Firestore and the Express REST API.
+ */
+export async function recordMinerPurchaseToAdmin(params: {
+  minerId: string
+  uid?: string
+  email?: string
+  name: string
+  powerTh: number
+  price: number
+  txHash?: string
+  network?: string
+  ownerWallet?: string
+  packageId?: string
+}): Promise<void> {
+  const now = new Date().toISOString()
+  const buyerEmail = params.email || (params.ownerWallet ? `wallet_${params.ownerWallet.slice(0, 6)}@crypto.com` : 'cliente@gomining.cloud')
+  const buyerUid = params.uid || 'usr_client'
+
+  const contractDoc: AdminContractRecord = {
+    id: params.minerId,
+    userId: buyerUid,
+    userEmail: buyerEmail,
+    packageId: params.packageId || `pkg-${params.minerId}`,
+    packageName: params.name,
+    contractedTh: params.powerTh,
+    allocatedTh: params.powerTh,
+    status: 'ACTIVE',
+    pricePaidUsdt: params.price,
+    variablePct: 0,
+    commissionPct: 2,
+    workerId: `vwk-${params.minerId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}`,
+    activatedAt: now,
+    expiresAt: new Date(Date.now() + 365 * 86400000).toISOString(),
+    accumulatedProductionPrl: 0,
+    accumulatedNetProfitUsd: 0,
+    lastCalculatedAt: now,
+    txHash: params.txHash || `tx_${params.minerId}`,
+    network: params.network || 'USDT',
+    source: 'GoMining Client',
+  }
+
+  const orderId = `ord_${params.minerId.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+  const orderDoc: AdminOrderRecord = {
+    orderId,
+    attemptId: `att_${Date.now()}`,
+    createdAt: now,
+    userId: buyerUid,
+    userEmail: buyerEmail,
+    userName: buyerEmail.split('@')[0] || 'Cliente GoMining',
+    packageId: params.packageId || `pkg-${params.minerId}`,
+    packageName: params.name,
+    contractedTh: params.powerTh,
+    amountUsd: params.price,
+    cryptoAsset: 'USDT',
+    cryptoAmount: `${params.price} USDT`,
+    paymentNetwork: params.network || 'TRON',
+    recipientAddress: params.ownerWallet || 'PLATFORM_TREASURY',
+    txHash: params.txHash || `tx_${params.minerId}`,
+    confirmations: 12,
+    requiredConfirmations: 12,
+    status: 'SETTLED',
+    bridgeStatus: 'NONE',
+    activatedMinerId: params.minerId,
+    idempotencyKey: `ord_${params.minerId}`,
+    settledAt: now,
+  }
+
+  try {
+    await Promise.all([
+      setDoc(doc(db, 'admin_contracts', params.minerId), contractDoc, { merge: true }),
+      setDoc(doc(db, 'admin_orders', orderId), orderDoc, { merge: true }),
+    ])
+  } catch (err) {
+    console.warn('[GoMining] Notice syncing purchase to admin platform:', err)
+  }
+
+  // Dual sync: also post to Express REST API if available
+  try {
+    const postOptions = (payload: any) => ({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(1500),
+    })
+    await Promise.allSettled([
+      fetch('http://127.0.0.1:3001/api/admin/contracts', postOptions(contractDoc)),
+      fetch('http://127.0.0.1:3001/api/admin/orders', postOptions(orderDoc)),
+    ])
+  } catch {
+    // Backend REST service is optional/offline
+  }
 }
 
 /** Fetch a single miner for a user by id */
