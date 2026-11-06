@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PublicKey, Transaction } from '@solana/web3.js'
-import { SOLANA_USDT_MINT, type PaymentNetworkId } from './paymentDestinations'
+import { SOLANA_USDT_MINT, USDT_CONTRACTS, type PaymentNetworkId } from './paymentDestinations'
 import type { PaymentQuote } from './paymentQuote'
 import { getMetaMaskConnectClient, metaMaskChainId } from './metamaskConnect'
 import { getCoinbaseWalletProvider } from './coinbaseWallet'
@@ -997,10 +997,39 @@ async function sendEvmPayment(provider: EvmProvider, from: string, quote: Paymen
   const accounts = await provider.request({ method: 'eth_accounts' })
   const activeAddress = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : ''
   if (!activeAddress || activeAddress.toLowerCase() !== from.toLowerCase()) throw new Error('La cuenta EVM activa cambió; vuelve a revisar el pago.')
-  const value = decimalUnits(quote.amount, 18)
-  const hash = await provider.request({ method: 'eth_sendTransaction', params: [{ from, to: quote.recipient, value: `0x${value.toString(16)}` }] })
-  if (typeof hash !== 'string' || !hash) throw new Error('La wallet no devolvió el hash de la transacción.')
-  return hash
+
+  try {
+    if (quote.asset === 'USDT') {
+      const usdtContract = USDT_CONTRACTS[quote.networkId]?.address
+      if (!usdtContract) throw new Error(`No se encontró el contrato de USDT para ${quote.networkName}.`)
+      const decimals = quote.decimals ?? (quote.networkId === 'bnb' ? 18 : 6)
+      const units = decimalUnits(quote.amount, decimals)
+      const cleanTo = quote.recipient.replace(/^0x/i, '').toLowerCase().padStart(64, '0')
+      const cleanVal = units.toString(16).padStart(64, '0')
+      const data = `0xa9059cbb${cleanTo}${cleanVal}`
+      const hash = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{ from, to: usdtContract, value: '0x0', data }],
+      })
+      if (typeof hash !== 'string' || !hash) throw new Error('La wallet no devolvió el hash de la transacción.')
+      return hash
+    } else {
+      const value = decimalUnits(quote.amount, 18)
+      const hash = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{ from, to: quote.recipient, value: `0x${value.toString(16)}` }],
+      })
+      if (typeof hash !== 'string' || !hash) throw new Error('La wallet no devolvió el hash de la transacción.')
+      return hash
+    }
+  } catch (err: unknown) {
+    if (isWalletRejection(err)) throw err
+    const msg = err instanceof Error ? err.message : String(err ?? '')
+    if (/\b512\b|unknown.*rpc|rpc.*unknown/i.test(msg)) {
+      throw new Error('El nodo RPC de la red no pudo procesar la solicitud. Verifica que tu billetera cuente con saldo suficiente para el importe y el gas en la red seleccionada.')
+    }
+    throw err
+  }
 }
 
 function evmChainId(networkId: PaymentNetworkId) {

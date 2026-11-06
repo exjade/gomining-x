@@ -1,6 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
     function isOwner(uid) {
       return request.auth != null && request.auth.uid == uid;
     }
@@ -36,14 +40,83 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
     }
 
-    // Client access is limited to its own non-financial demo snapshot.
-    match /users/{uid}/demoState/{docId} {
-      allow read: if isOwner(uid) && docId == 'current';
-      allow create, update: if isOwner(uid) && docId == 'current' && validDemoSnapshot();
+    // User document for authentication, profile, wallet linking, and referral tree
+    match /users/{uid} {
+      // Public read to allow sponsor referral code lookup before and during signup
+      allow read: if true;
+      // Authenticated users can only create their own user document
+      allow create: if isAuthenticated() && request.auth.uid == uid;
+      // Authenticated users can update their own profile, or update referral/commission fields on a sponsor document
+      allow update: if isAuthenticated() && (
+        request.auth.uid == uid ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'referral', 'commissionBalance', 'balance', 'totalCommissionsEarned',
+          'purchasesCount', 'lastPurchaseAt', 'firstPurchaseAt', 'sponsorId'
+        ])
+      );
+      allow delete: if false;
+
+      // Demo state per browser/session
+      match /demoState/{docId} {
+        allow read: if isOwner(uid) && docId == 'current';
+        allow create, update: if isOwner(uid) && docId == 'current' && validDemoSnapshot();
+        allow delete: if false;
+      }
+    }
+
+    // Isolated miner storage per authenticated user
+    match /miners/{uid}/miner/{minerId} {
+      allow read, write: if isOwner(uid);
       allow delete: if false;
     }
 
-    // Orders, wallets, payment proofs, miners, rewards and operator data stay server-only.
+    // Referral commission records
+    match /referralCommissions/{commissionId} {
+      allow read, create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    // Dedicated referrals collection for financial accounting (1nvezt pattern)
+    match /referrals/{uid} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if false;
+
+      match /transactions/{txId} {
+        allow read, create: if isAuthenticated();
+        allow update, delete: if false;
+      }
+    }
+
+    // Dedicated unilevel network collection per user (tree node & upline chain)
+    match /unilevel/{uid} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if false;
+
+      match /{subcol=**} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    // Daily mining profit accounting
+    match /mining_daily_profit/{profitId} {
+      allow read, create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    // Unilevel 20-levels distribution records (Notion Technical Plan)
+    match /unilevel_distributions/{distributionId} {
+      allow read, create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    // Dedicated country detection collection per user
+    match /countries/{uid} {
+      allow read, write: if isAuthenticated() && request.auth.uid == uid;
+    }
+
+    // Default deny all other paths
     match /{document=**} {
       allow read, write: if false;
     }

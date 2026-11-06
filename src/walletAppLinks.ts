@@ -95,7 +95,7 @@ export function getMetaMaskDappBrowserUrl(target: string) {
 export function buildCheckoutResumeUrl(target: string, checkout: {
   productName: string
   amount: number
-  currency: 'USD' | 'MXN'
+  currency: 'USD'
   networkId: PaymentNetworkId
   walletId: WalletId
 }) {

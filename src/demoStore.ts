@@ -75,6 +75,7 @@ export type DemoReceipt = {
 
 export type DemoSession = {
   balance: number
+  maintenanceCredit: number
   miners: DemoMiner[]
   workers: DemoWorker[]
   workerActivationMode: 'automatic' | 'manual'
@@ -88,6 +89,7 @@ type OperationResult = { ok: true; receipt: DemoReceipt } | { ok: false; require
 
 let state: DemoSession = {
   balance: 0,
+  maintenanceCredit: 0,
   miners: [],
   workers: [],
   workerActivationMode: 'automatic',
@@ -175,6 +177,7 @@ export function getDemoSessionForPersistence(): DemoSession {
       balanceAfter: receipt.balanceAfter,
     })),
     presaleTokens: state.presaleTokens,
+    maintenanceCredit: state.maintenanceCredit ?? 0,
   }
 }
 
@@ -247,7 +250,9 @@ export function restoreDemoSession(value: unknown): boolean {
     }
   }
 
-  state = { balance, miners, workers, workerActivationMode: data.workerActivationMode === 'manual' ? 'manual' : 'automatic',
+  const maintenanceCredit = Number.isFinite(Number(data.maintenanceCredit)) ? Number(data.maintenanceCredit) : 0
+
+  state = { balance, maintenanceCredit, miners, workers, workerActivationMode: data.workerActivationMode === 'manual' ? 'manual' : 'automatic',
     pendingMinerOrders, subscription, receipts, presaleTokens }
   notify()
   return true
@@ -280,6 +285,21 @@ export function addDemoBalance(amount: number, detail = 'Crédito ficticio añad
   const balance = roundCurrency(state.balance + normalizedAmount)
   const receipt = makeReceipt('deposit', 'Recarga local', normalizedAmount, detail, balance)
   state = { ...state, balance, receipts: [receipt, ...state.receipts].slice(0, 50) }
+  notify()
+  return receipt
+}
+
+/** Deposita PEARL o USDT y lo convierte automáticamente en Crédito de Mantenimiento */
+export function depositMaintenanceToken(token: 'PEARL' | 'USDT', tokenAmount: number): DemoReceipt | null {
+  if (!Number.isFinite(tokenAmount) || tokenAmount <= 0) return null
+  // 1 USDT = $1.00 USD. 1 PEARL = $0.05 USD en crédito de mantenimiento.
+  const rate = token === 'USDT' ? 1.0 : 0.05
+  const usdCredit = roundCurrency(tokenAmount * rate)
+  const currentCredit = state.maintenanceCredit ?? 0
+  const newCredit = roundCurrency(currentCredit + usdCredit)
+  const detail = `Depósito de ${tokenAmount} ${token} convertido en $${usdCredit.toFixed(2)} USD de Crédito de Mantenimiento`
+  const receipt = makeReceipt('deposit', 'Crédito de mantenimiento', usdCredit, detail, state.balance)
+  state = { ...state, maintenanceCredit: newCredit, receipts: [receipt, ...state.receipts].slice(0, 50) }
   notify()
   return receipt
 }

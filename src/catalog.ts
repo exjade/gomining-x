@@ -90,6 +90,7 @@ const definition = (
 ): ScreenDefinition => ({ title, eyebrow, description, icon, group, mode, action, observed, columns })
 
 export const screens: Record<string, ScreenDefinition> = {
+  '/': definition('GoMining', 'MINERÍA DIGITAL DE BITCOIN', 'Mina Bitcoin todos los días con mineros digitales respaldados por potencia real.', '✦', 'Inicio', 'generic', 'Crear cuenta', false),
   '/home': definition('Panel', 'TU ESPACIO GOMINING', 'Resumen de tu actividad y accesos frecuentes.', '⌂', 'Panel', 'dashboard', undefined, true),
   '/nft-miners': definition('Mineros', 'MINEROS DIGITALES', 'Administra y explora tus mineros digitales.', '▦', 'Panel', 'collection', 'Crear minero', true),
   '/nft-rewards': definition('Recompensas', 'MINERÍA', 'Consulta la actividad y las recompensas de minería.', '✦', 'Panel', 'table', 'Reclamar recompensas'),
@@ -148,6 +149,40 @@ export const screens: Record<string, ScreenDefinition> = {
   '/blog/how-to-withdraw-rewards-safely': definition('Retirar recompensas de forma segura', 'CENTRO DE AYUDA', 'Guía informativa. Los enlaces a soporte son externos.', '↗', 'Academia', 'article'),
 }
 
-export function getScreen(pathname: string): ScreenDefinition | undefined {
-  return screens[pathname]
+export const routeAliases: Record<string, string> = {
+  '/miners': '/nft-miners',
+  '/my-miners': '/nft-miners',
+  '/market': '/marketplace',
+  '/calculator': '/mining-calculator',
+  '/referrals': '/nft-referral',
+  '/referral': '/nft-referral',
+  '/unilevel': '/nft-referral',
+  '/wallet': '/gmt-wallets',
+  '/wallets': '/gmt-wallets',
+  '/dc': '/data-centers',
+  '/sub': '/subscriptions',
+  '/subs': '/subscriptions',
+  '/presale': '/launchpad',
+  '/rewards': '/nft-rewards/solo',
+  '/earn': '/finance/earn-summary',
+  '/buy-mineros': '/home?modal=paywall-create',
+  '/buy-miners': '/home?modal=paywall-create',
+}
+
+export const fallbackScreen: ScreenDefinition = definition(
+  'Vista local',
+  'EXPLORACIÓN',
+  'Esta pantalla no está documentada en el catálogo actual.',
+  '◌',
+  'Panel',
+  'generic',
+  undefined,
+  false,
+)
+
+export function getScreen(pathname: string): ScreenDefinition {
+  const clean = pathname.split('?')[0].split('#')[0]
+  const normalized = clean.replace(/\/+$/, '').toLowerCase() || '/'
+  const target = routeAliases[normalized] || normalized
+  return screens[target] || screens[pathname] || fallbackScreen
 }

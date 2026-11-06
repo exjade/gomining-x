@@ -1,7 +1,7 @@
 import { PAYMENT_DESTINATIONS, USDT_CONTRACTS, type PaymentNetworkId } from './paymentDestinations'
 
 export type PaymentAsset = 'BNB' | 'ETH' | 'POL' | 'SOL' | 'USDT' | 'BTC' | 'TRX'
-export type PaymentCurrency = 'USD' | 'MXN'
+export type PaymentCurrency = 'USD'
 
 export type PaymentQuote = {
   networkId: PaymentNetworkId
@@ -11,7 +11,6 @@ export type PaymentQuote = {
   catalogValue: number
   catalogCurrency: PaymentCurrency
   catalogUsd: number
-  usdMxnRate: number | null
   fxDate: string | null
   assetUsd: number
   amount: string
@@ -51,16 +50,14 @@ export const ASSET_DECIMALS: Record<PaymentNetworkId, Record<string, number>> = 
 export const SWAP_FEE_RATE = 0.015
 const QUOTE_TTL_MS = 30_000
 
-export async function convertCatalogPriceToUsd(value: number, currency: PaymentCurrency): Promise<number> {
+export async function convertCatalogPriceToUsd(value: number, _currency?: PaymentCurrency): Promise<number> {
   if (!Number.isFinite(value) || value <= 0) throw new Error('El precio del producto debe ser mayor que cero.')
-  if (currency === 'USD') return value
-  const fx = await fetchUsdMxnRate()
-  return value / fx.rate
+  return value
 }
 
 export async function fetchPaymentQuote(
   catalogValue: number,
-  catalogCurrency: PaymentCurrency,
+  _catalogCurrency: PaymentCurrency = 'USD',
   networkId: PaymentNetworkId,
   selectedAsset?: PaymentAsset,
 ): Promise<PaymentQuote> {
@@ -71,18 +68,8 @@ export async function fetchPaymentQuote(
   const asset: PaymentAsset = selectedAsset ?? DEFAULT_ASSET_BY_NETWORK[networkId] ?? 'USDT'
   const decimals = ASSET_DECIMALS[networkId]?.[asset] ?? (asset === 'USDT' ? USDT_CONTRACTS[networkId]?.decimals ?? 6 : 18)
 
-  let catalogUsd = catalogValue
-  let usdMxnRate: number | null = null
-  let fxDate: string | null = null
-  let fxSource = ''
-
-  if (catalogCurrency === 'MXN') {
-    const fx = await fetchUsdMxnRate()
-    usdMxnRate = fx.rate
-    fxDate = fx.date
-    catalogUsd = catalogValue / fx.rate
-    fxSource = ` · USD/MXN Frankfurter · ${fx.date}`
-  }
+  const catalogUsd = catalogValue
+  const fxDate: string | null = null
 
   let assetUsd = 1
   let quoteSource = 'Paridad nominal USDT/USD (1:1)'
@@ -113,7 +100,7 @@ export async function fetchPaymentQuote(
       throw new Error(`No hay una cotización válida para ${asset}. El pago quedó deshabilitado.`)
     }
     assetUsd = parsed
-    quoteSource = `Binance Spot · ${symbol}${fxSource}`
+    quoteSource = `Binance Spot · ${symbol}`
   }
 
   const updatedAt = Date.now()
@@ -129,9 +116,8 @@ export async function fetchPaymentQuote(
     asset,
     recipient: destination.address,
     catalogValue,
-    catalogCurrency,
+    catalogCurrency: 'USD',
     catalogUsd,
-    usdMxnRate,
     fxDate,
     assetUsd,
     amount,
@@ -145,36 +131,12 @@ export async function fetchPaymentQuote(
   }
 }
 
-async function fetchUsdMxnRate(): Promise<{ rate: number; date: string }> {
-  const controller = new AbortController()
-  const timeout = window.setTimeout(() => controller.abort(), 8_000)
-  let response: Response
-  try {
-    response = await fetch('https://api.frankfurter.dev/v2/rate/usd/mxn', { cache: 'no-store', signal: controller.signal })
-  } catch (error) {
-    if (controller.signal.aborted) throw new Error('No se pudo consultar el tipo de cambio MXN/USD; no se puede cotizar este pago.')
-    throw error
-  } finally {
-    window.clearTimeout(timeout)
-  }
-  if (!response.ok) throw new Error(`La fuente de tipo de cambio respondió ${response.status}; no se puede cotizar este pago.`)
-  const fx = await response.json() as { base?: string; quote?: string; rate?: number; date?: string }
-  if (fx.base?.toUpperCase() !== 'USD' || fx.quote?.toUpperCase() !== 'MXN' || !Number.isFinite(fx.rate) || !fx.rate || !fx.date) {
-    throw new Error('La fuente de tipo de cambio no devolvió una cotización MXN válida.')
-  }
-  const rateDate = new Date(`${fx.date}T23:59:59Z`).getTime()
-  if (!Number.isFinite(rateDate) || Date.now() - rateDate > 7 * 24 * 60 * 60 * 1000) {
-    throw new Error('El tipo de cambio MXN está vencido; el pago quedó deshabilitado hasta recibir una tasa reciente.')
-  }
-  return { rate: fx.rate, date: fx.date }
-}
-
 export function formatUsd(value: number) {
-  return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(value)
+  return `$${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)} USD`
 }
 
-export function formatCatalogPrice(value: number, currency: PaymentCurrency) {
-  return new Intl.NumberFormat('es-MX', { style: 'currency', currency, currencyDisplay: 'code', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)
+export function formatCatalogPrice(value: number, _currency?: PaymentCurrency) {
+  return `$${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)} USD`
 }
 
 export function formatAssetAmount(value: string, asset: PaymentAsset) {

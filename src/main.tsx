@@ -24,14 +24,21 @@ class AppErrorBoundary extends React.Component<React.PropsWithChildren, Boundary
     return { failed: true }
   }
 
+  componentDidCatch(error: unknown, info: React.ErrorInfo) {
+    console.error('AppErrorBoundary caught error:', error, info)
+  }
+
   render() {
     if (this.state.failed) return <div className="app-boot-error" role="alert">
       <div className="boot-error-card">
         <span className="boot-error-mark">!</span>
         <p className="eyebrow">RECUPERACIÓN</p>
         <h1>No se pudo cargar esta vista</h1>
-        <p>La conexión o un recurso de la aplicación falló al iniciar. Puedes volver a intentar cargarla.</p>
-        <button className="button button-primary" type="button" onClick={() => window.location.reload()}>Reintentar <span>↻</span></button>
+        <p>Ocurrió un inconveniente al cargar esta pantalla. Puedes volver al panel principal o intentar recargar.</p>
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '14px' }}>
+          <button className="button button-primary" type="button" onClick={() => { this.setState({ failed: false }); window.location.href = '/home' }}>Volver al panel <span>⌂</span></button>
+          <button className="button button-secondary" type="button" onClick={() => window.location.reload()}>Reintentar <span>↻</span></button>
+        </div>
       </div>
     </div>
     return this.props.children

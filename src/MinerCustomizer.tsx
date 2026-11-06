@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useDemoSession, updateDemoMinerCustomization, type MinerCustomization, type DemoMiner } from './demoStore'
 import { startMiningSimulation } from './miningSimulation'
+import { useAuth } from './AuthContext'
+import { updateMinerInFirestore, getMinerById } from './firebase'
 
 type CustomizerTab = 'Wall' | 'Body' | 'Bottom' | 'Fans' | 'Screen' | 'Buttons' | 'Top' | 'Stickers'
 
@@ -29,23 +31,36 @@ const SCREEN_EXPRESSIONS = [
 ]
 
 export function MinerCustomizer() {
-  const { minerId } = useParams<{ minerId?: string }>()
+  const routeParams = useParams<{ minerId?: string }>()
+  const parsedIdFromPath = typeof window !== 'undefined'
+    ? window.location.pathname.match(/\/(?:nft-)?miners\/([^/]+)\/customize/)?.[1]
+    : undefined
+  const minerId = routeParams.minerId || parsedIdFromPath
   const navigate = useNavigate()
   const demo = useDemoSession()
+  const { user } = useAuth()
 
-  const miner: DemoMiner = demo.miners.find((m) => m.id === minerId) ?? demo.miners[0] ?? {
-    id: minerId ?? 'bonus-miner-default',
-    name: 'Bonus miner #5422372',
-    powerTh: 0.0281,
-    efficiency: 12,
-    price: 0,
-    purchaseMode: 'once',
-    acquiredAt: new Date().toISOString(),
-    workerId: 'worker-bonus',
-  }
+  // Fallback demo miner
+  const demoMiner: DemoMiner | undefined = minerId
+    ? demo.miners.find((m) => m.id === minerId)
+    : demo.miners[0]
+
+  const [minerData, setMinerData] = useState<{
+    id: string
+    name: string
+    powerTh: number
+    efficiency: number
+    status?: string
+    txHash?: string
+  }>(() => ({
+    id: minerId || demoMiner?.id || 'bonus-miner-default',
+    name: demoMiner?.name || (minerId ? `Minero ${minerId.slice(-6)}` : 'Bonus miner #5422372'),
+    powerTh: demoMiner?.powerTh || 5.83,
+    efficiency: 15,
+  }))
 
   const [activeTab, setActiveTab] = useState<CustomizerTab>('Wall')
-  const [customization, setCustomization] = useState<MinerCustomization>(() => miner.customization ?? {
+  const [customization, setCustomization] = useState<MinerCustomization>(() => demoMiner?.customization ?? {
     wallColor: '#7c3aed',
     bodyColor: '#1e1b4b',
     bottomColor: '#e2e8f0',
@@ -56,6 +71,39 @@ export function MinerCustomizer() {
     stickers: 'gomining-classic',
     updatedAt: new Date().toISOString(),
   })
+
+  // Load miner from Firestore if authenticated and minerId is present
+  useEffect(() => {
+    if (!user || !minerId) return
+    let active = true
+
+    getMinerById(user.uid, minerId)
+      .then((stored) => {
+        if (!active || !stored) return
+        setMinerData({
+          id: stored.id,
+          name: stored.name,
+          powerTh: stored.powerTh,
+          efficiency: stored.efficiencyWattsPerTh || stored.efficiency || 15,
+          status: stored.status,
+          txHash: stored.txHash,
+        })
+        if (stored.visualTraits) {
+          setCustomization((prev) => ({
+            ...prev,
+            ...stored.visualTraits,
+            updatedAt: new Date().toISOString(),
+          }))
+        }
+      })
+      .catch((err) => {
+        console.warn('Error loading miner from Firestore:', err)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [user, minerId])
 
   const [selectedScreenMode, setSelectedScreenMode] = useState('smile')
   const [savedSuccess, setSavedSuccess] = useState(false)
@@ -75,15 +123,21 @@ export function MinerCustomizer() {
     })
   }
 
-  const handleSave = () => {
-    updateDemoMinerCustomization(miner.id, {
+  const handleSave = async () => {
+    const targetId = minerId || minerData.id
+    updateDemoMinerCustomization(targetId, {
       ...customization,
       updatedAt: new Date().toISOString(),
     })
-    startMiningSimulation(miner.id, miner.name, miner.powerTh)
+    if (user && targetId) {
+      await updateMinerInFirestore(user.uid, targetId, {
+        visualTraits: customization,
+      })
+    }
+    startMiningSimulation(targetId, minerData.name, minerData.powerTh)
     setSavedSuccess(true)
     setTimeout(() => {
-      navigate('/nft-miners')
+      navigate('/profile')
     }, 1200)
   }
 
@@ -104,18 +158,18 @@ export function MinerCustomizer() {
     <div className="miner-customizer-page">
       {/* Top Header */}
       <div className="customizer-topbar">
-        <button type="button" className="customizer-back-button" onClick={() => navigate('/nft-miners')}>
-          <span className="back-arrow">‹</span> Volver
+        <button type="button" className="customizer-back-button" onClick={() => navigate('/profile')}>
+          <span className="back-arrow">‹</span> Volver al perfil
         </button>
         <div className="customizer-miner-title">
-          <h2>{miner.name}</h2>
+          <h2>{minerData.name}</h2>
           <div className="customizer-badges">
-            <span className="pill-badge pill-power">⚡ {miner.powerTh.toFixed(4)} TH</span>
-            <span className="pill-badge pill-efficiency">🔌 {miner.efficiency} W/TH</span>
+            <span className="pill-badge pill-power">⚡ {minerData.powerTh.toFixed(2)} TH</span>
+            <span className="pill-badge pill-efficiency">🔌 {minerData.efficiency} W/TH</span>
           </div>
         </div>
         <button type="button" className="button button-primary customizer-save-button" onClick={handleSave}>
-          {savedSuccess ? '¡Guardado! ✓' : 'Guardar y Minar'}
+          {savedSuccess ? '¡Guardado en cuenta! ✓' : 'Guardar personalización'}
         </button>
       </div>
 
