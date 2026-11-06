@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Search, 
   Lock, 
   Unlock, 
   Eye, 
-  X
+  X,
+  RefreshCw
 } from 'lucide-react';
 import { UserManagementService, type AdminManagedUser } from '../../services/admin/userManagementService';
+import { fetchFirestoreUsers } from '../../utils/firebaseAuth';
 
 interface UserManagementViewProps {
   isDarkTheme?: boolean;
@@ -19,6 +21,49 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   const [users, setUsers] = useState<AdminManagedUser[]>(userService.getUsers());
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedUser, setSelectedUser] = useState<AdminManagedUser | null>(null);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [firestoreCount, setFirestoreCount] = useState<number>(0);
+
+  const syncFirestoreData = async () => {
+    setIsSyncing(true);
+    try {
+      const fsUsers = await fetchFirestoreUsers();
+      if (fsUsers.length > 0) {
+        setFirestoreCount(fsUsers.length);
+        const mappedFromFirestore: AdminManagedUser[] = fsUsers.map((fu) => ({
+          id: fu.uid || `usr_${fu.id}`,
+          email: fu.email || 'sin-correo@gomining.app',
+          username: fu.username || fu.email?.split('@')[0] || 'usuario',
+          fullName: fu.username ? `${fu.username} (GoMining)` : fu.email || 'GoMining User',
+          registeredAt: fu.createdAt?.toDate ? fu.createdAt.toDate().toISOString() : new Date().toISOString(),
+          status: 'ACTIVE',
+          activeContractsCount: fu.purchasesCount || (fu.minersCount || 0),
+          totalContractedTh: fu.totalPowerTh || 0,
+          walletBalanceUsdt: fu.balance || 0,
+          totalPrlAccumulated: fu.commissionBalance || fu.totalCommissionsEarned || 0,
+          membershipPlan: fu.referral?.referralCode ? `Ref: ${fu.referral.referralCode}` : 'GoMining User',
+          lastLoginAt: fu.lastPurchaseAt?.toDate ? fu.lastPurchaseAt.toDate().toISOString() : new Date().toISOString()
+        }));
+
+        // Merge with local users avoiding duplicates
+        const currentLocal = userService.getUsers();
+        const mergedMap = new Map<string, AdminManagedUser>();
+        mappedFromFirestore.forEach(u => mergedMap.set(u.id, u));
+        currentLocal.forEach(u => {
+          if (!mergedMap.has(u.id)) mergedMap.set(u.id, u);
+        });
+        setUsers(Array.from(mergedMap.values()));
+      }
+    } catch (err) {
+      console.warn('[UserManagementView] Firestore sync warning:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  useEffect(() => {
+    syncFirestoreData();
+  }, []);
 
   const handleToggleStatus = (userId: string, currentStatus: AdminManagedUser['status']) => {
     const nextStatus: AdminManagedUser['status'] = currentStatus === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
@@ -37,25 +82,48 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       {/* HEADER */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className={`text-2xl font-bold font-sans tracking-tight ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
-            Gestión Integral de Usuarios (Ficha 360°)
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className={`text-2xl font-bold font-sans tracking-tight ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+              Gestión Integral de Usuarios (Ficha 360°)
+            </h2>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono border bg-emerald-500/10 border-emerald-500/30 text-emerald-400">
+              <span className="w-2 h-2 rounded-full bg-[#05DF72] animate-pulse" />
+              <span>salad-miners</span>
+              {firestoreCount > 0 && <span className="text-[10px] opacity-75">({firestoreCount} en nube)</span>}
+            </div>
+          </div>
           <p className={`text-xs font-mono mt-1 ${isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}`}>
-            Supervisión de cuentas registradas, saldos de billeteras, contratos asignados y control de acceso.
+            Supervisión sincronizada con Cloud Firestore (/users), saldos, contratos mineros y control de acceso.
           </p>
         </div>
 
-        <div className="relative min-w-[260px]">
-          <Search className={`absolute left-3.5 top-2.5 h-4 w-4 ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`} />
-          <input
-            type="text"
-            placeholder="Buscar por nombre, email o ID..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className={`w-full pl-10 pr-4 py-2 rounded-2xl text-xs font-mono border focus:outline-none focus:border-[#05DF72] ${
-              isDarkTheme ? 'bg-[#0E1320] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900 focus:bg-white'
+        <div className="flex items-center gap-2">
+          <button
+            onClick={syncFirestoreData}
+            disabled={isSyncing}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-mono border transition-all cursor-pointer ${
+              isDarkTheme
+                ? 'bg-white/5 border-white/10 hover:bg-white/10 text-slate-300'
+                : 'bg-slate-100 border-slate-300 hover:bg-slate-200 text-slate-700'
             }`}
-          />
+            title="Sincronizar directamente con Firestore salad-miners"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin text-[#05DF72]' : ''}`} />
+            <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar Firestore'}</span>
+          </button>
+
+          <div className="relative min-w-[240px]">
+            <Search className={`absolute left-3.5 top-2.5 h-4 w-4 ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`} />
+            <input
+              type="text"
+              placeholder="Buscar por nombre, email o ID..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className={`w-full pl-10 pr-4 py-2 rounded-2xl text-xs font-mono border focus:outline-none focus:border-[#05DF72] ${
+                isDarkTheme ? 'bg-[#0E1320] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900 focus:bg-white'
+              }`}
+            />
+          </div>
         </div>
       </div>
 
@@ -74,7 +142,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 isDarkTheme ? 'border-white/10 text-slate-400' : 'border-slate-200 text-slate-700 font-bold'
               }`}>
                 <th className="py-3 px-3">USUARIO / EMAIL</th>
-                <th className="py-3 px-3">MEMBRESÍA</th>
+                <th className="py-3 px-3">MEMBRESÍA / REF</th>
                 <th className="py-3 px-3">CONTRATOS</th>
                 <th className="py-3 px-3">POTENCIA TH/S</th>
                 <th className="py-3 px-3">BALANCE DISPONIBLE</th>
@@ -86,7 +154,14 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               {filteredUsers.map((u) => (
                 <tr key={u.id} className={`transition-colors ${isDarkTheme ? 'hover:bg-white/[0.02]' : 'hover:bg-slate-50'}`}>
                   <td className="py-3 px-3">
-                    <div className={`font-bold ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>{u.fullName}</div>
+                    <div className="flex items-center gap-2">
+                      <div className={`font-bold ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>{u.fullName}</div>
+                      {u.id.length > 20 && (
+                        <span className="text-[9px] px-1 py-0.2 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                          Cloud
+                        </span>
+                      )}
+                    </div>
                     <div className={`text-[11px] ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>{u.email}</div>
                   </td>
                   <td className="py-3 px-3">
@@ -164,6 +239,10 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
             <div className="space-y-3 font-mono text-xs">
               <div className={`flex justify-between py-1 border-b ${isDarkTheme ? 'border-white/5' : 'border-slate-100'}`}>
+                <span className={isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}>UID / ID:</span>
+                <span className={`font-mono text-[11px] truncate max-w-[200px] ${isDarkTheme ? 'text-cyan-400' : 'text-cyan-600'}`}>{selectedUser.id}</span>
+              </div>
+              <div className={`flex justify-between py-1 border-b ${isDarkTheme ? 'border-white/5' : 'border-slate-100'}`}>
                 <span className={isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}>Nombre Completo:</span>
                 <span className={`font-bold ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>{selectedUser.fullName}</span>
               </div>
@@ -172,7 +251,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 <span className="text-cyan-500 font-bold">{selectedUser.email}</span>
               </div>
               <div className={`flex justify-between py-1 border-b ${isDarkTheme ? 'border-white/5' : 'border-slate-100'}`}>
-                <span className={isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}>Membresía Vigente:</span>
+                <span className={isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}>Membresía / Referido:</span>
                 <span className="font-bold text-[#05DF72]">{selectedUser.membershipPlan}</span>
               </div>
               <div className={`flex justify-between py-1 border-b ${isDarkTheme ? 'border-white/5' : 'border-slate-100'}`}>
@@ -180,8 +259,8 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 <span className={`font-bold ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>{selectedUser.totalContractedTh} TH/s</span>
               </div>
               <div className={`flex justify-between py-1 border-b ${isDarkTheme ? 'border-white/5' : 'border-slate-100'}`}>
-                <span className={isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}>Producción Acumulada:</span>
-                <span className="font-bold text-cyan-500">{selectedUser.totalPrlAccumulated.toFixed(2)} PRL</span>
+                <span className={isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}>Comisiones Acumuladas:</span>
+                <span className="font-bold text-cyan-500">${selectedUser.totalPrlAccumulated.toFixed(2)} USD</span>
               </div>
               <div className={`flex justify-between py-1 border-b ${isDarkTheme ? 'border-white/5' : 'border-slate-100'}`}>
                 <span className={isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}>Saldo en Billetera:</span>
