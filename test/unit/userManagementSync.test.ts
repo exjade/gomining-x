@@ -13,12 +13,15 @@ if (typeof (globalThis as any).localStorage === 'undefined') {
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   UserManagementService,
   INITIAL_ADMIN_USERS,
   INITIAL_CLIENT_USERS,
   INITIAL_USERS,
   normalizeUserDoc,
+  parseNumericValue,
   type AdminManagedUser
 } from '../../src/services/admin/userManagementService.js';
 import {
@@ -58,6 +61,19 @@ describe('User Management & Firestore Collections (/admin_users and /users) Unit
     }
   });
 
+  it('safely parses numeric values with commas, currency symbols, and decimals via parseNumericValue', () => {
+    assert.equal(parseNumericValue(128), 128);
+    assert.equal(parseNumericValue('128.5'), 128.5);
+    assert.equal(parseNumericValue('128,5'), 128.5);
+    assert.equal(parseNumericValue('$125.01'), 125.01);
+    assert.equal(parseNumericValue('1.250,50'), 1250.5);
+    assert.equal(parseNumericValue('1,250.50'), 1250.5);
+    assert.equal(parseNumericValue('   $ 450,20 USDT '), 450.2);
+    assert.equal(parseNumericValue(null, 0), 0);
+    assert.equal(parseNumericValue(undefined, 10), 10);
+    assert.equal(parseNumericValue('invalid', 0), 0);
+  });
+
   it('correctly normalizes /admin_users documents from Cloud Firestore', () => {
     const rawAdminDoc = {
       uid: 'adm_firestore_99',
@@ -67,9 +83,9 @@ describe('User Management & Firestore Collections (/admin_users and /users) Unit
       status: 'ACTIVE',
       membershipPlan: 'VIP Master 365',
       activeContractsCount: 5,
-      totalContractedTh: 640,
-      walletBalanceUsdt: 1250.75,
-      totalPrlAccumulated: 2400.50
+      totalContractedTh: '640,50',
+      walletBalanceUsdt: '$1250.75',
+      totalPrlAccumulated: '2.400,50'
     };
 
     const normalized = normalizeUserDoc(rawAdminDoc, 'admin_users');
@@ -80,8 +96,9 @@ describe('User Management & Firestore Collections (/admin_users and /users) Unit
     assert.equal(normalized.sourceCollection, 'admin_users');
     assert.equal(normalized.isPlatformAdmin, true);
     assert.equal(normalized.activeContractsCount, 5);
-    assert.equal(normalized.totalContractedTh, 640);
+    assert.equal(normalized.totalContractedTh, 640.5);
     assert.equal(normalized.walletBalanceUsdt, 1250.75);
+    assert.equal(normalized.totalPrlAccumulated, 2400.5);
   });
 
   it('correctly normalizes /users documents from Cloud Firestore with alternative field names', () => {
@@ -92,8 +109,8 @@ describe('User Management & Firestore Collections (/admin_users and /users) Unit
       rank: 'Standard Pro',
       status: 'active',
       contracts: 2,
-      powerTh: 96,
-      balanceUsdt: 310.20,
+      powerTh: '96,25',
+      balanceUsdt: '310.20',
       prlBalance: 450.00
     };
 
@@ -106,7 +123,7 @@ describe('User Management & Firestore Collections (/admin_users and /users) Unit
     assert.equal(normalized.isPlatformAdmin, false);
     assert.equal(normalized.membershipPlan, 'Standard Pro');
     assert.equal(normalized.activeContractsCount, 2);
-    assert.equal(normalized.totalContractedTh, 96);
+    assert.equal(normalized.totalContractedTh, 96.25);
     assert.equal(normalized.walletBalanceUsdt, 310.20);
     assert.equal(normalized.totalPrlAccumulated, 450.00);
   });
@@ -137,7 +154,7 @@ describe('User Management & Firestore Collections (/admin_users and /users) Unit
       registeredAt: new Date().toISOString(),
       status: 'SUSPENDED',
       activeContractsCount: 7,
-      totalContractedTh: 896,
+      totalContractedTh: 896.5,
       walletBalanceUsdt: 4500.50,
       totalPrlAccumulated: 1200.00,
       membershipPlan: 'VIP Whales Elite',
@@ -153,7 +170,7 @@ describe('User Management & Firestore Collections (/admin_users and /users) Unit
     assert.equal(saved.email, 'test.operator@minerx.cloud');
     assert.equal(saved.membershipPlan, 'VIP Whales Elite');
     assert.equal(saved.activeContractsCount, 7);
-    assert.equal(saved.totalContractedTh, 896);
+    assert.equal(saved.totalContractedTh, 896.5);
     assert.equal(saved.walletBalanceUsdt, 4500.50);
     assert.equal(saved.status, 'SUSPENDED');
     assert.equal(saved.sourceCollection, 'admin_users');
@@ -162,7 +179,44 @@ describe('User Management & Firestore Collections (/admin_users and /users) Unit
     const fetched = userService.getUserById('usr_test_edit_100');
     assert.ok(fetched);
     assert.equal(fetched.fullName, 'Test Operator Renamed');
-    assert.equal(fetched.totalContractedTh, 896);
+    assert.equal(fetched.totalContractedTh, 896.5);
+  });
+
+  it('allows migrating a user between collections (/users -> /admin_users)', async () => {
+    const clientUser: AdminManagedUser = {
+      id: 'usr_migrating_01',
+      email: 'promote.me@gomining.com',
+      username: 'promoteme',
+      fullName: 'Promoted Client',
+      registeredAt: new Date().toISOString(),
+      status: 'ACTIVE',
+      activeContractsCount: 1,
+      totalContractedTh: 48,
+      walletBalanceUsdt: 150,
+      totalPrlAccumulated: 80,
+      membershipPlan: 'Standard Pro',
+      role: 'CLIENT_PRO',
+      lastLoginAt: new Date().toISOString(),
+      sourceCollection: 'users',
+      isPlatformAdmin: false
+    };
+
+    await userService.saveUser(clientUser, 'users');
+    let u = userService.getUserById('usr_migrating_01');
+    assert.equal(u?.sourceCollection, 'users');
+    assert.equal(u?.isPlatformAdmin, false);
+
+    // Promote to admin_users
+    await userService.updateUser('usr_migrating_01', {
+      sourceCollection: 'admin_users',
+      isPlatformAdmin: true,
+      role: 'OPERATOR'
+    });
+
+    u = userService.getUserById('usr_migrating_01');
+    assert.equal(u?.sourceCollection, 'admin_users');
+    assert.equal(u?.isPlatformAdmin, true);
+    assert.equal(u?.role, 'OPERATOR');
   });
 
   it('allows partial updating of user fields via updateUser', async () => {
@@ -178,6 +232,33 @@ describe('User Management & Firestore Collections (/admin_users and /users) Unit
     assert.equal(updated.membershipPlan, 'Super Admin Master');
   });
 
+  it('allows deleting a user via deleteUser', async () => {
+    const userToDel: AdminManagedUser = {
+      id: 'usr_to_delete_99',
+      email: 'trash@minerx.cloud',
+      username: 'trash',
+      fullName: 'Trash User',
+      registeredAt: new Date().toISOString(),
+      status: 'BLOCKED',
+      activeContractsCount: 0,
+      totalContractedTh: 0,
+      walletBalanceUsdt: 0,
+      totalPrlAccumulated: 0,
+      membershipPlan: 'Entry Basic',
+      role: 'CLIENT_BASIC',
+      lastLoginAt: new Date().toISOString(),
+      sourceCollection: 'users',
+      isPlatformAdmin: false
+    };
+
+    await userService.saveUser(userToDel, 'users');
+    assert.ok(userService.getUserById('usr_to_delete_99'));
+
+    const deleted = await userService.deleteUser('usr_to_delete_99');
+    assert.equal(deleted, true);
+    assert.equal(userService.getUserById('usr_to_delete_99'), undefined);
+  });
+
   it('allows toggling user status (ACTIVE <-> SUSPENDED)', () => {
     const initialStatus = userService.getUserById('usr_roman_01')?.status || 'ACTIVE';
     const toggled = initialStatus === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
@@ -190,6 +271,30 @@ describe('User Management & Firestore Collections (/admin_users and /users) Unit
 
     // Revert back
     userService.updateUserStatus('usr_roman_01', initialStatus, 'Reverting');
+  });
+
+  it('provides real-time subscription method returning clean unsubscribe function', () => {
+    const unsub = userService.subscribeToUsers(() => {});
+    assert.equal(typeof unsub, 'function');
+    assert.doesNotThrow(() => unsub());
+  });
+
+  it('verifies firestore.indexes.json includes composite indexes for status, email, and role', () => {
+    const indexesPath = resolve(process.cwd(), 'firestore.indexes.json');
+    const content = JSON.parse(readFileSync(indexesPath, 'utf-8'));
+    assert.ok(Array.isArray(content.indexes));
+
+    const adminIndexes = content.indexes.filter((idx: any) => idx.collectionGroup === 'admin_users');
+    const userIndexes = content.indexes.filter((idx: any) => idx.collectionGroup === 'users');
+
+    assert.ok(adminIndexes.length >= 3);
+    assert.ok(userIndexes.length >= 3);
+
+    const hasAdminRole = adminIndexes.some((idx: any) => idx.fields.some((f: any) => f.fieldPath === 'role'));
+    const hasUserRole = userIndexes.some((idx: any) => idx.fields.some((f: any) => f.fieldPath === 'role'));
+
+    assert.equal(hasAdminRole, true);
+    assert.equal(hasUserRole, true);
   });
 
   it('correctly maps URL query params for ?tab=admin_users and ?tab=users to admin suite', () => {

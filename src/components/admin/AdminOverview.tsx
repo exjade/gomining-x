@@ -73,25 +73,25 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
   const dailyNetUsd = netHourlyPrl * 24 * (globalConfig.prlManualOverridePrice ?? globalConfig.prlPriceUsd);
 
   return (
-    <div className="minerx-admin-view space-y-6 animate-in fade-in duration-300 pb-16">
+    <div className="minerx-admin-view space-y-6 pb-16">
       {/* 1. TOP EXECUTIVE KPI BANNER */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
         {/* KPI 1: Usuarios & Contratos */}
         <div
-          className={`p-4 sm:p-5 rounded-2xl border transition-all ${
+          className={`admin-card p-4 sm:p-5 admin-radius-card border ${
             isDarkTheme
-              ? 'bg-[#0E1320]/80 border-white/[0.08] shadow-lg text-white'
-              : 'bg-white border-slate-200 text-slate-900 shadow-sm'
+              ? ' admin-bg-surface admin-border admin-text-primary'
+              : ' admin-bg-surface admin-border admin-text-primary'
           }`}
         >
-          <div className={`flex items-center justify-between text-xs font-mono mb-1.5 ${isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-semibold'}`}>
-            <span className="uppercase tracking-wider">Usuarios & Contratos</span>
-            <Users className="h-4 w-4 text-[#05DF72]" />
+          <div className={`flex items-center justify-between text-xs font-mono mb-1.5 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary font-semibold'}`}>
+            <span className="">Usuarios & Contratos</span>
+            <Users className="h-4 w-4 admin-text-success" />
           </div>
-          <div className="text-2xl sm:text-3xl font-bold font-mono">
-            {usersCount} <span className={`text-xs font-normal font-sans ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>usuarios</span>
+          <div className="text-2xl font-semibold font-mono">
+            {usersCount} <span className={`text-xs font-normal font-sans ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>usuarios</span>
           </div>
-          <div className="text-xs font-mono text-emerald-500 mt-1 flex items-center gap-1.5 font-semibold">
+          <div className="text-xs font-mono admin-text-success mt-1 flex items-center gap-1.5 font-semibold">
             <CheckCircle2 className="h-3 w-3" />
             <span>{activeContracts.length} contratos activos</span>
           </div>
@@ -99,63 +99,63 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
 
         {/* KPI 2: Hashrate Contratado vs Asignado */}
         <div
-          className={`p-4 sm:p-5 rounded-2xl border transition-all ${
+          className={`admin-card p-4 sm:p-5 admin-radius-card border ${
             isDarkTheme
-              ? 'bg-[#0E1320]/80 border-white/[0.08] shadow-lg text-white'
-              : 'bg-white border-slate-200 text-slate-900 shadow-sm'
+              ? ' admin-bg-surface admin-border admin-text-primary'
+              : ' admin-bg-surface admin-border admin-text-primary'
           }`}
         >
-          <div className={`flex items-center justify-between text-xs font-mono mb-1.5 ${isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-semibold'}`}>
-            <span className="uppercase tracking-wider">Potencia Asignada</span>
-            <Cpu className="h-4 w-4 text-cyan-400" />
+          <div className={`flex items-center justify-between text-xs font-mono mb-1.5 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary font-semibold'}`}>
+            <span className="">Potencia Asignada</span>
+            <Cpu className="h-4 w-4 admin-text-accent" />
           </div>
-          <div className={`text-2xl sm:text-3xl font-bold font-mono ${isDarkTheme ? 'text-cyan-400' : 'text-cyan-700'}`}>
+          <div className={`text-2xl font-semibold font-mono ${isDarkTheme ? ' admin-text-accent' : ' admin-text-accent'}`}>
             {allocation.totalAllocatedTh}{' '}
-            <span className={`text-xs font-normal font-sans ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>/ {allocation.totalContractedTh} TH/s</span>
+            <span className={`text-xs font-normal font-sans ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>/ {allocation.totalContractedTh} TH/s</span>
           </div>
-          <div className={`text-xs font-mono mt-1 ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>
+          <div className={`text-xs font-mono mt-1 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>
             {allocation.utilizationRatePct}% capacidad respaldada
           </div>
         </div>
 
         {/* KPI 3: Tasa Base R_base */}
         <div
-          className={`p-4 sm:p-5 rounded-2xl border transition-all ${
+          className={`admin-card p-4 sm:p-5 admin-radius-card border ${
             isDarkTheme
-              ? 'bg-[#0E1320]/80 border-white/[0.08] shadow-lg text-white'
-              : 'bg-white border-slate-200 text-slate-900 shadow-sm'
+              ? ' admin-bg-surface admin-border admin-text-primary'
+              : ' admin-bg-surface admin-border admin-text-primary'
           }`}
         >
-          <div className={`flex items-center justify-between text-xs font-mono mb-1.5 ${isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-semibold'}`}>
-            <span className="uppercase tracking-wider">Tasa R_Base Unificada</span>
-            <Zap className="h-4 w-4 text-amber-500" />
+          <div className={`flex items-center justify-between text-xs font-mono mb-1.5 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary font-semibold'}`}>
+            <span className="">Tasa R_Base Unificada</span>
+            <Zap className="h-4 w-4 admin-text-warning" />
           </div>
-          <div className="text-2xl sm:text-3xl font-bold font-mono">
+          <div className="text-2xl font-semibold font-mono">
             {baseRate.toFixed(4)}{' '}
-            <span className={`text-xs font-normal font-sans ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>PRL/TH/h</span>
+            <span className={`text-xs font-normal font-sans ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>PRL/TH/h</span>
           </div>
-          <div className="text-xs font-mono text-amber-500 mt-1 flex items-center gap-1 font-semibold">
+          <div className="text-xs font-mono admin-text-warning mt-1 flex items-center gap-1 font-semibold">
             <span>Kryptex Pool Automática</span>
           </div>
         </div>
 
         {/* KPI 4: Rendimiento Estimado Diario */}
         <div
-          className={`p-4 sm:p-5 rounded-2xl border transition-all ${
+          className={`admin-card p-4 sm:p-5 admin-radius-card border ${
             isDarkTheme
-              ? 'bg-[#0E1320]/80 border-white/[0.08] shadow-lg text-white'
-              : 'bg-white border-slate-200 text-slate-900 shadow-sm'
+              ? ' admin-bg-surface admin-border admin-text-primary'
+              : ' admin-bg-surface admin-border admin-text-primary'
           }`}
         >
-          <div className={`flex items-center justify-between text-xs font-mono mb-1.5 ${isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-semibold'}`}>
-            <span className="uppercase tracking-wider">Producción Neta Día</span>
-            <DollarSign className="h-4 w-4 text-[#05DF72]" />
+          <div className={`flex items-center justify-between text-xs font-mono mb-1.5 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary font-semibold'}`}>
+            <span className="">Producción Neta Día</span>
+            <DollarSign className="h-4 w-4 admin-text-success" />
           </div>
-          <div className="text-2xl sm:text-3xl font-bold font-mono text-[#05DF72]">
+          <div className="text-2xl font-semibold font-mono admin-text-success">
             ${dailyNetUsd.toFixed(2)}{' '}
-            <span className={`text-xs font-normal font-sans ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>USD/día</span>
+            <span className={`text-xs font-normal font-sans ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>USD/día</span>
           </div>
-          <div className={`text-xs font-mono mt-1 ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>
+          <div className={`text-xs font-mono mt-1 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>
             {(netHourlyPrl * 24).toFixed(2)} PRL/24h neta
           </div>
         </div>
@@ -165,49 +165,49 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Left 2 Cols: Resumen de Flota y Telemetría Operativa 2D */}
         <div className="lg:col-span-2 space-y-4">
-          <div className={`p-5 rounded-2xl border transition-all ${
-            isDarkTheme ? 'bg-[#0A0E17]/90 border-white/[0.08] text-white shadow-xl' : 'bg-white border-slate-200 text-slate-900 shadow-sm'
+          <div className={`admin-card p-5 admin-radius-card border ${
+            isDarkTheme ? ' admin-bg-surface admin-border admin-text-primary' : ' admin-bg-surface admin-border admin-text-primary'
           }`}>
-            <div className={`flex items-center justify-between pb-3 border-b ${isDarkTheme ? 'border-white/5' : 'border-slate-100'} mb-4`}>
+            <div className={`flex items-center justify-between pb-3 border-b ${isDarkTheme ? ' admin-border' : ' admin-border'} mb-4`}>
               <div className="flex items-center gap-2">
-                <Server className="h-4 w-4 text-[#05DF72]" />
-                <h3 className={`text-xs font-mono font-bold uppercase tracking-wider ${isDarkTheme ? 'text-slate-200' : 'text-slate-900'}`}>
+                <Server className="h-4 w-4 admin-text-success" />
+                <h3 className={`text-xs font-mono font-semibold ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-primary'}`}>
                   Supervisión Operativa de la Infraestructura Física
                 </h3>
               </div>
-              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#05DF72]/15 text-[#05DF72] border border-[#05DF72]/30">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#05DF72] animate-pulse" />
+              <span className="admin-badge flex items-center gap-1 px-2 py-0.5 admin-radius-control text-xs font-mono font-semibold admin-bg-success admin-text-success border admin-border">
+                <span className="h-1.5 w-1.5 rounded-full admin-bg-success" />
                 ONLINE
               </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-              <div className={`p-3 rounded-xl border ${isDarkTheme ? 'bg-white/[0.02] border-white/5' : 'bg-slate-50 border-slate-200'}`}>
-                <span className={`text-[10px] font-mono block mb-1 uppercase font-semibold ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>Flota GPU SaladCloud</span>
-                <div className={`font-mono font-bold text-base ${isDarkTheme ? 'text-cyan-400' : 'text-cyan-700'}`}>
+              <div className={`admin-card p-3 admin-radius-card border ${isDarkTheme ? ' admin-bg-surface admin-border' : ' admin-bg-surface admin-border'}`}>
+                <span className={`text-xs font-mono block mb-1 font-semibold ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>Flota GPU SaladCloud</span>
+                <div className={`font-mono font-semibold text-base ${isDarkTheme ? ' admin-text-accent' : ' admin-text-accent'}`}>
                   216 Nodos Activos
                 </div>
-                <span className={`text-[10px] font-mono block mt-0.5 ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>
+                <span className={`text-xs font-mono block mt-0.5 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>
                   RTX 4090 / 3090 Clusters
                 </span>
               </div>
 
-              <div className={`p-3 rounded-xl border ${isDarkTheme ? 'bg-white/[0.02] border-white/5' : 'bg-slate-50 border-slate-200'}`}>
-                <span className={`text-[10px] font-mono block mb-1 uppercase font-semibold ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>Workers Kryptex Pool</span>
-                <div className="font-mono font-bold text-base text-[#05DF72]">
+              <div className={`admin-card p-3 admin-radius-card border ${isDarkTheme ? ' admin-bg-surface admin-border' : ' admin-bg-surface admin-border'}`}>
+                <span className={`text-xs font-mono block mb-1 font-semibold ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>Workers Kryptex Pool</span>
+                <div className="font-mono font-semibold text-base admin-text-success">
                   1,371 Mineros
                 </div>
-                <span className={`text-[10px] font-mono block mt-0.5 ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>
+                <span className={`text-xs font-mono block mt-0.5 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>
                   1.36 EH/s Hashrate Global
                 </span>
               </div>
 
-              <div className={`p-3 rounded-xl border ${isDarkTheme ? 'bg-white/[0.02] border-white/5' : 'bg-slate-50 border-slate-200'}`}>
-                <span className={`text-[10px] font-mono block mb-1 uppercase font-semibold ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>Eficiencia Térmica</span>
-                <div className="font-mono font-bold text-base text-emerald-500">
+              <div className={`admin-card p-3 admin-radius-card border ${isDarkTheme ? ' admin-bg-surface admin-border' : ' admin-bg-surface admin-border'}`}>
+                <span className={`text-xs font-mono block mb-1 font-semibold ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>Eficiencia Térmica</span>
+                <div className="font-mono font-semibold text-base admin-text-success">
                   62.4 °C Media
                 </div>
-                <span className={`text-[10px] font-mono block mt-0.5 ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>
+                <span className={`text-xs font-mono block mt-0.5 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>
                   0 alertas críticas
                 </span>
               </div>
@@ -216,16 +216,16 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
             {/* Barra de Distribución y Respaldo */}
             <div className="pt-2">
               <div className="flex items-center justify-between text-xs font-mono mb-2">
-                <span className={isDarkTheme ? 'text-slate-400' : 'text-slate-700 font-semibold'}>Capacidad Contratada vs Respaldo Físico:</span>
-                <span className="font-bold text-[#05DF72]">{allocation.utilizationRatePct}% Asignado</span>
+                <span className={isDarkTheme ? 'admin-text-secondary' : 'admin-text-primary font-semibold'}>Capacidad Contratada vs Respaldo Físico:</span>
+                <span className="font-semibold admin-text-success">{allocation.utilizationRatePct}% Asignado</span>
               </div>
-              <div className={`w-full rounded-full h-3 overflow-hidden p-0.5 border mb-2 ${isDarkTheme ? 'bg-slate-800/40 border-white/5' : 'bg-slate-200 border-slate-300'}`}>
+              <div className={`w-full rounded-full h-3 overflow-hidden p-0.5 border mb-2 ${isDarkTheme ? ' admin-bg-subtle admin-border' : ' admin-bg-subtle admin-border'}`}>
                 <div
-                  className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-emerald-500 to-cyan-400 shadow-sm"
+                  className="h-full admin-radius-control admin-bg-primary"
                   style={{ width: `${Math.min(100, allocation.utilizationRatePct)}%` }}
                 />
               </div>
-              <div className={`flex justify-between text-[11px] font-mono ${isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}`}>
+              <div className={`flex justify-between text-xs font-mono ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary font-medium'}`}>
                 <span>0 TH/s</span>
                 <span>Asignado: {allocation.totalAllocatedTh} TH/s</span>
                 <span>Tope Respaldo: {allocation.totalBackedCapacityTh} TH/s</span>
@@ -233,25 +233,25 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
             </div>
 
             {allocation.isOverallocated && (
-              <div className="mt-3 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center gap-2 text-rose-500 text-xs font-mono font-bold">
-                <ShieldAlert className="h-4 w-4 shrink-0 animate-pulse" />
+              <div className="admin-card mt-3 p-3 admin-radius-card admin-bg-danger border admin-border-danger flex items-center gap-2 admin-text-danger text-xs font-mono font-semibold">
+                <ShieldAlert className="h-4 w-4 shrink-0" />
                 <span>ALERTA: Potencia sobreasignada por encima del respaldo físico disponible.</span>
               </div>
             )}
           </div>
 
           {/* Estado de Stratum y Pool */}
-          <div className={`p-4 rounded-2xl border flex flex-wrap items-center justify-between gap-3 text-xs font-mono ${
-            isDarkTheme ? 'bg-[#0A0E17]/90 border-white/[0.08] text-slate-300' : 'bg-white border-slate-200 text-slate-800 shadow-sm'
+          <div className={`admin-card p-4 admin-radius-card border flex flex-wrap items-center justify-between gap-3 text-xs font-mono ${
+            isDarkTheme ? ' admin-bg-surface admin-border admin-text-secondary' : ' admin-bg-surface admin-border admin-text-primary'
           }`}>
             <div className="flex items-center gap-2">
-              <Radio className="h-4 w-4 text-[#05DF72] animate-pulse" />
-              <span>Pool Kryptex Stratum: <strong className="text-[#05DF72]">prl.kryptex.network:7048</strong></span>
+              <Radio className="h-4 w-4 admin-text-success" />
+              <span>Pool Kryptex Stratum: <strong className="admin-text-success">prl.kryptex.network:7048</strong></span>
             </div>
-            <div className={`flex items-center gap-3 text-[11px] ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>
-              <span>Latencia: <strong className={isDarkTheme ? 'text-cyan-400' : 'text-cyan-700 font-bold'}>18ms</strong></span>
-              <span>Dificultad: <strong className={isDarkTheme ? 'text-white' : 'text-slate-900 font-bold'}>Auto (PPS+)</strong></span>
-              <span>Moneda: <strong className="text-emerald-500 font-bold">PEARL (PRL)</strong></span>
+            <div className={`flex items-center gap-3 text-xs ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>
+              <span>Latencia: <strong className={isDarkTheme ? 'admin-text-accent' : 'admin-text-accent font-semibold'}>18ms</strong></span>
+              <span>Dificultad: <strong className={isDarkTheme ? 'admin-text-primary' : 'admin-text-primary font-semibold'}>Auto (PPS+)</strong></span>
+              <span>Moneda: <strong className="admin-text-success font-semibold">PEARL (PRL)</strong></span>
             </div>
           </div>
         </div>
@@ -259,147 +259,147 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
         {/* Right 1 Col: Quick Control Hub (Sin sticker icons) */}
         <div className="flex flex-col gap-4">
           <div
-            className={`p-5 rounded-2xl border transition-all flex flex-col justify-between ${
+            className={`admin-card p-5 admin-radius-card border flex flex-col justify-between ${
               isDarkTheme
-                ? 'bg-[#0E1320]/80 border-white/[0.08] text-white shadow-lg'
-                : 'bg-white border-slate-200 text-slate-900 shadow-sm'
+                ? ' admin-bg-surface admin-border admin-text-primary'
+                : ' admin-bg-surface admin-border admin-text-primary'
             }`}
           >
             <div>
-              <div className={`flex items-center justify-between pb-3 border-b ${isDarkTheme ? 'border-white/5' : 'border-slate-100'} mb-3`}>
-                <span className={`text-xs font-mono font-bold tracking-wider uppercase ${isDarkTheme ? 'text-slate-400' : 'text-slate-700'}`}>
+              <div className={`flex items-center justify-between pb-3 border-b ${isDarkTheme ? ' admin-border' : ' admin-border'} mb-3`}>
+                <span className={`text-xs font-mono font-semibold ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-primary'}`}>
                   Accesos Rápidos de Control
                 </span>
-                <span className="text-[10px] font-mono text-[#05DF72] font-bold">
+                <span className="text-xs font-mono admin-text-secondary font-semibold">
                   {allocation.availableCapacityTh} TH/s Libre
                 </span>
               </div>
 
-              <div className="space-y-2">
+              <div className="admin-quick-access space-y-2">
                 <button
                   onClick={() => onNavigateTab('admin_engine')}
-                  className={`w-full flex items-center justify-between p-3 rounded-xl border text-xs font-mono font-bold transition-all active:scale-[0.98] cursor-pointer ${
+                  className={`w-full flex items-center justify-between p-3 admin-radius-control border text-xs font-mono font-semibold active:scale-[0.98] cursor-pointer ${
                     isDarkTheme
-                      ? 'bg-white/[0.03] hover:bg-[#05DF72]/10 border-white/10 hover:border-[#05DF72]/40 text-white'
-                      : 'bg-slate-50 hover:bg-emerald-50 border-slate-200 hover:border-emerald-300 text-slate-800'
+                      ? ' admin-bg-surface admin-border admin-text-primary'
+                      : ' admin-bg-surface admin-border admin-text-primary'
                   }`}
                 >
                   <span className="flex items-center gap-2">
-                    <Sliders className="h-4 w-4 text-[#05DF72]" />
+                    <Sliders className="h-4 w-4 admin-text-success" />
                     <span>Ajustar Variables del Motor</span>
                   </span>
-                  <ArrowUpRight className={`h-3.5 w-3.5 ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`} />
+                  <ArrowUpRight className={`h-3.5 w-3.5 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`} />
                 </button>
 
                 <button
                   onClick={() => onNavigateTab('admin_packages')}
-                  className={`w-full flex items-center justify-between p-3 rounded-xl border text-xs font-mono font-bold transition-all active:scale-[0.98] cursor-pointer ${
+                  className={`w-full flex items-center justify-between p-3 admin-radius-control border text-xs font-mono font-semibold active:scale-[0.98] cursor-pointer ${
                     isDarkTheme
-                      ? 'bg-white/[0.03] hover:bg-cyan-500/10 border-white/10 hover:border-cyan-500/40 text-white'
-                      : 'bg-slate-50 hover:bg-cyan-50 border-slate-200 hover:border-cyan-300 text-slate-800'
+                      ? ' admin-bg-surface admin-border admin-text-primary'
+                      : ' admin-bg-surface admin-border admin-text-primary'
                   }`}
                 >
                   <span className="flex items-center gap-2">
-                    <Package className="h-4 w-4 text-cyan-500" />
+                    <Package className="h-4 w-4 admin-text-accent" />
                     <span>Constructor de Paquetes ({packagesCount})</span>
                   </span>
-                  <ArrowUpRight className={`h-3.5 w-3.5 ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`} />
+                  <ArrowUpRight className={`h-3.5 w-3.5 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`} />
                 </button>
 
                 <button
                   onClick={() => onNavigateTab('admin_orders')}
-                  className={`w-full flex items-center justify-between p-3 rounded-xl border text-xs font-mono font-bold transition-all active:scale-[0.98] cursor-pointer ${
+                  className={`w-full flex items-center justify-between p-3 admin-radius-control border text-xs font-mono font-semibold active:scale-[0.98] cursor-pointer ${
                     isDarkTheme
-                      ? 'bg-white/[0.03] hover:bg-emerald-500/10 border-white/10 hover:border-emerald-500/40 text-white'
-                      : 'bg-slate-50 hover:bg-emerald-50 border-slate-200 hover:border-emerald-300 text-slate-800'
+                      ? ' admin-bg-surface admin-border admin-text-primary'
+                      : ' admin-bg-surface admin-border admin-text-primary'
                   }`}
                 >
                   <span className="flex items-center gap-2">
-                    <ShoppingCart className="h-4 w-4 text-[#05DF72]" />
+                    <ShoppingCart className="h-4 w-4 admin-text-success" />
                     <span>Pagos de Paquetes (${paymentsSummary.totalVolumeUsd.toFixed(0)})</span>
                   </span>
                   <div className="flex items-center gap-1.5">
                     {paymentsSummary.pendingCount > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-cyan-500/20 text-cyan-400 font-mono">
+                      <span className="admin-badge text-xs px-1.5 py-0.2 admin-radius-control admin-bg-warning admin-text-warning font-mono">
                         {paymentsSummary.pendingCount} pend.
                       </span>
                     )}
-                    <ArrowUpRight className={`h-3.5 w-3.5 ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`} />
+                    <ArrowUpRight className={`h-3.5 w-3.5 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`} />
                   </div>
                 </button>
 
                 <button
                   onClick={() => onNavigateTab('admin_withdrawals')}
-                  className={`w-full flex items-center justify-between p-3 rounded-xl border text-xs font-mono font-bold transition-all active:scale-[0.98] cursor-pointer ${
+                  className={`w-full flex items-center justify-between p-3 admin-radius-control border text-xs font-mono font-semibold active:scale-[0.98] cursor-pointer ${
                     isDarkTheme
-                      ? 'bg-white/[0.03] hover:bg-amber-500/10 border-white/10 hover:border-amber-500/40 text-white'
-                      : 'bg-slate-50 hover:bg-amber-50 border-slate-200 hover:border-amber-300 text-slate-800'
+                      ? ' admin-bg-surface admin-border admin-text-primary'
+                      : ' admin-bg-surface admin-border admin-text-primary'
                   }`}
                 >
                   <span className="flex items-center gap-2">
-                    <ArrowDownRight className="h-4 w-4 text-amber-500" />
+                    <ArrowDownRight className="h-4 w-4 admin-text-warning" />
                     <span>Solicitudes de Retiro</span>
                   </span>
                   <div className="flex items-center gap-1.5">
                     {withdrawalsSummary.pendingCount > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-500 font-mono font-bold animate-pulse">
+                      <span className="admin-badge text-xs px-1.5 py-0.2 admin-radius-control admin-bg-warning admin-text-warning font-mono font-semibold">
                         {withdrawalsSummary.pendingCount} pend.
                       </span>
                     )}
-                    <ArrowUpRight className={`h-3.5 w-3.5 ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`} />
+                    <ArrowUpRight className={`h-3.5 w-3.5 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`} />
                   </div>
                 </button>
 
                 <button
                   onClick={() => onNavigateTab('admin_referrals')}
-                  className={`w-full flex items-center justify-between p-3 rounded-xl border text-xs font-mono font-bold transition-all active:scale-[0.98] cursor-pointer ${
+                  className={`w-full flex items-center justify-between p-3 admin-radius-control border text-xs font-mono font-semibold active:scale-[0.98] cursor-pointer ${
                     isDarkTheme
-                      ? 'bg-white/[0.03] hover:bg-amber-500/10 border-white/10 hover:border-amber-500/40 text-white'
-                      : 'bg-slate-50 hover:bg-amber-50 border-slate-200 hover:border-amber-300 text-slate-800'
+                      ? ' admin-bg-surface admin-border admin-text-primary'
+                      : ' admin-bg-surface admin-border admin-text-primary'
                   }`}
                 >
                   <span className="flex items-center gap-2">
-                    <Share2 className="h-4 w-4 text-amber-500" />
+                    <Share2 className="h-4 w-4 admin-text-warning" />
                     <span>Programa de Referidos</span>
                   </span>
-                  <ArrowUpRight className={`h-3.5 w-3.5 ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`} />
+                  <ArrowUpRight className={`h-3.5 w-3.5 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`} />
                 </button>
 
                 <button
                   onClick={() => onNavigateTab('admin_allocations')}
-                  className={`w-full flex items-center justify-between p-3 rounded-xl border text-xs font-mono font-bold transition-all active:scale-[0.98] cursor-pointer ${
+                  className={`w-full flex items-center justify-between p-3 admin-radius-control border text-xs font-mono font-semibold active:scale-[0.98] cursor-pointer ${
                     isDarkTheme
-                      ? 'bg-white/[0.03] hover:bg-white/10 border-white/10 text-white'
-                      : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800'
+                      ? ' admin-bg-surface admin-border admin-text-primary'
+                      : ' admin-bg-surface admin-border admin-text-primary'
                   }`}
                 >
                   <span className="flex items-center gap-2">
-                    <Cpu className="h-4 w-4 text-[#F59E0B]" />
+                    <Cpu className="h-4 w-4 admin-text-secondary" />
                     <span>Asignación Centralizada</span>
                   </span>
-                  <ArrowUpRight className={`h-3.5 w-3.5 ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`} />
+                  <ArrowUpRight className={`h-3.5 w-3.5 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`} />
                 </button>
 
                 <button
                   onClick={() => onNavigateTab('admin_ledger')}
-                  className={`w-full flex items-center justify-between p-3 rounded-xl border text-xs font-mono font-bold transition-all active:scale-[0.98] cursor-pointer ${
+                  className={`w-full flex items-center justify-between p-3 admin-radius-control border text-xs font-mono font-semibold active:scale-[0.98] cursor-pointer ${
                     isDarkTheme
-                      ? 'bg-white/[0.03] hover:bg-emerald-500/10 border-white/10 hover:border-emerald-500/40 text-white'
-                      : 'bg-slate-50 hover:bg-emerald-50 border-slate-200 hover:border-emerald-300 text-slate-800'
+                      ? ' admin-bg-surface admin-border admin-text-primary'
+                      : ' admin-bg-surface admin-border admin-text-primary'
                   }`}
                 >
                   <span className="flex items-center gap-2">
-                    <DollarSign className="h-4 w-4 text-emerald-500" />
+                    <DollarSign className="h-4 w-4 admin-text-success" />
                     <span>Libro Contable & Ledger</span>
                   </span>
-                  <ArrowUpRight className={`h-3.5 w-3.5 ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`} />
+                  <ArrowUpRight className={`h-3.5 w-3.5 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`} />
                 </button>
               </div>
             </div>
 
-            <div className={`mt-4 pt-3 border-t ${isDarkTheme ? 'border-white/5 text-slate-400' : 'border-slate-100 text-slate-600'} text-[11px] font-mono flex items-center justify-between`}>
+            <div className={`mt-4 pt-3 border-t ${isDarkTheme ? ' admin-border admin-text-secondary' : ' admin-border admin-text-secondary'} text-xs font-mono flex items-center justify-between`}>
               <span>Profit Engine v2</span>
-              <span className="text-emerald-500 font-bold">Activo</span>
+              <span className="admin-text-success font-semibold">Activo</span>
             </div>
           </div>
         </div>

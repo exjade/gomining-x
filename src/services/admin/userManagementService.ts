@@ -611,14 +611,6 @@ export class UserManagementService {
     };
   }
 
-    const currentLocal = this.getUsers();
-    return {
-      adminUsers: currentLocal.filter(u => u.sourceCollection === 'admin_users'),
-      clientUsers: currentLocal.filter(u => u.sourceCollection === 'users'),
-      all: currentLocal
-    };
-  }
-
   public async seedInitialAdminUsers(): Promise<number> {
     const count = await seedAdminInDb(INITIAL_ADMIN_USERS);
     await this.fetchFromFirestore();

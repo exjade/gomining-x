@@ -70,14 +70,14 @@ export const ContractsAllocationView: React.FC<ContractsAllocationViewProps> = (
   });
 
   return (
-    <div className="minerx-admin-view space-y-6 animate-in fade-in duration-300 pb-12">
+    <div className="minerx-admin-view space-y-6 pb-12">
       {/* HEADER */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className={`text-2xl font-bold font-sans tracking-tight ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+          <h2 className={`text-2xl font-semibold font-sans ${isDarkTheme ? ' admin-text-primary' : ' admin-text-primary'}`}>
             Control de Contratos y Asignación Centralizada de Potencia
           </h2>
-          <p className={`text-xs font-mono mt-1 ${isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}`}>
+          <p className={`text-xs font-mono mt-1 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary font-medium'}`}>
             Gestión de potencia contratada vs asignada con garantía de respaldo físico verificable.
           </p>
         </div>
@@ -86,18 +86,18 @@ export const ContractsAllocationView: React.FC<ContractsAllocationViewProps> = (
           <button
             onClick={refreshContractsFromFirestore}
             disabled={isSyncing}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl border text-xs font-mono font-bold transition-all active:scale-[0.97] cursor-pointer ${
-              isDarkTheme ? 'bg-white/5 border-white/10 text-slate-300 hover:text-white hover:bg-white/10' : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
+            className={`flex items-center gap-1.5 px-3 py-2 admin-radius-control border text-xs font-mono font-semibold active:scale-[0.97] cursor-pointer ${
+              isDarkTheme ? ' admin-bg-surface admin-border admin-text-secondary' : ' admin-bg-surface admin-border admin-text-primary'
             }`}
             title="Sincronizar mineros y contratos adquiridos por clientes desde Cloud Firestore (/admin_contracts)"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin text-[#05DF72]' : 'text-slate-400'}`} />
+            <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? ' animate-spin admin-text-success' : ' admin-text-secondary'}`} />
             <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar Firestore'}</span>
           </button>
 
           {/* Global Capacity Gauge Input */}
           <div className="flex items-center gap-2">
-            <span className={`text-xs font-mono font-semibold ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>Capacidad de Respaldo:</span>
+            <span className={`text-xs font-mono font-semibold ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>Capacidad de Respaldo:</span>
             <input
               type="number"
               step="50"
@@ -107,21 +107,21 @@ export const ContractsAllocationView: React.FC<ContractsAllocationViewProps> = (
                 setBackedCapacity(val);
                 setSummary(allocationService.getAllocationSummary(val));
               }}
-              className={`w-28 px-3 py-1.5 rounded-xl text-xs font-mono font-bold border focus:outline-none focus:border-[#05DF72] ${
-                isDarkTheme ? 'bg-[#0E1320] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900 focus:bg-white'
+              className={`w-28 px-3 py-1.5 admin-radius-card text-xs font-mono font-semibold border ${
+                isDarkTheme ? ' admin-bg-surface admin-border admin-text-primary' : ' admin-bg-surface admin-border admin-text-primary'
               }`}
             />
-            <span className="text-xs font-mono font-bold text-cyan-400">TH/s</span>
+            <span className="text-xs font-mono font-semibold admin-text-accent">TH/s</span>
           </div>
         </div>
       </div>
 
       {/* OVERALLOCATION OR WARNING ALERT */}
       {summary.isOverallocated && (
-        <div className="p-4 rounded-3xl bg-rose-500/10 border border-rose-500/30 flex items-center gap-3 text-rose-400 font-mono text-xs">
-          <ShieldAlert className="h-5 w-5 shrink-0 animate-pulse text-rose-500" />
+        <div className="admin-card p-4 admin-radius-card admin-bg-danger border admin-border-danger flex items-center gap-3 admin-text-danger font-mono text-xs">
+          <ShieldAlert className="h-5 w-5 shrink-0 admin-text-danger" />
           <div>
-            <strong className="block font-bold">SOBREASIGNACIÓN DETECTADA:</strong>
+            <strong className="block font-semibold">SOBREASIGNACIÓN DETECTADA:</strong>
             Potencia asignada ({summary.totalAllocatedTh} TH/s) supera la capacidad respaldada ({summary.totalBackedCapacityTh} TH/s). Reduce asignaciones para garantizar solidez financiera.
           </div>
         </div>
@@ -129,35 +129,35 @@ export const ContractsAllocationView: React.FC<ContractsAllocationViewProps> = (
 
       {/* CAPACITY STATUS SUMMARY CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className={`p-4 rounded-2xl border ${isDarkTheme ? 'bg-[#0E1320]/80 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900 shadow-sm'}`}>
-          <span className={`text-[11px] font-mono font-semibold ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>POTENCIA CONTRATADA</span>
-          <div className={`text-2xl font-bold font-mono mt-1 ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>{summary.totalContractedTh} TH/s</div>
+        <div className={`admin-card p-4 admin-radius-card border ${isDarkTheme ? ' admin-bg-surface admin-border admin-text-primary' : ' admin-bg-surface admin-border admin-text-primary'}`}>
+          <span className={`text-xs font-mono font-semibold ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>POTENCIA CONTRATADA</span>
+          <div className={`text-2xl font-semibold font-mono mt-1 ${isDarkTheme ? ' admin-text-primary' : ' admin-text-primary'}`}>{summary.totalContractedTh} TH/s</div>
         </div>
-        <div className={`p-4 rounded-2xl border ${isDarkTheme ? 'bg-[#0E1320]/80 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900 shadow-sm'}`}>
-          <span className={`text-[11px] font-mono font-semibold ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>POTENCIA ASIGNADA</span>
-          <div className="text-2xl font-bold font-mono text-[#05DF72] mt-1">{summary.totalAllocatedTh} TH/s</div>
+        <div className={`admin-card p-4 admin-radius-card border ${isDarkTheme ? ' admin-bg-surface admin-border admin-text-primary' : ' admin-bg-surface admin-border admin-text-primary'}`}>
+          <span className={`text-xs font-mono font-semibold ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>POTENCIA ASIGNADA</span>
+          <div className="text-2xl font-semibold font-mono admin-text-success mt-1">{summary.totalAllocatedTh} TH/s</div>
         </div>
-        <div className={`p-4 rounded-2xl border ${isDarkTheme ? 'bg-[#0E1320]/80 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900 shadow-sm'}`}>
-          <span className={`text-[11px] font-mono font-semibold ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>CAPACIDAD DISPONIBLE</span>
-          <div className="text-2xl font-bold font-mono text-cyan-500 mt-1">{summary.availableCapacityTh} TH/s</div>
+        <div className={`admin-card p-4 admin-radius-card border ${isDarkTheme ? ' admin-bg-surface admin-border admin-text-primary' : ' admin-bg-surface admin-border admin-text-primary'}`}>
+          <span className={`text-xs font-mono font-semibold ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>CAPACIDAD DISPONIBLE</span>
+          <div className="text-2xl font-semibold font-mono admin-text-accent mt-1">{summary.availableCapacityTh} TH/s</div>
         </div>
-        <div className={`p-4 rounded-2xl border ${isDarkTheme ? 'bg-[#0E1320]/80 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900 shadow-sm'}`}>
-          <span className={`text-[11px] font-mono font-semibold ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>TASA DE UTILIZACIÓN</span>
-          <div className="text-2xl font-bold font-mono text-[#F59E0B] mt-1">{summary.utilizationRatePct}%</div>
+        <div className={`admin-card p-4 admin-radius-card border ${isDarkTheme ? ' admin-bg-surface admin-border admin-text-primary' : ' admin-bg-surface admin-border admin-text-primary'}`}>
+          <span className={`text-xs font-mono font-semibold ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>TASA DE UTILIZACIÓN</span>
+          <div className="text-2xl font-semibold font-mono admin-text-secondary mt-1">{summary.utilizationRatePct}%</div>
         </div>
       </div>
 
       {/* SEARCH AND FILTER BAR */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="relative flex-1 min-w-[240px]">
-          <Search className={`absolute left-3.5 top-2.5 h-4 w-4 ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`} />
+          <Search className={`absolute left-3.5 top-2.5 h-4 w-4 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`} />
           <input
             type="text"
             placeholder="Buscar por ID de contrato, usuario o paquete..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className={`w-full pl-10 pr-4 py-2 rounded-2xl text-xs font-mono border focus:outline-none focus:border-[#05DF72] ${
-              isDarkTheme ? 'bg-[#0E1320] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900 focus:bg-white'
+            className={`w-full pl-10 pr-4 py-2 admin-radius-card text-xs font-mono border ${
+              isDarkTheme ? ' admin-bg-surface admin-border admin-text-primary' : ' admin-bg-surface admin-border admin-text-primary'
             }`}
           />
         </div>
@@ -166,8 +166,8 @@ export const ContractsAllocationView: React.FC<ContractsAllocationViewProps> = (
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className={`px-3 py-2 rounded-2xl text-xs font-mono border focus:outline-none ${
-              isDarkTheme ? 'bg-[#0E1320] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900 focus:bg-white'
+            className={`px-3 py-2 admin-radius-card text-xs font-mono border ${
+              isDarkTheme ? ' admin-bg-surface admin-border admin-text-primary' : ' admin-bg-surface admin-border admin-text-primary'
             }`}
           >
             <option value="ALL">Todos los Estados</option>
@@ -180,17 +180,17 @@ export const ContractsAllocationView: React.FC<ContractsAllocationViewProps> = (
 
       {/* CONTRACTS TABLE */}
       <div
-        className={`p-6 rounded-3xl border transition-all ${
+        className={`admin-card p-6 admin-radius-card border ${
           isDarkTheme
-            ? 'bg-[#0E1320]/80 border-white/[0.08] backdrop-blur-xl text-white'
-            : 'bg-white border-slate-200 text-slate-900 shadow-sm'
+            ? ' admin-bg-surface admin-border admin-text-primary'
+            : ' admin-bg-surface admin-border admin-text-primary'
         }`}
       >
         <div className="overflow-x-auto">
           <table className="w-full text-left font-mono text-xs">
             <thead>
-              <tr className={`border-b text-[11px] ${
-                isDarkTheme ? 'border-white/10 text-slate-400' : 'border-slate-200 text-slate-700 font-bold'
+              <tr className={`border-b text-xs ${
+                isDarkTheme ? ' admin-border admin-text-secondary' : ' admin-border admin-text-primary font-semibold'
               }`}>
                 <th className="py-3 px-3">CONTRATO / USUARIO</th>
                 <th className="py-3 px-3">PAQUETE</th>
@@ -200,20 +200,20 @@ export const ContractsAllocationView: React.FC<ContractsAllocationViewProps> = (
                 <th className="py-3 px-3 text-right">ACCIONES</th>
               </tr>
             </thead>
-            <tbody className={`divide-y ${isDarkTheme ? 'divide-white/5' : 'divide-slate-100'}`}>
+            <tbody className={`divide-y ${isDarkTheme ? ' divide-white/5' : ' divide-slate-100'}`}>
               {filteredContracts.map((ctr) => (
-                <tr key={ctr.id} className={`transition-colors ${isDarkTheme ? 'hover:bg-white/[0.02]' : 'hover:bg-slate-50'}`}>
+                <tr key={ctr.id} className={`${isDarkTheme ? '' : ''}`}>
                   <td className="py-3 px-3">
-                    <div className={`font-bold ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>{ctr.id}</div>
-                    <div className={`text-[11px] ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>{ctr.userEmail}</div>
+                    <div className={`font-semibold ${isDarkTheme ? ' admin-text-primary' : ' admin-text-primary'}`}>{ctr.id}</div>
+                    <div className={`text-xs ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>{ctr.userEmail}</div>
                   </td>
                   <td className="py-3 px-3">
-                    <span className="font-bold text-cyan-500">{ctr.packageName}</span>
-                    <div className={`text-[10px] ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>Worker: {ctr.workerId || 'Auto'}</div>
+                    <span className="font-semibold admin-text-accent">{ctr.packageName}</span>
+                    <div className={`text-xs ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>Worker: {ctr.workerId || 'Auto'}</div>
                   </td>
                   <td className="py-3 px-3">
-                    <span className={`font-bold ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>{ctr.contractedTh} TH/s</span>
-                    <div className={`text-[10px] ${isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}`}>${ctr.pricePaidUsdt} USDT</div>
+                    <span className={`font-semibold ${isDarkTheme ? ' admin-text-primary' : ' admin-text-primary'}`}>{ctr.contractedTh} TH/s</span>
+                    <div className={`text-xs ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary font-medium'}`}>${ctr.pricePaidUsdt} USDT</div>
                   </td>
                   <td className="py-3 px-3">
                     <div className="flex items-center gap-3">
@@ -224,21 +224,21 @@ export const ContractsAllocationView: React.FC<ContractsAllocationViewProps> = (
                         step="1"
                         value={ctr.allocatedTh}
                         onChange={(e) => handleUpdateAllocation(ctr.id, parseInt(e.target.value) || 0)}
-                        className="w-32 accent-[#05DF72] cursor-pointer"
+                        className="w-32 admin-accent-range cursor-pointer"
                       />
-                      <span className="font-bold text-[#05DF72] min-w-[65px]">
+                      <span className="font-semibold admin-text-success min-w-[65px]">
                         {ctr.allocatedTh} / {ctr.contractedTh} TH
                       </span>
                     </div>
                   </td>
                   <td className="py-3 px-3">
                     <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      className={`admin-badge px-2 py-0.5 admin-radius-control text-xs font-semibold ${
                         ctr.status === 'ACTIVE'
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          ? ' admin-bg-success admin-text-success border admin-border-success'
                           : ctr.status === 'PARTIALLY_ALLOCATED'
-                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                          : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                          ? ' admin-bg-warning admin-text-warning border admin-border-warning'
+                          : ' admin-bg-danger admin-text-danger border admin-border-danger'
                       }`}
                     >
                       {ctr.status}
@@ -247,10 +247,10 @@ export const ContractsAllocationView: React.FC<ContractsAllocationViewProps> = (
                   <td className="py-3 px-3 text-right">
                     <button
                       onClick={() => handleToggleStatus(ctr.id, ctr.status)}
-                      className={`p-1.5 rounded-xl border text-xs font-mono transition-all active:scale-[0.97] cursor-pointer ${
+                      className={`p-1.5 admin-radius-control border text-xs font-mono active:scale-[0.97] cursor-pointer ${
                         ctr.status === 'ACTIVE'
-                          ? isDarkTheme ? 'border-amber-500/30 text-amber-400 hover:bg-amber-500/10' : 'border-amber-400 text-amber-700 hover:bg-amber-50'
-                          : isDarkTheme ? 'border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10' : 'border-emerald-400 text-emerald-700 hover:bg-emerald-50'
+                          ? isDarkTheme ? ' admin-border-warning admin-text-warning' : ' admin-border-warning admin-text-warning'
+                          : isDarkTheme ? ' admin-border-success admin-text-success' : ' admin-border-success admin-text-success'
                       }`}
                       title={ctr.status === 'ACTIVE' ? 'Suspender Contrato' : 'Reanudar Contrato'}
                     >

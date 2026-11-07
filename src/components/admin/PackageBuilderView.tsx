@@ -12,11 +12,15 @@ import {
   Globe,
   Users,
   Search,
-  ShoppingCart
+  ShoppingCart,
+  Sliders,
+  Sparkles,
+  Calendar
 } from 'lucide-react';
 import { CommercialPackageService } from '../../services/admin/commercialPackageService';
 import { HashrateAllocationService } from '../../services/admin/hashrateAllocationService';
 import { MinerxProfitEngine } from '../../services/admin/minerxProfitEngine';
+import { StorefrontControlService, type StorefrontSectionsConfig } from '../../services/admin/storefrontControlService';
 import type { CommercialPackage, MiningContract } from '../../types/admin';
 
 interface PackageBuilderViewProps {
@@ -33,14 +37,17 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
   const packageService = CommercialPackageService.getInstance();
   const allocationService = HashrateAllocationService.getInstance();
   const profitEngine = MinerxProfitEngine.getInstance();
+  const storefrontService = StorefrontControlService.getInstance();
 
   const [packages, setPackages] = useState<CommercialPackage[]>(packageService.getPackages());
   const [contracts, setContracts] = useState<MiningContract[]>(allocationService.getContracts());
-  const [activeViewSubTab, setActiveViewSubTab] = useState<'catalog' | 'purchases'>('catalog');
+  const [storefrontConfig, setStorefrontConfig] = useState<StorefrontSectionsConfig>(storefrontService.getConfig());
+  const [activeViewSubTab, setActiveViewSubTab] = useState<'catalog' | 'purchases' | 'storefront_controls'>('catalog');
   const [purchasesSearchTerm, setPurchasesSearchTerm] = useState<string>('');
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingPkg, setEditingPkg] = useState<Partial<CommercialPackage> | null>(null);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [isUpdatingSection, setIsUpdatingSection] = useState<boolean>(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
 
   // Load from Cloud Firestore on mount and subscribe to live changes
@@ -61,6 +68,10 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
       })
       .catch(() => {});
 
+    storefrontService.fetchFirestoreConfig()
+      .then(setStorefrontConfig)
+      .catch(() => {});
+
     const unsubPackages = packageService.subscribeToFirestorePackages((pkgs) => {
       setPackages(pkgs);
     });
@@ -69,11 +80,37 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
       setContracts(ctrs);
     });
 
+    const unsubStorefront = storefrontService.subscribeToFirestoreConfig((cfg) => {
+      setStorefrontConfig(cfg);
+    });
+
     return () => {
       unsubPackages();
       unsubContracts();
+      unsubStorefront();
     };
   }, []);
+
+  const handleToggleStorefrontSection = async (section: keyof Omit<StorefrontSectionsConfig, 'updatedAt' | 'updatedBy'>) => {
+    setIsUpdatingSection(true);
+    const nextVal = !storefrontConfig[section];
+    try {
+      const updated = await storefrontService.updateSectionToggle(section, nextVal);
+      setStorefrontConfig(updated);
+      const labels: Record<string, string> = {
+        showPresale: 'Preventa',
+        showLaunch: 'Lanzamiento',
+        showMonthly: 'Mensual',
+        showCustom: 'Personalizado'
+      };
+      setSyncFeedback(`Sección "${labels[section] || section}" ${nextVal ? 'habilitada' : 'oculta/deshabilitada'} en la app del cliente.`);
+    } catch {
+      setSyncFeedback('Error al actualizar visibilidad de sección.');
+    } finally {
+      setIsUpdatingSection(false);
+      setTimeout(() => setSyncFeedback(null), 3000);
+    }
+  };
 
   const handleSyncFirestore = async () => {
     setIsSyncing(true);
@@ -375,9 +412,25 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
             <span className="h-2 w-2 rounded-full bg-[#05DF72] animate-pulse"></span>
           )}
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveViewSubTab('storefront_controls')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
+            activeViewSubTab === 'storefront_controls'
+              ? isDarkTheme ? 'bg-white text-slate-950 shadow-sm' : 'bg-slate-900 text-white shadow-sm'
+              : isDarkTheme ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Sliders className="h-3.5 w-3.5 text-amber-400" />
+          <span>Control de Secciones de Tienda</span>
+          <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+            Live
+          </span>
+        </button>
       </div>
 
-      {activeViewSubTab === 'catalog' ? (
+      {activeViewSubTab === 'catalog' && (
         /* PACKAGES GRID */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {packages.map((pkg) => {
@@ -512,7 +565,9 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
             );
           })}
         </div>
-      ) : (
+      )}
+
+      {activeViewSubTab === 'purchases' && (
         /* CLIENT PURCHASED MINERS TABLE (Real-time synchronization from GoMining client app) */
         <div className={`p-6 rounded-3xl border transition-all space-y-4 ${
           isDarkTheme ? 'bg-[#0E1320]/80 border-white/[0.08] text-white shadow-xl' : 'bg-white border-slate-200 text-slate-900 shadow-sm'
@@ -629,6 +684,269 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
                   ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {activeViewSubTab === 'storefront_controls' && (
+        <div className={`p-6 rounded-3xl border transition-all space-y-6 ${
+          isDarkTheme ? 'bg-[#0E1320]/80 border-white/[0.08] text-white shadow-xl' : 'bg-white border-slate-200 text-slate-900 shadow-sm'
+        }`}>
+          {/* Header */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-white/[0.08]">
+            <div>
+              <h3 className="text-lg font-bold font-sans flex items-center gap-2">
+                <span>Control de Secciones de Tienda ("Crear un minero")</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#05DF72]/15 text-[#05DF72] border border-[#05DF72]/30">
+                  Cloud Firestore Live
+                </span>
+              </h3>
+              <p className={`text-xs font-mono mt-1 ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>
+                Activa o desactiva las secciones de compra en la aplicación de clientes GoMining mediante renderizado condicional.
+              </p>
+            </div>
+            {storefrontConfig.updatedAt && (
+              <div className="text-xs font-mono text-slate-400 flex items-center gap-1.5">
+                <span>Último cambio:</span>
+                <span className="font-semibold text-white">
+                  {new Date(storefrontConfig.updatedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Info Banner */}
+          <div className={`p-4 rounded-2xl border text-xs font-mono flex items-start gap-3 ${
+            isDarkTheme ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-200' : 'bg-cyan-50 border-cyan-200 text-cyan-900'
+          }`}>
+            <Sliders className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+            <div className="space-y-1">
+              <p className="font-bold text-cyan-300">
+                Sincronización Inmediata con la App del Cliente (GoMining)
+              </p>
+              <p className={`text-[11px] leading-relaxed ${isDarkTheme ? 'text-slate-300' : 'text-slate-700'}`}>
+                Cada interruptor modifica en tiempo real la configuración en Cloud Firestore (<code className="px-1 py-0.5 rounded bg-black/30 font-mono text-cyan-300">/admin_settings/storefront_sections</code>). Al apagar una sección (por ejemplo, la <strong>Preventa</strong> una vez agotadas las 30 unidades), el diálogo "Crear un minero" del cliente oculta instantáneamente esa pestaña y salta a la siguiente opción activa sin alterar el diseño visual original ni requerir despliegues de código.
+              </p>
+            </div>
+          </div>
+
+          {/* Controls Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* 1. PREVENTA */}
+            <div className={`p-5 rounded-2xl border transition-all ${
+              storefrontConfig.showPresale
+                ? isDarkTheme ? 'bg-amber-500/5 border-amber-500/30' : 'bg-amber-50/50 border-amber-200'
+                : isDarkTheme ? 'bg-slate-900/40 border-slate-800 opacity-70' : 'bg-slate-100/50 border-slate-200 opacity-70'
+            }`}>
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className={`p-2 rounded-xl border ${
+                    storefrontConfig.showPresale
+                      ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                      : 'bg-slate-800 text-slate-500 border-slate-700'
+                  }`}>
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm">Pestaña: Preventa (30 unidades c/u)</h4>
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-semibold">
+                      Preventa Limitada
+                    </span>
+                  </div>
+                </div>
+
+                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                  storefrontConfig.showPresale
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                }`}>
+                  {storefrontConfig.showPresale ? 'ACTIVO EN CLIENTE' : 'OCULTO'}
+                </span>
+              </div>
+
+              <p className="text-xs font-mono text-slate-400 mb-4 leading-relaxed">
+                4 niveles exclusivos con cupo limitado de 30 unidades cada uno (1.46 TH a 42.44 TH). Al terminar la preventa, desactiva esta opción para removerla de la vista de compra.
+              </p>
+
+              <div className="pt-3 border-t border-white/[0.08] flex items-center justify-between">
+                <span className="text-xs font-mono text-slate-400">Visibilidad en Diálogo:</span>
+                <button
+                  type="button"
+                  disabled={isUpdatingSection}
+                  onClick={() => handleToggleStorefrontSection('showPresale')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                    storefrontConfig.showPresale
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                  }`}
+                >
+                  <span className={`h-2 w-2 rounded-full ${storefrontConfig.showPresale ? 'bg-emerald-200 animate-pulse' : 'bg-slate-500'}`} />
+                  <span>{storefrontConfig.showPresale ? 'Habilitado (Mostrar)' : 'Deshabilitado (Ocultar)'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 2. LANZAMIENTO */}
+            <div className={`p-5 rounded-2xl border transition-all ${
+              storefrontConfig.showLaunch
+                ? isDarkTheme ? 'bg-sky-500/5 border-sky-500/30' : 'bg-sky-50/50 border-sky-200'
+                : isDarkTheme ? 'bg-slate-900/40 border-slate-800 opacity-70' : 'bg-slate-100/50 border-slate-200 opacity-70'
+            }`}>
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className={`p-2 rounded-xl border ${
+                    storefrontConfig.showLaunch
+                      ? 'bg-sky-500/20 text-sky-400 border-sky-500/30'
+                      : 'bg-slate-800 text-slate-500 border-slate-700'
+                  }`}>
+                    <Cpu className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm">Pestaña: Lanzamiento (16 niveles)</h4>
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-sky-400 font-semibold">
+                      Pago Único (One-time)
+                    </span>
+                  </div>
+                </div>
+
+                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                  storefrontConfig.showLaunch
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                }`}>
+                  {storefrontConfig.showLaunch ? 'ACTIVO EN CLIENTE' : 'OCULTO'}
+                </span>
+              </div>
+
+              <p className="text-xs font-mono text-slate-400 mb-4 leading-relaxed">
+                Catálogo regular con 16 niveles de máquinas estándar desde 42.44 TH ($499.99 USD) hasta 5,000 TH respaldadas de por vida.
+              </p>
+
+              <div className="pt-3 border-t border-white/[0.08] flex items-center justify-between">
+                <span className="text-xs font-mono text-slate-400">Visibilidad en Diálogo:</span>
+                <button
+                  type="button"
+                  disabled={isUpdatingSection}
+                  onClick={() => handleToggleStorefrontSection('showLaunch')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                    storefrontConfig.showLaunch
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                  }`}
+                >
+                  <span className={`h-2 w-2 rounded-full ${storefrontConfig.showLaunch ? 'bg-emerald-200 animate-pulse' : 'bg-slate-500'}`} />
+                  <span>{storefrontConfig.showLaunch ? 'Habilitado (Mostrar)' : 'Deshabilitado (Ocultar)'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 3. MENSUAL */}
+            <div className={`p-5 rounded-2xl border transition-all ${
+              storefrontConfig.showMonthly
+                ? isDarkTheme ? 'bg-purple-500/5 border-purple-500/30' : 'bg-purple-50/50 border-purple-200'
+                : isDarkTheme ? 'bg-slate-900/40 border-slate-800 opacity-70' : 'bg-slate-100/50 border-slate-200 opacity-70'
+            }`}>
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className={`p-2 rounded-xl border ${
+                    storefrontConfig.showMonthly
+                      ? 'bg-purple-500/20 text-purple-400 border-purple-500/30'
+                      : 'bg-slate-800 text-slate-500 border-slate-700'
+                  }`}>
+                    <Calendar className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm">Pestaña: Suscripción Mensual</h4>
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-purple-400 font-semibold">
+                      Recurrente / 30 Días
+                    </span>
+                  </div>
+                </div>
+
+                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                  storefrontConfig.showMonthly
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                }`}>
+                  {storefrontConfig.showMonthly ? 'ACTIVO EN CLIENTE' : 'OCULTO'}
+                </span>
+              </div>
+
+              <p className="text-xs font-mono text-slate-400 mb-4 leading-relaxed">
+                Minero por suscripción mensual con cuota fija y upgrade acumulativo de potencia (desde $39.99/mes hasta $499.99/mes).
+              </p>
+
+              <div className="pt-3 border-t border-white/[0.08] flex items-center justify-between">
+                <span className="text-xs font-mono text-slate-400">Visibilidad en Diálogo:</span>
+                <button
+                  type="button"
+                  disabled={isUpdatingSection}
+                  onClick={() => handleToggleStorefrontSection('showMonthly')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                    storefrontConfig.showMonthly
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                  }`}
+                >
+                  <span className={`h-2 w-2 rounded-full ${storefrontConfig.showMonthly ? 'bg-emerald-200 animate-pulse' : 'bg-slate-500'}`} />
+                  <span>{storefrontConfig.showMonthly ? 'Habilitado (Mostrar)' : 'Deshabilitado (Ocultar)'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 4. POTENCIA PERSONALIZADA (CUSTOM) */}
+            <div className={`p-5 rounded-2xl border transition-all ${
+              storefrontConfig.showCustom
+                ? isDarkTheme ? 'bg-cyan-500/5 border-cyan-500/30' : 'bg-cyan-50/50 border-cyan-200'
+                : isDarkTheme ? 'bg-slate-900/40 border-slate-800 opacity-70' : 'bg-slate-100/50 border-slate-200 opacity-70'
+            }`}>
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className={`p-2 rounded-xl border ${
+                    storefrontConfig.showCustom
+                      ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+                      : 'bg-slate-800 text-slate-500 border-slate-700'
+                  }`}>
+                    <Sliders className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm">Selector: Potencia Personalizada</h4>
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-semibold">
+                      Control Slider (1-5,000 TH)
+                    </span>
+                  </div>
+                </div>
+
+                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                  storefrontConfig.showCustom
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                }`}>
+                  {storefrontConfig.showCustom ? 'ACTIVO EN CLIENTE' : 'OCULTO'}
+                </span>
+              </div>
+
+              <p className="text-xs font-mono text-slate-400 mb-4 leading-relaxed">
+                Opción "Personalizado" con selector de 22 niveles discretos y cálculo dinámico de ROI dentro del diálogo de compra.
+              </p>
+
+              <div className="pt-3 border-t border-white/[0.08] flex items-center justify-between">
+                <span className="text-xs font-mono text-slate-400">Visibilidad en Diálogo:</span>
+                <button
+                  type="button"
+                  disabled={isUpdatingSection}
+                  onClick={() => handleToggleStorefrontSection('showCustom')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                    storefrontConfig.showCustom
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                  }`}
+                >
+                  <span className={`h-2 w-2 rounded-full ${storefrontConfig.showCustom ? 'bg-emerald-200 animate-pulse' : 'bg-slate-500'}`} />
+                  <span>{storefrontConfig.showCustom ? 'Habilitado (Mostrar)' : 'Deshabilitado (Ocultar)'}</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

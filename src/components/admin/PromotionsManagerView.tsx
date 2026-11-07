@@ -55,21 +55,21 @@ export const PromotionsManagerView: React.FC<PromotionsManagerViewProps> = ({
   };
 
   return (
-    <div className="minerx-admin-view space-y-6 animate-in fade-in duration-300 pb-12">
+    <div className="minerx-admin-view space-y-6 pb-12">
       {/* HEADER */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className={`text-2xl font-bold font-sans tracking-tight ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+          <h2 className={`text-2xl font-semibold font-sans ${isDarkTheme ? ' admin-text-primary' : ' admin-text-primary'}`}>
             Constructor de Promociones y Campañas
           </h2>
-          <p className={`text-xs font-mono mt-1 ${isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}`}>
+          <p className={`text-xs font-mono mt-1 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary font-medium'}`}>
             Crea promociones y bonos que se publican automáticamente en el feed y dashboard de los usuarios.
           </p>
         </div>
 
         <button
           onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-[#05DF72] text-slate-950 font-mono text-xs font-bold hover:bg-[#04C965] active:scale-[0.97] transition-all cursor-pointer shadow-lg shadow-emerald-500/20"
+          className="flex items-center gap-2 px-4 py-2.5 admin-radius-control admin-bg-primary admin-text-primary font-mono text-xs font-semibold active:scale-[0.97] cursor-pointer"
         >
           <Plus className="h-4 w-4" />
           Crear Promoción
@@ -81,57 +81,57 @@ export const PromotionsManagerView: React.FC<PromotionsManagerViewProps> = ({
         {promotions.map((p) => (
           <div
             key={p.id}
-            className={`p-6 rounded-3xl border flex flex-col justify-between transition-all ${
+            className={`admin-card p-6 admin-radius-card border flex flex-col justify-between ${
               isDarkTheme
-                ? 'bg-[#0E1320]/80 border-white/[0.08] backdrop-blur-xl text-white shadow-lg'
-                : 'bg-white border-slate-200 text-slate-900 shadow-sm'
+                ? ' admin-bg-surface admin-border admin-text-primary'
+                : ' admin-bg-surface admin-border admin-text-primary'
             }`}
           >
             <div>
               <div className="flex items-center justify-between mb-3">
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#05DF72]/15 text-[#05DF72] border border-[#05DF72]/30">
+                <span className="admin-badge px-2.5 py-0.5 admin-radius-control text-xs font-mono font-semibold admin-bg-success admin-text-success border admin-border">
                   {p.badge}
                 </span>
-                <span className={`text-[11px] font-mono flex items-center gap-1 ${isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}`}>
+                <span className={`text-xs font-mono flex items-center gap-1 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary font-medium'}`}>
                   <Eye className="h-3.5 w-3.5" />
                   {p.clicksCount} clics · {p.conversionsCount} ventas
                 </span>
               </div>
 
-              <h3 className={`text-lg font-bold font-sans ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>{p.title}</h3>
-              <p className={`text-xs font-mono mt-1 ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>{p.description}</p>
+              <h3 className={`text-lg font-semibold font-sans ${isDarkTheme ? ' admin-text-primary' : ' admin-text-primary'}`}>{p.title}</h3>
+              <p className={`text-xs font-mono mt-1 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>{p.description}</p>
 
-              <div className={`my-4 p-3.5 rounded-2xl border flex items-center justify-between font-mono text-xs ${
-                isDarkTheme ? 'bg-white/[0.03] border-white/5' : 'bg-slate-50 border-slate-200'
+              <div className={`admin-card my-4 p-3.5 admin-radius-card border flex items-center justify-between font-mono text-xs ${
+                isDarkTheme ? ' admin-bg-surface admin-border' : ' admin-bg-surface admin-border'
               }`}>
                 <div>
-                  <span className={`text-[10px] block font-semibold ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>DESCUENTO</span>
-                  <span className="font-bold text-[#05DF72]">{p.discountPct}% OFF</span>
+                  <span className={`text-xs block font-semibold ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>DESCUENTO</span>
+                  <span className="font-semibold admin-text-success">{p.discountPct}% OFF</span>
                 </div>
                 {p.bonusTh && p.bonusTh > 0 && (
                   <div>
-                    <span className={`text-[10px] block font-semibold ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>BONO TH</span>
-                    <span className="font-bold text-cyan-500">+{p.bonusTh} TH/s</span>
+                    <span className={`text-xs block font-semibold ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>BONO TH</span>
+                    <span className="font-semibold admin-text-accent">+{p.bonusTh} TH/s</span>
                   </div>
                 )}
                 <div>
-                  <span className={`text-[10px] block font-semibold ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>VIGENCIA</span>
-                  <span className={`font-semibold ${isDarkTheme ? 'text-slate-300' : 'text-slate-800'}`}>{new Date(p.endDate).toLocaleDateString()}</span>
+                  <span className={`text-xs block font-semibold ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`}>VIGENCIA</span>
+                  <span className={`font-semibold ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-primary'}`}>{new Date(p.endDate).toLocaleDateString()}</span>
                 </div>
               </div>
             </div>
 
-            <div className={`pt-3 border-t flex items-center justify-between ${isDarkTheme ? 'border-white/5' : 'border-slate-200'}`}>
-              <span className={`text-[11px] font-mono ${isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}`}>
-                Estado: <strong className={p.active ? 'text-emerald-500' : 'text-amber-500'}>{p.active ? 'PUBLICADA' : 'PAUSADA'}</strong>
+            <div className={`pt-3 border-t flex items-center justify-between ${isDarkTheme ? ' admin-border' : ' admin-border'}`}>
+              <span className={`text-xs font-mono ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary font-medium'}`}>
+                Estado: <strong className={p.active ? 'admin-text-success' : 'admin-text-warning'}>{p.active ? 'PUBLICADA' : 'PAUSADA'}</strong>
               </span>
 
               <button
                 onClick={() => handleToggle(p.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[11px] font-mono font-bold transition-all active:scale-[0.97] cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 admin-radius-control border text-xs font-mono font-semibold active:scale-[0.97] cursor-pointer ${
                   p.active
-                    ? 'border-amber-500/30 text-amber-500 hover:bg-amber-500/10'
-                    : 'border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10'
+                    ? ' admin-border-warning admin-text-warning'
+                    : ' admin-border-success admin-text-success'
                 }`}
               >
                 {p.active ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
@@ -144,18 +144,18 @@ export const PromotionsManagerView: React.FC<PromotionsManagerViewProps> = ({
 
       {/* CREATE PROMOTION MODAL */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 admin-bg-subtle">
           <div
-            className={`w-full max-w-lg p-6 rounded-3xl border shadow-2xl ${
-              isDarkTheme ? 'bg-[#0E1320] border-white/15 text-white' : 'bg-white border-slate-200 text-slate-900 shadow-2xl'
+            className={`admin-card w-full max-w-lg p-6 admin-radius-card border ${
+              isDarkTheme ? ' admin-bg-surface admin-border admin-text-primary' : ' admin-bg-surface admin-border admin-text-primary'
             }`}
           >
-            <div className={`flex items-center justify-between pb-3 border-b mb-4 ${isDarkTheme ? 'border-white/10' : 'border-slate-200'}`}>
-              <h3 className={`text-lg font-bold font-sans ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>Nueva Campaña Promocional</h3>
+            <div className={`flex items-center justify-between pb-3 border-b mb-4 ${isDarkTheme ? ' admin-border' : ' admin-border'}`}>
+              <h3 className={`text-lg font-semibold font-sans ${isDarkTheme ? ' admin-text-primary' : ' admin-text-primary'}`}>Nueva Campaña Promocional</h3>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className={`p-1.5 rounded-xl border transition-all cursor-pointer ${
-                  isDarkTheme ? 'border-white/10 text-slate-400 hover:text-white hover:bg-white/5' : 'border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                className={`p-1.5 admin-radius-control border cursor-pointer ${
+                  isDarkTheme ? ' admin-border admin-text-secondary' : ' admin-border admin-text-secondary'
                 }`}
               >
                 <X className="h-5 w-5" />
@@ -164,55 +164,55 @@ export const PromotionsManagerView: React.FC<PromotionsManagerViewProps> = ({
 
             <form onSubmit={handleSave} className="space-y-4 font-mono text-xs">
               <div>
-                <label className={`block mb-1 font-semibold ${isDarkTheme ? 'text-slate-300' : 'text-slate-700'}`}>Título de la Promoción</label>
+                <label className={`block mb-1 font-semibold ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-primary'}`}>Título de la Promoción</label>
                 <input
                   type="text"
                   required
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   placeholder="Ej: Promo Black Friday Minero"
-                  className={`w-full px-3.5 py-2.5 rounded-2xl border focus:outline-none focus:border-[#05DF72] ${
-                    isDarkTheme ? 'bg-[#090D16] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900 focus:bg-white'
+                  className={`w-full px-3.5 py-2.5 admin-radius-card border ${
+                    isDarkTheme ? ' admin-bg-surface admin-border admin-text-primary' : ' admin-bg-surface admin-border admin-text-primary'
                   }`}
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={`block mb-1 font-semibold ${isDarkTheme ? 'text-slate-300' : 'text-slate-700'}`}>Insignia / Badge</label>
+                  <label className={`block mb-1 font-semibold ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-primary'}`}>Insignia / Badge</label>
                   <input
                     type="text"
                     value={formData.badge}
                     onChange={(e) => setFormData({ ...formData, badge: e.target.value })}
-                    className={`w-full px-3.5 py-2 rounded-xl border focus:outline-none focus:border-[#05DF72] ${
-                      isDarkTheme ? 'bg-[#090D16] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900 focus:bg-white'
+                    className={`w-full px-3.5 py-2 admin-radius-card border ${
+                      isDarkTheme ? ' admin-bg-surface admin-border admin-text-primary' : ' admin-bg-surface admin-border admin-text-primary'
                     }`}
                   />
                 </div>
                 <div>
-                  <label className={`block mb-1 font-semibold ${isDarkTheme ? 'text-slate-300' : 'text-slate-700'}`}>Descuento (%)</label>
+                  <label className={`block mb-1 font-semibold ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-primary'}`}>Descuento (%)</label>
                   <input
                     type="number"
                     min="0"
                     max="90"
                     value={formData.discountPct}
                     onChange={(e) => setFormData({ ...formData, discountPct: parseInt(e.target.value) || 0 })}
-                    className={`w-full px-3.5 py-2 rounded-xl border focus:outline-none focus:border-[#05DF72] ${
-                      isDarkTheme ? 'bg-[#090D16] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900 focus:bg-white'
+                    className={`w-full px-3.5 py-2 admin-radius-card border ${
+                      isDarkTheme ? ' admin-bg-surface admin-border admin-text-primary' : ' admin-bg-surface admin-border admin-text-primary'
                     }`}
                   />
                 </div>
               </div>
 
               <div>
-                <label className={`block mb-1 font-semibold ${isDarkTheme ? 'text-slate-300' : 'text-slate-700'}`}>Descripción</label>
+                <label className={`block mb-1 font-semibold ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-primary'}`}>Descripción</label>
                 <textarea
                   rows={2}
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="Detalles visibles en la tarjeta del cliente..."
-                  className={`w-full px-3.5 py-2.5 rounded-2xl border focus:outline-none focus:border-[#05DF72] ${
-                    isDarkTheme ? 'bg-[#090D16] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900 focus:bg-white'
+                  className={`w-full px-3.5 py-2.5 admin-radius-card border ${
+                    isDarkTheme ? ' admin-bg-surface admin-border admin-text-primary' : ' admin-bg-surface admin-border admin-text-primary'
                   }`}
                 />
               </div>
@@ -221,15 +221,15 @@ export const PromotionsManagerView: React.FC<PromotionsManagerViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className={`px-4 py-2 rounded-xl border text-xs font-mono transition-all cursor-pointer ${
-                    isDarkTheme ? 'border-white/10 text-slate-300 hover:text-white hover:bg-white/5' : 'border-slate-300 text-slate-700 hover:text-slate-900 hover:bg-slate-100'
+                  className={`px-4 py-2 admin-radius-control border text-xs font-mono cursor-pointer ${
+                    isDarkTheme ? ' admin-border admin-text-secondary' : ' admin-border admin-text-primary'
                   }`}
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-[#05DF72] text-slate-950 font-bold hover:bg-[#04C965] active:scale-[0.97] transition-all cursor-pointer shadow-sm"
+                  className="px-5 py-2 admin-radius-control admin-bg-primary admin-text-primary font-semibold active:scale-[0.97] cursor-pointer"
                 >
                   Publicar Promoción
                 </button>

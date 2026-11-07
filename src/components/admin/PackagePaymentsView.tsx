@@ -82,42 +82,42 @@ export const PackagePaymentsView: React.FC<PackagePaymentsViewProps> = ({ isDark
     switch (status) {
       case 'SETTLED':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+          <span className="admin-badge inline-flex items-center gap-1.5 px-2.5 py-1 admin-radius-control text-xs font-mono font-semibold admin-bg-success admin-text-success border admin-border-success">
+            <span className="h-1.5 w-1.5 rounded-full admin-bg-success"></span>
             Liquidado & Minero Activo
           </span>
         );
       case 'CONFIRMED':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-cyan-500/10 text-cyan-500 border border-cyan-500/20">
-            <span className="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
+          <span className="admin-badge inline-flex items-center gap-1.5 px-2.5 py-1 admin-radius-control text-xs font-mono font-semibold admin-bg-info admin-text-accent border admin-border-info">
+            <span className="h-1.5 w-1.5 rounded-full admin-bg-info"></span>
             Confirmando en Bloque
           </span>
         );
       case 'PENDING':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+          <span className="admin-badge inline-flex items-center gap-1.5 px-2.5 py-1 admin-radius-control text-xs font-mono font-semibold admin-bg-warning admin-text-warning border admin-border-warning">
+            <span className="h-1.5 w-1.5 rounded-full admin-bg-warning"></span>
             Esperando Depósito
           </span>
         );
       case 'UNDERPAID':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20">
-            <span className="h-1.5 w-1.5 rounded-full bg-rose-500"></span>
+          <span className="admin-badge inline-flex items-center gap-1.5 px-2.5 py-1 admin-radius-control text-xs font-mono font-semibold admin-bg-danger admin-text-danger border admin-border-danger">
+            <span className="h-1.5 w-1.5 rounded-full admin-bg-danger"></span>
             Pago Incompleto
           </span>
         );
       case 'EXPIRED':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-slate-500/10 text-slate-400 border border-slate-500/20">
-            <span className="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
+          <span className="admin-badge inline-flex items-center gap-1.5 px-2.5 py-1 admin-radius-control text-xs font-mono font-semibold admin-bg-subtle admin-text-secondary border admin-border">
+            <span className="h-1.5 w-1.5 rounded-full admin-bg-subtle"></span>
             Cotización Caducada
           </span>
         );
       case 'REVERSED':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+          <span className="admin-badge inline-flex items-center gap-1.5 px-2.5 py-1 admin-radius-control text-xs font-mono font-semibold admin-bg-danger admin-text-danger border admin-border-danger">
             Revertido
           </span>
         );
@@ -127,46 +127,46 @@ export const PackagePaymentsView: React.FC<PackagePaymentsViewProps> = ({ isDark
   const getNetworkBadge = (network: PackageOrderPayment['paymentNetwork'] | string) => {
     const net = String(network || '').toUpperCase();
     if (net.includes('TRON') || net === 'TRC20') {
-      return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">TRON TRC20</span>;
+      return <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-danger admin-text-danger border admin-border-danger">TRON TRC20</span>;
     }
     if (net.includes('ETH') || net === 'ERC20') {
-      return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">ETH ERC20</span>;
+      return <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-info admin-text-accent border admin-border-info">ETH ERC20</span>;
     }
     if (net.includes('SOL')) {
-      return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">SOLANA</span>;
+      return <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-subtle admin-text-secondary border admin-border">SOLANA</span>;
     }
     if (net.includes('BTC') || net.includes('BITCOIN')) {
-      return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">BITCOIN</span>;
+      return <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-warning admin-text-warning border admin-border-warning">BITCOIN</span>;
     }
     if (net.includes('POLY') || net.includes('POL')) {
-      return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">POLYGON</span>;
+      return <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-accent-soft admin-text-accent border admin-border-accent">POLYGON</span>;
     }
     if (net.includes('BNB') || net.includes('BSC')) {
-      return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">BNB CHAIN</span>;
+      return <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-warning admin-text-warning border admin-border-warning">BNB CHAIN</span>;
     }
     if (net.includes('LOCAL') || net.includes('BALANCE')) {
-      return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">SALDO LOCAL</span>;
+      return <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-success admin-text-success border admin-border-success">SALDO LOCAL</span>;
     }
     if (net.includes('SPEI')) {
-      return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">PUENTE SPEI</span>;
+      return <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-success admin-text-success border admin-border-success">PUENTE SPEI</span>;
     }
-    return <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-slate-500/10 text-slate-400 border border-slate-500/20">{network || 'CRYPTO'}</span>;
+    return <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-subtle admin-text-secondary border admin-border">{network || 'CRYPTO'}</span>;
   };
 
   return (
     <div className="minerx-admin-view space-y-6">
       {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-white/[0.08]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b admin-border">
         <div>
           <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[#05DF72]">
+            <div className="admin-card p-2 admin-radius-card admin-bg-success border admin-border-success admin-text-success">
               <ShoppingCart className="h-5 w-5" />
             </div>
             <div>
-              <h2 className={`text-xl sm:text-2xl font-bold font-sans tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>
+              <h2 className={`text-xl font-semibold font-sans ${isLight ? ' admin-text-primary' : ' admin-text-primary'}`}>
                 Pagos de Paquetes Comprados
               </h2>
-              <p className={`text-xs mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+              <p className={`text-xs mt-0.5 ${isLight ? ' admin-text-secondary' : ' admin-text-secondary'}`}>
                 Verificación on-chain de órdenes de compra, pagos en criptoactivos y activación automática de mineros
               </p>
             </div>
@@ -177,14 +177,14 @@ export const PackagePaymentsView: React.FC<PackagePaymentsViewProps> = ({ isDark
           <button
             onClick={refreshList}
             disabled={isSyncing}
-            className={`px-3 py-2 rounded-xl border text-xs font-mono font-bold flex items-center gap-1.5 transition-all active:scale-[0.98] cursor-pointer ${
+            className={`px-3 py-2 admin-radius-control border text-xs font-mono font-semibold flex items-center gap-1.5 active:scale-[0.98] cursor-pointer ${
               isLight 
-                ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shadow-xs' 
-                : 'bg-white/[0.04] hover:bg-white/[0.08] border-white/10 text-slate-200'
+                ? ' admin-bg-surface admin-border admin-text-primary'
+                : ' admin-bg-surface admin-border admin-text-secondary'
             }`}
             title="Sincronizar órdenes y pagos de paquetes desde Cloud Firestore (/admin_orders)"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin text-[#05DF72]' : ''}`} />
+            <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? ' animate-spin admin-text-success' : ''}`} />
             <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar Firestore'}</span>
           </button>
         </div>
@@ -193,95 +193,95 @@ export const PackagePaymentsView: React.FC<PackagePaymentsViewProps> = ({ isDark
       {/* 4 Executive KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* KPI 1: Volumen Facturado */}
-        <div className={`p-5 rounded-2xl border transition-all ${
-          isLight ? 'bg-emerald-50/80 border-emerald-200 shadow-xs' : 'bg-[#081C10]/80 border-emerald-500/30 shadow-lg text-white'
+        <div className={`admin-card p-5 admin-radius-card border ${
+          isLight ? ' admin-bg-success admin-border-success' : ' admin-bg-surface admin-border-success admin-text-primary'
         }`}>
           <div className="flex items-center justify-between mb-2">
-            <span className={`text-xs font-mono uppercase tracking-wider font-semibold ${isLight ? 'text-emerald-800' : 'text-emerald-400'}`}>
+            <span className={`text-xs font-mono font-semibold ${isLight ? ' admin-text-success' : ' admin-text-success'}`}>
               Volumen Total Facturado
             </span>
-            <DollarSign className="h-4 w-4 text-[#05DF72]" />
+            <DollarSign className="h-4 w-4 admin-text-success" />
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold font-mono tracking-tight text-[#05DF72]">
+          <div className="text-2xl font-semibold font-mono admin-text-success">
             ${summary.totalVolumeUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })}{' '}
-            <span className="text-xs font-normal font-sans text-slate-400">USD</span>
+            <span className="text-xs font-normal font-sans admin-text-secondary">USD</span>
           </div>
-          <div className={`text-xs font-mono mt-1 ${isLight ? 'text-emerald-700 font-medium' : 'text-emerald-300/80'}`}>
+          <div className={`text-xs font-mono mt-1 ${isLight ? ' admin-text-success font-medium' : ' admin-text-success'}`}>
             {summary.settledCount} órdenes liquidadas con éxito
           </div>
         </div>
 
         {/* KPI 2: Potencia TH/s Vendida */}
-        <div className={`p-5 rounded-2xl border transition-all ${
-          isLight ? 'bg-cyan-50/80 border-cyan-200 shadow-xs' : 'bg-[#081828]/80 border-cyan-500/30 shadow-lg text-white'
+        <div className={`admin-card p-5 admin-radius-card border ${
+          isLight ? ' admin-bg-info admin-border-info' : ' admin-bg-surface admin-border-info admin-text-primary'
         }`}>
           <div className="flex items-center justify-between mb-2">
-            <span className={`text-xs font-mono uppercase tracking-wider font-semibold ${isLight ? 'text-cyan-800' : 'text-cyan-400'}`}>
+            <span className={`text-xs font-mono font-semibold ${isLight ? ' admin-text-accent' : ' admin-text-accent'}`}>
               Potencia Total Vendida
             </span>
-            <Zap className="h-4 w-4 text-cyan-400" />
+            <Zap className="h-4 w-4 admin-text-accent" />
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold font-mono tracking-tight text-cyan-400">
+          <div className="text-2xl font-semibold font-mono admin-text-accent">
             {summary.totalThSold}{' '}
-            <span className="text-xs font-normal font-sans text-slate-400">TH/s</span>
+            <span className="text-xs font-normal font-sans admin-text-secondary">TH/s</span>
           </div>
-          <div className={`text-xs font-mono mt-1 ${isLight ? 'text-cyan-700 font-medium' : 'text-cyan-300/80'}`}>
+          <div className={`text-xs font-mono mt-1 ${isLight ? ' admin-text-accent font-medium' : ' admin-text-accent'}`}>
             Asignada a mineros digitales activos
           </div>
         </div>
 
         {/* KPI 3: Órdenes Pendientes de Confirmación */}
-        <div className={`p-5 rounded-2xl border transition-all ${
-          isLight ? 'bg-amber-50/80 border-amber-200 shadow-xs' : 'bg-[#1C1508]/80 border-amber-500/30 shadow-lg text-white'
+        <div className={`admin-card p-5 admin-radius-card border ${
+          isLight ? ' admin-bg-warning admin-border-warning' : ' admin-bg-subtle admin-border-warning admin-text-primary'
         }`}>
           <div className="flex items-center justify-between mb-2">
-            <span className={`text-xs font-mono uppercase tracking-wider font-semibold ${isLight ? 'text-amber-800' : 'text-amber-400'}`}>
+            <span className={`text-xs font-mono font-semibold ${isLight ? ' admin-text-warning' : ' admin-text-warning'}`}>
               En Verificación On-Chain
             </span>
-            <Clock className="h-4 w-4 text-amber-500" />
+            <Clock className="h-4 w-4 admin-text-warning" />
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold font-mono tracking-tight text-amber-500">
+          <div className="text-2xl font-semibold font-mono admin-text-warning">
             {summary.pendingCount}
           </div>
-          <div className={`text-xs font-mono mt-1 ${isLight ? 'text-amber-700 font-medium' : 'text-amber-300/80'}`}>
+          <div className={`text-xs font-mono mt-1 ${isLight ? ' admin-text-warning font-medium' : ' admin-text-warning'}`}>
             Acumulando confirmaciones de red
           </div>
         </div>
 
         {/* KPI 4: Caducadas / Expiradas */}
-        <div className={`p-5 rounded-2xl border transition-all ${
-          isLight ? 'bg-slate-50/80 border-slate-200 shadow-xs' : 'bg-[#101420]/80 border-white/[0.08] shadow-lg text-white'
+        <div className={`admin-card p-5 admin-radius-card border ${
+          isLight ? ' admin-bg-surface admin-border' : ' admin-bg-subtle admin-border admin-text-primary'
         }`}>
           <div className="flex items-center justify-between mb-2">
-            <span className={`text-xs font-mono uppercase tracking-wider font-semibold ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+            <span className={`text-xs font-mono font-semibold ${isLight ? ' admin-text-secondary' : ' admin-text-secondary'}`}>
               Cotizaciones Expiradas
             </span>
-            <Package className="h-4 w-4 text-slate-400" />
+            <Package className="h-4 w-4 admin-text-secondary" />
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold font-mono tracking-tight">
+          <div className="text-2xl font-semibold font-mono">
             {summary.expiredCount}
           </div>
-          <div className={`text-xs font-mono mt-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+          <div className={`text-xs font-mono mt-1 ${isLight ? ' admin-text-secondary' : ' admin-text-secondary'}`}>
             Superaron TTL de 30 minutos
           </div>
         </div>
       </div>
 
       {/* Filters and Search Bar */}
-      <div className={`p-4 rounded-2xl border flex flex-col md:flex-row items-center justify-between gap-3 ${
-        isLight ? 'bg-white border-slate-200 shadow-xs' : 'bg-[#0E1320]/80 border-white/[0.08]'
+      <div className={`admin-card p-4 admin-radius-card border flex flex-col md:flex-row items-center justify-between gap-3 ${
+        isLight ? ' admin-bg-surface admin-border' : ' admin-bg-surface admin-border'
       }`}>
         <div className="relative w-full md:w-80">
-          <Search className={`absolute left-3 top-2.5 h-4 w-4 ${isLight ? 'text-slate-400' : 'text-slate-500'}`} />
+          <Search className={`absolute left-3 top-2.5 h-4 w-4 ${isLight ? ' admin-text-secondary' : ' admin-text-secondary'}`} />
           <input
             type="text"
             placeholder="Buscar por ID orden, cliente, paquete o txHash..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className={`w-full pl-9 pr-4 py-2 rounded-xl text-xs font-mono border focus:outline-hidden transition-all ${
+            className={`w-full pl-9 pr-4 py-2 admin-radius-card text-xs font-mono border ${
               isLight 
-                ? 'bg-slate-50 border-slate-200 text-slate-800 focus:border-emerald-500' 
-                : 'bg-white/[0.04] border-white/10 text-white focus:border-emerald-400'
+                ? ' admin-bg-surface admin-border admin-text-primary'
+                : ' admin-bg-surface admin-border admin-text-primary'
             }`}
           />
         </div>
@@ -289,12 +289,12 @@ export const PackagePaymentsView: React.FC<PackagePaymentsViewProps> = ({ isDark
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           {/* Status Filter */}
           <div className="flex items-center gap-1 text-xs font-mono">
-            <span className={`text-[11px] font-semibold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Estado:</span>
+            <span className={`text-xs font-semibold ${isLight ? ' admin-text-secondary' : ' admin-text-secondary'}`}>Estado:</span>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-mono border cursor-pointer ${
-                isLight ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-slate-900 border-white/10 text-slate-200'
+              className={`px-2.5 py-1.5 admin-radius-card text-xs font-mono border cursor-pointer ${
+                isLight ? ' admin-bg-surface admin-border admin-text-primary' : ' admin-bg-subtle admin-border admin-text-secondary'
               }`}
             >
               <option value="ALL">Todos los Estados</option>
@@ -308,12 +308,12 @@ export const PackagePaymentsView: React.FC<PackagePaymentsViewProps> = ({ isDark
 
           {/* Network Filter */}
           <div className="flex items-center gap-1 text-xs font-mono">
-            <span className={`text-[11px] font-semibold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Red / Método:</span>
+            <span className={`text-xs font-semibold ${isLight ? ' admin-text-secondary' : ' admin-text-secondary'}`}>Red / Método:</span>
             <select
               value={networkFilter}
               onChange={(e) => setNetworkFilter(e.target.value)}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-mono border cursor-pointer ${
-                isLight ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-slate-900 border-white/10 text-slate-200'
+              className={`px-2.5 py-1.5 admin-radius-card text-xs font-mono border cursor-pointer ${
+                isLight ? ' admin-bg-surface admin-border admin-text-primary' : ' admin-bg-subtle admin-border admin-text-secondary'
               }`}
             >
               <option value="ALL">Todas las Redes</option>
@@ -328,26 +328,26 @@ export const PackagePaymentsView: React.FC<PackagePaymentsViewProps> = ({ isDark
       </div>
 
       {/* Main Table */}
-      <div className={`overflow-hidden rounded-2xl border ${
-        isLight ? 'bg-white border-slate-200 shadow-xs' : 'bg-[#0E1320]/80 border-white/[0.08]'
+      <div className={`overflow-hidden admin-radius-card border ${
+        isLight ? ' admin-bg-surface admin-border' : ' admin-bg-surface admin-border'
       }`}>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs font-mono">
             <thead>
-              <tr className={`border-b ${isLight ? 'bg-slate-50/80 border-slate-200 text-slate-700' : 'bg-white/[0.02] border-white/[0.06] text-slate-400'}`}>
-                <th className="py-3 px-4 font-bold uppercase text-[10px] tracking-wider">Orden / Fecha</th>
-                <th className="py-3 px-4 font-bold uppercase text-[10px] tracking-wider">Cliente</th>
-                <th className="py-3 px-4 font-bold uppercase text-[10px] tracking-wider">Paquete / Potencia</th>
-                <th className="py-3 px-4 font-bold uppercase text-[10px] tracking-wider text-right">Importe Facturado</th>
-                <th className="py-3 px-4 font-bold uppercase text-[10px] tracking-wider">Red & Confirmaciones</th>
-                <th className="py-3 px-4 font-bold uppercase text-[10px] tracking-wider">Estado</th>
-                <th className="py-3 px-4 font-bold uppercase text-[10px] tracking-wider text-right">Acciones</th>
+              <tr className={`border-b ${isLight ? ' admin-bg-surface admin-border admin-text-primary' : ' admin-bg-surface admin-border admin-text-secondary'}`}>
+                <th className="py-3 px-4 font-semibold text-xs">Orden / Fecha</th>
+                <th className="py-3 px-4 font-semibold text-xs">Cliente</th>
+                <th className="py-3 px-4 font-semibold text-xs">Paquete / Potencia</th>
+                <th className="py-3 px-4 font-semibold text-xs text-right">Importe Facturado</th>
+                <th className="py-3 px-4 font-semibold text-xs">Red & Confirmaciones</th>
+                <th className="py-3 px-4 font-semibold text-xs">Estado</th>
+                <th className="py-3 px-4 font-semibold text-xs text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.05]">
               {filteredPayments.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className={`py-8 text-center ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                  <td colSpan={7} className={`py-8 text-center ${isLight ? ' admin-text-secondary' : ' admin-text-secondary'}`}>
                     No se encontraron pagos u órdenes con los filtros seleccionados.
                   </td>
                 </tr>
@@ -355,39 +355,39 @@ export const PackagePaymentsView: React.FC<PackagePaymentsViewProps> = ({ isDark
                 filteredPayments.map((item) => (
                   <tr 
                     key={item.orderId}
-                    className={`transition-colors ${
-                      isLight ? 'hover:bg-slate-50/60' : 'hover:bg-white/[0.02]'
+                    className={`${
+                      isLight ? '' : ''
                     }`}
                   >
                     <td className="py-3.5 px-4">
-                      <div className="font-bold text-cyan-400">{item.orderId}</div>
-                      <div className={`text-[10px] ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>
+                      <div className="font-semibold admin-text-accent">{item.orderId}</div>
+                      <div className={`text-xs ${isLight ? ' admin-text-secondary' : ' admin-text-secondary'}`}>
                         {new Date(item.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                       </div>
                     </td>
 
                     <td className="py-3.5 px-4">
-                      <div className={`font-bold font-sans ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                      <div className={`font-semibold font-sans ${isLight ? ' admin-text-primary' : ' admin-text-primary'}`}>
                         {item.userName}
                       </div>
-                      <div className={`text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                      <div className={`text-xs ${isLight ? ' admin-text-secondary' : ' admin-text-secondary'}`}>
                         {item.userEmail}
                       </div>
                     </td>
 
                     <td className="py-3.5 px-4">
-                      <div className="font-bold">{item.packageName}</div>
-                      <div className="text-[10px] text-[#05DF72] font-semibold flex items-center gap-1">
+                      <div className="font-semibold">{item.packageName}</div>
+                      <div className="text-xs admin-text-success font-semibold flex items-center gap-1">
                         <Zap className="h-3 w-3" />
                         <span>{item.contractedTh} TH/s de Potencia</span>
                       </div>
                     </td>
 
                     <td className="py-3.5 px-4 text-right">
-                      <div className="font-bold text-sm text-[#05DF72]">
+                      <div className="font-semibold text-sm admin-text-success">
                         ${item.amountUsd.toFixed(2)} USD
                       </div>
-                      <div className={`text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                      <div className={`text-xs ${isLight ? ' admin-text-secondary' : ' admin-text-secondary'}`}>
                         {item.cryptoAmount}
                       </div>
                     </td>
@@ -396,14 +396,14 @@ export const PackagePaymentsView: React.FC<PackagePaymentsViewProps> = ({ isDark
                       <div className="flex items-center gap-1.5 mb-1">
                         {getNetworkBadge(item.paymentNetwork)}
                       </div>
-                      <div className={`text-[10px] flex items-center gap-1.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                      <div className={`text-xs flex items-center gap-1.5 ${isLight ? ' admin-text-secondary' : ' admin-text-secondary'}`}>
                         <span>Bloques: {item.confirmations}/{item.requiredConfirmations}</span>
                         {item.confirmations >= item.requiredConfirmations && (
-                          <CheckCircle2 className="h-3 w-3 text-[#05DF72]" />
+                          <CheckCircle2 className="h-3 w-3 admin-text-success" />
                         )}
                       </div>
                       {item.txHash && (
-                        <div className="text-[9px] text-cyan-400 truncate max-w-[120px]">
+                        <div className="text-xs admin-text-accent truncate max-w-[120px]">
                           tx: {item.txHash.slice(0, 10)}...
                         </div>
                       )}
@@ -412,7 +412,7 @@ export const PackagePaymentsView: React.FC<PackagePaymentsViewProps> = ({ isDark
                     <td className="py-3.5 px-4">
                       {getStatusBadge(item.status)}
                       {item.activatedMinerId && (
-                        <div className="text-[10px] text-[#05DF72] mt-0.5 flex items-center gap-1">
+                        <div className="text-xs admin-text-success mt-0.5 flex items-center gap-1">
                           <Cpu className="h-2.5 w-2.5" />
                           <span>ID: {item.activatedMinerId}</span>
                         </div>
@@ -424,7 +424,7 @@ export const PackagePaymentsView: React.FC<PackagePaymentsViewProps> = ({ isDark
                         {(item.status === 'PENDING' || item.status === 'CONFIRMED') && (
                           <button
                             onClick={() => setSettleModalItem(item)}
-                            className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-[#05DF72] border border-emerald-500/30 font-bold text-[11px] transition-all active:scale-[0.97] cursor-pointer"
+                            className="px-2.5 py-1 admin-radius-control admin-bg-primary admin-text-success border admin-border-success font-semibold text-xs active:scale-[0.97] cursor-pointer"
                             title="Verificar y activar minero"
                           >
                             Activar Minero
@@ -433,8 +433,8 @@ export const PackagePaymentsView: React.FC<PackagePaymentsViewProps> = ({ isDark
 
                         <button
                           onClick={() => setSelectedPayment(item)}
-                          className={`p-1.5 rounded-lg border text-[11px] flex items-center gap-1 ${
-                            isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-white/5 hover:bg-white/10 text-slate-300'
+                          className={`p-1.5 admin-radius-control border text-xs flex items-center gap-1 ${
+                            isLight ? ' admin-bg-surface admin-text-primary' : ' admin-bg-surface admin-text-secondary'
                           } cursor-pointer`}
                           title="Ver recibo y detalles de liquidación"
                         >
@@ -452,35 +452,35 @@ export const PackagePaymentsView: React.FC<PackagePaymentsViewProps> = ({ isDark
 
       {/* Modal: Confirmar y Activar Minero */}
       {settleModalItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
-          <div className={`w-full max-w-md p-6 rounded-2xl border shadow-2xl ${
-            isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-[#0E1320] border-white/10 text-white'
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 admin-bg-subtle">
+          <div className={`admin-card w-full max-w-md p-6 admin-radius-card border ${
+            isLight ? ' admin-bg-surface admin-border admin-text-primary' : ' admin-bg-surface admin-border admin-text-primary'
           }`}>
-            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+            <div className="flex items-center justify-between pb-3 border-b admin-border">
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-[#05DF72]" />
-                <h3 className="font-bold text-base">Liquidar Orden y Activar Minero</h3>
+                <CheckCircle2 className="h-5 w-5 admin-text-success" />
+                <h3 className="font-semibold text-base">Liquidar Orden y Activar Minero</h3>
               </div>
               <button 
                 onClick={() => setSettleModalItem(null)}
-                className="p-1 rounded-lg hover:bg-white/10 text-slate-400"
+                className="p-1 admin-radius-control admin-text-secondary"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
             <div className="mt-4 space-y-3 text-xs font-mono">
-              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[#05DF72]">
-                <div className="font-bold text-sm">
+              <div className="admin-card p-3 admin-radius-card admin-bg-success border admin-border-success admin-text-success">
+                <div className="font-semibold text-sm">
                   {settleModalItem.packageName} — {settleModalItem.contractedTh} TH/s
                 </div>
-                <div className="text-[11px] text-emerald-400/80 mt-1">
+                <div className="text-xs admin-text-success mt-1">
                   Cliente: {settleModalItem.userName} (${settleModalItem.amountUsd.toFixed(2)} USD)
                 </div>
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                <label className="block text-xs font-semibold admin-text-secondary mb-1">
                   Hash de Transacción On-Chain:
                 </label>
                 <input
@@ -488,27 +488,27 @@ export const PackagePaymentsView: React.FC<PackagePaymentsViewProps> = ({ isDark
                   placeholder="0x... (deja vacío para usar o simular hash verificado)"
                   value={manualTxHash}
                   onChange={(e) => setManualTxHash(e.target.value)}
-                  className={`w-full p-2.5 rounded-xl border text-xs font-mono ${
-                    isLight ? 'bg-slate-50 border-slate-200 text-slate-900' : 'bg-white/5 border-white/10 text-white'
+                  className={`w-full p-2.5 admin-radius-card border text-xs font-mono ${
+                    isLight ? ' admin-bg-surface admin-border admin-text-primary' : ' admin-bg-surface admin-border admin-text-primary'
                   }`}
                 />
               </div>
 
-              <div className="text-[11px] text-slate-400 italic">
+              <div className="text-xs admin-text-secondary italic">
                 Al confirmar, se generará el documento <code>miners/{`{minerId}`}</code> en Firestore, se registrará el crédito en el Ledger contable y se sumará la potencia a la asignación de contratos.
               </div>
             </div>
 
-            <div className="mt-5 flex items-center justify-end gap-2 pt-3 border-t border-white/10">
+            <div className="mt-5 flex items-center justify-end gap-2 pt-3 border-t admin-border">
               <button
                 onClick={() => setSettleModalItem(null)}
-                className="px-3 py-1.5 rounded-xl border text-xs font-mono hover:bg-white/5"
+                className="px-3 py-1.5 admin-radius-control border text-xs font-mono"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleConfirmSettle}
-                className="px-4 py-1.5 rounded-xl bg-[#05DF72] hover:bg-emerald-400 text-slate-950 font-bold text-xs font-mono transition-all active:scale-[0.98] cursor-pointer"
+                className="px-4 py-1.5 admin-radius-control admin-bg-primary admin-text-primary font-semibold text-xs font-mono active:scale-[0.98] cursor-pointer"
               >
                 Confirmar y Activar
               </button>
@@ -519,84 +519,84 @@ export const PackagePaymentsView: React.FC<PackagePaymentsViewProps> = ({ isDark
 
       {/* Modal: Ver Recibo Completo */}
       {selectedPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
-          <div className={`w-full max-w-lg p-6 rounded-2xl border shadow-2xl ${
-            isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-[#0E1320] border-white/10 text-white'
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 admin-bg-subtle">
+          <div className={`admin-card w-full max-w-lg p-6 admin-radius-card border ${
+            isLight ? ' admin-bg-surface admin-border admin-text-primary' : ' admin-bg-surface admin-border admin-text-primary'
           }`}>
-            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+            <div className="flex items-center justify-between pb-3 border-b admin-border">
               <div className="flex items-center gap-2">
-                <ReceiptIcon className="h-5 w-5 text-cyan-400" />
-                <h3 className="font-bold text-base">Comprobante de Pago & Conciliación</h3>
+                <ReceiptIcon className="h-5 w-5 admin-text-accent" />
+                <h3 className="font-semibold text-base">Comprobante de Pago & Conciliación</h3>
               </div>
               <button 
                 onClick={() => setSelectedPayment(null)}
-                className="p-1 rounded-lg hover:bg-white/10 text-slate-400"
+                className="p-1 admin-radius-control admin-text-secondary"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
             <div className="mt-4 space-y-2 text-xs font-mono">
-              <div className="flex justify-between py-1.5 border-b border-white/5">
-                <span className="text-slate-400">ID de Orden:</span>
-                <span className="font-bold text-cyan-400">{selectedPayment.orderId}</span>
+              <div className="flex justify-between py-1.5 border-b admin-border">
+                <span className="admin-text-secondary">ID de Orden:</span>
+                <span className="font-semibold admin-text-accent">{selectedPayment.orderId}</span>
               </div>
-              <div className="flex justify-between py-1.5 border-b border-white/5">
-                <span className="text-slate-400">Cliente Comprador:</span>
-                <span className="font-bold">{selectedPayment.userName} ({selectedPayment.userEmail})</span>
+              <div className="flex justify-between py-1.5 border-b admin-border">
+                <span className="admin-text-secondary">Cliente Comprador:</span>
+                <span className="font-semibold">{selectedPayment.userName} ({selectedPayment.userEmail})</span>
               </div>
-              <div className="flex justify-between py-1.5 border-b border-white/5">
-                <span className="text-slate-400">Paquete & Potencia:</span>
-                <span className="font-bold text-[#05DF72]">
+              <div className="flex justify-between py-1.5 border-b admin-border">
+                <span className="admin-text-secondary">Paquete & Potencia:</span>
+                <span className="font-semibold admin-text-success">
                   {selectedPayment.packageName} ({selectedPayment.contractedTh} TH/s)
                 </span>
               </div>
-              <div className="flex justify-between py-1.5 border-b border-white/5">
-                <span className="text-slate-400">Importe USD:</span>
-                <span className="font-bold text-sm">${selectedPayment.amountUsd.toFixed(2)} USD</span>
+              <div className="flex justify-between py-1.5 border-b admin-border">
+                <span className="admin-text-secondary">Importe USD:</span>
+                <span className="font-semibold text-sm">${selectedPayment.amountUsd.toFixed(2)} USD</span>
               </div>
-              <div className="flex justify-between py-1.5 border-b border-white/5">
-                <span className="text-slate-400">Importe Cripto / Red:</span>
-                <span className="font-bold">{selectedPayment.cryptoAmount} en {selectedPayment.paymentNetwork}</span>
+              <div className="flex justify-between py-1.5 border-b admin-border">
+                <span className="admin-text-secondary">Importe Cripto / Red:</span>
+                <span className="font-semibold">{selectedPayment.cryptoAmount} en {selectedPayment.paymentNetwork}</span>
               </div>
-              <div className="flex flex-col py-1.5 border-b border-white/5">
-                <span className="text-slate-400 mb-1">Dirección Receptora:</span>
-                <span className="font-mono text-[11px] break-all bg-white/5 p-2 rounded-lg">
+              <div className="flex flex-col py-1.5 border-b admin-border">
+                <span className="admin-text-secondary mb-1">Dirección Receptora:</span>
+                <span className="font-mono text-xs break-all admin-bg-surface p-2 admin-radius-card">
                   {selectedPayment.recipientAddress}
                 </span>
               </div>
               {selectedPayment.txHash && (
-                <div className="flex flex-col py-1.5 border-b border-white/5">
-                  <span className="text-slate-400 mb-1">Hash de Depósito On-Chain:</span>
-                  <span className="font-mono text-[11px] text-cyan-400 break-all bg-cyan-500/10 p-2 rounded-lg border border-cyan-500/20">
+                <div className="flex flex-col py-1.5 border-b admin-border">
+                  <span className="admin-text-secondary mb-1">Hash de Depósito On-Chain:</span>
+                  <span className="font-mono text-xs admin-text-accent break-all admin-bg-info p-2 admin-radius-card border admin-border-info">
                     {selectedPayment.txHash}
                   </span>
                 </div>
               )}
               {selectedPayment.activatedMinerId && (
-                <div className="flex justify-between py-1.5 border-b border-white/5">
-                  <span className="text-slate-400">Minero Digital Creado:</span>
-                  <span className="font-bold text-[#05DF72]">{selectedPayment.activatedMinerId}</span>
+                <div className="flex justify-between py-1.5 border-b admin-border">
+                  <span className="admin-text-secondary">Minero Digital Creado:</span>
+                  <span className="font-semibold admin-text-success">{selectedPayment.activatedMinerId}</span>
                 </div>
               )}
-              <div className="flex justify-between py-1.5 border-b border-white/5">
-                <span className="text-slate-400">Clave de Idempotencia:</span>
-                <span className="font-mono text-[10px] text-slate-400 truncate max-w-[200px]">
+              <div className="flex justify-between py-1.5 border-b admin-border">
+                <span className="admin-text-secondary">Clave de Idempotencia:</span>
+                <span className="font-mono text-xs admin-text-secondary truncate max-w-[200px]">
                   {selectedPayment.idempotencyKey}
                 </span>
               </div>
               <div className="flex justify-between py-1.5">
-                <span className="text-slate-400">Confirmaciones de Red:</span>
-                <span className="font-bold text-[#05DF72]">
+                <span className="admin-text-secondary">Confirmaciones de Red:</span>
+                <span className="font-semibold admin-text-success">
                   {selectedPayment.confirmations} / {selectedPayment.requiredConfirmations}
                 </span>
               </div>
             </div>
 
-            <div className="mt-5 flex justify-end pt-3 border-t border-white/10">
+            <div className="mt-5 flex justify-end pt-3 border-t admin-border">
               <button
                 onClick={() => setSelectedPayment(null)}
-                className="px-4 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-mono font-bold"
+                className="px-4 py-1.5 admin-radius-control admin-bg-surface text-xs font-mono font-semibold"
               >
                 Cerrar
               </button>

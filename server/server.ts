@@ -39,6 +39,7 @@ const AUDIT_LOGS_FILE = path.join(DATA_DIR, 'audit_logs.json');
 const PACKAGES_FILE = path.join(DATA_DIR, 'commercial_packages.json');
 const CONTRACTS_FILE = path.join(DATA_DIR, 'admin_contracts.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'admin_orders.json');
+const STOREFRONT_SECTIONS_FILE = path.join(DATA_DIR, 'storefront_sections.json');
 
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
@@ -175,6 +176,31 @@ export function writeOrders(orders: any[]): void {
     fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2), 'utf-8');
   } catch (err) {
     console.error('Error writing orders file:', err);
+  }
+}
+
+export function readStorefrontSections(): any {
+  try {
+    if (fs.existsSync(STOREFRONT_SECTIONS_FILE)) {
+      return JSON.parse(fs.readFileSync(STOREFRONT_SECTIONS_FILE, 'utf-8'));
+    }
+  } catch (err) {
+    console.error('Error reading storefront sections file:', err);
+  }
+  return {
+    showPresale: true,
+    showLaunch: true,
+    showMonthly: true,
+    showCustom: true,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function writeStorefrontSections(data: any): void {
+  try {
+    fs.writeFileSync(STOREFRONT_SECTIONS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error writing storefront sections file:', err);
   }
 }
 
@@ -525,6 +551,23 @@ app.post('/api/admin/orders', (req, res) => {
   }
   writeOrders(orders);
   res.json({ success: true, order });
+});
+
+// 2d. Storefront Sections Visibility (Admin Remote Control for Client Modal)
+app.get('/api/admin/storefront-sections', (_req, res) => {
+  const sections = readStorefrontSections();
+  res.json(sections);
+});
+
+app.post('/api/admin/storefront-sections', (req, res) => {
+  const current = readStorefrontSections();
+  const updated = {
+    ...current,
+    ...req.body,
+    updatedAt: new Date().toISOString()
+  };
+  writeStorefrontSections(updated);
+  res.json({ success: true, config: updated });
 });
 
 // 2b. Resilient Alert Dispatcher (Discord & Telegram)
