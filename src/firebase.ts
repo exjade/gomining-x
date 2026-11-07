@@ -1090,6 +1090,123 @@ export async function fetchPublishedCommercialPackages(): Promise<PublishedComme
   return DEFAULT_COMMERCIAL_PACKAGES
 }
 
+// ============================================================================
+// STOREFRONT SECTIONS CONFIGURATION (Admin Remote Control for Modal Tabs)
+// ============================================================================
+
+export interface StorefrontSectionsConfig {
+  showPresale: boolean
+  showLaunch: boolean
+  showMonthly: boolean
+  showCustom: boolean
+  updatedAt?: string
+}
+
+export const DEFAULT_STOREFRONT_SECTIONS: StorefrontSectionsConfig = {
+  showPresale: true,
+  showLaunch: true,
+  showMonthly: true,
+  showCustom: true,
+}
+
+/**
+ * Subscribes to real-time section visibility toggled by the admin in MinerX.
+ * Controls conditional rendering of Preventa, Lanzamiento, Mensual and Custom in client modal.
+ */
+export function subscribeToStorefrontSections(
+  callback: (config: StorefrontSectionsConfig) => void
+): () => void {
+  try {
+    const docRef = doc(db, 'admin_settings', 'storefront_sections')
+    const unsubscribe = onSnapshot(
+      docRef,
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data()
+          callback({
+            showPresale: data.showPresale !== false,
+            showLaunch: data.showLaunch !== false,
+            showMonthly: data.showMonthly !== false,
+            showCustom: data.showCustom !== false,
+            updatedAt: data.updatedAt,
+          })
+        } else {
+          callback(DEFAULT_STOREFRONT_SECTIONS)
+        }
+      },
+      (err) => {
+        console.warn('[GoMining] Real-time subscription error for storefront sections, falling back:', err)
+        fetchStorefrontSections().then(callback).catch(() => callback(DEFAULT_STOREFRONT_SECTIONS))
+      }
+    )
+    return unsubscribe
+  } catch (err) {
+    console.warn('[GoMining] Could not initialize storefront sections listener:', err)
+    fetchStorefrontSections().then(callback).catch(() => callback(DEFAULT_STOREFRONT_SECTIONS))
+    return () => {}
+  }
+}
+
+/**
+ * Fetches current storefront sections config from Cloud Firestore /admin_settings/storefront_sections
+ */
+export async function fetchStorefrontSections(): Promise<StorefrontSectionsConfig> {
+  try {
+    const docRef = doc(db, 'admin_settings', 'storefront_sections')
+    const snap = await getDoc(docRef)
+    if (snap.exists()) {
+      const data = snap.data()
+      return {
+        showPresale: data.showPresale !== false,
+        showLaunch: data.showLaunch !== false,
+        showMonthly: data.showMonthly !== false,
+        showCustom: data.showCustom !== false,
+        updatedAt: data.updatedAt,
+      }
+    }
+  } catch (err) {
+    console.warn('[GoMining] Error fetching storefront sections from Firestore:', err)
+  }
+
+  // Local fallback
+  try {
+    const res = await fetch('http://127.0.0.1:3001/api/admin/storefront-sections', { signal: AbortSignal.timeout(1200) })
+    if (res.ok) {
+      const data = await res.json()
+      if (data && typeof data === 'object') {
+        return {
+          showPresale: data.showPresale !== false,
+          showLaunch: data.showLaunch !== false,
+          showMonthly: data.showMonthly !== false,
+          showCustom: data.showCustom !== false,
+          updatedAt: data.updatedAt,
+        }
+      }
+    }
+  } catch {
+    // offline fallback
+  }
+
+  return DEFAULT_STOREFRONT_SECTIONS
+}
+
+/**
+ * Saves storefront sections config to Cloud Firestore /admin_settings/storefront_sections
+ */
+export async function saveStorefrontSections(config: Partial<StorefrontSectionsConfig>): Promise<boolean> {
+  try {
+    const docRef = doc(db, 'admin_settings', 'storefront_sections')
+    await setDoc(docRef, {
+      ...config,
+      updatedAt: new Date().toISOString()
+    }, { merge: true })
+    return true
+  } catch (err) {
+    console.error('[GoMining] Error saving storefront sections:', err)
+    return false
+  }
+}
+
 /**
  * Records a client miner purchase into the platform administration collections
  * (/admin_contracts and /admin_orders) so it immediately displays on the MinerX Admin Dashboard.

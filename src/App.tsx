@@ -28,11 +28,11 @@ import { LandingPage } from './LandingPage'
 import { ReferralPage } from './ReferralPage'
 import { usePersonalization } from './personalization'
 import {
-  subscribeToPublishedCommercialPackages,
+  subscribeToStorefrontSections,
   recordMinerPurchaseToAdmin,
   savePurchasedMiner,
-  DEFAULT_COMMERCIAL_PACKAGES,
-  type PublishedCommercialPackage,
+  type StorefrontSectionsConfig,
+  DEFAULT_STOREFRONT_SECTIONS,
   type StoredMiner,
 } from './firebase'
 import {
@@ -506,7 +506,7 @@ function AppContent() {
           txHash: `sim_${minerId}`,
           network: 'LOCAL_BALANCE',
           ownerWallet: demoInput.ownerWallet,
-          packageId: input.packageId,
+          packageId: (input as any).packageId,
         }).catch(() => {})
         setSessionEvents((items) => [`${input.name} · ${input.powerTh.toFixed(2)} TH añadidos a la granja`, ...items].slice(0, 5))
         setToast("Minero añadido a la granja local; saldo y comprobante actualizados")
@@ -1509,12 +1509,12 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
   walletSession: ReturnType<typeof useWalletSession>
   onClose: () => void
   onPayWithWallet: (productName: string, amount: number, currency: PaymentCurrency) => void
-  onComplete: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; durationDays?: number; packageId?: string }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
-  onDefer: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; durationDays?: number; packageId?: string }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
+  onComplete: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; durationDays?: number }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
+  onDefer: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; durationDays?: number }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
 }) {
-  const [commercialPackages, setCommercialPackages] = useState<PublishedCommercialPackage[]>(DEFAULT_COMMERCIAL_PACKAGES)
-  const [categoryTab, setCategoryTab] = useState<'packages' | 'presale' | 'launch' | 'monthly'>('packages')
-  const [presetId, setPresetId] = useState<string>('pkg-miner-1')
+  const [storefrontSections, setStorefrontSections] = useState<StorefrontSectionsConfig>(DEFAULT_STOREFRONT_SECTIONS)
+  const [categoryTab, setCategoryTab] = useState<'presale' | 'launch' | 'monthly'>('presale')
+  const [presetId, setPresetId] = useState<string>('presale-1')
   const [customPowerIndex, setCustomPowerIndex] = useState(0)
   const [maintenanceToken, setMaintenanceToken] = useState<'PEARL' | 'USDT'>('PEARL')
   const [roiPeriod, setRoiPeriod] = useState<'daily' | 'monthly' | 'annual'>('daily')
@@ -1525,37 +1525,51 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
   const [feedback, setFeedback] = useState('')
 
   useEffect(() => {
-    const unsubscribe = subscribeToPublishedCommercialPackages((pkgs) => {
-      if (pkgs && pkgs.length > 0) {
-        setCommercialPackages(pkgs)
-      }
+    const unsubscribe = subscribeToStorefrontSections((cfg) => {
+      if (cfg) setStorefrontSections(cfg)
     })
     return () => {
       if (unsubscribe) unsubscribe()
     }
   }, [])
 
-  const activePlans = useMemo(() => {
-    if (categoryTab === 'packages') {
-      return commercialPackages.map((pkg) => ({
-        id: pkg.id,
-        label: pkg.name,
-        powerTh: pkg.powerTh,
-        price: pkg.priceUsdt,
-        btcPerDay: pkg.powerTh * 0.0000004245,
-        roi: Number((55 + (pkg.variablePct || 0)).toFixed(2)),
-        variablePct: pkg.variablePct,
-        commissionPct: pkg.commissionPct,
-        description: pkg.description,
-      }))
+  // Auto-switch to active tab if current tab gets disabled by admin
+  useEffect(() => {
+    if (categoryTab === 'presale' && !storefrontSections.showPresale) {
+      if (storefrontSections.showLaunch) {
+        setCategoryTab('launch')
+        setPresetId('launch-42')
+      } else if (storefrontSections.showMonthly) {
+        setCategoryTab('monthly')
+        setPresetId(monthlyMinerPlans[0].id)
+      }
+    } else if (categoryTab === 'launch' && !storefrontSections.showLaunch) {
+      if (storefrontSections.showPresale) {
+        setCategoryTab('presale')
+        setPresetId('presale-1')
+      } else if (storefrontSections.showMonthly) {
+        setCategoryTab('monthly')
+        setPresetId(monthlyMinerPlans[0].id)
+      }
+    } else if (categoryTab === 'monthly' && !storefrontSections.showMonthly) {
+      if (storefrontSections.showPresale) {
+        setCategoryTab('presale')
+        setPresetId('presale-1')
+      } else if (storefrontSections.showLaunch) {
+        setCategoryTab('launch')
+        setPresetId('launch-42')
+      }
     }
+  }, [storefrontSections, categoryTab])
+
+  const activePlans = useMemo(() => {
     if (categoryTab === 'presale') return presaleMinerPlans
-    if (categoryTab === 'launch') return launchMinerPlans
-    return monthlyMinerPlans
-  }, [categoryTab, commercialPackages])
+    if (categoryTab === 'monthly') return monthlyMinerPlans
+    return launchMinerPlans
+  }, [categoryTab])
 
   const selected = activePlans.find((plan) => plan.id === presetId) || activePlans[0]
-  const isCustom = categoryTab === 'launch' && presetId === 'custom'
+  const isCustom = categoryTab === 'launch' && presetId === 'custom' && storefrontSections.showCustom
   const customTier = customMinerPriceTiers[customPowerIndex]
   const powerTh = isCustom ? customTier.powerTh : (selected?.powerTh ?? 48)
   const total = isCustom ? customTier.priceUsd : (selected?.price ?? 561.99)
@@ -1594,7 +1608,6 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
       currency,
       purchaseMode,
       durationDays: purchaseMode === 'monthly' ? 30 : undefined,
-      packageId: categoryTab === 'packages' ? selected?.id : undefined,
     }
     try {
       const result = await (kind === 'buy' ? onComplete(input) : onDefer(input))
@@ -1639,7 +1652,7 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
             <div className="builder-review-grid">
               <div><span>Potencia</span><strong>{powerTh.toFixed(2)} TH</strong></div>
               <div><span>Eficiencia</span><strong>15 W/TH</strong></div>
-              <div><span>Modalidad</span><strong>{categoryTab === 'packages' ? 'Paquete Oficial MinerX' : categoryTab === 'presale' ? 'Preventa (Edición limitada)' : categoryTab === 'monthly' ? 'Mensual · 30 días' : 'Lanzamiento · Propiedad'}</strong></div>
+              <div><span>Modalidad</span><strong>{categoryTab === 'presale' ? 'Preventa (Edición limitada)' : categoryTab === 'monthly' ? 'Mensual · 30 días' : 'Lanzamiento · Propiedad'}</strong></div>
               <div><span>Token de mantenimiento</span><strong>{maintenanceToken} {maintenanceToken === 'PEARL' ? '(-20% dto)' : ''}</strong></div>
             </div>
             <div className="purchase-total">
@@ -1689,82 +1702,39 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
               <p className="purchase-muted">Elige tu minero digital respaldado por potencia real. Todos los precios en USD ($).</p>
             </header>
 
-            {/* Categoría: Paquetes MinerX vs Preventa vs Lanzamiento vs Mensual */}
-            <div className="builder-mode-tabs" style={{ marginBottom: '14px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-              <button
-                type="button"
-                className={categoryTab === 'packages' ? 'builder-mode-active' : ''}
-                onClick={() => { setCategoryTab('packages'); setPresetId(commercialPackages[0]?.id ?? 'pkg-miner-1') }}
-              >
-                Paquetes MinerX ({commercialPackages.length})
-              </button>
-              <button
-                type="button"
-                className={categoryTab === 'presale' ? 'builder-mode-active' : ''}
-                onClick={() => { setCategoryTab('presale'); setPresetId('presale-1') }}
-              >
-                Preventa (30 unidades c/u)
-              </button>
-              <button
-                type="button"
-                className={categoryTab === 'launch' ? 'builder-mode-active' : ''}
-                onClick={() => { setCategoryTab('launch'); setPresetId('launch-42') }}
-              >
-                Lanzamiento (16 niveles)
-              </button>
-              <button
-                type="button"
-                className={categoryTab === 'monthly' ? 'builder-mode-active' : ''}
-                onClick={() => { setCategoryTab('monthly'); setPresetId(monthlyMinerPlans[0].id) }}
-              >
-                Mensual
-              </button>
+            {/* Categoría: Preventa vs Lanzamiento vs Mensual */}
+            <div className="builder-mode-tabs" style={{ marginBottom: '14px' }}>
+              {storefrontSections.showPresale && (
+                <button
+                  type="button"
+                  className={categoryTab === 'presale' ? 'builder-mode-active' : ''}
+                  onClick={() => { setCategoryTab('presale'); setPresetId('presale-1') }}
+                >
+                  Preventa (30 unidades c/u)
+                </button>
+              )}
+              {storefrontSections.showLaunch && (
+                <button
+                  type="button"
+                  className={categoryTab === 'launch' ? 'builder-mode-active' : ''}
+                  onClick={() => { setCategoryTab('launch'); setPresetId('launch-42') }}
+                >
+                  Lanzamiento (16 niveles)
+                </button>
+              )}
+              {storefrontSections.showMonthly && (
+                <button
+                  type="button"
+                  className={categoryTab === 'monthly' ? 'builder-mode-active' : ''}
+                  onClick={() => { setCategoryTab('monthly'); setPresetId(monthlyMinerPlans[0].id) }}
+                >
+                  Mensual
+                </button>
+              )}
             </div>
 
-            {/* Cards for Official MinerX Commercial Packages */}
-            {categoryTab === 'packages' && (
-              <div style={{ marginBottom: '14px' }}>
-                <div className="builder-list-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <small style={{ color: '#a5a7b8' }}>
-                    Paquetes oficiales de la administración MinerX · Potencia garantizada y liquidación diaria
-                  </small>
-                  <span className="checkout-local-badge" style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', border: '1px solid #3b82f6' }}>
-                    OFICIAL MINERX
-                  </span>
-                </div>
-                <div className="builder-plan-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-                  {commercialPackages.map((pkg) => (
-                    <button
-                      key={pkg.id}
-                      type="button"
-                      className={`builder-plan-option ${presetId === pkg.id ? 'builder-plan-option-active' : ''}`}
-                      onClick={() => setPresetId(pkg.id)}
-                      style={{ position: 'relative', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '4px' }}
-                    >
-                      <span className="builder-plan-title">
-                        <span>{pkg.name}</span>
-                        {pkg.variablePct > 0 && (
-                          <small style={{ color: '#60a5fa', fontSize: '9px', fontWeight: 600 }}>+{pkg.variablePct}% var</small>
-                        )}
-                      </span>
-                      <strong className="builder-plan-price">{formatCatalogPrice(pkg.priceUsdt, 'USD')}</strong>
-                      <small className="builder-plan-yield" style={{ color: '#e2e8f0', fontWeight: 600 }}>{pkg.powerTh} TH/s</small>
-                      <small className="builder-plan-roi" style={{ color: '#22c55e', fontSize: '9px' }}>
-                        {(pkg.powerTh * 0.0000004245).toFixed(8)} BTC/d
-                      </small>
-                      {pkg.description && (
-                        <span style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px', lineHeight: '1.2' }}>
-                          {pkg.description}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Cards for Presale */}
-            {categoryTab === 'presale' && (
+            {categoryTab === 'presale' && storefrontSections.showPresale && (
               <div style={{ marginBottom: '14px' }}>
                 <div className="builder-list-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <small style={{ color: '#a5a7b8' }}>4 niveles exclusivos limitados a 30 unidades cada uno</small>
@@ -1792,7 +1762,7 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
             )}
 
             {/* Cards for Launch */}
-            {categoryTab === 'launch' && (
+            {categoryTab === 'launch' && storefrontSections.showLaunch && (
               <div style={{ marginBottom: '14px' }}>
                 <div className="builder-list-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <small style={{ color: '#a5a7b8' }}>16 niveles estándar desde 42.44 TH ($499.99 USD) hasta 5,000 TH</small>
@@ -1812,15 +1782,17 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
                       <small className="builder-plan-roi" style={{ color: '#22c55e', fontSize: '9px' }}>ROI {plan.roi}%*</small>
                     </button>
                   ))}
-                  <button
-                    type="button"
-                    className={`builder-plan-option ${presetId === 'custom' ? 'builder-plan-option-active' : ''}`}
-                    onClick={() => setPresetId('custom')}
-                  >
-                    <span className="builder-plan-title"><span>Personalizado</span></span>
-                    <strong className="builder-plan-price">1–5,000 TH</strong>
-                    <small className="builder-plan-yield">22 niveles</small>
-                  </button>
+                  {storefrontSections.showCustom && (
+                    <button
+                      type="button"
+                      className={`builder-plan-option ${presetId === 'custom' ? 'builder-plan-option-active' : ''}`}
+                      onClick={() => setPresetId('custom')}
+                    >
+                      <span className="builder-plan-title"><span>Personalizado</span></span>
+                      <strong className="builder-plan-price">1–5,000 TH</strong>
+                      <small className="builder-plan-yield">22 niveles</small>
+                    </button>
+                  )}
                 </div>
 
                 {isCustom && (
@@ -1850,7 +1822,7 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
             )}
 
             {/* Cards for Monthly */}
-            {categoryTab === 'monthly' && (
+            {categoryTab === 'monthly' && storefrontSections.showMonthly && (
               <div style={{ marginBottom: '14px' }}>
                 <div className="builder-plan-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
                   {monthlyMinerPlans.map((plan) => (
