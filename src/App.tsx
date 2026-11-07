@@ -14,7 +14,15 @@ import { CryptoIcon } from './CryptoIcon'
 import { isPaymentNetworkId, type PaymentNetworkId } from './paymentDestinations'
 import { AppRouteSkeleton, MetricValueSkeleton, PoolTableSkeleton, Skeleton, WalletIdentitySkeleton } from './Skeletons'
 import { convertCatalogPriceToUsd, formatAssetAmount, formatCatalogPrice, type PaymentCurrency } from './paymentQuote'
-import { customMinerPriceTiers, launchMinerPlans, MINER_CATALOG_OBSERVED_AT, monthlyMinerPlans, presaleMinerPlans } from './minerCatalog'
+import { customMinerPriceTiers, launchMinerPlans, MINER_CATALOG_OBSERVED_AT, monthlyMinerPlans, oneTimeMinerPlans, presaleMinerPlans } from './minerCatalog'
+import { MinerCreationScreen } from './components/miner-builder/MinerCreationScreen'
+import { CreateMinerModal } from './components/miner-builder/CreateMinerModal'
+import { MinerOptionList } from './components/miner-builder/MinerOptionList'
+import { MinerTabs, type MinerCategoryTab } from './components/miner-builder/MinerTabs'
+import { PowerSlider } from './components/miner-builder/PowerSlider'
+import { RewardsCalculator, type RewardPeriod } from './components/miner-builder/RewardsCalculator'
+import { PaymentTimingOptions, type MaintenanceToken } from './components/miner-builder/PaymentOptions'
+import { customMinerEconomics } from './components/miner-builder/customMinerEconomics'
 import { BitcoinMiningCalculator } from './BitcoinMiningCalculator'
 import { calculateMiningSettlement, REFERRAL_LEVEL_WEIGHTS } from './miningEconomics'
 import { resetMiningConfig, updateMiningConfig, useMiningConfig } from './miningConfig'
@@ -1513,11 +1521,12 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
   onDefer: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; durationDays?: number }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
 }) {
   const [storefrontSections, setStorefrontSections] = useState<StorefrontSectionsConfig>(DEFAULT_STOREFRONT_SECTIONS)
-  const [categoryTab, setCategoryTab] = useState<'presale' | 'launch' | 'monthly'>('presale')
+  const [categoryTab, setCategoryTab] = useState<MinerCategoryTab>('packages')
   const [presetId, setPresetId] = useState<string>('presale-1')
+  const [isCustomEditorOpen, setIsCustomEditorOpen] = useState(false)
   const [customPowerIndex, setCustomPowerIndex] = useState(0)
-  const [maintenanceToken, setMaintenanceToken] = useState<'PEARL' | 'USDT'>('PEARL')
-  const [roiPeriod, setRoiPeriod] = useState<'daily' | 'monthly' | 'annual'>('daily')
+  const [maintenanceToken, setMaintenanceToken] = useState<MaintenanceToken>('PEARL')
+  const [roiPeriod, setRoiPeriod] = useState<RewardPeriod>('monthly')
   const [promoCode, setPromoCode] = useState('')
   const [stage, setStage] = useState<'configure' | 'review' | 'receipt'>('configure')
   const [accepted, setAccepted] = useState(false)
@@ -1542,6 +1551,9 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
       } else if (storefrontSections.showMonthly) {
         setCategoryTab('monthly')
         setPresetId(monthlyMinerPlans[0].id)
+      } else {
+        setCategoryTab('packages')
+        setPresetId('')
       }
     } else if (categoryTab === 'launch' && !storefrontSections.showLaunch) {
       if (storefrontSections.showPresale) {
@@ -1550,6 +1562,9 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
       } else if (storefrontSections.showMonthly) {
         setCategoryTab('monthly')
         setPresetId(monthlyMinerPlans[0].id)
+      } else {
+        setCategoryTab('packages')
+        setPresetId('')
       }
     } else if (categoryTab === 'monthly' && !storefrontSections.showMonthly) {
       if (storefrontSections.showPresale) {
@@ -1558,18 +1573,38 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
       } else if (storefrontSections.showLaunch) {
         setCategoryTab('launch')
         setPresetId('launch-42')
+      } else {
+        setCategoryTab('packages')
+        setPresetId('')
       }
     }
   }, [storefrontSections, categoryTab])
 
+  useEffect(() => {
+    if (!storefrontSections.showCustom && (presetId === 'custom' || isCustomEditorOpen)) {
+      if (presetId === 'custom') setPresetId('')
+      setIsCustomEditorOpen(false)
+    }
+  }, [storefrontSections.showCustom, presetId, isCustomEditorOpen])
+
   const activePlans = useMemo(() => {
+    if (categoryTab === 'packages') return oneTimeMinerPlans
     if (categoryTab === 'presale') return presaleMinerPlans
     if (categoryTab === 'monthly') return monthlyMinerPlans
     return launchMinerPlans
   }, [categoryTab])
 
-  const selected = activePlans.find((plan) => plan.id === presetId) || activePlans[0]
-  const isCustom = categoryTab === 'launch' && presetId === 'custom' && storefrontSections.showCustom
+  const visibleTabs = useMemo<MinerCategoryTab[]>(() => {
+    const tabs: MinerCategoryTab[] = ['packages']
+    if (storefrontSections.showPresale) tabs.push('presale')
+    if (storefrontSections.showLaunch) tabs.push('launch')
+    if (storefrontSections.showMonthly) tabs.push('monthly')
+    return tabs
+  }, [storefrontSections])
+
+  const selected = activePlans.find((plan) => plan.id === presetId)
+  const isCustom = categoryTab === 'packages' && presetId === 'custom' && storefrontSections.showCustom
+  const isCustomEditor = isCustom && isCustomEditorOpen
   const customTier = customMinerPriceTiers[customPowerIndex]
   const powerTh = isCustom ? customTier.powerTh : (selected?.powerTh ?? 48)
   const total = isCustom ? customTier.priceUsd : (selected?.price ?? 561.99)
@@ -1587,15 +1622,18 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
   const periodMultiplier = roiPeriod === 'daily' ? 1 : roiPeriod === 'monthly' ? 30 : 365
   const btcPriceUsd = 90000
   const dailyBtcEstimate = powerTh * 0.0000004245
-  const periodBtcEstimate = dailyBtcEstimate * periodMultiplier
-  const poolPayoutUsd = periodBtcEstimate * btcPriceUsd
+  const calculatedPeriodBtcEstimate = dailyBtcEstimate * periodMultiplier
+  const economicsFixture = customMinerEconomics(powerTh, roiPeriod, maintenanceToken)
+  const periodBtcEstimate = economicsFixture?.periodBtcEstimate ?? calculatedPeriodBtcEstimate
+  const poolPayoutUsd = economicsFixture?.poolPayoutUsd ?? periodBtcEstimate * btcPriceUsd
 
   const dailyMaintenanceBase = powerTh * 0.022
   const maintenanceDiscount = maintenanceToken === 'PEARL' ? 0.20 : 0.0
-  const periodMaintenanceUsd = dailyMaintenanceBase * periodMultiplier * (1 - maintenanceDiscount)
-  const periodMaintenanceTokenAmount = maintenanceToken === 'PEARL' ? periodMaintenanceUsd / 0.05 : periodMaintenanceUsd
-  const netRewardUsd = Math.max(0, poolPayoutUsd - periodMaintenanceUsd)
-  const displayRoi = selected?.roi ?? 57.17
+  const calculatedMaintenanceUsd = dailyMaintenanceBase * periodMultiplier * (1 - maintenanceDiscount)
+  const periodMaintenanceUsd = economicsFixture?.periodMaintenanceUsd ?? calculatedMaintenanceUsd
+  const periodMaintenanceTokenAmount = economicsFixture?.periodMaintenanceTokenAmount ?? (maintenanceToken === 'PEARL' ? periodMaintenanceUsd / 0.05 : periodMaintenanceUsd)
+  const netRewardUsd = economicsFixture?.netRewardUsd ?? Math.max(0, poolPayoutUsd - periodMaintenanceUsd)
+  const displayRoi = economicsFixture?.annualRoi ?? selected?.roi ?? 57.17
 
   const runDemoAction = async (kind: 'buy' | 'defer') => {
     if (!accepted) return
@@ -1623,11 +1661,10 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
   }
 
   const receiptIsPending = receipt?.kind === 'miner-pending'
+  const modalVariant = stage !== 'configure' ? 'workflow' : isCustomEditor ? 'custom' : 'catalog'
 
   return (
-    <div className="modal-backdrop purchase-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-      <section className="purchase-modal miner-builder-modal" role="dialog" aria-modal="true" aria-labelledby="miner-builder-title" style={{ maxWidth: '820px' }}>
-        <button className="modal-close" aria-label="Cerrar configurador" onClick={onClose}>×</button>
+    <CreateMinerModal variant={modalVariant} onClose={onClose}>
 
         {stage === 'receipt' && receipt ? (
           <>
@@ -1652,7 +1689,7 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
             <div className="builder-review-grid">
               <div><span>Potencia</span><strong>{powerTh.toFixed(2)} TH</strong></div>
               <div><span>Eficiencia</span><strong>15 W/TH</strong></div>
-              <div><span>Modalidad</span><strong>{categoryTab === 'presale' ? 'Preventa (Edición limitada)' : categoryTab === 'monthly' ? 'Mensual · 30 días' : 'Lanzamiento · Propiedad'}</strong></div>
+              <div><span>Modalidad</span><strong>{categoryTab === 'presale' ? 'Preventa (Edición limitada)' : categoryTab === 'monthly' ? 'Mensual · 30 días' : categoryTab === 'packages' ? 'Paquetes MinerX' : 'Lanzamiento · Propiedad'}</strong></div>
               <div><span>Token de mantenimiento</span><strong>{maintenanceToken} {maintenanceToken === 'PEARL' ? '(-20% dto)' : ''}</strong></div>
             </div>
             <div className="purchase-total">
@@ -1695,273 +1732,172 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
           </>
         ) : (
           <>
-            <header className="builder-hero">
-              <div className="builder-hero-art" aria-hidden="true" />
-              <p className="eyebrow">CONFIGURADOR DE MINERO</p>
-              <h2 id="miner-builder-title">Crear un minero</h2>
-              <p className="purchase-muted">Elige tu minero digital respaldado por potencia real. Todos los precios en USD ($).</p>
-            </header>
-
-            {/* Categoría: Preventa vs Lanzamiento vs Mensual */}
-            <div className="builder-mode-tabs" style={{ marginBottom: '14px' }}>
-              {storefrontSections.showPresale && (
-                <button
-                  type="button"
-                  className={categoryTab === 'presale' ? 'builder-mode-active' : ''}
-                  onClick={() => { setCategoryTab('presale'); setPresetId('presale-1') }}
-                >
-                  Preventa (30 unidades c/u)
-                </button>
-              )}
-              {storefrontSections.showLaunch && (
-                <button
-                  type="button"
-                  className={categoryTab === 'launch' ? 'builder-mode-active' : ''}
-                  onClick={() => { setCategoryTab('launch'); setPresetId('launch-42') }}
-                >
-                  Lanzamiento (16 niveles)
-                </button>
-              )}
-              {storefrontSections.showMonthly && (
-                <button
-                  type="button"
-                  className={categoryTab === 'monthly' ? 'builder-mode-active' : ''}
-                  onClick={() => { setCategoryTab('monthly'); setPresetId(monthlyMinerPlans[0].id) }}
-                >
-                  Mensual
-                </button>
-              )}
-            </div>
-
-            {/* Cards for Presale */}
-            {categoryTab === 'presale' && storefrontSections.showPresale && (
-              <div style={{ marginBottom: '14px' }}>
-                <div className="builder-list-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <small style={{ color: '#a5a7b8' }}>4 niveles exclusivos limitados a 30 unidades cada uno</small>
-                  <span className="checkout-local-badge" style={{ background: 'rgba(217, 119, 6, 0.2)', color: '#f59e0b', border: '1px solid #d97706' }}>
-                    PREVENTA LIMITADA
-                  </span>
-                </div>
-                <div className="builder-plan-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-                  {presaleMinerPlans.map((plan) => (
-                    <button
-                      key={plan.id}
-                      type="button"
-                      className={`builder-plan-option ${presetId === plan.id ? 'builder-plan-option-active' : ''}`}
-                      onClick={() => setPresetId(plan.id)}
-                      style={{ position: 'relative' }}
-                    >
-                      <span className="builder-plan-title"><span>{plan.label}</span><small style={{ color: '#f59e0b', fontSize: '9px' }}>30 disp.</small></span>
-                      <strong className="builder-plan-price">{formatCatalogPrice(plan.price, 'USD')}</strong>
-                      <small className="builder-plan-yield">{plan.btcPerDay?.toFixed(8)} BTC/día</small>
-                      <small className="builder-plan-roi" style={{ color: '#22c55e' }}>ROI {plan.roi}%*</small>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Cards for Launch */}
-            {categoryTab === 'launch' && storefrontSections.showLaunch && (
-              <div style={{ marginBottom: '14px' }}>
-                <div className="builder-list-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <small style={{ color: '#a5a7b8' }}>16 niveles estándar desde 42.44 TH ($499.99 USD) hasta 5,000 TH</small>
-                  <span className="checkout-local-badge">LANZAMIENTO</span>
-                </div>
-                <div className="builder-plan-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', maxHeight: '280px', overflowY: 'auto', paddingRight: '4px' }}>
-                  {launchMinerPlans.map((plan) => (
-                    <button
-                      key={plan.id}
-                      type="button"
-                      className={`builder-plan-option ${presetId === plan.id ? 'builder-plan-option-active' : ''}`}
-                      onClick={() => setPresetId(plan.id)}
-                    >
-                      <span className="builder-plan-title"><span>{plan.label}</span></span>
-                      <strong className="builder-plan-price">{formatCatalogPrice(plan.price, 'USD')}</strong>
-                      <small className="builder-plan-yield">{plan.btcPerDay?.toFixed(8)} BTC/d</small>
-                      <small className="builder-plan-roi" style={{ color: '#22c55e', fontSize: '9px' }}>ROI {plan.roi}%*</small>
-                    </button>
-                  ))}
-                  {storefrontSections.showCustom && (
-                    <button
-                      type="button"
-                      className={`builder-plan-option ${presetId === 'custom' ? 'builder-plan-option-active' : ''}`}
-                      onClick={() => setPresetId('custom')}
-                    >
-                      <span className="builder-plan-title"><span>Personalizado</span></span>
-                      <strong className="builder-plan-price">1–5,000 TH</strong>
-                      <small className="builder-plan-yield">22 niveles</small>
-                    </button>
-                  )}
-                </div>
-
-                {isCustom && (
-                  <section className="builder-custom-panel" style={{ marginTop: '12px' }}>
-                    <div className="panel-toolbar">
-                      <div>
-                        <h3>Ajuste personalizado</h3>
-                        <p>Precio exacto por nivel · $12.99/TH base · 15 W/TH</p>
-                      </div>
-                      <span className="checkout-local-badge">USD</span>
+            {isCustomEditor ? (
+              <MinerCreationScreen customMode onBack={() => setIsCustomEditorOpen(false)}>
+                <div className="miner-custom-card-list">
+                  <section className="miner-custom-card miner-custom-power-card">
+                  <div className="panel-toolbar">
+                    <div>
+                      <h3>Ajuste personalizado</h3>
+                      <p>Precio exacto por nivel · $12.99/TH base</p>
                     </div>
-                    <label className="builder-slider-label">
-                      <span>Nivel y Potencia</span>
-                      <strong>{customTier.powerTh.toLocaleString('es-MX')} TH · {formatCatalogPrice(customTier.priceUsd, 'USD')}</strong>
-                      <input
-                        type="range"
-                        min="0"
-                        max={customMinerPriceTiers.length - 1}
-                        step="1"
-                        value={customPowerIndex}
-                        onChange={(event) => setCustomPowerIndex(Number(event.target.value))}
-                      />
-                    </label>
+                    <span className="miner-option-badge">USD</span>
+                  </div>
+                  <PowerSlider
+                    value={customPowerIndex}
+                    tiers={customMinerPriceTiers}
+                    valueLabel={`${customTier.powerTh.toLocaleString('es-MX')} TH · ${formatCatalogPrice(customTier.priceUsd, 'USD')}`}
+                    onChange={setCustomPowerIndex}
+                  />
+                  <div className="miner-energy-efficiency">
+                    <div className="miner-section-heading">Eficiencia energética <span className="miner-info-icon" aria-hidden="true">i</span></div>
+                    <div className="miner-efficiency-chip"><span className="miner-efficiency-mark" aria-hidden="true">⚡</span><strong>15 W/TH</strong></div>
+                  </div>
+                  <div className="miner-power-range-control">
+                    <label className="miner-power-range-label" htmlFor="custom-power-range">Potencia personalizada</label>
+                    <input
+                      id="custom-power-range"
+                      className="miner-power-range"
+                      type="range"
+                      min="0"
+                      max={customMinerPriceTiers.length - 1}
+                      step="1"
+                      value={customPowerIndex}
+                      aria-label="Nivel y Potencia"
+                      onChange={(event) => setCustomPowerIndex(Number(event.target.value))}
+                    />
+                  </div>
                   </section>
-                )}
-              </div>
-            )}
 
-            {/* Cards for Monthly */}
-            {categoryTab === 'monthly' && storefrontSections.showMonthly && (
-              <div style={{ marginBottom: '14px' }}>
-                <div className="builder-plan-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
-                  {monthlyMinerPlans.map((plan) => (
-                    <button
-                      key={plan.id}
-                      type="button"
-                      className={`builder-plan-option ${presetId === plan.id ? 'builder-plan-option-active' : ''}`}
-                      onClick={() => setPresetId(plan.id)}
-                    >
-                      <span className="builder-plan-title"><span>{plan.label}</span></span>
-                      <strong className="builder-plan-price">{plan.powerTh.toFixed(2)} TH</strong>
-                      <small className="builder-plan-yield">{formatCatalogPrice(plan.price, 'USD')} / mes</small>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+                  <section className="miner-custom-card miner-custom-rewards-card">
+                  <RewardsCalculator
+                    roiPeriod={roiPeriod}
+                    setRoiPeriod={setRoiPeriod}
+                    maintenanceToken={maintenanceToken}
+                    setMaintenanceToken={setMaintenanceToken}
+                    btcPriceUsd={btcPriceUsd}
+                    poolPayoutUsd={poolPayoutUsd}
+                    periodBtcEstimate={periodBtcEstimate}
+                    periodMaintenanceUsd={periodMaintenanceUsd}
+                    periodMaintenanceTokenAmount={periodMaintenanceTokenAmount}
+                    netRewardUsd={netRewardUsd}
+                    displayRoi={displayRoi}
+                    showCurrencySelector
+                  />
+                  </section>
 
-            {/* Panel de Cálculo de Minería y Token de Mantenimiento (Matching UI-UX screenshot!) */}
-            <section className="builder-custom-panel builder-economics-panel" style={{ background: '#121320', borderColor: 'rgba(140, 80, 245, 0.25)' }}>
-              <div className="builder-economics-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <div className="builder-mode-tabs" style={{ width: '240px' }}>
-                  <button
-                    type="button"
-                    className={roiPeriod === 'daily' ? 'builder-mode-active' : ''}
-                    onClick={() => setRoiPeriod('daily')}
-                  >
-                    A diario
-                  </button>
-                  <button
-                    type="button"
-                    className={roiPeriod === 'monthly' ? 'builder-mode-active' : ''}
-                    onClick={() => setRoiPeriod('monthly')}
-                  >
-                    Mensual
-                  </button>
-                  <button
-                    type="button"
-                    className={roiPeriod === 'annual' ? 'builder-mode-active' : ''}
-                    onClick={() => setRoiPeriod('annual')}
-                  >
-                    Anual
-                  </button>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '11px', color: '#a5a7b8' }}>Eficiencia:</span>
-                  <span className="checkout-local-badge" style={{ background: '#1e1c38', color: '#c7a7ff' }}>15 W/TH</span>
-                </div>
-              </div>
-
-              <div className="builder-economics-controls" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-                <div>
-                  <small style={{ color: '#8d90a5', display: 'block', marginBottom: '4px' }}>Precio BTC de referencia</small>
-                  <strong style={{ fontSize: '14px', color: '#fff' }}>${btcPriceUsd.toLocaleString('en-US')} USD</strong>
-                </div>
-                <div>
-                  <small style={{ color: '#8d90a5', display: 'block', marginBottom: '4px' }}>Token de mantenimiento</small>
-                  <div className="builder-mode-tabs" style={{ padding: '2px' }}>
-                    <button
-                      type="button"
-                      className={maintenanceToken === 'PEARL' ? 'builder-mode-active' : ''}
-                      onClick={() => setMaintenanceToken('PEARL')}
-                    >
-                      PEARL (-20%)
-                    </button>
-                    <button
-                      type="button"
-                      className={maintenanceToken === 'USDT' ? 'builder-mode-active' : ''}
-                      onClick={() => setMaintenanceToken('USDT')}
-                    >
-                      USDT
-                    </button>
+                  <div className="miner-custom-card miner-custom-traits-row" aria-label="Rasgos del minero">
+                    <span className="miner-traits-thumbnail" aria-hidden="true" />
+                    <span className="miner-custom-traits-copy">
+                      <strong>Rasgos del minero</strong>
+                      <small>{customTier.powerTh.toFixed(2)} TH · 15 W/TH</small>
+                    </span>
+                    <span className="miner-custom-traits-chevron" aria-hidden="true">›</span>
                   </div>
-                </div>
-              </div>
 
-              {/* Dynamic Metrics */}
-              <div className="builder-economics-metrics" style={{ background: '#171829', borderRadius: '10px', padding: '12px', display: 'grid', gap: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '12px', color: '#a7aabd' }}>Pago estimado de pool:</span>
-                  <div style={{ textAlign: 'right' }}>
-                    <strong style={{ fontSize: '12px', color: '#22c55e' }}>${poolPayoutUsd.toFixed(2)} USD</strong>
-                    <small style={{ display: 'block', color: '#8d90a5', fontSize: '10px' }}>{periodBtcEstimate.toFixed(8)} BTC</small>
+                  <section className="miner-custom-card miner-custom-payment-card">
+                  <PaymentTimingOptions />
+                  <div className="miner-config-summary">
+                    <span>Precio total <strong>{formatCatalogPrice(total, 'USD')}</strong></span>
+                    <span>Catálogo <strong>{new Date(MINER_CATALOG_OBSERVED_AT).toLocaleDateString('es-MX')}</strong></span>
                   </div>
+                  <label className="builder-promo miner-promo">
+                    <span>Código promocional</span>
+                    <input value={promoCode} onChange={(event) => setPromoCode(event.target.value)} placeholder="Añadir código opcional" />
+                  </label>
+                  </section>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '12px', color: '#a7aabd', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    Mantenimiento:
-                    {maintenanceToken === 'PEARL' && (
-                      <span style={{ background: '#ef4444', color: '#fff', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
-                        HASTA -20%
-                      </span>
+                <div className="purchase-modal-actions">
+                  <button className="button button-primary" onClick={() => { setAccepted(false); setStage('review') }}>
+                    Continuar a la compra <span>→</span>
+                  </button>
+                </div>
+              </MinerCreationScreen>
+            ) : (
+              <>
+                <MinerCreationScreen>
+                  <MinerTabs
+                    activeTab={categoryTab}
+                    visibleTabs={visibleTabs}
+                    onChange={(tab) => {
+                      setIsCustomEditorOpen(false)
+                      setCategoryTab(tab)
+                      setPresetId(tab === 'launch' ? 'launch-42' : tab === 'monthly' ? monthlyMinerPlans[0].id : 'presale-1')
+                    }}
+                  />
+
+                  <MinerOptionList
+                    activeTab={categoryTab}
+                    plans={activePlans}
+                    selectedId={presetId}
+                    onSelect={setPresetId}
+                    heading={categoryTab === 'presale'
+                      ? '4 niveles exclusivos limitados a 30 unidades cada uno'
+                      : categoryTab === 'packages'
+                        ? 'Elige una potencia para tu minero MinerX'
+                        : categoryTab === 'launch'
+                        ? '16 niveles estándar desde 42.44 TH ($499.99 USD) hasta 5,000 TH'
+                        : 'Elige una potencia para consultar el rendimiento mensual'}
+                    badge={categoryTab === 'presale'
+                      ? <span className="miner-option-badge miner-option-badge-warning">PREVENTA LIMITADA</span>
+                      : categoryTab === 'launch'
+                        ? <span className="miner-option-badge">LANZAMIENTO</span>
+                        : undefined}
+                    includeCustom={categoryTab === 'packages' && storefrontSections.showCustom}
+                  >
+                    {categoryTab === 'monthly' && (
+                      <RewardsCalculator
+                        roiPeriod={roiPeriod}
+                        setRoiPeriod={setRoiPeriod}
+                        maintenanceToken={maintenanceToken}
+                        setMaintenanceToken={setMaintenanceToken}
+                        btcPriceUsd={btcPriceUsd}
+                        poolPayoutUsd={poolPayoutUsd}
+                        periodBtcEstimate={periodBtcEstimate}
+                        periodMaintenanceUsd={periodMaintenanceUsd}
+                        periodMaintenanceTokenAmount={periodMaintenanceTokenAmount}
+                        netRewardUsd={netRewardUsd}
+                        displayRoi={displayRoi}
+                      />
                     )}
-                  </span>
-                  <div style={{ textAlign: 'right' }}>
-                    <strong style={{ fontSize: '12px', color: '#f87171' }}>-${periodMaintenanceUsd.toFixed(2)} USD</strong>
-                    <small style={{ display: 'block', color: '#8d90a5', fontSize: '10px' }}>
-                      {periodMaintenanceTokenAmount.toFixed(2)} {maintenanceToken}
-                    </small>
-                  </div>
+
+                    <div className={`miner-config-summary ${categoryTab === 'monthly' ? 'miner-config-summary-monthly' : ''}`}>
+                      {categoryTab === 'monthly' ? (
+                        <span>Precio total <strong>{formatCatalogPrice(total, 'USD')}</strong> · Eficiencia <strong>15 W/TH</strong> · Catálogo <strong>{new Date(MINER_CATALOG_OBSERVED_AT).toLocaleDateString('es-MX')}</strong></span>
+                      ) : (
+                        <>
+                          <span>Precio total <strong>{formatCatalogPrice(total, 'USD')}</strong></span>
+                          <span>Potencia <strong>{powerTh.toFixed(2)} TH</strong></span>
+                          <span>Eficiencia <strong>15 W/TH</strong></span>
+                          <span>Catálogo <strong>{new Date(MINER_CATALOG_OBSERVED_AT).toLocaleDateString('es-MX')}</strong></span>
+                        </>
+                      )}
+                    </div>
+                    <label className="builder-promo miner-promo">
+                      <span>Código promocional</span>
+                      <input value={promoCode} onChange={(event) => setPromoCode(event.target.value)} placeholder="Añadir código opcional" />
+                    </label>
+                  </MinerOptionList>
+                </MinerCreationScreen>
+                <div className="purchase-modal-actions">
+                  <button className="button button-quiet" onClick={onClose}>Cancelar</button>
+                  <button
+                    className="button button-primary"
+                    disabled={!selected && !isCustom}
+                    onClick={() => {
+                      setAccepted(false)
+                      if (isCustom) setIsCustomEditorOpen(true)
+                      else setStage('review')
+                    }}
+                  >
+                    Continuar a la compra <span>→</span>
+                  </button>
                 </div>
-                <div style={{ height: '1px', background: 'rgba(255,255,255,0.08)', margin: '4px 0' }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>Recompensa neta estimada:</span>
-                  <strong style={{ fontSize: '15px', color: '#a855f7' }}>${netRewardUsd.toFixed(2)} USD</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11px', color: '#8d90a5' }}>ROI estimado anual:</span>
-                  <strong style={{ fontSize: '11px', color: '#22c55e' }}>hasta {displayRoi}%</strong>
-                </div>
-              </div>
-
-              <small style={{ display: 'block', color: '#7c8098', fontSize: '9px', marginTop: '8px' }}>
-                *El token de mantenimiento ({maintenanceToken}) se deposita y se convierte en Crédito de Mantenimiento para descontar costos diarios.
-              </small>
-            </section>
-
-            <div className="builder-estimate-grid" style={{ marginTop: '14px' }}>
-              <div><span>Precio total</span><strong style={{ color: '#c7a7ff' }}>{formatCatalogPrice(total, 'USD')}</strong></div>
-              <div><span>Potencia</span><strong>{powerTh.toFixed(2)} TH</strong></div>
-              <div><span>Eficiencia</span><strong>15 W/TH</strong></div>
-              <div><span>Catálogo</span><strong>{new Date(MINER_CATALOG_OBSERVED_AT).toLocaleDateString('es-MX')}</strong></div>
-            </div>
-
-            <label className="builder-promo" style={{ marginTop: '10px' }}>
-              <span>Código promocional</span>
-              <input value={promoCode} onChange={(event) => setPromoCode(event.target.value)} placeholder="Añadir código opcional" />
-            </label>
-
-            <div className="purchase-modal-actions">
-              <button className="button button-quiet" onClick={onClose}>Cancelar</button>
-              <button className="button button-primary" onClick={() => { setAccepted(false); setStage('review') }}>
-                Continuar a la compra <span>→</span>
-              </button>
-            </div>
+              </>
+            )}
           </>
         )}
-      </section>
-    </div>
+    </CreateMinerModal>
   )
 }
 
