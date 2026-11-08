@@ -7,7 +7,7 @@ import { VastClient } from './services/vastClient.js';
 import { VastOffersService } from './services/vastOffersService.js';
 import { VastInstanceService } from './services/vastInstanceService.js';
 import { StrategyEngine } from './services/strategyEngine.js';
-import { CatalogService, VALID_SECTIONS, type CatalogSection } from '../src/services/catalogService.js';
+import { CatalogService, VALID_SECTIONS, VALID_STATUSES, type CatalogSection } from '../src/services/catalogService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -318,11 +318,14 @@ export function getUserIdFromReq(req: express.Request): string {
  * Returns null if token is missing, invalid, or expired.
  */
 export function getAuthenticatedUser(req: express.Request): UserAccount | null {
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim() || (req.query.token as string);
+  const authHeader = (req.headers && req.headers.authorization) || '';
+  let token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (!token && req.query && typeof req.query.token === 'string') {
+    token = req.query.token.trim();
+  }
   if (!token) return null;
   const db = readUsers();
-  const user = db.users.find((u) => u.sessionToken === token);
+  const user = db.users.find((u) => Boolean(u.sessionToken) && u.sessionToken === token);
   return user || null;
 }
 
@@ -529,6 +532,12 @@ app.get('/api/catalog/admin', async (req, res) => {
     });
   }
 
+  if (status && !VALID_STATUSES.includes(status as any)) {
+    return res.status(400).json({
+      error: `Invalid status query parameter: '${status}'. Must be one of: ${VALID_STATUSES.join(', ')}`
+    });
+  }
+
   try {
     const adminCatalog = await catalogService.getAdminCatalog({
       section: section as CatalogSection | undefined,
@@ -554,8 +563,8 @@ app.post('/api/catalog/packages', async (req, res) => {
   }
 
   const pkg = req.body;
-  if (!pkg || typeof pkg !== 'object') {
-    return res.status(400).json({ error: 'Validación de paquete fallida', details: 'Body is required' });
+  if (!pkg || typeof pkg !== 'object' || Array.isArray(pkg)) {
+    return res.status(400).json({ error: 'Validación de paquete fallida', details: 'Body must be a valid package object' });
   }
 
   const updatedBy = user.id;
@@ -582,6 +591,9 @@ app.post('/api/catalog/packages/:id/archive', async (req, res) => {
   }
 
   const { id } = req.params;
+  if (!id || typeof id !== 'string' || !id.trim()) {
+    return res.status(400).json({ error: 'Package id is required' });
+  }
   const updatedBy = user.id;
 
   try {
@@ -2824,9 +2836,18 @@ async function runAutonomousBackgroundWatcher() {
   }
 }
 
-// Background intervals and server listener (disabled during test runs)
-const isTestEnv = process.env.NODE_ENV === 'test' || process.execArgv.includes('--test') || process.argv.some(a => a.includes('--test') || a.includes('node:test'));
-if (!isTestEnv) {
+// Background intervals and server listener (only enabled when executed directly, disabled during module import / test runs)
+const isMainModule = Boolean(
+  process.argv[1] &&
+  path.resolve(process.argv[1]).toLowerCase() === path.resolve(__filename).toLowerCase()
+);
+
+const isTestEnv = process.env.NODE_ENV === 'test' ||
+  Boolean(process.env.NODE_TEST_CONTEXT) ||
+  process.execArgv.includes('--test') ||
+  process.argv.some(a => a.includes('test') || a.includes('--test') || a.includes('node:test'));
+
+if (isMainModule && !isTestEnv) {
   // 1. Autonomous Surveillance Loop every 60 seconds
   setInterval(runAutonomousBackgroundWatcher, 60000);
   // 2. Interactive Telegram Commands Poller every 8 seconds

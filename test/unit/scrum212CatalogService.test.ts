@@ -716,6 +716,17 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
       // Mock duck-typed firestore instance
     });
     assert.ok(mockAdapter);
+
+    // In Node without emulator, savePackage on default adapter throws remote write security error
+    const defaultAdapter = new FirestoreCatalogStoreAdapter();
+    if (!process.env.FIRESTORE_EMULATOR_HOST) {
+      await assert.rejects(
+        async () => {
+          await defaultAdapter.savePackage(fixtureMinerxPublished);
+        },
+        /Remote Firestore writes from Node backend are strictly prohibited without FIRESTORE_EMULATOR_HOST/
+      );
+    }
   });
 
   // CommercialPackageService integration tests
@@ -1070,6 +1081,12 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
         assert.ok(adminData.canonical.some((p: any) => p.id === 'pkg-mensual-draft'));
         assert.ok(adminData.legacy.some((p: any) => p.id === 'pkg-miner-1'));
 
+        // Invalid status query parameter on admin endpoint returns 400
+        const adminInvalidStatus = await fetch(`${baseUrl}/api/catalog/admin?status=INVALID_STATUS`, {
+          headers: { authorization: `Bearer ${testToken}` },
+        });
+        assert.equal(adminInvalidStatus.status, 400);
+
         // 3. POST /api/catalog/packages requires valid authentication
         const postUnauth = await fetch(`${baseUrl}/api/catalog/packages`, {
           method: 'POST',
@@ -1095,6 +1112,17 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
         assert.equal(postIncomplete.status, 400);
         const errJson = await postIncomplete.json();
         assert.ok(errJson.details.includes('status is required on package creation'));
+
+        // 4b. POST /api/catalog/packages rejects non-object / array payload with 400
+        const postArray = await fetch(`${baseUrl}/api/catalog/packages`, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${testToken}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify([{ name: 'Array Item' }]),
+        });
+        assert.equal(postArray.status, 400);
 
         // 5. POST /api/catalog/packages creates valid package and strictly sets updatedBy from authenticated session
         const postValid = await fetch(`${baseUrl}/api/catalog/packages`, {
@@ -1138,12 +1166,27 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
         assert.equal(archiveJson.package.isPublished, false);
         assert.equal(archiveJson.package.updatedBy, 'usr_http_test_operator');
 
+        // 6b. POST /api/catalog/packages/:id/archive returns 404 if package does not exist
+        const archive404 = await fetch(`${baseUrl}/api/catalog/packages/pkg-non-existent/archive`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${testToken}` },
+        });
+        assert.equal(archive404.status, 404);
+
+        // 6c. POST /api/catalog/packages/:id/archive returns 400 when attempting to archive legacy package
+        const archiveLegacy = await fetch(`${baseUrl}/api/catalog/packages/pkg-miner-1/archive`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${testToken}` },
+        });
+        assert.equal(archiveLegacy.status, 400);
+
         // 7. GET /api/packages is legacy route with X-Catalog-Legacy header
         const legacyRes = await fetch(`${baseUrl}/api/packages`);
         assert.equal(legacyRes.status, 200);
         assert.equal(legacyRes.headers.get('x-catalog-legacy'), 'true');
       } finally {
         // Cleanup server and test user
+        server.closeAllConnections?.();
         server.close();
         const cleanedDb = readUsers();
         cleanedDb.users = cleanedDb.users.filter(u => u.id !== 'usr_http_test_operator');

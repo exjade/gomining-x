@@ -79,6 +79,12 @@ export class FirestoreCatalogStoreAdapter implements CatalogStoreAdapter {
     if (!this.firestoreInstance) {
       throw new Error('Firestore is not initialized');
     }
+    const nodeProcess = (globalThis as any).process;
+    const isNode = typeof window === 'undefined';
+    const emulatorHost = nodeProcess?.env?.FIRESTORE_EMULATOR_HOST;
+    if (isNode && !emulatorHost && !(this.firestoreInstance as any)?._isMock) {
+      throw new Error('Remote Firestore writes from Node backend are strictly prohibited without FIRESTORE_EMULATOR_HOST (SCRUM-212).');
+    }
     await setDoc(doc(this.firestoreInstance, COMMERCIAL_PACKAGES_COLLECTION, pkg.id), pkg, { merge: true });
   }
 
