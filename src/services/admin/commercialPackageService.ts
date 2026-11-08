@@ -398,9 +398,12 @@ export class CommercialPackageService {
   }
 
   /**
-   * Saves or updates a commercial package.
+   * LEGACY / NON-CANONICAL PATH:
+   * Temporarily preserved for existing legacy UI until SCRUM-217 Admin CRUD.
+   * Modifies packages locally and syncs to legacy Firestore/API.
+   * MUST NOT be used as a fallback for saveCanonicalPackage().
    *
-   * CANONICAL PATH ENFORCEMENT (SCRUM-212 Iteration 3):
+   * Validations enforced:
    * - Validates payload BEFORE any persistence (localStorage or Firestore).
    * - Strict CREATE validation: status and isPublished are required; NO defaults (status || 'ACTIVE' and isPublished ?? true are REMOVED).
    * - In Node backend, remote Firestore writes are guarded by FIRESTORE_EMULATOR_HOST.
@@ -544,8 +547,13 @@ export class CommercialPackageService {
   /**
    * CANONICAL MUTATION PATH (SCRUM-212 / Target for SCRUM-217 Admin CRUD):
    * Saves or updates a canonical commercial package via backend Express API.
-   * Strictly requires section, status ('ACTIVE' | 'ARCHIVED' | 'DRAFT'), and isPublished (boolean).
-   * Does not inject default ACTIVE or true.
+   * Strictly backend-first and fail-closed:
+   * - Must validate mutation contract before calling backend.
+   * - Must NOT write to localStorage or Firestore before backend confirms mutation.
+   * - If backend responds with any error (NETWORK_ERROR, BACKEND_NOT_FOUND_OR_BLAZE_REQUIRED, 401, 400, 500, etc.)
+   *   or does not respond, it strictly REJECTS with an error.
+   * - Has NO fallback to legacy local persistence (savePackage).
+   * - Only updates local cache AFTER receiving HTTP 2xx and confirmed package from backend.
    */
   public async saveCanonicalPackage(
     pkg: Partial<CommercialPackage> & {
@@ -566,45 +574,47 @@ export class CommercialPackageService {
 
     const payload = options?.updatedBy ? { ...pkg, updatedBy: options.updatedBy } : pkg;
 
+    let res: Response;
     try {
-      const res = await apiFetch('/api/catalog/packages', {
+      res = await apiFetch('/api/catalog/packages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.package) {
-          const list = this.getPackages();
-          const idx = list.findIndex(p => p.id === data.package.id);
-          if (idx >= 0) list[idx] = data.package;
-          else list.unshift(data.package);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-          return data.package;
-        }
-      } else {
-        const errJson = await res.json().catch(() => ({}));
-        // If the backend was completely unreachable (NETWORK_ERROR or BACKEND_NOT_FOUND_OR_BLAZE_REQUIRED),
-        // allow fallback to local handling in offline / unit test environment
-        if (errJson?.error === 'NETWORK_ERROR' || errJson?.error === 'BACKEND_NOT_FOUND_OR_BLAZE_REQUIRED') {
-          console.warn('[CommercialPackageService] Backend unreachable, falling back to local storage:', errJson.message || errJson.error);
-        } else {
-          // Backend actively responded with an error (e.g. 401 Unauthorized, 400 Bad Request)
-          // Strictly reject: do NOT silently bypass backend authorization or persistence rules!
-          const errMsg = errJson?.error || errJson?.details || `Backend returned HTTP ${res.status}`;
-          throw new Error(`Canonical package mutation rejected by backend (${res.status}): ${errMsg}`);
-        }
-      }
-    } catch (err: any) {
-      if (err?.message?.includes('Canonical package mutation rejected by backend') || err?.message?.includes('Unauthorized')) {
-        throw err;
-      }
-      console.warn('[CommercialPackageService] Notice calling canonical /api/catalog/packages endpoint:', err);
+    } catch (netErr: any) {
+      throw new Error(`Canonical package mutation rejected: network error (${netErr?.message || netErr})`);
     }
 
-    return this.savePackage(payload);
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      const errMsg =
+        errJson?.details
+          ? `${errJson.error || 'Error'}: ${errJson.details}`
+          : errJson?.message
+            ? `${errJson.error || 'Error'}: ${errJson.message}`
+            : errJson?.error || `Backend returned HTTP ${res.status}`;
+      throw new Error(`Canonical package mutation rejected by backend (${res.status}): ${errMsg}`);
+    }
+
+    const data = await res.json().catch(() => ({}));
+    if (!data?.package) {
+      throw new Error('Canonical package mutation rejected: backend did not return confirmed package');
+    }
+
+    // Only update local cache AFTER HTTP 2xx + confirmed package from backend
+    const list = this.getPackages();
+    const idx = list.findIndex(p => p.id === data.package.id);
+    if (idx >= 0) list[idx] = data.package;
+    else list.unshift(data.package);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    return data.package;
   }
 
+  /**
+   * LEGACY / NON-CANONICAL PATH:
+   * Temporarily preserved for existing legacy UI variable adjustments until SCRUM-217.
+   * MUST NOT be used as a fallback for saveCanonicalPackage().
+   */
   public updatePackageVariables(packageId: string, variablePct: number, commissionPct: number, updatedBy?: string): CommercialPackage | null {
     const list = this.getPackages();
     const idx = list.findIndex(p => p.id === packageId || p.id.replace(/-/g, '_') === packageId.replace(/-/g, '_'));
@@ -646,6 +656,11 @@ export class CommercialPackageService {
     return null;
   }
 
+  /**
+   * LEGACY / NON-CANONICAL PATH:
+   * Temporarily preserved for existing legacy UI archive toggling until SCRUM-217.
+   * MUST NOT be used as a fallback for saveCanonicalPackage().
+   */
   public toggleArchive(packageId: string, updatedBy?: string): void {
     const list = this.getPackages();
     const pkg = list.find(p => p.id === packageId);
@@ -694,6 +709,11 @@ export class CommercialPackageService {
     }
   }
 
+  /**
+   * LEGACY / NON-CANONICAL PATH:
+   * Temporarily preserved for existing legacy UI publish toggling until SCRUM-217.
+   * MUST NOT be used as a fallback for saveCanonicalPackage().
+   */
   public togglePublish(packageId: string, updatedBy?: string): void {
     const list = this.getPackages();
     const pkg = list.find(p => p.id === packageId);

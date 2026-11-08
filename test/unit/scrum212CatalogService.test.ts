@@ -1344,20 +1344,47 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
       );
 
       // Valid canonical creation succeeds and maintains exact properties without defaults
-      const canonicalDraft = await commercialService.saveCanonicalPackage({
-        id: 'pkg-canonical-draft-test',
-        name: 'Canonical Draft Package',
-        powerTh: 120,
-        priceUsdt: 1500,
-        section: 'minerx',
-        status: 'DRAFT',
-        isPublished: false,
-      });
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async () => {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            package: {
+              id: 'pkg-canonical-draft-test',
+              packageId: 'pkg-canonical-draft-test',
+              name: 'Canonical Draft Package',
+              powerTh: 120,
+              priceUsdt: 1500,
+              section: 'minerx',
+              status: 'DRAFT',
+              isPublished: false,
+              version: 1,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      };
 
-      assert.equal(canonicalDraft.id, 'pkg-canonical-draft-test');
-      assert.equal(canonicalDraft.status, 'DRAFT', 'Canonical DRAFT must not be promoted to ACTIVE');
-      assert.equal(canonicalDraft.isPublished, false, 'Canonical unpublished must not be promoted to true');
-      assert.equal(canonicalDraft.version, 1);
+      try {
+        const canonicalDraft = await commercialService.saveCanonicalPackage({
+          id: 'pkg-canonical-draft-test',
+          name: 'Canonical Draft Package',
+          powerTh: 120,
+          priceUsdt: 1500,
+          section: 'minerx',
+          status: 'DRAFT',
+          isPublished: false,
+        });
+
+        assert.equal(canonicalDraft.id, 'pkg-canonical-draft-test');
+        assert.equal(canonicalDraft.status, 'DRAFT', 'Canonical DRAFT must not be promoted to ACTIVE');
+        assert.equal(canonicalDraft.isPublished, false, 'Canonical unpublished must not be promoted to true');
+        assert.equal(canonicalDraft.version, 1);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
     });
 
     it('verifies validatePackageMutation error message specifies VALID_STATUSES on create with invalid status', () => {
@@ -1377,6 +1404,81 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
         res.errors.some(e => e.includes('Invalid status: must be one of [ACTIVE, ARCHIVED, DRAFT]')),
         `Expected error message with ACTIVE, ARCHIVED, DRAFT, got: ${res.errors.join('; ')}`
       );
+    });
+
+    it('verifies saveCanonicalPackage strictly rejects on NETWORK_ERROR without writing to localStorage', async () => {
+      const commercialService = CommercialPackageService.getInstance();
+      const originalFetch = globalThis.fetch;
+
+      // Mock network failure (unreachable backend server)
+      globalThis.fetch = async () => {
+        throw new TypeError('Failed to fetch: network unreachable');
+      };
+
+      try {
+        const testPkgId = `pkg-net-err-${Date.now()}`;
+        await assert.rejects(
+          async () => {
+            await commercialService.saveCanonicalPackage({
+              id: testPkgId,
+              name: 'Network Error Test Package',
+              powerTh: 100,
+              priceUsdt: 1000,
+              section: 'minerx',
+              status: 'ACTIVE',
+              isPublished: true,
+            });
+          },
+          /Canonical package mutation rejected/
+        );
+
+        // Verify package was NOT persisted in localStorage
+        const stored = commercialService.getPackageById(testPkgId);
+        assert.equal(stored, undefined, 'Package must not be saved to localStorage on network error');
+        const rawLocal = localStorage.getItem('minerx_admin_commercial_packages_v2') || '';
+        assert.equal(rawLocal.includes(testPkgId), false, 'Raw localStorage must not contain the rejected package');
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('verifies saveCanonicalPackage strictly rejects on BACKEND_NOT_FOUND_OR_BLAZE_REQUIRED without writing to localStorage', async () => {
+      const commercialService = CommercialPackageService.getInstance();
+      const originalFetch = globalThis.fetch;
+
+      // Mock 404 HTML fallback from static hosting (no Blaze functions deployed)
+      globalThis.fetch = async () => {
+        return new Response('<html><body>404 Not Found</body></html>', {
+          status: 404,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      };
+
+      try {
+        const testPkgId = `pkg-blaze-err-${Date.now()}`;
+        await assert.rejects(
+          async () => {
+            await commercialService.saveCanonicalPackage({
+              id: testPkgId,
+              name: 'Blaze Required Test Package',
+              powerTh: 100,
+              priceUsdt: 1000,
+              section: 'minerx',
+              status: 'ACTIVE',
+              isPublished: true,
+            });
+          },
+          /BACKEND_NOT_FOUND_OR_BLAZE_REQUIRED/
+        );
+
+        // Verify package was NOT persisted in localStorage
+        const stored = commercialService.getPackageById(testPkgId);
+        assert.equal(stored, undefined, 'Package must not be saved to localStorage when backend not found');
+        const rawLocal = localStorage.getItem('minerx_admin_commercial_packages_v2') || '';
+        assert.equal(rawLocal.includes(testPkgId), false, 'Raw localStorage must not contain the rejected package');
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
     });
 
     it('verifies saveCanonicalPackage strictly rejects on backend HTTP 401 without bypassing to localStorage', async () => {
@@ -1411,6 +1513,105 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
         // Verify that rejected package was NOT persisted in localStorage
         const stored = commercialService.getPackageById(unauthPackageId);
         assert.equal(stored, undefined, 'Package rejected by backend must not be saved to localStorage');
+        const rawLocal = localStorage.getItem('minerx_admin_commercial_packages_v2') || '';
+        assert.equal(rawLocal.includes(unauthPackageId), false, 'Raw localStorage must not contain the rejected package');
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('verifies saveCanonicalPackage strictly rejects on backend HTTP 400 without writing to localStorage', async () => {
+      const commercialService = CommercialPackageService.getInstance();
+      const originalFetch = globalThis.fetch;
+
+      // Mock backend returning 400 Bad Request
+      globalThis.fetch = async () => {
+        return new Response(
+          JSON.stringify({ error: 'Validación de paquete fallida', details: 'Backend rejected mutation due to concurrency conflict' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        );
+      };
+
+      try {
+        const badPkgId = `pkg-bad-req-${Date.now()}`;
+        await assert.rejects(
+          async () => {
+            await commercialService.saveCanonicalPackage({
+              id: badPkgId,
+              name: 'Bad Request Backend Package',
+              powerTh: 150,
+              priceUsdt: 1200,
+              section: 'minerx',
+              status: 'ACTIVE',
+              isPublished: true,
+            });
+          },
+          /Canonical package mutation rejected by backend \(400\)/
+        );
+
+        // Verify that rejected package was NOT persisted in localStorage
+        const stored = commercialService.getPackageById(badPkgId);
+        assert.equal(stored, undefined, 'Package rejected by backend (400) must not be saved to localStorage');
+        const rawLocal = localStorage.getItem('minerx_admin_commercial_packages_v2') || '';
+        assert.equal(rawLocal.includes(badPkgId), false, 'Raw localStorage must not contain the rejected package');
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('verifies saveCanonicalPackage updates localStorage ONLY after backend confirms HTTP 2xx', async () => {
+      const commercialService = CommercialPackageService.getInstance();
+      const originalFetch = globalThis.fetch;
+
+      const successPkgId = `pkg-success-${Date.now()}`;
+      const confirmedBackendPackage = {
+        id: successPkgId,
+        packageId: successPkgId,
+        name: 'Confirmed Backend Package',
+        powerTh: 250,
+        priceUsdt: 3000,
+        section: 'minerx' as const,
+        status: 'ACTIVE' as const,
+        isPublished: true,
+        version: 1,
+        updatedBy: 'usr_verified_session',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      let fetchCalled = false;
+      globalThis.fetch = async () => {
+        fetchCalled = true;
+        // Verify that prior to response, package is NOT in localStorage
+        const beforeResponse = commercialService.getPackageById(successPkgId);
+        assert.equal(beforeResponse, undefined, 'Package must not exist in localStorage before backend response');
+
+        return new Response(
+          JSON.stringify({ success: true, package: confirmedBackendPackage }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      };
+
+      try {
+        const result = await commercialService.saveCanonicalPackage({
+          id: successPkgId,
+          name: 'Confirmed Backend Package',
+          powerTh: 250,
+          priceUsdt: 3000,
+          section: 'minerx',
+          status: 'ACTIVE',
+          isPublished: true,
+        });
+
+        assert.equal(fetchCalled, true);
+        assert.deepEqual(result, confirmedBackendPackage);
+
+        // Verify package is NOW in localStorage after successful 2xx backend confirmation
+        const stored = commercialService.getPackageById(successPkgId);
+        assert.ok(stored, 'Package must exist in localStorage after 2xx backend confirmation');
+        assert.equal(stored?.id, successPkgId);
+        assert.equal(stored?.version, 1);
+        assert.equal(stored?.updatedBy, 'usr_verified_session');
       } finally {
         globalThis.fetch = originalFetch;
       }
