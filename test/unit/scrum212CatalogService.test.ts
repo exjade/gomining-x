@@ -1203,7 +1203,93 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
         const errJson = await postIncomplete.json();
         assert.ok(errJson.details.includes('status is required on package creation'));
 
-        // 4b. POST /api/catalog/packages rejects non-object / array payload with 400
+        // 4a. POST /api/catalog/packages rejects creation without packageType (SCRUM-217 Blocker 1)
+        const postNoType = await fetch(`${baseUrl}/api/catalog/packages`, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${testToken}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: 'Package Without Type',
+            powerTh: 50,
+            priceUsdt: 500,
+            section: 'minerx',
+            sortOrder: 1,
+            status: 'ACTIVE',
+            isPublished: false,
+          }),
+        });
+        assert.equal(postNoType.status, 400);
+        const errNoType = await postNoType.json();
+        assert.ok(errNoType.details.includes('packageType is required on package creation'));
+
+        // 4b. POST /api/catalog/packages rejects creation without sortOrder (SCRUM-217 Blocker 1)
+        const postNoOrder = await fetch(`${baseUrl}/api/catalog/packages`, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${testToken}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: 'Package Without SortOrder',
+            powerTh: 50,
+            priceUsdt: 500,
+            section: 'minerx',
+            packageType: 'fixed',
+            status: 'ACTIVE',
+            isPublished: false,
+          }),
+        });
+        assert.equal(postNoOrder.status, 400);
+        const errNoOrder = await postNoOrder.json();
+        assert.ok(errNoOrder.details.includes('sortOrder is required on package creation'));
+
+        // 4c. POST /api/catalog/packages rejects creation with negative sortOrder (SCRUM-217 Blocker 1)
+        const postNegativeOrder = await fetch(`${baseUrl}/api/catalog/packages`, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${testToken}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: 'Package Negative SortOrder',
+            powerTh: 50,
+            priceUsdt: 500,
+            section: 'minerx',
+            packageType: 'fixed',
+            sortOrder: -1,
+            status: 'ACTIVE',
+            isPublished: false,
+          }),
+        });
+        assert.equal(postNegativeOrder.status, 400);
+        const errNegOrder = await postNegativeOrder.json();
+        assert.ok(errNegOrder.details.includes('sortOrder must be a number >= 0'));
+
+        // 4d. POST /api/catalog/packages rejects creation with ARCHIVED + isPublished: true (SCRUM-217 Blocker 3)
+        const postArchivedPublished = await fetch(`${baseUrl}/api/catalog/packages`, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${testToken}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: 'Archived Published Package',
+            powerTh: 50,
+            priceUsdt: 500,
+            section: 'minerx',
+            packageType: 'fixed',
+            sortOrder: 1,
+            status: 'ARCHIVED',
+            isPublished: true,
+          }),
+        });
+        assert.equal(postArchivedPublished.status, 400);
+        const errArcPub = await postArchivedPublished.json();
+        assert.ok(errArcPub.details.includes('An ARCHIVED package cannot be published'));
+
+        // 4e. POST /api/catalog/packages rejects non-object / array payload with 400
         const postArray = await fetch(`${baseUrl}/api/catalog/packages`, {
           method: 'POST',
           headers: {

@@ -640,9 +640,25 @@ describe('SCRUM-217: PackageBuilder Canonical CRUD & Backend-First Integration T
         );
         assert.equal(nanRes.valid, false);
         assert.ok(nanRes.errors.some(e => e.includes('sortOrder must be a number >= 0')));
+
+        const infRes = CatalogService.validatePackageMutation(
+          {
+            name: 'Infinity SortOrder Miner',
+            powerTh: 100,
+            priceUsdt: 1000,
+            section: 'minerx',
+            packageType: 'fixed',
+            sortOrder: Infinity,
+            status: 'ACTIVE',
+            isPublished: true,
+          },
+          { isCreate: true }
+        );
+        assert.equal(infRes.valid, false);
+        assert.ok(infRes.errors.some(e => e.includes('sortOrder must be a number >= 0')));
       });
 
-      it('savePackage on UPDATE preserves existing packageType and sortOrder when omitted', async () => {
+      it('savePackage on UPDATE preserves existing packageType and sortOrder when omitted or undefined', async () => {
         const { MemoryCatalogStoreAdapter } = await import('../../src/services/catalogService.js');
         const memoryAdapter = new MemoryCatalogStoreAdapter([
           {
@@ -663,6 +679,7 @@ describe('SCRUM-217: PackageBuilder Canonical CRUD & Backend-First Integration T
         ]);
         const catalogService = new CatalogService(memoryAdapter);
 
+        // Omitted
         const updated = await catalogService.savePackage({
           id: 'pkg-exist-1',
           name: 'Existing Miner Updated',
@@ -674,6 +691,21 @@ describe('SCRUM-217: PackageBuilder Canonical CRUD & Backend-First Integration T
         assert.equal(updated.packageType, 'subscription');
         assert.equal(updated.sortOrder, 4);
         assert.equal(updated.version, 2);
+
+        // Explicit undefined
+        const updatedUndefined = await catalogService.savePackage({
+          id: 'pkg-exist-1',
+          name: 'Existing Miner Undefined Props',
+          powerTh: 130,
+          priceUsdt: 1300,
+          section: 'minerx',
+          packageType: undefined,
+          sortOrder: undefined,
+        });
+
+        assert.equal(updatedUndefined.packageType, 'subscription');
+        assert.equal(updatedUndefined.sortOrder, 4);
+        assert.equal(updatedUndefined.version, 3);
       });
 
       it('savePackage on UPDATE validates packageType and sortOrder if provided', async () => {
@@ -717,6 +749,42 @@ describe('SCRUM-217: PackageBuilder Canonical CRUD & Backend-First Integration T
             priceUsdt: 1000,
             section: 'minerx',
             sortOrder: -5,
+          }),
+          /sortOrder must be a number >= 0/
+        );
+
+        await assert.rejects(
+          () => catalogService.savePackage({
+            id: 'pkg-exist-2',
+            name: 'Existing Miner 2 Empty Type',
+            powerTh: 100,
+            priceUsdt: 1000,
+            section: 'minerx',
+            packageType: '' as any,
+          }),
+          /Invalid packageType/
+        );
+
+        await assert.rejects(
+          () => catalogService.savePackage({
+            id: 'pkg-exist-2',
+            name: 'Existing Miner 2 Empty Status',
+            powerTh: 100,
+            priceUsdt: 1000,
+            section: 'minerx',
+            status: '' as any,
+          }),
+          /Invalid status/
+        );
+
+        await assert.rejects(
+          () => catalogService.savePackage({
+            id: 'pkg-exist-2',
+            name: 'Existing Miner 2 Infinity Order',
+            powerTh: 100,
+            priceUsdt: 1000,
+            section: 'minerx',
+            sortOrder: Infinity,
           }),
           /sortOrder must be a number >= 0/
         );
@@ -831,6 +899,59 @@ describe('SCRUM-217: PackageBuilder Canonical CRUD & Backend-First Integration T
           }),
           /An ARCHIVED package cannot be published/
         );
+      });
+
+      it('saveCanonicalPackage rejects client-side when attempting to publish a cached ARCHIVED package', async () => {
+        const service = CommercialPackageService.getInstance();
+        const arcPkgId = `pkg-cached-arc-${Date.now()}`;
+
+        // Populate local cache with an archived package
+        const currentList = service.getPackages();
+        localStorage.setItem(
+          'minerx_admin_commercial_packages_v2',
+          JSON.stringify([
+            ...currentList,
+            {
+              id: arcPkgId,
+              packageId: arcPkgId,
+              name: 'Cached Archived Package',
+              section: 'minerx',
+              packageType: 'fixed',
+              sortOrder: 1,
+              powerTh: 100,
+              priceUsdt: 1000,
+              status: 'ARCHIVED',
+              isPublished: false,
+              version: 1,
+            },
+          ])
+        );
+
+        // Attempting to mutate isPublished: true without changing status must fail validation before any fetch
+        let fetchCalled = false;
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async () => {
+          fetchCalled = true;
+          return new Response('{}', { status: 200 });
+        };
+
+        try {
+          await assert.rejects(
+            () => service.saveCanonicalPackage({
+              id: arcPkgId,
+              packageId: arcPkgId,
+              name: 'Cached Archived Package',
+              section: 'minerx',
+              powerTh: 100,
+              priceUsdt: 1000,
+              isPublished: true,
+            }),
+            /An ARCHIVED package cannot be published/
+          );
+          assert.equal(fetchCalled, false, 'Client validation must fail closed before making network request');
+        } finally {
+          globalThis.fetch = originalFetch;
+        }
       });
 
       it('PackageBuilderView disables Publish button for ARCHIVED packages in UI and returns early in handleTogglePublish', () => {

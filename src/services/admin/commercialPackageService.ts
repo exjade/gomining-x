@@ -139,15 +139,15 @@ export function validatePackageSchema(
 
       if (p.sortOrder === undefined || p.sortOrder === null) {
         errors.push('sortOrder is required on package creation (must be a number >= 0)');
-      } else if (typeof p.sortOrder !== 'number' || isNaN(p.sortOrder) || p.sortOrder < 0) {
+      } else if (typeof p.sortOrder !== 'number' || !Number.isFinite(p.sortOrder) || p.sortOrder < 0) {
         errors.push('sortOrder must be a number >= 0');
       }
     } else {
-      if (p.packageType && !['fixed', 'subscription', 'custom'].includes(p.packageType)) {
+      if (p.packageType !== undefined && p.packageType !== null && !['fixed', 'subscription', 'custom'].includes(p.packageType)) {
         errors.push(`Invalid packageType: ${p.packageType}`);
       }
       if (p.sortOrder !== undefined && p.sortOrder !== null) {
-        if (typeof p.sortOrder !== 'number' || isNaN(p.sortOrder) || p.sortOrder < 0) {
+        if (typeof p.sortOrder !== 'number' || !Number.isFinite(p.sortOrder) || p.sortOrder < 0) {
           errors.push('sortOrder must be a number >= 0');
         }
       }
@@ -163,15 +163,15 @@ export function validatePackageSchema(
       errors.push('isPublished is required on package creation (must be an explicit boolean true or false)');
     }
   } else {
-    if (p.packageType && !['fixed', 'subscription', 'custom'].includes(p.packageType)) {
+    if (p.packageType !== undefined && p.packageType !== null && !['fixed', 'subscription', 'custom'].includes(p.packageType)) {
       errors.push(`Invalid packageType: ${p.packageType}`);
     }
     if (p.sortOrder !== undefined && p.sortOrder !== null) {
-      if (typeof p.sortOrder !== 'number' || isNaN(p.sortOrder) || p.sortOrder < 0) {
+      if (typeof p.sortOrder !== 'number' || !Number.isFinite(p.sortOrder) || p.sortOrder < 0) {
         errors.push('sortOrder must be a number >= 0');
       }
     }
-    if (p.status && !['ACTIVE', 'ARCHIVED', 'DRAFT'].includes(p.status)) {
+    if (p.status !== undefined && p.status !== null && !['ACTIVE', 'ARCHIVED', 'DRAFT'].includes(p.status)) {
       errors.push(`Invalid status: ${p.status}`);
     }
     if (p.isPublished !== undefined && typeof p.isPublished !== 'boolean') {
@@ -485,6 +485,9 @@ export class CommercialPackageService {
         ...existing,
         ...pkg,
         packageId: existing.packageId || existing.id,
+        section: pkg.section ?? existing.section,
+        packageType: pkg.packageType ?? existing.packageType,
+        sortOrder: pkg.sortOrder ?? existing.sortOrder,
         cadence: pkg.cadence ?? existing?.cadence,
         priceUsdCents: typeof pkg.priceUsdCents === 'number' ? pkg.priceUsdCents : existing?.priceUsdCents,
         status: pkg.status ?? existing.status,
@@ -711,7 +714,13 @@ export class CommercialPackageService {
     options?: { updatedBy?: string }
   ): Promise<CommercialPackage> {
     const isCreate = !pkg.id && !pkg.packageId;
-    const validation = CatalogService.validatePackageMutation(pkg, { isCreate, isUpdate: !isCreate });
+    const inputTargetId = pkg.packageId || pkg.id;
+    const existing = inputTargetId ? this.getPackageById(inputTargetId) : undefined;
+    const validation = CatalogService.validatePackageMutation(pkg, {
+      isCreate,
+      isUpdate: !isCreate,
+      existingPackage: existing || undefined,
+    });
     if (!validation.valid) {
       throw new Error(`Canonical package mutation rejected: ${validation.errors.join('; ')}`);
     }

@@ -298,7 +298,7 @@ export class CatalogService {
 
       if (p.sortOrder === undefined || p.sortOrder === null) {
         errors.push('sortOrder is required on package creation (must be a number >= 0)');
-      } else if (typeof p.sortOrder !== 'number' || isNaN(p.sortOrder) || p.sortOrder < 0) {
+      } else if (typeof p.sortOrder !== 'number' || !Number.isFinite(p.sortOrder) || p.sortOrder < 0) {
         errors.push('sortOrder must be a number >= 0');
       }
 
@@ -318,11 +318,11 @@ export class CatalogService {
         }
       }
       if (p.sortOrder !== undefined && p.sortOrder !== null) {
-        if (typeof p.sortOrder !== 'number' || isNaN(p.sortOrder) || p.sortOrder < 0) {
+        if (typeof p.sortOrder !== 'number' || !Number.isFinite(p.sortOrder) || p.sortOrder < 0) {
           errors.push('sortOrder must be a number >= 0');
         }
       }
-      if (p.status && !VALID_STATUSES.includes(p.status as any)) {
+      if (p.status !== undefined && p.status !== null && !VALID_STATUSES.includes(p.status as any)) {
         errors.push(`Invalid status: must be one of [${VALID_STATUSES.join(', ')}]`);
       }
       if (p.isPublished !== undefined && typeof p.isPublished !== 'boolean') {
@@ -473,6 +473,9 @@ export class CatalogService {
         id: existing.id,
         packageId: existing.packageId || existing.id,
         version: nextVersion,
+        section: cleanPkg.section ?? existing.section,
+        packageType: cleanPkg.packageType ?? existing.packageType,
+        sortOrder: cleanPkg.sortOrder ?? existing.sortOrder,
         status: cleanPkg.status ?? existing.status,
         isPublished: typeof cleanPkg.isPublished === 'boolean' ? cleanPkg.isPublished : existing.isPublished,
         updatedAt: now,
