@@ -20,6 +20,28 @@ export interface AdminCatalogInventory {
 }
 export type AdminCatalogResult = AdminCatalogInventory;
 
+/**
+ * CLOUD FIRESTORE BACKEND ARCHITECTURAL CLASSIFICATION (SCRUM-212 Iteration 3):
+ *
+ * 1. FIRESTORE_BACKEND_AUTH:
+ *    In the Node backend environment, Firebase Client SDK (firebase/firestore) is initialized
+ *    without Firebase Auth credentials. User session authentication is handled locally via
+ *    users.json / sessionToken and does NOT authenticate the Firebase Client SDK.
+ *
+ * 2. CLOUD_ADMIN_READ: BLOCKED / NEEDS_PO_DECISION
+ *    Firestore security rules require `isAdmin()` for reading unpublished/DRAFT/ARCHIVED packages.
+ *    Storefront read of published packages (isPublished == true) is public and operational.
+ *    Administrative cloud read of unpublished packages without backend credentials is blocked by Firestore rules.
+ *
+ * 3. CLOUD_MUTATION_STATUS: BLOCKED / NEEDS_PO_DECISION
+ *    Direct cloud mutations (CREATE, UPDATE, ARCHIVE) from Node backend are unauthenticated against
+ *    Firestore security rules (which require isAdmin()). Remote writes are strictly guarded by
+ *    FIRESTORE_EMULATOR_HOST until an authorized backend Firestore mechanism is approved by PO.
+ *    Per AGENTS.md, Firebase Admin SDK, service accounts, or custom credentials must NOT be invented.
+ */
+export const CLOUD_ADMIN_READ_STATUS = 'BLOCKED / NEEDS_PO_DECISION';
+export const CLOUD_MUTATION_STATUS = 'BLOCKED / NEEDS_PO_DECISION';
+
 export interface CatalogStoreAdapter {
   getPackages(): Promise<CommercialPackage[]>;
   savePackage(pkg: CommercialPackage): Promise<void>;

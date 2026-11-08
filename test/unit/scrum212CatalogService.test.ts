@@ -18,6 +18,8 @@ import {
   MemoryCatalogStoreAdapter,
   VALID_SECTIONS,
   type CatalogSection,
+  CLOUD_ADMIN_READ_STATUS,
+  CLOUD_MUTATION_STATUS,
 } from '../../src/services/catalogService';
 import {
   CommercialPackageService,
@@ -640,8 +642,8 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
     assert.ok(withAdminEmail.errors.some(e => e.includes('Synthetic credential')));
   });
 
-  // CommercialPackageService mutation validations
-  it('CommercialPackageService validates mutations and rejects invalid inputs', () => {
+  // CommercialPackageService mutation validations & canonical contract enforcement
+  it('CommercialPackageService validates mutations, rejects creates without explicit status/isPublished, and injects zero defaults', () => {
     const commercialService = CommercialPackageService.getInstance();
 
     // Rejects invalid mutation with negative power
@@ -652,6 +654,8 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
           powerTh: -10,
           priceUsdt: 500,
           section: 'minerx',
+          status: 'ACTIVE',
+          isPublished: true,
         } as any);
       },
       /Package mutation rejected/
@@ -665,20 +669,93 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
           powerTh: 50,
           priceUsdt: 500,
           section: 'minerx',
+          status: 'ACTIVE',
+          isPublished: true,
           finalPriceUsdCents: 4900,
         } as any);
       },
       /Package mutation rejected/
     );
 
-    // Successfully creates and updates a valid package with version increments
+    // Iteration 3: Rejects CREATE without explicit status (no ACTIVE default injection)
+    assert.throws(
+      () => {
+        commercialService.savePackage({
+          name: 'Missing Status Miner',
+          powerTh: 80,
+          priceUsdt: 800,
+          section: 'minerx',
+          isPublished: true,
+        } as any);
+      },
+      /status is required on package creation/
+    );
+
+    // Iteration 3: Rejects CREATE without explicit isPublished (no true default injection)
+    assert.throws(
+      () => {
+        commercialService.savePackage({
+          name: 'Missing isPublished Miner',
+          powerTh: 80,
+          priceUsdt: 800,
+          section: 'minerx',
+          status: 'ACTIVE',
+        } as any);
+      },
+      /isPublished is required on package creation/
+    );
+
+    // Iteration 3: Rejects CREATE missing both status and isPublished
+    assert.throws(
+      () => {
+        commercialService.savePackage({
+          name: 'Missing Both Defaults',
+          powerTh: 80,
+          priceUsdt: 800,
+          section: 'minerx',
+        } as any);
+      },
+      /status is required on package creation/
+    );
+
+    // Iteration 3: validatePackageSchema rejects CREATE without explicit status and isPublished
+    const schemaValidationMissing = validatePackageSchema(
+      {
+        name: 'Schema Check',
+        powerTh: 50,
+        priceUsdt: 500,
+        section: 'minerx',
+      },
+      { isCreate: true }
+    );
+    assert.equal(schemaValidationMissing.valid, false);
+    assert.ok(schemaValidationMissing.errors.some(e => e.includes('status is required on package creation')));
+    assert.ok(schemaValidationMissing.errors.some(e => e.includes('isPublished is required on package creation')));
+
+    // Successfully creates with explicit status=DRAFT and isPublished=false (no promotion to ACTIVE/true)
+    const savedDraft = commercialService.savePackage({
+      name: 'Explicit Draft Package',
+      powerTh: 80,
+      priceUsdt: 800,
+      section: 'minerx',
+      status: 'DRAFT',
+      isPublished: false,
+    });
+    assert.equal(savedDraft.status, 'DRAFT', 'Status must remain strictly DRAFT without default promotion');
+    assert.equal(savedDraft.isPublished, false, 'isPublished must remain strictly false without default promotion');
+    assert.equal(savedDraft.version, 1);
+
+    // Successfully creates and updates an ACTIVE package with version increments
     const saved = commercialService.savePackage({
       name: 'Valid Dynamic Miner',
       powerTh: 80,
       priceUsdt: 800,
       section: 'minerx',
+      status: 'ACTIVE',
+      isPublished: true,
     });
     assert.equal(saved.status, 'ACTIVE');
+    assert.equal(saved.isPublished, true);
     assert.equal(saved.version, 1);
 
     const updated = commercialService.savePackage({
@@ -687,6 +764,8 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
     });
     assert.equal(updated.version, 2);
     assert.equal(updated.powerTh, 85);
+    assert.equal(updated.status, 'ACTIVE');
+    assert.equal(updated.isPublished, true);
   });
 
   // FirestoreCatalogStoreAdapter behavior with null / custom store
@@ -1193,6 +1272,111 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
         writeUsers(cleanedDb);
         // Restore default catalogService
         setCatalogService(catalogService);
+      }
+    });
+  });
+
+  // =========================================================================
+  // ITERATION 3 ARCHITECTURAL BLOCKER VERIFICATION TESTS (SCRUM-212)
+  // =========================================================================
+  describe('Iteration 3 Architectural Blockers & Cloud Classification', () => {
+    it('verifies explicit cloud read and mutation status classifications (NEEDS_PO_DECISION)', () => {
+      assert.equal(CLOUD_ADMIN_READ_STATUS, 'BLOCKED / NEEDS_PO_DECISION');
+      assert.equal(CLOUD_MUTATION_STATUS, 'BLOCKED / NEEDS_PO_DECISION');
+    });
+
+    it('verifies INITIAL_PACKAGES are explicitly tagged and isolated as LEGACY', () => {
+      assert.ok(Array.isArray(INITIAL_PACKAGES));
+      assert.equal(INITIAL_PACKAGES.length, 5);
+      for (const legacyPkg of INITIAL_PACKAGES) {
+        assert.equal(legacyPkg.isLegacy, true, `Package ${legacyPkg.id} must be marked isLegacy: true`);
+        assert.equal(legacyPkg.section, undefined, `Legacy package ${legacyPkg.id} must not declare section`);
+        assert.equal(CatalogService.isLegacyPackage(legacyPkg), true);
+        assert.equal(CatalogService.isCanonicalPackage(legacyPkg), false);
+      }
+    });
+
+    it('verifies CommercialPackageService.saveCanonicalPackage requires valid canonical contract', async () => {
+      const commercialService = CommercialPackageService.getInstance();
+
+      // Missing section fails
+      await assert.rejects(
+        async () => {
+          await commercialService.saveCanonicalPackage({
+            name: 'No Section Canonical',
+            powerTh: 100,
+            priceUsdt: 1000,
+            status: 'ACTIVE',
+            isPublished: true,
+          } as any);
+        },
+        /Invalid or missing section/
+      );
+
+      // Missing status fails
+      await assert.rejects(
+        async () => {
+          await commercialService.saveCanonicalPackage({
+            name: 'No Status Canonical',
+            powerTh: 100,
+            priceUsdt: 1000,
+            section: 'minerx',
+            isPublished: true,
+          } as any);
+        },
+        /status is required on package creation/
+      );
+
+      // Missing isPublished fails
+      await assert.rejects(
+        async () => {
+          await commercialService.saveCanonicalPackage({
+            name: 'No Publish Canonical',
+            powerTh: 100,
+            priceUsdt: 1000,
+            section: 'minerx',
+            status: 'ACTIVE',
+          } as any);
+        },
+        /isPublished is required on package creation/
+      );
+
+      // Valid canonical creation succeeds and maintains exact properties without defaults
+      const canonicalDraft = await commercialService.saveCanonicalPackage({
+        id: 'pkg-canonical-draft-test',
+        name: 'Canonical Draft Package',
+        powerTh: 120,
+        priceUsdt: 1500,
+        section: 'minerx',
+        status: 'DRAFT',
+        isPublished: false,
+      });
+
+      assert.equal(canonicalDraft.id, 'pkg-canonical-draft-test');
+      assert.equal(canonicalDraft.status, 'DRAFT', 'Canonical DRAFT must not be promoted to ACTIVE');
+      assert.equal(canonicalDraft.isPublished, false, 'Canonical unpublished must not be promoted to true');
+      assert.equal(canonicalDraft.version, 1);
+    });
+
+    it('verifies FirestoreCatalogStoreAdapter strictly enforces emulator guard for remote Node writes', async () => {
+      const { FirestoreCatalogStoreAdapter } = await import('../../src/services/catalogService');
+      const adapter = new FirestoreCatalogStoreAdapter();
+
+      const originalEnv = process.env.FIRESTORE_EMULATOR_HOST;
+      try {
+        delete process.env.FIRESTORE_EMULATOR_HOST;
+        await assert.rejects(
+          async () => {
+            await adapter.savePackage(fixtureMinerxPublished);
+          },
+          /Remote Firestore writes from Node backend are strictly prohibited without FIRESTORE_EMULATOR_HOST/
+        );
+      } finally {
+        if (originalEnv) {
+          process.env.FIRESTORE_EMULATOR_HOST = originalEnv;
+        } else {
+          delete process.env.FIRESTORE_EMULATOR_HOST;
+        }
       }
     });
   });

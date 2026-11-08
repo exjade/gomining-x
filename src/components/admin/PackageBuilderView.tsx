@@ -209,7 +209,8 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
         variablePct: formData.variablePct,
         commissionPct: formData.commissionPct,
         description: formData.description,
-        status: editingPkg.status || 'ACTIVE'
+        status: editingPkg.status || 'ACTIVE',
+        isPublished: editingPkg.isPublished ?? true,
       });
     } else {
       packageService.savePackage({
@@ -220,7 +221,8 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
         variablePct: formData.variablePct,
         commissionPct: formData.commissionPct,
         description: formData.description,
-        status: 'ACTIVE'
+        status: 'ACTIVE',
+        isPublished: true,
       });
     }
 

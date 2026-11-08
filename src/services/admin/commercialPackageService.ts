@@ -100,8 +100,12 @@ export function createPurchaseSnapshot(
 
 /**
  * Validates package schema requirements per SCRUM-210 and SCRUM-212.
+ * Canonical creations (isCreate = true) strictly require explicit status and isPublished boolean.
  */
-export function validatePackageSchema(pkg: Partial<CommercialPackage>): { valid: boolean; errors: string[] } {
+export function validatePackageSchema(
+  pkg: Partial<CommercialPackage>,
+  options?: { isCreate?: boolean; isUpdate?: boolean }
+): { valid: boolean; errors: string[] } {
   const p = pkg || {};
   const errors: string[] = [];
   if (!p.name || !p.name.trim()) errors.push('Package name is required');
@@ -126,9 +130,27 @@ export function validatePackageSchema(pkg: Partial<CommercialPackage>): { valid:
   if (p.packageType && !['fixed', 'subscription', 'custom'].includes(p.packageType)) {
     errors.push(`Invalid packageType: ${p.packageType}`);
   }
-  if (p.status && !['ACTIVE', 'ARCHIVED', 'DRAFT'].includes(p.status)) {
-    errors.push(`Invalid status: ${p.status}`);
+
+  // Canonical CREATE strictly requires explicit status and isPublished (no default assumptions or auto-publish)
+  if (options?.isCreate) {
+    if (p.status === undefined || p.status === null) {
+      errors.push('status is required on package creation (must be explicitly ACTIVE, DRAFT, or ARCHIVED)');
+    } else if (!['ACTIVE', 'ARCHIVED', 'DRAFT'].includes(p.status)) {
+      errors.push(`Invalid status: ${p.status}`);
+    }
+
+    if (typeof p.isPublished !== 'boolean') {
+      errors.push('isPublished is required on package creation (must be an explicit boolean true or false)');
+    }
+  } else {
+    if (p.status && !['ACTIVE', 'ARCHIVED', 'DRAFT'].includes(p.status)) {
+      errors.push(`Invalid status: ${p.status}`);
+    }
+    if (p.isPublished !== undefined && typeof p.isPublished !== 'boolean') {
+      errors.push('isPublished must be a boolean (true or false)');
+    }
   }
+
   if (p.currency !== undefined && p.currency !== 'USD') {
     errors.push(`Visible catalog currency must remain strictly 'USD' (received: '${p.currency}')`);
   }
@@ -161,7 +183,18 @@ export function validatePackageSchema(pkg: Partial<CommercialPackage>): { valid:
   return { valid: errors.length === 0, errors };
 }
 
-export const INITIAL_PACKAGES: CommercialPackage[] = [
+/**
+ * LEGACY PACKAGES REPOSITORY (Pre-SCRUM-210 / Pre-SCRUM-212)
+ *
+ * EXPLICITLY ISOLATED AS LEGACY:
+ * - These 5 static miner definitions represent legacy local-only seed items.
+ * - They lack canonical 'section' metadata and are NOT part of the canonical dynamic catalog.
+ * - Excluded from storefront catalog queries (/api/catalog/storefront).
+ * - Separated into the 'legacy' bucket in admin catalog queries (/api/catalog/admin).
+ * - Must NOT be used as the target path or schema for SCRUM-217.
+ * - SCRUM-217 Admin CRUD must interact strictly with the canonical catalog path.
+ */
+export const LEGACY_INITIAL_PACKAGES: CommercialPackage[] = [
   {
     id: 'pkg-miner-1',
     name: 'Minero 1 Entry',
@@ -244,6 +277,8 @@ export const INITIAL_PACKAGES: CommercialPackage[] = [
   }
 ];
 
+export const INITIAL_PACKAGES: CommercialPackage[] = LEGACY_INITIAL_PACKAGES;
+
 export class CommercialPackageService {
   private static instance: CommercialPackageService;
   private audit = AdminAuditService.getInstance();
@@ -262,7 +297,7 @@ export class CommercialPackageService {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) return JSON.parse(raw);
     } catch {}
-    return INITIAL_PACKAGES;
+    return INITIAL_PACKAGES.map(p => ({ ...p }));
   }
 
   public getPackageById(id: string): CommercialPackage | undefined {
@@ -362,36 +397,78 @@ export class CommercialPackageService {
     return 0;
   }
 
+  /**
+   * Saves or updates a commercial package.
+   *
+   * CANONICAL PATH ENFORCEMENT (SCRUM-212 Iteration 3):
+   * - Validates payload BEFORE any persistence (localStorage or Firestore).
+   * - Strict CREATE validation: status and isPublished are required; NO defaults (status || 'ACTIVE' and isPublished ?? true are REMOVED).
+   * - In Node backend, remote Firestore writes are guarded by FIRESTORE_EMULATOR_HOST.
+   */
   public savePackage(
-    pkg: Omit<CommercialPackage, 'createdAt' | 'updatedAt' | 'version' | 'id'> & { id?: string; updatedBy?: string }
+    pkg: Omit<CommercialPackage, 'createdAt' | 'updatedAt' | 'version' | 'id'> & {
+      id?: string;
+      updatedBy?: string;
+      status?: CommercialPackage['status'];
+      isPublished?: boolean;
+    }
   ): CommercialPackage {
-    const validation = validatePackageSchema(pkg as Partial<CommercialPackage>);
+    const list = this.getPackages();
+    const targetId = (pkg as any).packageId || pkg.id;
+    const idx = targetId
+      ? list.findIndex(p => p.id === targetId || p.id.replace(/-/g, '_') === targetId.replace(/-/g, '_'))
+      : -1;
+    const existing = idx >= 0 ? list[idx] : undefined;
+    const isUpdate = Boolean(existing);
+    const isCreate = !isUpdate;
+
+    // Validate payload BEFORE any local storage or database persistence
+    const validation = validatePackageSchema(pkg as Partial<CommercialPackage>, { isCreate, isUpdate });
     if (!validation.valid) {
       throw new Error(`Package mutation rejected: ${validation.errors.join('; ')}`);
     }
 
-    const list = this.getPackages();
+    // Additional canonical validation if package declares section (canonical path)
+    if (pkg.section) {
+      const canonicalValidation = CatalogService.validatePackageMutation(pkg as Partial<CommercialPackage>, {
+        isCreate,
+        isUpdate,
+        existingPackage: existing,
+      });
+      if (!canonicalValidation.valid) {
+        throw new Error(`Package mutation rejected: ${canonicalValidation.errors.join('; ')}`);
+      }
+    }
+
     const now = new Date().toISOString();
     let saved: CommercialPackage;
 
-    if (pkg.id) {
-      const idx = list.findIndex(p => p.id === pkg.id);
-      const existing = idx >= 0 ? list[idx] : undefined;
-      const newVersion = existing ? (Number(existing.version) || 1) + 1 : 1;
+    if (existing) {
+      const newVersion = (Number(existing.version) || 1) + 1;
       saved = {
         ...existing,
         ...pkg,
-        packageId: pkg.id,
+        packageId: existing.packageId || existing.id,
         cadence: pkg.cadence ?? existing?.cadence,
         priceUsdCents: typeof pkg.priceUsdCents === 'number' ? pkg.priceUsdCents : existing?.priceUsdCents,
-        isPublished: pkg.isPublished ?? (pkg.status ? pkg.status === 'ACTIVE' : (existing?.status === 'ACTIVE')),
+        status: pkg.status ?? existing.status,
+        isPublished: typeof pkg.isPublished === 'boolean' ? pkg.isPublished : existing.isPublished,
         version: newVersion,
-        updatedAt: now
+        updatedAt: now,
       } as CommercialPackage;
 
-      if (pkg.updatedBy && typeof pkg.updatedBy === 'string' && pkg.updatedBy.trim() && pkg.updatedBy !== 'admin_sys' && pkg.updatedBy !== 'admin@minerx.cloud') {
+      if (
+        pkg.updatedBy &&
+        typeof pkg.updatedBy === 'string' &&
+        pkg.updatedBy.trim() &&
+        pkg.updatedBy !== 'admin_sys' &&
+        pkg.updatedBy !== 'admin@minerx.cloud'
+      ) {
         saved.updatedBy = pkg.updatedBy.trim();
-        this.audit.logAction(saved.updatedBy, saved.updatedBy, 'SUPER_ADMIN', 'COMMERCIAL', 'UPDATE_PACKAGE_VERSION', saved.id, { version: newVersion, pkg: saved });
+        this.audit.logAction(saved.updatedBy, saved.updatedBy, 'SUPER_ADMIN', 'COMMERCIAL', 'UPDATE_PACKAGE_VERSION', saved.id, {
+          version: newVersion,
+          pkg: saved,
+        });
       } else {
         delete saved.updatedBy;
       }
@@ -402,23 +479,31 @@ export class CommercialPackageService {
         list.push(saved);
       }
     } else {
-      const newId = `pkg-${Date.now()}`;
+      const newId = targetId || `pkg-${Date.now()}`;
       saved = {
         ...pkg,
         id: newId,
         packageId: newId,
         cadence: pkg.cadence,
         priceUsdCents: typeof pkg.priceUsdCents === 'number' ? pkg.priceUsdCents : undefined,
-        status: pkg.status || 'ACTIVE',
-        isPublished: pkg.isPublished ?? true,
+        status: pkg.status as 'ACTIVE' | 'ARCHIVED' | 'DRAFT',
+        isPublished: pkg.isPublished as boolean,
         version: 1,
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
       } as CommercialPackage;
 
-      if (pkg.updatedBy && typeof pkg.updatedBy === 'string' && pkg.updatedBy.trim() && pkg.updatedBy !== 'admin_sys' && pkg.updatedBy !== 'admin@minerx.cloud') {
+      if (
+        pkg.updatedBy &&
+        typeof pkg.updatedBy === 'string' &&
+        pkg.updatedBy.trim() &&
+        pkg.updatedBy !== 'admin_sys' &&
+        pkg.updatedBy !== 'admin@minerx.cloud'
+      ) {
         saved.updatedBy = pkg.updatedBy.trim();
-        this.audit.logAction(saved.updatedBy, saved.updatedBy, 'SUPER_ADMIN', 'COMMERCIAL', 'CREATE_PACKAGE', saved.id, { pkg: saved });
+        this.audit.logAction(saved.updatedBy, saved.updatedBy, 'SUPER_ADMIN', 'COMMERCIAL', 'CREATE_PACKAGE', saved.id, {
+          pkg: saved,
+        });
       } else {
         delete saved.updatedBy;
       }
@@ -426,10 +511,15 @@ export class CommercialPackageService {
       list.unshift(saved);
     }
 
+    // Persist to local cache AFTER validation passes
     localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
 
-    // Asynchronously synchronize with Cloud Firestore
-    if (db) {
+    // Guard direct Firestore writes from Node backend
+    const isNode = typeof window === 'undefined';
+    const nodeProcess = (globalThis as any).process;
+    const emulatorHost = nodeProcess?.env?.FIRESTORE_EMULATOR_HOST;
+
+    if (db && (!isNode || emulatorHost)) {
       setDoc(doc(db, COMMERCIAL_PACKAGES_COLLECTION, saved.id), saved, { merge: true }).catch(err => {
         console.error(`[CommercialPackageService] Error syncing package ${saved.id} to Firestore:`, err);
       });
@@ -440,11 +530,60 @@ export class CommercialPackageService {
       apiFetch('/api/catalog/packages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(saved)
+        body: JSON.stringify(saved),
       }).catch(() => {});
     } catch {}
 
     return saved;
+  }
+
+  /**
+   * CANONICAL MUTATION PATH (SCRUM-212 / Target for SCRUM-217 Admin CRUD):
+   * Saves or updates a canonical commercial package via backend Express API.
+   * Strictly requires section, status ('ACTIVE' | 'ARCHIVED' | 'DRAFT'), and isPublished (boolean).
+   * Does not inject default ACTIVE or true.
+   */
+  public async saveCanonicalPackage(
+    pkg: Partial<CommercialPackage> & {
+      name: string;
+      powerTh: number;
+      priceUsdt: number;
+      section: CatalogSection;
+      status: 'ACTIVE' | 'ARCHIVED' | 'DRAFT';
+      isPublished: boolean;
+    },
+    options?: { updatedBy?: string }
+  ): Promise<CommercialPackage> {
+    const isCreate = !pkg.id && !pkg.packageId;
+    const validation = CatalogService.validatePackageMutation(pkg, { isCreate, isUpdate: !isCreate });
+    if (!validation.valid) {
+      throw new Error(`Canonical package mutation rejected: ${validation.errors.join('; ')}`);
+    }
+
+    const payload = options?.updatedBy ? { ...pkg, updatedBy: options.updatedBy } : pkg;
+
+    try {
+      const res = await apiFetch('/api/catalog/packages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.package) {
+          const list = this.getPackages();
+          const idx = list.findIndex(p => p.id === data.package.id);
+          if (idx >= 0) list[idx] = data.package;
+          else list.unshift(data.package);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+          return data.package;
+        }
+      }
+    } catch (err) {
+      console.warn('[CommercialPackageService] Notice calling canonical /api/catalog/packages endpoint:', err);
+    }
+
+    return this.savePackage(payload);
   }
 
   public updatePackageVariables(packageId: string, variablePct: number, commissionPct: number, updatedBy?: string): CommercialPackage | null {
