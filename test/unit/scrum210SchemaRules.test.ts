@@ -430,11 +430,11 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
     assert.ok(minerMatch, 'Must find match block for /miners/{uid}/miner/{minerId}');
     const minerBlockBody = minerMatch[1];
 
-    // Source-contract check: MUST NOT contain allow write (which inadvertently permits delete in Firestore rules)
+    // Source-contract check: MUST NOT contain allow write (including allow read, write: or allow write:)
     assert.equal(
-      /allow\s+write\b/.test(minerBlockBody),
+      /\ballow\s+[^;:]*\bwrite\b/i.test(minerBlockBody),
       false,
-      'SECURITY BUG FIX: /miners/{uid}/miner/{minerId} must NEVER contain "allow write", as write grants delete!'
+      'SECURITY BUG FIX: /miners/{uid}/miner/{minerId} must NEVER grant "write" (e.g. allow write: or allow read, write:), as write grants delete!'
     );
 
     // Must explicitly declare read, create, update
@@ -463,6 +463,13 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
     assert.ok(packageMatch, 'Must find match block for /commercial_packages/{packageId}');
     const packageBlockBody = packageMatch[1];
 
+    // Must NOT grant write on commercial packages (must separate create, update from delete)
+    assert.equal(
+      /\ballow\s+[^;:]*\bwrite\b/i.test(packageBlockBody),
+      false,
+      'Commercial packages must not grant "write" as write permits delete; must use explicit create, update'
+    );
+
     assert.ok(packageBlockBody.includes('resource.data.isPublished == true'));
     assert.equal(packageBlockBody.includes('publishedToStorefront'), false, 'Must not reference retired publishedToStorefront');
     assert.ok(/allow\s+create,\s*update:\s*if\s+isAdmin\(\);/.test(packageBlockBody));
@@ -477,6 +484,64 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
 
     // 4. Default deny at end
     assert.ok(rulesContent.includes('match /{document=**} {\n      allow read, write: if false;'));
+  });
+
+  it('verifies that the rule-contract validator correctly flags and rejects the Iteration 1 bug pattern', () => {
+    // Regression check: the exact bug from Iteration 1 was:
+    // "allow read, write: if isOwner(uid) || isAdmin(); allow delete: if false;"
+    const iteration1BuggyBlock = `
+      allow read, write: if isOwner(uid) || isAdmin();
+      allow delete: if false;
+    `;
+
+    // Must detect "write" granted in "allow read, write:"
+    const hasForbiddenWrite = /\ballow\s+[^;:]*\bwrite\b/i.test(iteration1BuggyBlock);
+    assert.equal(hasForbiddenWrite, true, 'Regex MUST detect and flag "allow read, write:" as granting write');
+
+    // Also detect allow write: by itself
+    const pureWriteBlock = 'allow write: if isOwner(uid);';
+    assert.equal(/\ballow\s+[^;:]*\bwrite\b/i.test(pureWriteBlock), true);
+
+    // Clean explicit block must NOT be flagged
+    const cleanBlock = `
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid) || isAdmin();
+      allow update: if isOwner(uid) || isAdmin();
+      allow delete: if false;
+    `;
+    assert.equal(/\ballow\s+[^;:]*\bwrite\b/i.test(cleanBlock), false);
+  });
+
+  it('handles null/undefined inputs and enforces integer cents on boundary functions', () => {
+    // null data in deserializeCommercialPackageDoc
+    const nullDoc = deserializeCommercialPackageDoc('pkg-null', null);
+    assert.equal(nullDoc.id, 'pkg-null');
+    assert.equal(nullDoc.priceUsdt, 0);
+
+    // undefined data in deserializeCommercialPackageDoc
+    const undefinedDoc = deserializeCommercialPackageDoc('pkg-undef', undefined);
+    assert.equal(undefinedDoc.id, 'pkg-undef');
+
+    // null pkg in validatePackageSchema
+    const nullValidation = validatePackageSchema(null as any);
+    assert.equal(nullValidation.valid, false);
+
+    // float pricePaidCents in createPurchaseSnapshot is rounded to integer cents
+    const snapshotFloat = createPurchaseSnapshot({
+      id: 'pkg-1',
+      name: 'Test',
+      powerTh: 10,
+      priceUsdt: 18.99,
+      durationDays: 365,
+      status: 'ACTIVE',
+      variablePct: 0,
+      commissionPct: 2,
+      version: 1,
+      createdAt: '2026-11-07T00:00:00Z',
+      updatedAt: '2026-11-07T00:00:00Z',
+    }, 1899.6);
+    assert.equal(snapshotFloat.pricePaidCents, 1900);
+    assert.ok(Number.isInteger(snapshotFloat.pricePaidCents));
   });
 
   it('verifies PurchasedMinerInstance supports client StoredMiner interoperability', () => {

@@ -17,6 +17,7 @@ Este documento define formalmente el contrato de datos en Cloud Firestore para e
 | Modelo de moneda en centavos enteros (`priceUsdCents`) | `PROPOSED` | Recomendación técnica de ingeniería para evitar pérdida de precisión por punto flotante; pendiente de ratificación final del PO. |
 | Clave de frontend (`frontendKey`) | `PROPOSED` | Clave observada en seeds para trazabilidad e idempotencia. |
 | IDs sugeridos (`preventa-01`, `minerx-01`, etc.) | `PROPOSED` | Propuestos para legibilidad e idempotencia; pendientes de confirmación final. |
+| Metadatos de auditoría interna (`source`, `updatedBy`, `seededAt`) | `PROPOSED` | Metadatos aditivos para trazabilidad operativa sin impacto en reglas de negocio. |
 | Colección `campaigns/{campaignId}` | `OUT_OF_SCOPE` | Descuentos y campañas nuevas declaradas OUT OF SCOPE en `FASE-1_INIT.md`. Pertenecen a SCRUM-213. |
 | DisplayNames finales de MinerX 1–5 | `OPEN_QUESTION` | Requiere confirmación del PO antes de sembrar (`NEEDS_PO_DECISION`). |
 | Inclusión de los 16 niveles de Lanzamiento | `OPEN_QUESTION` | Requiere confirmación del PO antes de sembrar (`NEEDS_PO_DECISION`). |
@@ -237,7 +238,7 @@ service cloud.firestore {
 }
 ```
 
-*Nota sobre validación:* Los tests automatizados en `test/unit/scrum210SchemaRules.test.ts` verifican estáticamente el contrato de código fuente (source-contract tests) de estas reglas. Para despliegues a producción se requerirá validación de comportamiento dinámico mediante el Firebase Local Emulator Suite.
+*Nota sobre validación:* Los tests automatizados en `test/unit/scrum210SchemaRules.test.ts` verifican estáticamente el contrato de código fuente (source-contract tests) de estas reglas. En particular, validan que ninguna sentencia `allow` contenga `write` antes de `:` (impidiendo tanto `allow write:` como `allow read, write:` o `allow create, write:`, los cuales anularían la restricción de `allow delete: if false;`). Para despliegues a producción se requerirá validación de comportamiento dinámico mediante el Firebase Local Emulator Suite.
 
 ---
 

@@ -11,48 +11,49 @@ export const COMMERCIAL_PACKAGES_COLLECTION = 'commercial_packages';
  * handling legacy fields as well as SCRUM-205 / SCRUM-210 additive fields.
  */
 export function deserializeCommercialPackageDoc(id: string, data: any): CommercialPackage {
-  const priceUsdt = Number(data.priceUsdt) || 0;
-  const priceUsdCents = typeof data.priceUsdCents === 'number'
-    ? data.priceUsdCents
+  const docData = data || {};
+  const priceUsdt = Number(docData.priceUsdt) || 0;
+  const priceUsdCents = typeof docData.priceUsdCents === 'number'
+    ? docData.priceUsdCents
     : (priceUsdt > 0 ? Math.round(priceUsdt * 100) : undefined);
-  const status = data.status || 'ACTIVE';
-  const isPublished = data.isPublished ?? (status === 'ACTIVE');
+  const status = docData.status || 'ACTIVE';
+  const isPublished = docData.isPublished ?? (status === 'ACTIVE');
 
   return {
     id,
-    name: data.name || 'Paquete Minero',
-    powerTh: Number(data.powerTh) || 0,
+    name: docData.name || 'Paquete Minero',
+    powerTh: Number(docData.powerTh) || 0,
     priceUsdt,
-    durationDays: Number(data.durationDays) || 365,
+    durationDays: Number(docData.durationDays) || 365,
     status,
     isPublished,
-    variablePct: Number(data.variablePct) || 0,
-    commissionPct: Number(data.commissionPct) || 2,
-    version: Number(data.version) || 1,
-    description: data.description || '',
-    maxPurchasesPerUser: data.maxPurchasesPerUser,
+    variablePct: Number(docData.variablePct) || 0,
+    commissionPct: Number(docData.commissionPct) || 2,
+    version: Number(docData.version) || 1,
+    description: docData.description || '',
+    maxPurchasesPerUser: docData.maxPurchasesPerUser,
 
     // Additive fields
     packageId: id,
-    section: data.section,
-    packageType: data.packageType,
-    sortOrder: typeof data.sortOrder === 'number' ? data.sortOrder : undefined,
-    displayName: data.displayName,
-    frontendKey: data.frontendKey,
-    source: data.source,
+    section: docData.section,
+    packageType: docData.packageType,
+    sortOrder: typeof docData.sortOrder === 'number' ? docData.sortOrder : undefined,
+    displayName: docData.displayName,
+    frontendKey: docData.frontendKey,
+    source: docData.source,
     priceUsdCents,
-    cadence: data.cadence ?? data.billing,
-    currency: data.currency,
-    dailyBtcText: data.dailyBtcText,
-    roiPct: typeof data.roiPct === 'number' ? data.roiPct : undefined,
-    limitedUnits: typeof data.limitedUnits === 'number' ? data.limitedUnits : undefined,
-    availableUnits: typeof data.availableUnits === 'number' ? data.availableUnits : undefined,
-    soldUnits: typeof data.soldUnits === 'number' ? data.soldUnits : undefined,
-    updatedBy: data.updatedBy,
-    seededAt: data.seededAt,
+    cadence: docData.cadence ?? docData.billing,
+    currency: docData.currency,
+    dailyBtcText: docData.dailyBtcText,
+    roiPct: typeof docData.roiPct === 'number' ? docData.roiPct : undefined,
+    limitedUnits: typeof docData.limitedUnits === 'number' ? docData.limitedUnits : undefined,
+    availableUnits: typeof docData.availableUnits === 'number' ? docData.availableUnits : undefined,
+    soldUnits: typeof docData.soldUnits === 'number' ? docData.soldUnits : undefined,
+    updatedBy: docData.updatedBy,
+    seededAt: docData.seededAt,
 
-    createdAt: data.createdAt || new Date().toISOString(),
-    updatedAt: data.updatedAt || new Date().toISOString(),
+    createdAt: docData.createdAt || new Date().toISOString(),
+    updatedAt: docData.updatedAt || new Date().toISOString(),
   };
 }
 
@@ -64,7 +65,8 @@ export function createPurchaseSnapshot(
   pkg: CommercialPackage,
   pricePaidCents?: number
 ): PurchasedPackageSnapshot {
-  const finalCents = pricePaidCents ?? pkg.priceUsdCents ?? Math.round(pkg.priceUsdt * 100);
+  const rawCents = pricePaidCents ?? pkg.priceUsdCents ?? Math.round(pkg.priceUsdt * 100);
+  const finalCents = Math.round(rawCents);
   return {
     packageId: pkg.id,
     packageName: pkg.name,
@@ -91,30 +93,31 @@ export function createPurchaseSnapshot(
  * Validates package schema requirements per SCRUM-210.
  */
 export function validatePackageSchema(pkg: Partial<CommercialPackage>): { valid: boolean; errors: string[] } {
+  const p = pkg || {};
   const errors: string[] = [];
-  if (!pkg.name || !pkg.name.trim()) errors.push('Package name is required');
-  if (typeof pkg.powerTh !== 'number' || pkg.powerTh <= 0) errors.push('powerTh must be a positive number');
+  if (!p.name || !p.name.trim()) errors.push('Package name is required');
+  if (typeof p.powerTh !== 'number' || p.powerTh <= 0) errors.push('powerTh must be a positive number');
   
-  const hasValidPrice = (typeof pkg.priceUsdt === 'number' && pkg.priceUsdt > 0) || (typeof pkg.priceUsdCents === 'number' && pkg.priceUsdCents > 0);
+  const hasValidPrice = (typeof p.priceUsdt === 'number' && p.priceUsdt > 0) || (typeof p.priceUsdCents === 'number' && p.priceUsdCents > 0);
   if (!hasValidPrice) errors.push('A positive price (priceUsdt or priceUsdCents) is required');
 
-  if (pkg.priceUsdCents !== undefined && (!Number.isInteger(pkg.priceUsdCents) || pkg.priceUsdCents <= 0)) {
+  if (p.priceUsdCents !== undefined && (!Number.isInteger(p.priceUsdCents) || p.priceUsdCents <= 0)) {
     errors.push('priceUsdCents must be a positive integer representing cents');
   }
-  if (typeof pkg.limitedUnits === 'number' && pkg.limitedUnits < 0) errors.push('limitedUnits cannot be negative');
-  if (typeof pkg.availableUnits === 'number' && pkg.availableUnits < 0) errors.push('availableUnits cannot be negative');
-  if (typeof pkg.soldUnits === 'number' && pkg.soldUnits < 0) errors.push('soldUnits cannot be negative');
-  if (typeof pkg.limitedUnits === 'number' && typeof pkg.soldUnits === 'number' && pkg.soldUnits > pkg.limitedUnits) {
+  if (typeof p.limitedUnits === 'number' && p.limitedUnits < 0) errors.push('limitedUnits cannot be negative');
+  if (typeof p.availableUnits === 'number' && p.availableUnits < 0) errors.push('availableUnits cannot be negative');
+  if (typeof p.soldUnits === 'number' && p.soldUnits < 0) errors.push('soldUnits cannot be negative');
+  if (typeof p.limitedUnits === 'number' && typeof p.soldUnits === 'number' && p.soldUnits > p.limitedUnits) {
     errors.push('soldUnits cannot exceed limitedUnits');
   }
-  if (pkg.section && !['minerx', 'preventa', 'lanzamiento', 'mensual'].includes(pkg.section)) {
-    errors.push(`Invalid section: ${pkg.section}`);
+  if (p.section && !['minerx', 'preventa', 'lanzamiento', 'mensual'].includes(p.section)) {
+    errors.push(`Invalid section: ${p.section}`);
   }
-  if (pkg.packageType && !['fixed', 'subscription', 'custom'].includes(pkg.packageType)) {
-    errors.push(`Invalid packageType: ${pkg.packageType}`);
+  if (p.packageType && !['fixed', 'subscription', 'custom'].includes(p.packageType)) {
+    errors.push(`Invalid packageType: ${p.packageType}`);
   }
-  if (pkg.status && !['ACTIVE', 'ARCHIVED', 'DRAFT'].includes(pkg.status)) {
-    errors.push(`Invalid status: ${pkg.status}`);
+  if (p.status && !['ACTIVE', 'ARCHIVED', 'DRAFT'].includes(p.status)) {
+    errors.push(`Invalid status: ${p.status}`);
   }
   return { valid: errors.length === 0, errors };
 }
