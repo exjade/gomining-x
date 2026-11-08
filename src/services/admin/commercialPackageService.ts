@@ -597,13 +597,21 @@ export class CommercialPackageService {
     }
 
     const data = await res.json().catch(() => ({}));
-    if (!data?.package) {
-      throw new Error('Canonical package mutation rejected: backend did not return confirmed package');
+    if (!data?.package || data.success === false) {
+      const detail = data?.error || data?.details || 'backend did not return confirmed package';
+      throw new Error(`Canonical package mutation rejected: ${detail}`);
     }
 
     // Only update local cache AFTER HTTP 2xx + confirmed package from backend
     const list = this.getPackages();
-    const idx = list.findIndex(p => p.id === data.package.id);
+    const targetId = data.package.id;
+    const targetPkgId = data.package.packageId;
+    const idx = list.findIndex(
+      p =>
+        p.id === targetId ||
+        (targetPkgId && p.id === targetPkgId) ||
+        (p.packageId && (p.packageId === targetId || (targetPkgId && p.packageId === targetPkgId)))
+    );
     if (idx >= 0) list[idx] = data.package;
     else list.unshift(data.package);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(list));

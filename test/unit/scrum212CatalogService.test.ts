@@ -1617,6 +1617,154 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
       }
     });
 
+    it('verifies saveCanonicalPackage strictly rejects on backend HTTP 500 without writing to localStorage', async () => {
+      const commercialService = CommercialPackageService.getInstance();
+      const originalFetch = globalThis.fetch;
+
+      // Mock backend returning 500 Internal Server Error
+      globalThis.fetch = async () => {
+        return new Response(
+          JSON.stringify({ error: 'Database connection failed', details: 'Firestore transaction aborted' }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } }
+        );
+      };
+
+      try {
+        const serverErrPkgId = `pkg-500-err-${Date.now()}`;
+        await assert.rejects(
+          async () => {
+            await commercialService.saveCanonicalPackage({
+              id: serverErrPkgId,
+              name: 'Server Error Package',
+              powerTh: 180,
+              priceUsdt: 1800,
+              section: 'minerx',
+              status: 'ACTIVE',
+              isPublished: true,
+            });
+          },
+          /Canonical package mutation rejected by backend \(500\)/
+        );
+
+        // Verify package was NOT persisted in localStorage
+        const stored = commercialService.getPackageById(serverErrPkgId);
+        assert.equal(stored, undefined, 'Package must not be saved to localStorage on HTTP 500');
+        const rawLocal = localStorage.getItem('minerx_admin_commercial_packages_v2') || '';
+        assert.equal(rawLocal.includes(serverErrPkgId), false, 'Raw localStorage must not contain the rejected package');
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('verifies saveCanonicalPackage strictly rejects when backend returns HTTP 200 with success: false', async () => {
+      const commercialService = CommercialPackageService.getInstance();
+      const originalFetch = globalThis.fetch;
+
+      // Mock backend returning 200 OK but success: false
+      globalThis.fetch = async () => {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Write rejected by backend business rules' }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      };
+
+      try {
+        const falseSuccessPkgId = `pkg-false-success-${Date.now()}`;
+        await assert.rejects(
+          async () => {
+            await commercialService.saveCanonicalPackage({
+              id: falseSuccessPkgId,
+              name: 'False Success Package',
+              powerTh: 200,
+              priceUsdt: 2000,
+              section: 'minerx',
+              status: 'ACTIVE',
+              isPublished: true,
+            });
+          },
+          /Write rejected by backend business rules/
+        );
+
+        // Verify package was NOT persisted in localStorage
+        const stored = commercialService.getPackageById(falseSuccessPkgId);
+        assert.equal(stored, undefined, 'Package must not be saved to localStorage when backend success is false');
+        const rawLocal = localStorage.getItem('minerx_admin_commercial_packages_v2') || '';
+        assert.equal(rawLocal.includes(falseSuccessPkgId), false, 'Raw localStorage must not contain the rejected package');
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('verifies saveCanonicalPackage update matches existing package by packageId without duplicating in localStorage', async () => {
+      const commercialService = CommercialPackageService.getInstance();
+      const originalFetch = globalThis.fetch;
+
+      const updateTargetId = `pkg-update-target-${Date.now()}`;
+      // Seed existing package into localStorage with packageId
+      const existingList = commercialService.getPackages();
+      existingList.push({
+        id: updateTargetId,
+        packageId: updateTargetId,
+        name: 'Initial Package Version',
+        powerTh: 100,
+        priceUsdt: 1000,
+        section: 'minerx' as const,
+        status: 'ACTIVE' as const,
+        isPublished: true,
+        version: 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      localStorage.setItem('minerx_admin_commercial_packages_v2', JSON.stringify(existingList));
+
+      const updatedBackendPackage = {
+        id: updateTargetId,
+        packageId: updateTargetId,
+        name: 'Updated Package Version',
+        powerTh: 110,
+        priceUsdt: 1050,
+        section: 'minerx' as const,
+        status: 'ACTIVE' as const,
+        isPublished: true,
+        version: 2,
+        updatedBy: 'usr_verified_session',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      globalThis.fetch = async () => {
+        return new Response(
+          JSON.stringify({ success: true, package: updatedBackendPackage }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      };
+
+      try {
+        const result = await commercialService.saveCanonicalPackage({
+          id: updateTargetId,
+          packageId: updateTargetId,
+          name: 'Updated Package Version',
+          powerTh: 110,
+          priceUsdt: 1050,
+          section: 'minerx',
+          status: 'ACTIVE',
+          isPublished: true,
+        });
+
+        assert.deepEqual(result, updatedBackendPackage);
+        const stored = commercialService.getPackageById(updateTargetId);
+        assert.equal(stored?.name, 'Updated Package Version');
+        assert.equal(stored?.version, 2);
+
+        // Verify no duplicate in list
+        const allPackages = commercialService.getPackages();
+        const matches = allPackages.filter(p => p.id === updateTargetId);
+        assert.equal(matches.length, 1, 'Updated package must not duplicate in localStorage');
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
     it('verifies FirestoreCatalogStoreAdapter strictly enforces emulator guard for remote Node writes', async () => {
       const { FirestoreCatalogStoreAdapter } = await import('../../src/services/catalogService');
       const adapter = new FirestoreCatalogStoreAdapter();
