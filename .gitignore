@@ -41,6 +41,7 @@ server/data/
 .firebase/
 firebase-debug.log*
 firestore-debug.log*
+*-firebase-adminsdk-*.json
 
 # Editor directories and files
 .vscode/*

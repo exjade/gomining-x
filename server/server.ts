@@ -8,6 +8,7 @@ import { VastOffersService } from './services/vastOffersService.js';
 import { VastInstanceService } from './services/vastInstanceService.js';
 import { StrategyEngine } from './services/strategyEngine.js';
 import { CatalogService, VALID_SECTIONS, VALID_STATUSES, type CatalogSection } from '../src/services/catalogService.js';
+import { FirebaseAdminCatalogStoreAdapter } from './services/firebaseAdminCatalogAdapter.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -482,10 +483,11 @@ app.post('/api/config', (req, res) => {
 });
 
 // 2a. Commercial Packages Endpoints (Platform Admin Packages)
-// Canonical endpoints delegate directly to CatalogService (backing store: commercial_packages).
+// Canonical endpoints delegate directly to CatalogService with authorized Firebase Admin SDK adapter.
+// Backing store is commercial_packages in Firestore.
 // Legacy routes (/api/packages, /api/commercial-packages) remain separated and backed by readPackages().
 
-export let catalogService = new CatalogService();
+export let catalogService = new CatalogService(new FirebaseAdminCatalogStoreAdapter());
 export function setCatalogService(service: CatalogService): void {
   catalogService = service;
 }
