@@ -73,6 +73,11 @@ export class DefaultFirestorePackageStore implements PackageStoreAdapter {
   }
 
   async setPackageDoc(id: string, data: any): Promise<void> {
+    const nodeProcess = (globalThis as any).process;
+    const emulatorHost = nodeProcess?.env?.FIRESTORE_EMULATOR_HOST;
+    if (!emulatorHost) {
+      throw new Error('Remote Firestore writes are strictly prohibited in SCRUM-211. FIRESTORE_EMULATOR_HOST must be set.');
+    }
     if (!this.firestoreInstance) {
       throw new Error('Cloud Firestore instance is not initialized');
     }
@@ -133,6 +138,14 @@ export class SafeSeedService {
     const isApply = !isDryRun && !!options.apply;
     const log = options.logger || (() => {});
     const catalog = options.targetCatalog || TARGET_PACKAGES_MANIFEST;
+
+    if (isApply && !options.storeAdapter) {
+      const nodeProcess = (globalThis as any).process;
+      const emulatorHost = nodeProcess?.env?.FIRESTORE_EMULATOR_HOST;
+      if (!emulatorHost) {
+        throw new Error('[SafeSeedService] Security error: --apply is strictly permitted ONLY when FIRESTORE_EMULATOR_HOST is defined. Remote writes are disabled in SCRUM-211.');
+      }
+    }
 
     const store: PackageStoreAdapter =
       options.storeAdapter ||

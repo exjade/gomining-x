@@ -18,7 +18,9 @@
     "neverDelete": true,
     "preserveLegacy": true,
     "priceUsdCentsProposed": true,
-    "autoSeedOnReadNeutralized": true
+    "autoSeedOnReadNeutralized": true,
+    "remoteApplyDisabled": true,
+    "emulatorApplyOnly": true
   },
   "packages": [
     {
@@ -32,7 +34,7 @@
       "powerTh": 48,
       "priceUsdt": 561.99,
       "priceUsdCents": 56199,
-      "currency": "USDT",
+      "currency": "USD",
       "cadence": "one_time",
       "durationDays": 365,
       "isPublished": true,
@@ -42,8 +44,8 @@
       "commissionPct": 2.0,
       "frontendKey": "minerx-01",
       "source": "frontend-seed",
-      "description": "Catálogo permanente Minero 1 (48 TH/s).",
-      "provenance": "PouwMiners_Modelo_de_Negocio_Consolidado.docx Sec 4.1 / JIRA_pouwminer_story_paquetes_dinamicos.md"
+      "description": null,
+      "provenance": "docs/JIRA_pouwminer_story_paquetes_dinamicos.md line 33"
     },
     {
       "id": "minerx-02",
@@ -56,7 +58,7 @@
       "powerTh": 64,
       "priceUsdt": 744.99,
       "priceUsdCents": 74499,
-      "currency": "USDT",
+      "currency": "USD",
       "cadence": "one_time",
       "durationDays": 365,
       "isPublished": true,
@@ -66,8 +68,8 @@
       "commissionPct": 2.0,
       "frontendKey": "minerx-02",
       "source": "frontend-seed",
-      "description": "Catálogo permanente Minero 2 (64 TH/s).",
-      "provenance": "PouwMiners_Modelo_de_Negocio_Consolidado.docx Sec 4.1 / JIRA_pouwminer_story_paquetes_dinamicos.md"
+      "description": null,
+      "provenance": "docs/JIRA_pouwminer_story_paquetes_dinamicos.md line 33"
     },
     {
       "id": "minerx-03",
@@ -80,7 +82,7 @@
       "powerTh": 96,
       "priceUsdt": 1111.99,
       "priceUsdCents": 111199,
-      "currency": "USDT",
+      "currency": "USD",
       "cadence": "one_time",
       "durationDays": 365,
       "isPublished": true,
@@ -90,8 +92,8 @@
       "commissionPct": 1.8,
       "frontendKey": "minerx-03",
       "source": "frontend-seed",
-      "description": "Catálogo permanente Minero 3 (96 TH/s).",
-      "provenance": "PouwMiners_Modelo_de_Negocio_Consolidado.docx Sec 4.1 / GoMining_Explicacion_Sistema_de_Compra_y_Mineros.docx"
+      "description": null,
+      "provenance": "docs/JIRA_pouwminer_story_paquetes_dinamicos.md line 33 / docs/GoMining_Explicacion_Sistema_de_Compra_y_Mineros.docx (Lanzamiento Nivel 5)"
     },
     {
       "id": "minerx-04",
@@ -104,7 +106,7 @@
       "powerTh": 128,
       "priceUsdt": 1474.99,
       "priceUsdCents": 147499,
-      "currency": "USDT",
+      "currency": "USD",
       "cadence": "one_time",
       "durationDays": 365,
       "isPublished": true,
@@ -114,8 +116,8 @@
       "commissionPct": 1.5,
       "frontendKey": "minerx-04",
       "source": "frontend-seed",
-      "description": "Catálogo permanente Minero 4 (128 TH/s).",
-      "provenance": "PouwMiners_Modelo_de_Negocio_Consolidado.docx Sec 4.1 / GoMining_Explicacion_Sistema_de_Compra_y_Mineros.docx"
+      "description": null,
+      "provenance": "docs/JIRA_pouwminer_story_paquetes_dinamicos.md line 33 / docs/GoMining_Explicacion_Sistema_de_Compra_y_Mineros.docx (Lanzamiento Nivel 6)"
     },
     {
       "id": "minerx-05",
@@ -128,7 +130,7 @@
       "powerTh": 192,
       "priceUsdt": 2201.99,
       "priceUsdCents": 220199,
-      "currency": "USDT",
+      "currency": "USD",
       "cadence": "one_time",
       "durationDays": 365,
       "isPublished": true,
@@ -138,14 +140,14 @@
       "commissionPct": 1.0,
       "frontendKey": "minerx-05",
       "source": "frontend-seed",
-      "description": "Catálogo permanente Minero 5 (192 TH/s).",
-      "provenance": "PouwMiners_Modelo_de_Negocio_Consolidado.docx Sec 4.1 / GoMining_Documento_de_Diseno.docx Table 4"
+      "description": null,
+      "provenance": "docs/JIRA_pouwminer_story_paquetes_dinamicos.md line 33 / docs/GoMining_Explicacion_Sistema_de_Compra_y_Mineros.docx (Lanzamiento Nivel 7) / docs/GoMining_Documento_de_Diseno.docx (Level 11)"
     },
     {
       "id": "minerx-custom",
       "packageId": "minerx-custom",
-      "name": "Personalizado",
-      "displayName": "Personalizado",
+      "name": "Custom",
+      "displayName": "Custom",
       "section": "minerx",
       "packageType": "custom",
       "sortOrder": 6,
@@ -162,13 +164,13 @@
       "commissionPct": 2.0,
       "frontendKey": "minerx-custom",
       "source": "frontend-seed",
-      "description": "Configuración personalizada desde 1 TH hasta 5,000 TH.",
-      "provenance": "Client main@99e0461 (src/App.tsx & customMinerPriceTiers)"
+      "description": null,
+      "provenance": "Client main@99e0461 (src/components/miner-builder/MinerOptionList.tsx & src/minerCatalog.ts: customMinerPriceTiers)"
     },
     {
       "id": "preventa-01",
       "packageId": "preventa-01",
-      "name": "Preventa 1.46 TH",
+      "name": "1.46 TH",
       "displayName": "1.46 TH",
       "section": "preventa",
       "packageType": "fixed",
@@ -191,13 +193,13 @@
       "commissionPct": 2.0,
       "frontendKey": "presale-1",
       "source": "frontend-seed",
-      "description": "Lote exclusivo de preventa con 30 cupos.",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: presaleMinerPlans[0])"
     },
     {
       "id": "preventa-02",
       "packageId": "preventa-02",
-      "name": "Preventa 8.33 TH",
+      "name": "8.33 TH",
       "displayName": "8.33 TH",
       "section": "preventa",
       "packageType": "fixed",
@@ -220,13 +222,13 @@
       "commissionPct": 2.0,
       "frontendKey": "presale-2",
       "source": "frontend-seed",
-      "description": "Lote exclusivo de preventa con 30 cupos.",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: presaleMinerPlans[1])"
     },
     {
       "id": "preventa-03",
       "packageId": "preventa-03",
-      "name": "Preventa 21.05 TH",
+      "name": "21.05 TH",
       "displayName": "21.05 TH",
       "section": "preventa",
       "packageType": "fixed",
@@ -249,13 +251,13 @@
       "commissionPct": 2.0,
       "frontendKey": "presale-3",
       "source": "frontend-seed",
-      "description": "Lote exclusivo de preventa con 30 cupos.",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: presaleMinerPlans[2])"
     },
     {
       "id": "preventa-04",
       "packageId": "preventa-04",
-      "name": "Preventa 42.44 TH",
+      "name": "42.44 TH",
       "displayName": "42.44 TH",
       "section": "preventa",
       "packageType": "fixed",
@@ -278,13 +280,13 @@
       "commissionPct": 2.0,
       "frontendKey": "presale-4",
       "source": "frontend-seed",
-      "description": "Lote exclusivo de preventa con 30 cupos.",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: presaleMinerPlans[3])"
     },
     {
       "id": "lanzamiento-01",
       "packageId": "lanzamiento-01",
-      "name": "Lanzamiento 42.44 TH",
+      "name": "42.44 TH",
       "displayName": "42.44 TH",
       "section": "lanzamiento",
       "packageType": "fixed",
@@ -304,13 +306,13 @@
       "commissionPct": 2.0,
       "frontendKey": "launch-42",
       "source": "frontend-seed",
-      "description": "Nivel de lanzamiento 42.44 TH.",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: launchMinerPlans[0])"
     },
     {
       "id": "lanzamiento-02",
       "packageId": "lanzamiento-02",
-      "name": "Lanzamiento 64 TH",
+      "name": "64 TH",
       "displayName": "64 TH",
       "section": "lanzamiento",
       "packageType": "fixed",
@@ -330,13 +332,13 @@
       "commissionPct": 2.0,
       "frontendKey": "launch-64",
       "source": "frontend-seed",
-      "description": "Nivel de lanzamiento 64 TH.",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: launchMinerPlans[1])"
     },
     {
       "id": "lanzamiento-03",
       "packageId": "lanzamiento-03",
-      "name": "Lanzamiento 96 TH",
+      "name": "96 TH",
       "displayName": "96 TH",
       "section": "lanzamiento",
       "packageType": "fixed",
@@ -356,13 +358,13 @@
       "commissionPct": 2.0,
       "frontendKey": "launch-96",
       "source": "frontend-seed",
-      "description": "Nivel de lanzamiento 96 TH.",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: launchMinerPlans[2])"
     },
     {
       "id": "lanzamiento-04",
       "packageId": "lanzamiento-04",
-      "name": "Lanzamiento 128 TH",
+      "name": "128 TH",
       "displayName": "128 TH",
       "section": "lanzamiento",
       "packageType": "fixed",
@@ -382,13 +384,13 @@
       "commissionPct": 2.0,
       "frontendKey": "launch-128",
       "source": "frontend-seed",
-      "description": "Nivel de lanzamiento 128 TH.",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: launchMinerPlans[3])"
     },
     {
       "id": "lanzamiento-05",
       "packageId": "lanzamiento-05",
-      "name": "Lanzamiento 192 TH",
+      "name": "192 TH",
       "displayName": "192 TH",
       "section": "lanzamiento",
       "packageType": "fixed",
@@ -408,13 +410,13 @@
       "commissionPct": 2.0,
       "frontendKey": "launch-192",
       "source": "frontend-seed",
-      "description": "Nivel de lanzamiento 192 TH.",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: launchMinerPlans[4])"
     },
     {
       "id": "lanzamiento-06",
       "packageId": "lanzamiento-06",
-      "name": "Lanzamiento 256 TH",
+      "name": "256 TH",
       "displayName": "256 TH",
       "section": "lanzamiento",
       "packageType": "fixed",
@@ -434,13 +436,13 @@
       "commissionPct": 2.0,
       "frontendKey": "launch-256",
       "source": "frontend-seed",
-      "description": "Nivel de lanzamiento 256 TH.",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: launchMinerPlans[5])"
     },
     {
       "id": "lanzamiento-07",
       "packageId": "lanzamiento-07",
-      "name": "Lanzamiento 384 TH",
+      "name": "384 TH",
       "displayName": "384 TH",
       "section": "lanzamiento",
       "packageType": "fixed",
@@ -460,13 +462,13 @@
       "commissionPct": 2.0,
       "frontendKey": "launch-384",
       "source": "frontend-seed",
-      "description": "Nivel de lanzamiento 384 TH.",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: launchMinerPlans[6])"
     },
     {
       "id": "lanzamiento-08",
       "packageId": "lanzamiento-08",
-      "name": "Lanzamiento 512 TH",
+      "name": "512 TH",
       "displayName": "512 TH",
       "section": "lanzamiento",
       "packageType": "fixed",
@@ -486,13 +488,13 @@
       "commissionPct": 2.0,
       "frontendKey": "launch-512",
       "source": "frontend-seed",
-      "description": "Nivel de lanzamiento 512 TH.",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: launchMinerPlans[7])"
     },
     {
       "id": "lanzamiento-09",
       "packageId": "lanzamiento-09",
-      "name": "Lanzamiento 768 TH",
+      "name": "768 TH",
       "displayName": "768 TH",
       "section": "lanzamiento",
       "packageType": "fixed",
@@ -512,13 +514,13 @@
       "commissionPct": 2.0,
       "frontendKey": "launch-768",
       "source": "frontend-seed",
-      "description": "Nivel de lanzamiento 768 TH.",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: launchMinerPlans[8])"
     },
     {
       "id": "lanzamiento-10",
       "packageId": "lanzamiento-10",
-      "name": "Lanzamiento 1,024 TH",
+      "name": "1,024 TH",
       "displayName": "1,024 TH",
       "section": "lanzamiento",
       "packageType": "fixed",
@@ -538,13 +540,13 @@
       "commissionPct": 2.0,
       "frontendKey": "launch-1024",
       "source": "frontend-seed",
-      "description": "Nivel de lanzamiento 1,024 TH.",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: launchMinerPlans[9])"
     },
     {
       "id": "lanzamiento-11",
       "packageId": "lanzamiento-11",
-      "name": "Lanzamiento 1,536 TH",
+      "name": "1,536 TH",
       "displayName": "1,536 TH",
       "section": "lanzamiento",
       "packageType": "fixed",
@@ -564,13 +566,13 @@
       "commissionPct": 2.0,
       "frontendKey": "launch-1536",
       "source": "frontend-seed",
-      "description": "Nivel de lanzamiento 1,536 TH.",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: launchMinerPlans[10])"
     },
     {
       "id": "lanzamiento-12",
       "packageId": "lanzamiento-12",
-      "name": "Lanzamiento 2,048 TH",
+      "name": "2,048 TH",
       "displayName": "2,048 TH",
       "section": "lanzamiento",
       "packageType": "fixed",
@@ -590,13 +592,13 @@
       "commissionPct": 2.0,
       "frontendKey": "launch-2048",
       "source": "frontend-seed",
-      "description": "Nivel de lanzamiento 2,048 TH.",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: launchMinerPlans[11])"
     },
     {
       "id": "lanzamiento-13",
       "packageId": "lanzamiento-13",
-      "name": "Lanzamiento 2,560 TH",
+      "name": "2,560 TH",
       "displayName": "2,560 TH",
       "section": "lanzamiento",
       "packageType": "fixed",
@@ -616,13 +618,13 @@
       "commissionPct": 2.0,
       "frontendKey": "launch-2560",
       "source": "frontend-seed",
-      "description": "Nivel de lanzamiento 2,560 TH.",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: launchMinerPlans[12])"
     },
     {
       "id": "lanzamiento-14",
       "packageId": "lanzamiento-14",
-      "name": "Lanzamiento 3,584 TH",
+      "name": "3,584 TH",
       "displayName": "3,584 TH",
       "section": "lanzamiento",
       "packageType": "fixed",
@@ -642,13 +644,13 @@
       "commissionPct": 2.0,
       "frontendKey": "launch-3584",
       "source": "frontend-seed",
-      "description": "Nivel de lanzamiento 3,584 TH.",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: launchMinerPlans[13])"
     },
     {
       "id": "lanzamiento-15",
       "packageId": "lanzamiento-15",
-      "name": "Lanzamiento 4,096 TH",
+      "name": "4,096 TH",
       "displayName": "4,096 TH",
       "section": "lanzamiento",
       "packageType": "fixed",
@@ -668,13 +670,13 @@
       "commissionPct": 2.0,
       "frontendKey": "launch-4096",
       "source": "frontend-seed",
-      "description": "Nivel de lanzamiento 4,096 TH.",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: launchMinerPlans[14])"
     },
     {
       "id": "lanzamiento-16",
       "packageId": "lanzamiento-16",
-      "name": "Lanzamiento 5,000 TH",
+      "name": "5,000 TH",
       "displayName": "5,000 TH",
       "section": "lanzamiento",
       "packageType": "fixed",
@@ -694,13 +696,13 @@
       "commissionPct": 2.0,
       "frontendKey": "launch-5000",
       "source": "frontend-seed",
-      "description": "Nivel de lanzamiento 5,000 TH.",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: launchMinerPlans[15])"
     },
     {
       "id": "mensual-inicio",
       "packageId": "mensual-inicio",
-      "name": "Suscripción Inicio",
+      "name": "Inicio",
       "displayName": "Inicio",
       "section": "mensual",
       "packageType": "subscription",
@@ -718,13 +720,13 @@
       "commissionPct": 2.0,
       "frontendKey": "monthly-start",
       "source": "frontend-seed",
-      "description": "Plan mensual Inicio (3.82 TH).",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: monthlyMinerPlans[0])"
     },
     {
       "id": "mensual-plus",
       "packageId": "mensual-plus",
-      "name": "Suscripción Plus",
+      "name": "Plus",
       "displayName": "Plus",
       "section": "mensual",
       "packageType": "subscription",
@@ -742,18 +744,18 @@
       "commissionPct": 2.0,
       "frontendKey": "monthly-plus",
       "source": "frontend-seed",
-      "description": "Plan mensual Plus (9.61 TH).",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: monthlyMinerPlans[1])"
     },
     {
       "id": "mensual-pro",
       "packageId": "mensual-pro",
-      "name": "Suscripción Pro",
+      "name": "Pro",
       "displayName": "Pro",
       "section": "mensual",
       "packageType": "subscription",
       "sortOrder": 3,
-      "powerTh": 24.2,
+      "powerTh": 24.20,
       "priceUsdt": 249.99,
       "priceUsdCents": 24999,
       "currency": "USD",
@@ -766,13 +768,13 @@
       "commissionPct": 2.0,
       "frontendKey": "monthly-pro",
       "source": "frontend-seed",
-      "description": "Plan mensual Pro (24.20 TH).",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: monthlyMinerPlans[2])"
     },
     {
       "id": "mensual-maximo",
       "packageId": "mensual-maximo",
-      "name": "Suscripción Máximo",
+      "name": "Máximo",
       "displayName": "Máximo",
       "section": "mensual",
       "packageType": "subscription",
@@ -790,123 +792,120 @@
       "commissionPct": 2.0,
       "frontendKey": "monthly-max",
       "source": "frontend-seed",
-      "description": "Plan mensual Máximo (48.66 TH).",
+      "description": null,
       "provenance": "Client main@99e0461 (src/minerCatalog.ts: monthlyMinerPlans[3])"
     }
   ],
-  "customTiers": {
-    "provenance": "Client main@99e0461 (src/minerCatalog.ts: customMinerPriceTiers)",
-    "tiers": [
-      {
-        "powerTh": 1,
-        "priceUsd": 12.99,
-        "priceUsdCents": 1299
-      },
-      {
-        "powerTh": 2,
-        "priceUsd": 24.99,
-        "priceUsdCents": 2499
-      },
-      {
-        "powerTh": 4,
-        "priceUsd": 49.99,
-        "priceUsdCents": 4999
-      },
-      {
-        "powerTh": 8,
-        "priceUsd": 99.99,
-        "priceUsdCents": 9999
-      },
-      {
-        "powerTh": 16,
-        "priceUsd": 189.99,
-        "priceUsdCents": 18999
-      },
-      {
-        "powerTh": 32,
-        "priceUsd": 379.99,
-        "priceUsdCents": 37999
-      },
-      {
-        "powerTh": 42.44,
-        "priceUsd": 499.99,
-        "priceUsdCents": 49999
-      },
-      {
-        "powerTh": 64,
-        "priceUsd": 759.99,
-        "priceUsdCents": 75999
-      },
-      {
-        "powerTh": 96,
-        "priceUsd": 1139.99,
-        "priceUsdCents": 113999
-      },
-      {
-        "powerTh": 128,
-        "priceUsd": 1519.99,
-        "priceUsdCents": 151999
-      },
-      {
-        "powerTh": 192,
-        "priceUsd": 2279.99,
-        "priceUsdCents": 227999
-      },
-      {
-        "powerTh": 256,
-        "priceUsd": 3039.99,
-        "priceUsdCents": 303999
-      },
-      {
-        "powerTh": 384,
-        "priceUsd": 4559.99,
-        "priceUsdCents": 455999
-      },
-      {
-        "powerTh": 512,
-        "priceUsd": 6079.99,
-        "priceUsdCents": 607999
-      },
-      {
-        "powerTh": 768,
-        "priceUsd": 9119.99,
-        "priceUsdCents": 911999
-      },
-      {
-        "powerTh": 1024,
-        "priceUsd": 12159.99,
-        "priceUsdCents": 1215999
-      },
-      {
-        "powerTh": 1536,
-        "priceUsd": 18239.99,
-        "priceUsdCents": 1823999
-      },
-      {
-        "powerTh": 2048,
-        "priceUsd": 24319.99,
-        "priceUsdCents": 2431999
-      },
-      {
-        "powerTh": 2560,
-        "priceUsd": 30399.99,
-        "priceUsdCents": 3039999
-      },
-      {
-        "powerTh": 3584,
-        "priceUsd": 42559.99,
-        "priceUsdCents": 4255999
-      },
-      {
-        "powerTh": 4096,
-        "priceUsd": 48639.99,
-        "priceUsdCents": 4863999
-      },
-      {
-        "powerTh": 5000,
-        "priceUsd": 54768.99,
-        "priceUsdCents": 5476899
-      }
-    ]
-  }
+  "customTiers": [
+    {
+      "powerTh": 1,
+      "priceUsd": 12.99,
+      "priceUsdCents": 1299
+    },
+    {
+      "powerTh": 2,
+      "priceUsd": 24.99,
+      "priceUsdCents": 2499
+    },
+    {
+      "powerTh": 4,
+      "priceUsd": 49.99,
+      "priceUsdCents": 4999
+    },
+    {
+      "powerTh": 8,
+      "priceUsd": 99.99,
+      "priceUsdCents": 9999
+    },
+    {
+      "powerTh": 16,
+      "priceUsd": 189.99,
+      "priceUsdCents": 18999
+    },
+    {
+      "powerTh": 32,
+      "priceUsd": 379.99,
+      "priceUsdCents": 37999
+    },
+    {
+      "powerTh": 42.44,
+      "priceUsd": 499.99,
+      "priceUsdCents": 49999
+    },
+    {
+      "powerTh": 64,
+      "priceUsd": 759.99,
+      "priceUsdCents": 75999
+    },
+    {
+      "powerTh": 96,
+      "priceUsd": 1139.99,
+      "priceUsdCents": 113999
+    },
+    {
+      "powerTh": 128,
+      "priceUsd": 1519.99,
+      "priceUsdCents": 151999
+    },
+    {
+      "powerTh": 192,
+      "priceUsd": 2279.99,
+      "priceUsdCents": 227999
+    },
+    {
+      "powerTh": 256,
+      "priceUsd": 3039.99,
+      "priceUsdCents": 303999
+    },
+    {
+      "powerTh": 384,
+      "priceUsd": 4559.99,
+      "priceUsdCents": 455999
+    },
+    {
+      "powerTh": 512,
+      "priceUsd": 6079.99,
+      "priceUsdCents": 607999
+    },
+    {
+      "powerTh": 768,
+      "priceUsd": 9119.99,
+      "priceUsdCents": 911999
+    },
+    {
+      "powerTh": 1024,
+      "priceUsd": 12159.99,
+      "priceUsdCents": 1215999
+    },
+    {
+      "powerTh": 1536,
+      "priceUsd": 18239.99,
+      "priceUsdCents": 1823999
+    },
+    {
+      "powerTh": 2048,
+      "priceUsd": 24319.99,
+      "priceUsdCents": 2431999
+    },
+    {
+      "powerTh": 2560,
+      "priceUsd": 30399.99,
+      "priceUsdCents": 3039999
+    },
+    {
+      "powerTh": 3584,
+      "priceUsd": 42559.99,
+      "priceUsdCents": 4255999
+    },
+    {
+      "powerTh": 4096,
+      "priceUsd": 48639.99,
+      "priceUsdCents": 4863999
+    },
+    {
+      "powerTh": 5000,
+      "priceUsd": 54768.99,
+      "priceUsdCents": 5476899
+    }
+  ]
 }

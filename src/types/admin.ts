@@ -188,7 +188,7 @@ export interface CommercialPackage {
   commissionPct: number;
   version: number;
   maxPurchasesPerUser?: number;
-  description?: string;
+  description?: string | null;
   isPublished?: boolean;
   createdAt: string;
   updatedAt: string;

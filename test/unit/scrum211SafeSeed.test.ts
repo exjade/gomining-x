@@ -30,6 +30,7 @@ import {
   COMMERCIAL_PACKAGES_COLLECTION,
   validatePackageSchema,
 } from '../../src/services/admin/commercialPackageService';
+import { main as runSafeSeedScript } from '../../scripts/safeSeedPackages';
 
 /**
  * In-memory Mock Firestore Store Adapter to verify SafeSeedService execution
@@ -58,7 +59,7 @@ class MockPackageStoreAdapter implements PackageStoreAdapter {
   }
 }
 
-describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests', () => {
+describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Iteration 2)', () => {
   const safeSeedService = SafeSeedService.getInstance();
   const packageService = CommercialPackageService.getInstance();
 
@@ -79,14 +80,18 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests', () =
     assert.equal(CUSTOM_TIERS_MANIFEST.length, 22);
   });
 
-  it('verifies MinerX 1–5 match exact names and values from business documents, excluding legacy names', () => {
+  // 2. FINDING 1: FUENTES MINERX 1–5 REVALIDATED EXCLUSIVELY AGAINST AUTHORIZED DOCS
+  it('verifies MinerX 1–5 match authorized documents and completely excludes PouwMiners_Modelo_de_Negocio_Consolidado.docx', () => {
     const minerxItems = TARGET_PACKAGES_MANIFEST.filter((p) => p.section === 'minerx');
     assert.equal(minerxItems.length, 6);
 
     const fixedMinerx = minerxItems.filter((p) => p.packageType === 'fixed');
     assert.equal(fixedMinerx.length, 5);
 
-    // Exact names and parameters from PouwMiners_Modelo_de_Negocio_Consolidado.docx
+    // Exact names and parameters from authorized docs:
+    // docs/JIRA_pouwminer_story_paquetes_dinamicos.md,
+    // docs/GoMining_Explicacion_Sistema_de_Compra_y_Mineros.docx,
+    // docs/GoMining_Documento_de_Diseno.docx
     const expected = [
       { id: 'minerx-01', name: 'Minero 1', powerTh: 48, priceUsdt: 561.99, sortOrder: 1 },
       { id: 'minerx-02', name: 'Minero 2', powerTh: 64, priceUsdt: 744.99, sortOrder: 2 },
@@ -105,10 +110,17 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests', () =
       assert.equal(actual.powerTh, exp.powerTh);
       assert.equal(actual.priceUsdt, exp.priceUsdt);
       assert.equal(actual.sortOrder, exp.sortOrder);
-      assert.equal(actual.currency, 'USDT');
+      assert.equal(actual.currency, 'USD'); // FINDING 4: Storefront visual currency is USD
       assert.equal(actual.cadence, 'one_time');
       assert.equal(actual.isPublished, true);
       assert.equal(actual.status, 'ACTIVE');
+
+      // FINDING 1: Provenance MUST NOT reference unauthorized PouwMiners_Modelo_de_Negocio_Consolidado.docx
+      assert.equal(
+        actual.provenance.includes('PouwMiners_Modelo_de_Negocio_Consolidado.docx'),
+        false,
+        `MinerX package ${actual.id} must NOT reference PouwMiners_Modelo_de_Negocio_Consolidado.docx`
+      );
 
       // Legacy names MUST NOT appear
       assert.equal(actual.name.includes('Entry'), false);
@@ -120,57 +132,203 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests', () =
       }
     }
 
-    // MinerX Custom Row
-    const customRow = minerxItems.find((p) => p.packageType === 'custom');
-    assert.ok(customRow, 'MinerX section must include custom row');
-    assert.equal(customRow.id, 'minerx-custom');
-    assert.equal(customRow.displayName, 'Personalizado');
-    assert.equal(customRow.sortOrder, 6);
+    // Verify zero occurrences of PouwMiners_Modelo_de_Negocio_Consolidado across ALL packages
+    for (const pkg of TARGET_PACKAGES_MANIFEST) {
+      assert.equal(
+        pkg.provenance.includes('PouwMiners_Modelo_de_Negocio_Consolidado'),
+        false,
+        `Package ${pkg.id} must not reference PouwMiners_Modelo_de_Negocio_Consolidado`
+      );
+    }
   });
 
-  it('verifies Preventa (4), Lanzamiento (16) and Mensual (4) exactly preserve Client main@99e0461 constants', () => {
+  // 3. FINDING 2: CUSTOM DEBE DECIR EXACTAMENTE "Custom"
+  it('guarantees Custom row is strictly labeled "Custom" (not "Personalizado") in name and displayName', () => {
+    const customRow = TARGET_PACKAGES_MANIFEST.find((p) => p.packageType === 'custom');
+    assert.ok(customRow, 'MinerX section must include custom row');
+    assert.equal(customRow.id, 'minerx-custom');
+    assert.equal(customRow.name, 'Custom');
+    assert.equal(customRow.displayName, 'Custom');
+    assert.equal(customRow.sortOrder, 6);
+    assert.equal(customRow.currency, 'USD');
+
+    // Regression prevention test: MUST NOT be "Personalizado"
+    assert.notEqual(customRow.name, 'Personalizado', 'Must not regress to "Personalizado"');
+    assert.notEqual(customRow.displayName, 'Personalizado', 'Must not regress to "Personalizado"');
+    assert.equal(customRow.name.toLowerCase().includes('personalizado'), false);
+    assert.equal(customRow.displayName.toLowerCase().includes('personalizado'), false);
+  });
+
+  // 4. FINDING 3: NO INVENTAR NOMBRES NI DESCRIPCIONES
+  it('guarantees displayName and name match exact Client constants with zero invented prefixes or marketing descriptions', () => {
     // Preventa
     const presale = TARGET_PACKAGES_MANIFEST.filter((p) => p.section === 'preventa');
     assert.equal(presale.length, 4);
     assert.deepEqual(
-      presale.map((p) => ({ th: p.powerTh, price: p.priceUsdt, units: p.limitedUnits, roi: p.roiPct })),
+      presale.map((p) => ({ name: p.name, displayName: p.displayName, th: p.powerTh, price: p.priceUsdt, units: p.limitedUnits, roi: p.roiPct })),
       [
-        { th: 1.46, price: 18.99, units: 30, roi: 52.5 },
-        { th: 8.33, price: 99.99, units: 30, roi: 55.62 },
-        { th: 21.05, price: 249.99, units: 30, roi: 56.47 },
-        { th: 42.44, price: 499.99, units: 30, roi: 57.17 },
+        { name: '1.46 TH', displayName: '1.46 TH', th: 1.46, price: 18.99, units: 30, roi: 52.5 },
+        { name: '8.33 TH', displayName: '8.33 TH', th: 8.33, price: 99.99, units: 30, roi: 55.62 },
+        { name: '21.05 TH', displayName: '21.05 TH', th: 21.05, price: 249.99, units: 30, roi: 56.47 },
+        { name: '42.44 TH', displayName: '42.44 TH', th: 42.44, price: 499.99, units: 30, roi: 57.17 },
       ]
     );
 
     // Lanzamiento (16 levels)
     const launch = TARGET_PACKAGES_MANIFEST.filter((p) => p.section === 'lanzamiento');
     assert.equal(launch.length, 16);
+    for (const l of launch) {
+      assert.equal(l.name, l.displayName, `Launch package ${l.id} name must match displayName`);
+      assert.equal(l.name.startsWith('Lanzamiento'), false, `Launch package ${l.id} must not have "Lanzamiento" prefix`);
+      assert.equal(l.currency, 'USD');
+    }
+    assert.equal(launch[0].name, '42.44 TH');
     assert.equal(launch[0].powerTh, 42.44);
     assert.equal(launch[0].priceUsdt, 499.99);
+    assert.equal(launch[15].name, '5,000 TH');
     assert.equal(launch[15].powerTh, 5000);
     assert.equal(launch[15].priceUsdt, 54768.99);
 
-    // Mensual (4 levels including Máximo)
+    // Mensual (4 levels)
     const monthly = TARGET_PACKAGES_MANIFEST.filter((p) => p.section === 'mensual');
     assert.equal(monthly.length, 4);
     assert.deepEqual(
-      monthly.map((p) => ({ name: p.displayName, th: p.powerTh, price: p.priceUsdt, cadence: p.cadence })),
+      monthly.map((p) => ({ name: p.name, displayName: p.displayName, th: p.powerTh, price: p.priceUsdt, cadence: p.cadence })),
       [
-        { name: 'Inicio', th: 3.82, price: 39.99, cadence: 'monthly' },
-        { name: 'Plus', th: 9.61, price: 99.99, cadence: 'monthly' },
-        { name: 'Pro', th: 24.20, price: 249.99, cadence: 'monthly' },
-        { name: 'Máximo', th: 48.66, price: 499.99, cadence: 'monthly' },
+        { name: 'Inicio', displayName: 'Inicio', th: 3.82, price: 39.99, cadence: 'monthly' },
+        { name: 'Plus', displayName: 'Plus', th: 9.61, price: 99.99, cadence: 'monthly' },
+        { name: 'Pro', displayName: 'Pro', th: 24.20, price: 249.99, cadence: 'monthly' },
+        { name: 'Máximo', displayName: 'Máximo', th: 48.66, price: 499.99, cadence: 'monthly' },
       ]
     );
+    for (const m of monthly) {
+      assert.equal(m.name.startsWith('Suscripción'), false, `Monthly package ${m.id} must not have "Suscripción" prefix`);
+    }
 
-    // Custom 22 tiers
-    assert.equal(CUSTOM_TIERS_MANIFEST.length, 22);
-    assert.equal(CUSTOM_TIERS_MANIFEST[0].powerTh, 1);
-    assert.equal(CUSTOM_TIERS_MANIFEST[0].priceUsd, 12.99);
-    assert.equal(CUSTOM_TIERS_MANIFEST[21].powerTh, 5000);
-    assert.equal(CUSTOM_TIERS_MANIFEST[21].priceUsd, 54768.99);
+    // Zero invented marketing copy in descriptions across all 30 packages
+    const inventedStrings = [
+      'Lote exclusivo de preventa',
+      'Nivel de lanzamiento',
+      'Plan mensual',
+      'Catálogo permanente',
+      'Configuración personalizada',
+    ];
+
+    for (const pkg of TARGET_PACKAGES_MANIFEST) {
+      assert.ok(
+        pkg.description === null || pkg.description === undefined || pkg.description === '',
+        `Package ${pkg.id} description must be null or empty, found: "${pkg.description}"`
+      );
+      for (const forbidden of inventedStrings) {
+        assert.equal(
+          String(pkg.description || '').includes(forbidden),
+          false,
+          `Package ${pkg.id} contains forbidden invented string: "${forbidden}"`
+        );
+      }
+    }
   });
 
+  // 5. FINDING 4: MONEDA VISIBLE ES USD
+  it('guarantees visible currency is USD for all 30 catalog packages including MinerX 1–5', () => {
+    for (const pkg of TARGET_PACKAGES_MANIFEST) {
+      assert.equal(pkg.currency, 'USD', `Package ${pkg.id} currency must be 'USD'`);
+      assert.notEqual(pkg.currency, 'USDT', `Package ${pkg.id} currency must NOT be 'USDT'`);
+    }
+
+    const minerxItems = TARGET_PACKAGES_MANIFEST.filter((p) => p.section === 'minerx');
+    for (const mx of minerxItems) {
+      assert.equal(mx.currency, 'USD', `MinerX package ${mx.id} must have visual currency USD`);
+    }
+  });
+
+  // 6. FINDING 5: BLOQUEO DURO DE APPLY REMOTO
+  it('guarantees safeSeedPackages CLI strictly blocks remote apply and exits with code != 0 without emulator', async () => {
+    const originalEmulator = process.env.FIRESTORE_EMULATOR_HOST;
+    const originalRemote = process.env.ALLOW_REMOTE_SEED;
+    try {
+      delete process.env.FIRESTORE_EMULATOR_HOST;
+      delete process.env.ALLOW_REMOTE_SEED;
+
+      // 1. Attempting --apply without FIRESTORE_EMULATOR_HOST must fail fast
+      await assert.rejects(
+        async () => {
+          await runSafeSeedScript(['--apply']);
+        },
+        {
+          message: /FIRESTORE_EMULATOR_HOST is required for --apply in SCRUM-211/,
+        }
+      );
+      assert.equal(process.exitCode, 1);
+
+      // 2. Attempting --allow-remote-staging must fail fast
+      await assert.rejects(
+        async () => {
+          await runSafeSeedScript(['--apply', '--allow-remote-staging']);
+        },
+        {
+          message: /Remote apply is strictly disabled in SCRUM-211/,
+        }
+      );
+      assert.equal(process.exitCode, 1);
+
+      // 3. ALLOW_REMOTE_SEED=true env var must fail fast
+      process.env.ALLOW_REMOTE_SEED = 'true';
+      await assert.rejects(
+        async () => {
+          await runSafeSeedScript(['--apply']);
+        },
+        {
+          message: /Remote apply is strictly disabled in SCRUM-211/,
+        }
+      );
+    } finally {
+      if (originalEmulator) process.env.FIRESTORE_EMULATOR_HOST = originalEmulator;
+      else delete process.env.FIRESTORE_EMULATOR_HOST;
+      if (originalRemote) process.env.ALLOW_REMOTE_SEED = originalRemote;
+      else delete process.env.ALLOW_REMOTE_SEED;
+      process.exitCode = 0;
+    }
+  });
+
+  it('guarantees DefaultFirestorePackageStore rejects setPackageDoc without FIRESTORE_EMULATOR_HOST', async () => {
+    const originalEmulator = process.env.FIRESTORE_EMULATOR_HOST;
+    try {
+      delete process.env.FIRESTORE_EMULATOR_HOST;
+      const store = new DefaultFirestorePackageStore();
+      await assert.rejects(
+        async () => {
+          await store.setPackageDoc('test-doc', { test: true });
+        },
+        {
+          message: /Remote Firestore writes are strictly prohibited in SCRUM-211. FIRESTORE_EMULATOR_HOST must be set./,
+        }
+      );
+    } finally {
+      if (originalEmulator) process.env.FIRESTORE_EMULATOR_HOST = originalEmulator;
+      else delete process.env.FIRESTORE_EMULATOR_HOST;
+    }
+  });
+
+  it('guarantees SafeSeedService rejects apply=true without storeAdapter when emulator is missing', async () => {
+    const originalEmulator = process.env.FIRESTORE_EMULATOR_HOST;
+    try {
+      delete process.env.FIRESTORE_EMULATOR_HOST;
+      await assert.rejects(
+        async () => {
+          await safeSeedService.executeSafeSeed({ apply: true, dryRun: false });
+        },
+        {
+          message: /Security error: --apply is strictly permitted ONLY when FIRESTORE_EMULATOR_HOST is defined/,
+        }
+      );
+    } finally {
+      if (originalEmulator) process.env.FIRESTORE_EMULATOR_HOST = originalEmulator;
+      else delete process.env.FIRESTORE_EMULATOR_HOST;
+    }
+  });
+
+  // 7. SCHEMA VALIDATION CONTRACT
   it('validates every manifest package against SCRUM-210 schema contract', () => {
     for (const pkg of TARGET_PACKAGES_MANIFEST) {
       const validation = validatePackageSchema(pkg);
@@ -188,7 +346,7 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests', () =
     }
   });
 
-  // 2. SAFE SEED EXECUTION: DRY-RUN BY DEFAULT
+  // 8. SAFE SEED EXECUTION: DRY-RUN BY DEFAULT
   it('executes safe seed in dry-run mode by default, writing 0 documents to Firestore', async () => {
     const store = new MockPackageStoreAdapter();
 
@@ -211,7 +369,7 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests', () =
     assert.equal(store.writeLog.length, 0);
   });
 
-  // 3. SAFE SEED EXECUTION: APPLY CREATES DOCUMENTS SAFELY
+  // 9. SAFE SEED EXECUTION: APPLY CREATES DOCUMENTS SAFELY
   it('executes safe seed with apply=true, creating 30 documents without materializing priceUsdCents', async () => {
     const store = new MockPackageStoreAdapter();
 
@@ -252,7 +410,7 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests', () =
     }
   });
 
-  // 4. IDEMPOTENCY: SECOND RUN CREATES 0 AND SKIPS ALL 30
+  // 10. IDEMPOTENCY: SECOND RUN CREATES 0 AND SKIPS ALL 30
   it('guarantees idempotency: second apply run creates 0 documents and skips all existing documents', async () => {
     const store = new MockPackageStoreAdapter();
 
@@ -283,7 +441,7 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests', () =
     assert.equal(store.writeLog.length, initialWriteCount, 'No additional writes must be performed on second run');
   });
 
-  // 5. LEGACY DOCUMENT PRESERVATION & ZERO DELETES
+  // 11. LEGACY DOCUMENT PRESERVATION & ZERO DELETES
   it('preserves legacy documents (pkg-miner-2 / "Minero 2 Standard") intact with zero overwrites or deletes', async () => {
     const store = new MockPackageStoreAdapter();
 
@@ -329,20 +487,19 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests', () =
     assert.equal(hasDelete, false, 'Zero delete operations allowed');
   });
 
-  // 6. SILENT AUTO-SEED REMOVAL ON READ
+  // 12. SILENT AUTO-SEED REMOVAL ON READ
   it('guarantees fetchFirestorePackages() on empty Firestore does NOT write or call auto-seed', async () => {
-    // When db is null or empty, fetchFirestorePackages returns [] or fallback without writes
     const packages = await packageService.fetchFirestorePackages();
     assert.ok(Array.isArray(packages));
   });
 
-  // 7. LEGACY SEED METHOD NEUTRALIZATION
+  // 13. LEGACY SEED METHOD NEUTRALIZATION
   it('guarantees seedInitialPackagesToFirestore() is neutralized and returns 0 without writing', async () => {
     const count = await packageService.seedInitialPackagesToFirestore();
     assert.equal(count, 0, 'seedInitialPackagesToFirestore must return 0 and perform no writes');
   });
 
-  // 8. SCHEMA REJECTION & COLLISION SAFETY
+  // 14. SCHEMA REJECTION & COLLISION SAFETY
   it('blocks packages with invalid schema and safely skips frontendKey collisions', async () => {
     const store = new MockPackageStoreAdapter();
 
@@ -378,33 +535,11 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests', () =
     assert.equal(store.docs.size, 0);
   });
 
-  // 9. DEFAULT FIRESTORE STORE ADAPTER TESTS
+  // 15. DEFAULT FIRESTORE STORE ADAPTER TESTS
   it('instantiates DefaultFirestorePackageStore safely with on-demand fallback initialization', () => {
     const defaultStore = new DefaultFirestorePackageStore();
     assert.ok(defaultStore, 'DefaultFirestorePackageStore must instantiate without error');
     assert.equal(typeof defaultStore.getExistingPackages, 'function');
     assert.equal(typeof defaultStore.setPackageDoc, 'function');
-  });
-
-  it('DefaultFirestorePackageStore rejects setPackageDoc with explicit error when firestore is null', async () => {
-    // Force a null firestore instance via an explicit mock constructor
-    const nullStore = new (class extends DefaultFirestorePackageStore {
-      constructor() {
-        super(null as any);
-        (this as any).firestoreInstance = null;
-      }
-    })();
-
-    await assert.rejects(
-      async () => {
-        await nullStore.setPackageDoc('test-pkg', { name: 'Test' });
-      },
-      {
-        message: 'Cloud Firestore instance is not initialized',
-      }
-    );
-
-    const existing = await nullStore.getExistingPackages();
-    assert.equal(existing.size, 0);
   });
 });

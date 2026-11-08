@@ -101,7 +101,7 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
         showPresale: 'Preventa',
         showLaunch: 'Lanzamiento',
         showMonthly: 'Mensual',
-        showCustom: 'Personalizado'
+        showCustom: 'Custom'
       };
       setSyncFeedback(`Sección "${labels[section] || section}" ${nextVal ? 'habilitada' : 'oculta/deshabilitada'} en la app del cliente.`);
     } catch {
@@ -917,7 +917,7 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
               </div>
 
               <p className="text-xs font-mono text-slate-400 mb-4 leading-relaxed">
-                Opción "Personalizado" con selector de 22 niveles discretos y cálculo dinámico de ROI dentro del diálogo de compra.
+                Opción "Custom" con selector de 22 niveles discretos y cálculo dinámico de ROI dentro del diálogo de compra.
               </p>
 
               <div className="pt-3 border-t border-white/[0.08] flex items-center justify-between">
