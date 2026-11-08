@@ -759,4 +759,398 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
     assert.equal(unstableMutation.valid, false);
     assert.ok(unstableMutation.errors.some(e => e.includes('packageId must remain stable')));
   });
+
+  // =========================================================================
+  // ITERATION 2 REVIEW BLOCKER VERIFICATION TESTS (SCRUM-212)
+  // =========================================================================
+
+  // BLOCKER 3 TESTS: No Default Publishing on CREATE
+  describe('Blocker 3: No Default Publishing on CREATE', () => {
+    it('validatePackageMutation rejects CREATE when status is missing', () => {
+      const res = CatalogService.validatePackageMutation(
+        {
+          name: 'Missing Status Miner',
+          powerTh: 100,
+          priceUsdt: 1000,
+          section: 'minerx',
+          isPublished: true,
+        },
+        { isCreate: true }
+      );
+      assert.equal(res.valid, false);
+      assert.ok(res.errors.some(e => e.includes('status is required on package creation')));
+    });
+
+    it('validatePackageMutation rejects CREATE when isPublished is missing', () => {
+      const res = CatalogService.validatePackageMutation(
+        {
+          name: 'Missing isPublished Miner',
+          powerTh: 100,
+          priceUsdt: 1000,
+          section: 'minerx',
+          status: 'ACTIVE',
+        },
+        { isCreate: true }
+      );
+      assert.equal(res.valid, false);
+      assert.ok(res.errors.some(e => e.includes('isPublished is required on package creation')));
+    });
+
+    it('validatePackageMutation rejects CREATE when status is invalid', () => {
+      const res = CatalogService.validatePackageMutation(
+        {
+          name: 'Invalid Status Miner',
+          powerTh: 100,
+          priceUsdt: 1000,
+          section: 'minerx',
+          status: 'PENDING' as any,
+          isPublished: true,
+        },
+        { isCreate: true }
+      );
+      assert.equal(res.valid, false);
+      assert.ok(res.errors.some(e => e.includes('Invalid status')));
+    });
+
+    it('validatePackageMutation rejects CREATE when isPublished is non-boolean', () => {
+      const res = CatalogService.validatePackageMutation(
+        {
+          name: 'Non Boolean isPublished Miner',
+          powerTh: 100,
+          priceUsdt: 1000,
+          section: 'minerx',
+          status: 'ACTIVE',
+          isPublished: 'true' as any,
+        },
+        { isCreate: true }
+      );
+      assert.equal(res.valid, false);
+      assert.ok(res.errors.some(e => e.includes('isPublished is required on package creation')));
+    });
+
+    it('savePackage throws on CREATE when status or isPublished are missing (never defaults to ACTIVE or true)', async () => {
+      const { service } = createTestCatalogService();
+
+      // Attempt create without status
+      await assert.rejects(
+        async () => {
+          await service.savePackage({
+            id: 'pkg-new-uninitialized-status',
+            name: 'Uninitialized Status',
+            powerTh: 80,
+            priceUsdt: 800,
+            section: 'minerx',
+            isPublished: true,
+          } as any);
+        },
+        /status is required on package creation/
+      );
+
+      // Attempt create without isPublished
+      await assert.rejects(
+        async () => {
+          await service.savePackage({
+            id: 'pkg-new-uninitialized-publish',
+            name: 'Uninitialized Publish',
+            powerTh: 80,
+            priceUsdt: 800,
+            section: 'minerx',
+            status: 'ACTIVE',
+          } as any);
+        },
+        /isPublished is required on package creation/
+      );
+    });
+
+    it('savePackage creates new package with explicit status=DRAFT and isPublished=false without injecting ACTIVE or true', async () => {
+      const { service, adapter } = createTestCatalogService();
+
+      const created = await service.savePackage({
+        id: 'pkg-explicit-draft',
+        name: 'Explicit Draft Package',
+        powerTh: 90,
+        priceUsdt: 950,
+        section: 'minerx',
+        status: 'DRAFT',
+        isPublished: false,
+      }, { updatedBy: 'usr_valid_operator' });
+
+      assert.equal(created.id, 'pkg-explicit-draft');
+      assert.equal(created.status, 'DRAFT', 'Must remain strictly DRAFT without default promotion');
+      assert.equal(created.isPublished, false, 'Must remain strictly unpublished without default promotion');
+      assert.equal(created.updatedBy, 'usr_valid_operator');
+
+      const persisted = await adapter.getPackageById('pkg-explicit-draft');
+      assert.ok(persisted);
+      assert.equal(persisted?.status, 'DRAFT');
+      assert.equal(persisted?.isPublished, false);
+    });
+
+    it('savePackage on UPDATE preserves existing status and isPublished when omitted in update payload', async () => {
+      const { service } = createTestCatalogService();
+
+      // Update existing fixtureMinerxPublished (status: 'ACTIVE', isPublished: true) without passing status or isPublished
+      const updated = await service.savePackage({
+        id: 'pkg-minerx-01',
+        name: 'MinerX Preserved Status Update',
+        powerTh: 105,
+        priceUsdt: 1250,
+        section: 'minerx',
+      }, { updatedBy: 'usr_valid_operator' });
+
+      assert.equal(updated.id, 'pkg-minerx-01');
+      assert.equal(updated.status, 'ACTIVE', 'Existing status preserved on update');
+      assert.equal(updated.isPublished, true, 'Existing isPublished preserved on update');
+      assert.equal(updated.version, 2);
+    });
+  });
+
+  // BLOCKER 2 TESTS: Mutations Require Real Authenticated Identity
+  describe('Blocker 2: Mutations Require Real Authenticated Identity', () => {
+    it('savePackage strictly derives updatedBy from options and ignores payload updatedBy', async () => {
+      const { service } = createTestCatalogService();
+
+      // Passing spoofed updatedBy in payload, but authoritative options.updatedBy
+      const created = await service.savePackage({
+        id: 'pkg-untrusted-body-id',
+        name: 'Untrusted Payload Test',
+        powerTh: 60,
+        priceUsdt: 600,
+        section: 'minerx',
+        status: 'ACTIVE',
+        isPublished: true,
+        updatedBy: 'spoofed_hacker_id',
+      } as any, { updatedBy: 'usr_authoritative_session' });
+
+      assert.equal(created.updatedBy, 'usr_authoritative_session', 'Must use options.updatedBy derived from valid session');
+      assert.notEqual(created.updatedBy, 'spoofed_hacker_id');
+    });
+
+    it('savePackage strips updatedBy if no authoritative session identity is supplied', async () => {
+      const { service } = createTestCatalogService();
+
+      const created = await service.savePackage({
+        id: 'pkg-no-session-update',
+        name: 'No Session Update',
+        powerTh: 70,
+        priceUsdt: 700,
+        section: 'minerx',
+        status: 'ACTIVE',
+        isPublished: true,
+        updatedBy: 'attacker_unverified',
+      } as any);
+
+      assert.equal(created.updatedBy, undefined, 'Must NEVER trust body.updatedBy when options.updatedBy is absent');
+      assert.notEqual(created.updatedBy, 'usr_default_admin');
+    });
+
+    it('archivePackage strictly sets updatedBy from options and rejects synthetic admin credentials', async () => {
+      const { service } = createTestCatalogService();
+
+      // Valid session identity
+      const archivedValid = await service.archivePackage('pkg-minerx-01', { updatedBy: 'usr_operator_99' });
+      assert.equal(archivedValid.status, 'ARCHIVED');
+      assert.equal(archivedValid.isPublished, false);
+      assert.equal(archivedValid.updatedBy, 'usr_operator_99');
+
+      // Synthetic admin credential is never persisted
+      const archivedSynthetic = await service.archivePackage('pkg-lanzamiento-01', { updatedBy: 'admin_sys' });
+      assert.equal(archivedSynthetic.updatedBy, undefined, 'Synthetic admin_sys must not be stored');
+    });
+  });
+
+  // BLOCKER 1 & INTEGRATION TESTS: Canonical Endpoints, Backing Store & Auth Enforcement
+  describe('Blocker 1 & Endpoints: Backing Store Isolation & Express Integration', () => {
+    it('verifies getAuthenticatedUser strictly requires real session token and rejects usr_default_admin fallback', async () => {
+      const { getAuthenticatedUser, readUsers, writeUsers } = await import('../../server/server.js');
+
+      // No token
+      const noAuthReq = { headers: {}, query: {} } as any;
+      assert.equal(getAuthenticatedUser(noAuthReq), null);
+
+      // Invalid token
+      const invalidTokenReq = { headers: { authorization: 'Bearer invalid_nonexistent_token' }, query: {} } as any;
+      assert.equal(getAuthenticatedUser(invalidTokenReq), null);
+
+      // Create a temporary verified user with sessionToken in memory/users db
+      const db = readUsers();
+      const testToken = `test_session_${Date.now()}`;
+      const verifiedUser = {
+        id: 'usr_scrum212_test_admin',
+        username: 'scrum212_admin',
+        email: 'scrum212_admin@minerx.cloud',
+        passwordHash: 'dummy_hash_value',
+        fullName: 'SCRUM-212 Test Administrator',
+        createdAt: new Date().toISOString(),
+        sessionToken: testToken,
+      };
+      db.users.push(verifiedUser);
+      writeUsers(db);
+
+      try {
+        const validReq = { headers: { authorization: `Bearer ${testToken}` }, query: {} } as any;
+        const authUser = getAuthenticatedUser(validReq);
+        assert.ok(authUser);
+        assert.equal(authUser?.id, 'usr_scrum212_test_admin');
+        assert.equal(authUser?.username, 'scrum212_admin');
+
+        // Query token fallback
+        const queryTokenReq = { headers: {}, query: { token: testToken } } as any;
+        const authUserQuery = getAuthenticatedUser(queryTokenReq);
+        assert.ok(authUserQuery);
+        assert.equal(authUserQuery?.id, 'usr_scrum212_test_admin');
+      } finally {
+        // Clean up test user
+        const cleanedDb = readUsers();
+        cleanedDb.users = cleanedDb.users.filter(u => u.id !== 'usr_scrum212_test_admin');
+        writeUsers(cleanedDb);
+      }
+    });
+
+    it('end-to-end HTTP tests verify /api/catalog/* routes delegate to CatalogService and enforce session auth', async () => {
+      const { app, setCatalogService, catalogService, readUsers, writeUsers } = await import('../../server/server.js');
+      const http = await import('node:http');
+
+      // Setup in-memory catalog for server testing
+      const testAdapter = new MemoryCatalogStoreAdapter([
+        fixtureMinerxPublished,
+        fixturePreventaPublished,
+        fixtureDraftPackage,
+        fixtureLegacyPackage1,
+      ]);
+      const isolatedService = new CatalogService(testAdapter);
+      setCatalogService(isolatedService);
+
+      // Setup temporary admin user
+      const db = readUsers();
+      const testToken = `test_http_token_${Date.now()}`;
+      const testUser = {
+        id: 'usr_http_test_operator',
+        username: 'http_operator',
+        email: 'http_operator@minerx.cloud',
+        passwordHash: 'hash',
+        fullName: 'HTTP Operator',
+        createdAt: new Date().toISOString(),
+        sessionToken: testToken,
+      };
+      db.users.push(testUser);
+      writeUsers(db);
+
+      // Start test HTTP server on ephemeral port
+      const server = http.createServer(app);
+      await new Promise<void>((resolve) => server.listen(0, resolve));
+      const port = (server.address() as any).port;
+      const baseUrl = `http://localhost:${port}`;
+
+      try {
+        // 1. GET /api/catalog/storefront is public, delegates to CatalogService, returns only ACTIVE+published
+        const sfRes = await fetch(`${baseUrl}/api/catalog/storefront?section=minerx`);
+        assert.equal(sfRes.status, 200);
+        const sfData = await sfRes.json();
+        assert.ok(Array.isArray(sfData));
+        assert.equal(sfData.length, 1);
+        assert.equal(sfData[0].id, 'pkg-minerx-01');
+        assert.equal(sfData[0].status, 'ACTIVE');
+
+        // Invalid section on storefront returns 400
+        const sfInvalid = await fetch(`${baseUrl}/api/catalog/storefront?section=nonexistent`);
+        assert.equal(sfInvalid.status, 400);
+
+        // 2. GET /api/catalog/admin requires valid authentication
+        const adminUnauth = await fetch(`${baseUrl}/api/catalog/admin`);
+        assert.equal(adminUnauth.status, 401);
+
+        const adminAuth = await fetch(`${baseUrl}/api/catalog/admin`, {
+          headers: { authorization: `Bearer ${testToken}` },
+        });
+        assert.equal(adminAuth.status, 200);
+        const adminData = await adminAuth.json();
+        assert.ok(Array.isArray(adminData.canonical));
+        assert.ok(Array.isArray(adminData.legacy));
+        assert.ok(adminData.canonical.some((p: any) => p.id === 'pkg-mensual-draft'));
+        assert.ok(adminData.legacy.some((p: any) => p.id === 'pkg-miner-1'));
+
+        // 3. POST /api/catalog/packages requires valid authentication
+        const postUnauth = await fetch(`${baseUrl}/api/catalog/packages`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ name: 'Test', powerTh: 10, priceUsdt: 100, section: 'minerx', status: 'ACTIVE', isPublished: true }),
+        });
+        assert.equal(postUnauth.status, 401);
+
+        // 4. POST /api/catalog/packages rejects incomplete creation with 400 (Blocker 3: no default publishing)
+        const postIncomplete = await fetch(`${baseUrl}/api/catalog/packages`, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${testToken}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: 'Incomplete Package Without Status',
+            powerTh: 50,
+            priceUsdt: 500,
+            section: 'minerx',
+          }),
+        });
+        assert.equal(postIncomplete.status, 400);
+        const errJson = await postIncomplete.json();
+        assert.ok(errJson.details.includes('status is required on package creation'));
+
+        // 5. POST /api/catalog/packages creates valid package and strictly sets updatedBy from authenticated session
+        const postValid = await fetch(`${baseUrl}/api/catalog/packages`, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${testToken}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            id: 'pkg-http-created',
+            name: 'HTTP Created Package',
+            powerTh: 75,
+            priceUsdt: 750,
+            section: 'minerx',
+            status: 'DRAFT',
+            isPublished: false,
+            updatedBy: 'hacker_spoofed_identity', // Must be ignored!
+          }),
+        });
+        assert.equal(postValid.status, 200);
+        const createdJson = await postValid.json();
+        assert.equal(createdJson.success, true);
+        assert.equal(createdJson.package.id, 'pkg-http-created');
+        assert.equal(createdJson.package.status, 'DRAFT', 'Must remain strictly DRAFT');
+        assert.equal(createdJson.package.isPublished, false, 'Must remain strictly unpublished');
+        assert.equal(createdJson.package.updatedBy, 'usr_http_test_operator', 'Must be derived from session, NOT hacker_spoofed_identity');
+
+        // 6. POST /api/catalog/packages/:id/archive requires authentication and sets status=ARCHIVED
+        const archiveUnauth = await fetch(`${baseUrl}/api/catalog/packages/pkg-http-created/archive`, {
+          method: 'POST',
+        });
+        assert.equal(archiveUnauth.status, 401);
+
+        const archiveAuth = await fetch(`${baseUrl}/api/catalog/packages/pkg-http-created/archive`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${testToken}` },
+        });
+        assert.equal(archiveAuth.status, 200);
+        const archiveJson = await archiveAuth.json();
+        assert.equal(archiveJson.package.status, 'ARCHIVED');
+        assert.equal(archiveJson.package.isPublished, false);
+        assert.equal(archiveJson.package.updatedBy, 'usr_http_test_operator');
+
+        // 7. GET /api/packages is legacy route with X-Catalog-Legacy header
+        const legacyRes = await fetch(`${baseUrl}/api/packages`);
+        assert.equal(legacyRes.status, 200);
+        assert.equal(legacyRes.headers.get('x-catalog-legacy'), 'true');
+      } finally {
+        // Cleanup server and test user
+        server.close();
+        const cleanedDb = readUsers();
+        cleanedDb.users = cleanedDb.users.filter(u => u.id !== 'usr_http_test_operator');
+        writeUsers(cleanedDb);
+        // Restore default catalogService
+        setCatalogService(catalogService);
+      }
+    });
+  });
 });

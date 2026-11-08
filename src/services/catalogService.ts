@@ -1,6 +1,8 @@
-import type { CommercialPackage } from '../types/admin';
-import { db, collection, getDocs, doc, setDoc, getDoc } from '../utils/firebaseAuth';
-import { deserializeCommercialPackageDoc, COMMERCIAL_PACKAGES_COLLECTION } from './admin/commercialPackageService';
+import type { CommercialPackage } from '../types/admin.js';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import { db, collection, getDocs, doc, setDoc, getDoc, firebaseConfig } from '../utils/firebaseAuth.js';
+import { deserializeCommercialPackageDoc, COMMERCIAL_PACKAGES_COLLECTION } from './admin/commercialPackageService.js';
 
 export type CatalogSection = 'minerx' | 'preventa' | 'lanzamiento' | 'mensual';
 export const VALID_SECTIONS: readonly CatalogSection[] = ['minerx', 'preventa', 'lanzamiento', 'mensual'] as const;
@@ -33,10 +35,32 @@ export class FirestoreCatalogStoreAdapter implements CatalogStoreAdapter {
   private firestoreInstance: any = null;
 
   constructor(firestoreInstance?: any) {
-    if (firestoreInstance) {
+    if (firestoreInstance !== undefined) {
       this.firestoreInstance = firestoreInstance;
     } else if (db) {
       this.firestoreInstance = db;
+    } else {
+      try {
+        const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
+        this.firestoreInstance = getFirestore(firebaseApp);
+      } catch (err: any) {
+        console.warn('[FirestoreCatalogStoreAdapter] Firestore init notice:', err?.message || err);
+        this.firestoreInstance = null;
+      }
+    }
+
+    if (this.firestoreInstance) {
+      const nodeProcess = (globalThis as any).process;
+      const emulatorHost = nodeProcess?.env?.FIRESTORE_EMULATOR_HOST;
+      if (emulatorHost) {
+        const [host, portStr] = emulatorHost.split(':');
+        const port = parseInt(portStr || '8080', 10);
+        try {
+          connectFirestoreEmulator(this.firestoreInstance, host, port);
+        } catch {
+          // Already connected or duplicate call
+        }
+      }
     }
   }
 
@@ -178,7 +202,7 @@ export class CatalogService {
    */
   public static validatePackageMutation(
     pkg: Partial<CommercialPackage>,
-    options?: { isUpdate?: boolean; existingPackage?: CommercialPackage }
+    options?: { isUpdate?: boolean; isCreate?: boolean; existingPackage?: CommercialPackage }
   ): ValidationResult {
     const p = pkg || {};
     const errors: string[] = [];
@@ -237,9 +261,28 @@ export class CatalogService {
       errors.push(`Invalid packageType: must be one of [${VALID_PACKAGE_TYPES.join(', ')}]`);
     }
 
-    // Status
-    if (p.status && !VALID_STATUSES.includes(p.status as any)) {
-      errors.push(`Invalid status: must be one of [${VALID_STATUSES.join(', ')}]`);
+    // Status and isPublished handling:
+    // On canonical CREATE (options?.isCreate === true or when isUpdate === false):
+    // status and isPublished are strictly mandatory (no default assumptions or auto-publish).
+    // On UPDATE (options?.isUpdate === true):
+    // optional; preserves existing values when omitted.
+    if (options?.isCreate || options?.isUpdate === false) {
+      if (p.status === undefined || p.status === null) {
+        errors.push('status is required on package creation (must be explicitly ACTIVE, DRAFT, or ARCHIVED)');
+      } else if (!VALID_STATUSES.includes(p.status as any)) {
+        errors.push(`Invalid status: must be one of [${VALID_STATUSES.join(', ')}]`);
+      }
+
+      if (typeof p.isPublished !== 'boolean') {
+        errors.push('isPublished is required on package creation (must be an explicit boolean true or false)');
+      }
+    } else {
+      if (p.status && !VALID_STATUSES.includes(p.status as any)) {
+        errors.push(`Invalid status: must be one of [${VALID_STATUSES.join(', ')}]`);
+      }
+      if (p.isPublished !== undefined && typeof p.isPublished !== 'boolean') {
+        errors.push('isPublished must be a boolean (true or false)');
+      }
     }
 
     // Visible catalog currency must continue strictly USD
@@ -351,8 +394,10 @@ export class CatalogService {
     }
 
     const isUpdate = Boolean(existing);
+    const isCreate = !isUpdate;
     const validation = CatalogService.validatePackageMutation(pkg, {
       isUpdate,
+      isCreate,
       existingPackage: existing || undefined,
     });
 
@@ -363,14 +408,21 @@ export class CatalogService {
     const now = new Date().toISOString();
     let saved: CommercialPackage;
 
+    // Do NOT trust pkg.updatedBy from payload.
+    // updatedBy must be derived strictly from options.updatedBy (authenticated identity).
+    const cleanPkg = { ...pkg };
+    delete (cleanPkg as any).updatedBy;
+
     if (existing) {
       const nextVersion = (Number(existing.version) || 1) + 1;
       saved = {
         ...existing,
-        ...pkg,
+        ...cleanPkg,
         id: existing.id,
         packageId: existing.packageId || existing.id,
         version: nextVersion,
+        status: cleanPkg.status ?? existing.status,
+        isPublished: typeof cleanPkg.isPublished === 'boolean' ? cleanPkg.isPublished : existing.isPublished,
         updatedAt: now,
       };
 
@@ -382,11 +434,11 @@ export class CatalogService {
     } else {
       const generatedId = targetId || `pkg-${Date.now()}`;
       saved = {
-        ...pkg,
+        ...cleanPkg,
         id: generatedId,
         packageId: generatedId,
-        status: pkg.status || 'ACTIVE',
-        isPublished: pkg.isPublished ?? true,
+        status: cleanPkg.status as 'ACTIVE' | 'ARCHIVED' | 'DRAFT',
+        isPublished: cleanPkg.isPublished as boolean,
         version: 1,
         createdAt: now,
         updatedAt: now,
@@ -394,6 +446,8 @@ export class CatalogService {
 
       if (options?.updatedBy && typeof options.updatedBy === 'string' && options.updatedBy.trim() && options.updatedBy !== 'admin_sys' && options.updatedBy !== 'admin@minerx.cloud') {
         saved.updatedBy = options.updatedBy.trim();
+      } else {
+        delete saved.updatedBy;
       }
     }
 

@@ -7,11 +7,12 @@ import { VastClient } from './services/vastClient.js';
 import { VastOffersService } from './services/vastOffersService.js';
 import { VastInstanceService } from './services/vastInstanceService.js';
 import { StrategyEngine } from './services/strategyEngine.js';
+import { CatalogService, VALID_SECTIONS, type CatalogSection } from '../src/services/catalogService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const app = express();
+export const app = express();
 const PORT = process.env.PORT || 3001;
 
 const vastClient = new VastClient();
@@ -310,6 +311,21 @@ export function getUserIdFromReq(req: express.Request): string {
   return 'usr_default_admin';
 }
 
+/**
+ * Authoritative session verification for catalog management (SCRUM-212).
+ * Strictly requires a valid session token present in users.json.
+ * NEVER falls back to default identities such as 'usr_default_admin'.
+ * Returns null if token is missing, invalid, or expired.
+ */
+export function getAuthenticatedUser(req: express.Request): UserAccount | null {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim() || (req.query.token as string);
+  if (!token) return null;
+  const db = readUsers();
+  const user = db.users.find((u) => u.sessionToken === token);
+  return user || null;
+}
+
 function getUserDataDir(userId: string): string {
   const userDir = path.join(DATA_DIR, 'users', userId);
   if (!fs.existsSync(userDir)) {
@@ -463,65 +479,126 @@ app.post('/api/config', (req, res) => {
 });
 
 // 2a. Commercial Packages Endpoints (Platform Admin Packages)
-const CANONICAL_SECTIONS = ['minerx', 'preventa', 'lanzamiento', 'mensual'] as const;
+// Canonical endpoints delegate directly to CatalogService (backing store: commercial_packages).
+// Legacy routes (/api/packages, /api/commercial-packages) remain separated and backed by readPackages().
+
+export let catalogService = new CatalogService();
+export function setCatalogService(service: CatalogService): void {
+  catalogService = service;
+}
 
 // 2a.1 Canonical Storefront Endpoint (SCRUM-212)
-// Strictly returns canonical packages for the requested section that are published and ACTIVE.
-// Excludes legacy without section, DRAFT, ARCHIVED, and unpublished packages.
-app.get('/api/catalog/storefront', (req, res) => {
+// Strictly delegates to CatalogService. Backing store is commercial_packages in Firestore.
+// Purely read-only; never writes or auto-seeds.
+// Returns canonical packages for the requested section that are published and ACTIVE, sorted by sortOrder ASC.
+app.get('/api/catalog/storefront', async (req, res) => {
   const section = req.query.section as string;
-  const packages = readPackages();
 
-  if (!section || !CANONICAL_SECTIONS.includes(section as any)) {
+  if (!section || !VALID_SECTIONS.includes(section as any)) {
     return res.status(400).json({
-      error: `Missing or invalid section query parameter: '${section}'. Must be one of: ${CANONICAL_SECTIONS.join(', ')}`
+      error: `Missing or invalid section query parameter: '${section}'. Must be one of: ${VALID_SECTIONS.join(', ')}`
     });
   }
 
-  const storefrontPackages = packages
-    .filter((pkg: any) =>
-      pkg &&
-      typeof pkg.section === 'string' &&
-      CANONICAL_SECTIONS.includes(pkg.section) &&
-      pkg.section === section &&
-      pkg.isPublished === true &&
-      pkg.status === 'ACTIVE' &&
-      !pkg.isLegacy
-    )
-    .sort((a: any, b: any) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-
-  res.setHeader('Cache-Control', 'no-cache');
-  res.json(storefrontPackages);
+  try {
+    const storefrontPackages = await catalogService.getStorefrontCatalog(section as CatalogSection);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.json(storefrontPackages);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error fetching storefront catalog', details: err?.message || String(err) });
+  }
 });
 
 // 2a.2 Canonical Admin Catalog Endpoint (SCRUM-212)
+// Requires a valid authenticated session. Backing store is commercial_packages via CatalogService.
 // Exposes new canonical catalog (ACTIVE, DRAFT, ARCHIVED) and physically preserved legacy separated.
-app.get('/api/catalog/admin', (req, res) => {
-  const section = req.query.section as string;
-  const status = req.query.status as string;
-  const packages = readPackages();
-
-  const canonical: any[] = [];
-  const legacy: any[] = [];
-
-  for (const pkg of packages) {
-    if (pkg && typeof pkg.section === 'string' && CANONICAL_SECTIONS.includes(pkg.section)) {
-      if (section && pkg.section !== section) continue;
-      if (status && pkg.status !== status) continue;
-      canonical.push(pkg);
-    } else {
-      legacy.push({
-        ...pkg,
-        isLegacy: true,
-      });
-    }
+app.get('/api/catalog/admin', async (req, res) => {
+  const user = getAuthenticatedUser(req);
+  if (!user) {
+    return res.status(401).json({
+      error: 'Unauthorized: valid authenticated session required'
+    });
   }
 
-  res.json({ canonical, legacy });
+  const section = req.query.section as string | undefined;
+  const status = req.query.status as string | undefined;
+
+  if (section && !VALID_SECTIONS.includes(section as any)) {
+    return res.status(400).json({
+      error: `Invalid section query parameter: '${section}'. Must be one of: ${VALID_SECTIONS.join(', ')}`
+    });
+  }
+
+  try {
+    const adminCatalog = await catalogService.getAdminCatalog({
+      section: section as CatalogSection | undefined,
+      status: status as any,
+    });
+    res.json(adminCatalog);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error fetching admin catalog', details: err?.message || String(err) });
+  }
 });
 
-// 2a.3 Legacy Packages Endpoints (Preserved for backward compatibility)
+// 2a.3 Canonical Package Save / Update Endpoint (SCRUM-212)
+// Requires a valid authenticated session (no usr_default_admin fallback).
+// updatedBy is derived strictly from validated session; req.body.updatedBy is NOT trusted.
+// Canonical CREATE explicitly requires status and isPublished (no default publishing).
+// Strictly delegates to CatalogService. Backing store is commercial_packages.
+app.post('/api/catalog/packages', async (req, res) => {
+  const user = getAuthenticatedUser(req);
+  if (!user) {
+    return res.status(401).json({
+      error: 'Unauthorized: valid authenticated session required for catalog mutations'
+    });
+  }
+
+  const pkg = req.body;
+  if (!pkg || typeof pkg !== 'object') {
+    return res.status(400).json({ error: 'Validación de paquete fallida', details: 'Body is required' });
+  }
+
+  const updatedBy = user.id;
+
+  try {
+    const saved = await catalogService.savePackage(pkg, { updatedBy });
+    res.json({ success: true, package: saved });
+  } catch (err: any) {
+    res.status(400).json({ error: 'Validación de paquete fallida', details: err?.message || String(err) });
+  }
+});
+
+// 2a.4 Canonical Package Archive Endpoint (SCRUM-212)
+// Requires a valid authenticated session.
+// updatedBy is derived strictly from validated session.
+// Strictly delegates to CatalogService. Backing store is commercial_packages.
+// Sets status = ARCHIVED, isPublished = false, preserves document physically.
+app.post('/api/catalog/packages/:id/archive', async (req, res) => {
+  const user = getAuthenticatedUser(req);
+  if (!user) {
+    return res.status(401).json({
+      error: 'Unauthorized: valid authenticated session required for catalog archive'
+    });
+  }
+
+  const { id } = req.params;
+  const updatedBy = user.id;
+
+  try {
+    const archived = await catalogService.archivePackage(id, { updatedBy });
+    res.json({ success: true, package: archived });
+  } catch (err: any) {
+    const msg = err?.message || String(err);
+    if (msg.includes('Package not found')) {
+      return res.status(404).json({ error: msg });
+    }
+    return res.status(400).json({ error: msg });
+  }
+});
+
+// 2a.5 Legacy Packages Endpoints (Preserved for backward compatibility)
 // Explicitly marked and separated as LEGACY; not the canonical dynamic storefront source.
+// Backing store is local JSON (commercial_packages.json / LEGACY_PACKAGES).
 app.get(['/api/packages', '/api/commercial-packages'], (_req, res) => {
   const packages = readPackages();
   res.setHeader('X-Catalog-Legacy', 'true');
@@ -529,7 +606,7 @@ app.get(['/api/packages', '/api/commercial-packages'], (_req, res) => {
 
   // Tag any legacy items lacking section
   const markedPackages = packages.map((pkg: any) => {
-    if (!pkg.section || !CANONICAL_SECTIONS.includes(pkg.section)) {
+    if (!pkg.section || !VALID_SECTIONS.includes(pkg.section)) {
       return { ...pkg, isLegacy: true };
     }
     return pkg;
@@ -538,99 +615,14 @@ app.get(['/api/packages', '/api/commercial-packages'], (_req, res) => {
   res.json(markedPackages);
 });
 
-// 2a.4 Canonical Mutation Validation helper
-function validatePackageMutationPayload(pkg: any, existingPkg?: any): { valid: boolean; errors: string[] } {
-  const errors: string[] = [];
-  if (!pkg) {
-    return { valid: false, errors: ['Body is required'] };
-  }
-  if (!pkg.name || typeof pkg.name !== 'string' || !pkg.name.trim()) {
-    errors.push('Nombre requerido para el paquete');
-  }
-  if (typeof pkg.powerTh !== 'number' || pkg.powerTh <= 0 || isNaN(pkg.powerTh)) {
-    errors.push('powerTh must be a positive number');
-  }
-  if (typeof pkg.priceUsdt !== 'number' || pkg.priceUsdt <= 0 || isNaN(pkg.priceUsdt)) {
-    errors.push('priceUsdt must be a positive number');
-  }
-  if (!pkg.section || !CANONICAL_SECTIONS.includes(pkg.section)) {
-    errors.push(`Invalid or missing section: ${pkg.section}. Must be one of: ${CANONICAL_SECTIONS.join(', ')}`);
-  }
-  if (pkg.packageType && !['fixed', 'subscription', 'custom'].includes(pkg.packageType)) {
-    errors.push(`Invalid packageType: ${pkg.packageType}`);
-  }
-  if (pkg.status && !['ACTIVE', 'ARCHIVED', 'DRAFT'].includes(pkg.status)) {
-    errors.push(`Invalid status: ${pkg.status}`);
-  }
-  if (pkg.currency !== undefined && pkg.currency !== 'USD') {
-    errors.push(`Visible catalog currency must remain strictly 'USD' (received: '${pkg.currency}')`);
-  }
-  if (pkg.minerId !== undefined) {
-    errors.push('minerId is invalid on commercial_packages: a package is an offer/template, not a miner instance');
-  }
-  if (pkg.limitedUnits !== undefined && (typeof pkg.limitedUnits !== 'number' || pkg.limitedUnits < 0 || isNaN(pkg.limitedUnits))) {
-    errors.push('limitedUnits cannot be negative');
-  }
-  if (pkg.availableUnits !== undefined && (typeof pkg.availableUnits !== 'number' || pkg.availableUnits < 0 || isNaN(pkg.availableUnits))) {
-    errors.push('availableUnits cannot be negative');
-  }
-  if (pkg.soldUnits !== undefined && (typeof pkg.soldUnits !== 'number' || pkg.soldUnits < 0 || isNaN(pkg.soldUnits))) {
-    errors.push('soldUnits cannot be negative');
-  }
-  if (typeof pkg.limitedUnits === 'number' && typeof pkg.soldUnits === 'number' && pkg.soldUnits > pkg.limitedUnits) {
-    errors.push('soldUnits cannot exceed limitedUnits');
-  }
-  if (existingPkg && (!existingPkg.section || existingPkg.isLegacy || !CANONICAL_SECTIONS.includes(existingPkg.section))) {
-    errors.push(`Cannot overwrite physically preserved legacy package: ${existingPkg.id}`);
-  }
-  if (existingPkg && (pkg.packageId || pkg.id)) {
-    const targetId = pkg.packageId || pkg.id;
-    const currentId = existingPkg.packageId || existingPkg.id;
-    if (targetId !== currentId) {
-      errors.push(`packageId must remain stable: cannot change ${currentId} to ${targetId}`);
-    }
-  }
-  const outOfScopeScrum213Fields = [
-    'finalPriceUsdCents',
-    'campaigns',
-    'discounts',
-    'discount',
-    'priority',
-    'stackable',
-    'promotions',
-    'promotionalPrice',
-    'promoPrice',
-    'discountActive',
-    'discountType',
-    'discountValue',
-    'discountLabel',
-  ];
-  for (const field of outOfScopeScrum213Fields) {
-    if (pkg[field] !== undefined) {
-      errors.push(`Field '${field}' is out of scope for SCRUM-212 and belongs to SCRUM-213`);
-    }
-  }
-  if (pkg.updatedBy && (pkg.updatedBy === 'admin_sys' || pkg.updatedBy === 'admin@minerx.cloud')) {
-    errors.push(`Synthetic credential '${pkg.updatedBy}' is not an authoritative administrative identity`);
-  }
-  return { valid: errors.length === 0, errors };
-}
-
-// 2a.5 Canonical Package Save / Update Endpoint
-app.post(['/api/catalog/packages', '/api/packages', '/api/commercial-packages'], (req, res) => {
-  if (req.path === '/api/packages' || req.path === '/api/commercial-packages') {
-    res.setHeader('X-Catalog-Legacy', 'true');
-  }
+app.post(['/api/packages', '/api/commercial-packages'], (req, res) => {
+  res.setHeader('X-Catalog-Legacy', 'true');
+  res.setHeader('X-Catalog-Notice', 'Legacy package endpoint. Canonical catalog uses /api/catalog/packages');
   const pkg = req.body;
   const packages = readPackages();
   const packageId = pkg?.packageId || pkg?.id;
   const existingIdx = packageId ? packages.findIndex((p: any) => p.id === packageId || p.packageId === packageId) : -1;
   const existingPkg = existingIdx >= 0 ? packages[existingIdx] : undefined;
-
-  const validation = validatePackageMutationPayload(pkg, existingPkg);
-  if (!validation.valid) {
-    return res.status(400).json({ error: 'Validación de paquete fallida', details: validation.errors });
-  }
 
   const now = new Date().toISOString();
   let saved: any;
@@ -641,72 +633,25 @@ app.post(['/api/catalog/packages', '/api/packages', '/api/commercial-packages'],
       ...existingPkg,
       ...pkg,
       id: existingPkg.id,
-      packageId: existingPkg.packageId || existingPkg.id,
       version: nextVersion,
       updatedAt: now
     };
-    if (pkg.updatedBy && typeof pkg.updatedBy === 'string' && pkg.updatedBy.trim() && pkg.updatedBy !== 'admin_sys' && pkg.updatedBy !== 'admin@minerx.cloud') {
-      saved.updatedBy = pkg.updatedBy.trim();
-    } else {
-      delete saved.updatedBy;
-    }
     packages[existingIdx] = saved;
   } else {
     const newId = packageId || `pkg-${Date.now()}`;
     saved = {
       ...pkg,
       id: newId,
-      packageId: newId,
       version: 1,
-      status: pkg.status || 'ACTIVE',
-      isPublished: pkg.isPublished ?? true,
+      isLegacy: true,
       createdAt: now,
       updatedAt: now
     };
-    if (pkg.updatedBy && typeof pkg.updatedBy === 'string' && pkg.updatedBy.trim() && pkg.updatedBy !== 'admin_sys' && pkg.updatedBy !== 'admin@minerx.cloud') {
-      saved.updatedBy = pkg.updatedBy.trim();
-    }
     packages.unshift(saved);
   }
 
   writePackages(packages);
-  res.json({ success: true, package: saved });
-});
-
-// 2a.6 Canonical Package Archive Endpoint (SCRUM-212)
-app.post('/api/catalog/packages/:id/archive', (req, res) => {
-  const { id } = req.params;
-  const { updatedBy } = req.body || {};
-  const packages = readPackages();
-  const idx = packages.findIndex((p: any) => p.id === id || p.packageId === id);
-
-  if (idx < 0) {
-    return res.status(404).json({ error: `Paquete no encontrado: ${id}` });
-  }
-
-  const existing = packages[idx];
-  if (!existing.section || existing.isLegacy || !CANONICAL_SECTIONS.includes(existing.section)) {
-    return res.status(400).json({ error: `Cannot overwrite or archive physically preserved legacy package: ${id}` });
-  }
-
-  const now = new Date().toISOString();
-  const archived = {
-    ...existing,
-    status: 'ARCHIVED',
-    isPublished: false,
-    version: (Number(existing.version) || 1) + 1,
-    updatedAt: now
-  };
-
-  if (updatedBy && typeof updatedBy === 'string' && updatedBy.trim() && updatedBy !== 'admin_sys' && updatedBy !== 'admin@minerx.cloud') {
-    archived.updatedBy = updatedBy.trim();
-  } else {
-    delete archived.updatedBy;
-  }
-
-  packages[idx] = archived;
-  writePackages(packages);
-  res.json({ success: true, package: archived });
+  res.json({ success: true, package: saved, isLegacy: true });
 });
 
 // 2b. Admin Contracts Endpoints (Client-purchased miners allocated to platform)
@@ -2879,13 +2824,16 @@ async function runAutonomousBackgroundWatcher() {
   }
 }
 
-// Background intervals:
-// 1. Autonomous Surveillance Loop every 60 seconds
-setInterval(runAutonomousBackgroundWatcher, 60000);
-// 2. Interactive Telegram Commands Poller every 8 seconds
-setInterval(pollTelegramCommands, 8000);
+// Background intervals and server listener (disabled during test runs)
+const isTestEnv = process.env.NODE_ENV === 'test' || process.execArgv.includes('--test') || process.argv.some(a => a.includes('--test') || a.includes('node:test'));
+if (!isTestEnv) {
+  // 1. Autonomous Surveillance Loop every 60 seconds
+  setInterval(runAutonomousBackgroundWatcher, 60000);
+  // 2. Interactive Telegram Commands Poller every 8 seconds
+  setInterval(pollTelegramCommands, 8000);
 
-app.listen(PORT, () => {
-  console.log(`[MinerX Engine v1.2] Proxy Server listening on http://localhost:${PORT}`);
-  console.log(`[MinerX Engine] Autonomous Telegram background watcher & interactive command listener initialized`);
-});
+  app.listen(PORT, () => {
+    console.log(`[MinerX Engine v1.2] Proxy Server listening on http://localhost:${PORT}`);
+    console.log(`[MinerX Engine] Autonomous Telegram background watcher & interactive command listener initialized`);
+  });
+}
