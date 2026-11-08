@@ -19,13 +19,15 @@ function printUsage() {
 Uso: npx tsx scripts/safeSeedPackages.ts [opciones]
 
 Opciones:
-  --dry-run       Ejecuta simulación sin realizar escrituras en Firestore (POR DEFECTO).
-  --apply         Aplica los cambios creando los paquetes inexistentes en Firestore.
-  --help, -h      Muestra este mensaje de ayuda.
+  --dry-run                 Ejecuta simulación sin realizar escrituras en Firestore (POR DEFECTO).
+  --apply                   Aplica los cambios creando los paquetes inexistentes en Firestore.
+  --allow-remote-staging    Autoriza explícitamente aplicar contra Firestore remoto/staging sin emulador.
+  --help, -h                Muestra este mensaje de ayuda.
 
 Seguridad:
   Por defecto, el script siempre ejecuta en modo --dry-run.
   Para escribir en la base de datos se requiere la bandera explícita --apply.
+  En modo --apply sin emulador (FIRESTORE_EMULATOR_HOST), se requiere además --allow-remote-staging.
   Prohibido ejecutar --apply contra producción sin autorización explícita del PO.
 `);
 }
@@ -40,9 +42,11 @@ async function main() {
 
   const hasApply = args.includes('--apply');
   const hasDryRun = args.includes('--dry-run');
+  const allowRemote = args.includes('--allow-remote-staging') || process.env.ALLOW_REMOTE_SEED === 'true';
 
   // Dry-run by default unless --apply is explicitly specified without --dry-run
   const isApply = hasApply && !hasDryRun;
+  const isEmulator = !!process.env.FIRESTORE_EMULATOR_HOST;
   const mode = isApply ? 'APPLY' : 'DRY-RUN';
 
   console.log('='.repeat(70));
@@ -51,11 +55,20 @@ async function main() {
   console.log('='.repeat(70));
 
   if (isApply) {
-    const isEmulator = !!process.env.FIRESTORE_EMULATOR_HOST;
     console.log(`\n[AVISO DE SEGURIDAD] Modo --apply detectado.`);
-    console.log(`Entorno Firestore: ${isEmulator ? 'EMULADOR LOCAL' : 'REMOTA / STAGING'}`);
-    if (!isEmulator) {
-      console.log(`⚠️  ADVERTENCIA: Operando sin FIRESTORE_EMULATOR_HOST.`);
+    console.log(`Entorno Firestore: ${isEmulator ? 'EMULADOR LOCAL (' + process.env.FIRESTORE_EMULATOR_HOST + ')' : 'REMOTA / STAGING'}`);
+
+    if (!isEmulator && !allowRemote) {
+      console.error(`\n❌ ERROR DE SEGURIDAD OBLIGATORIO (SCRUM-211):`);
+      console.error(`   El PO y las reglas de seguridad prohíben escrituras remotas accidentales.`);
+      console.error(`   No se detectó la variable de entorno FIRESTORE_EMULATOR_HOST.`);
+      console.error(`   Para aplicar en un emulador local: configure FIRESTORE_EMULATOR_HOST.`);
+      console.error(`   Para aplicar explícitamente en staging remoto (previa autorización): use --allow-remote-staging.\n`);
+      process.exit(1);
+    }
+
+    if (!isEmulator && allowRemote) {
+      console.log(`⚠️  ADVERTENCIA: Operando en Firestore remoto con bandera explícita --allow-remote-staging.`);
       console.log(`Verifique que el proyecto activo en firebaseConfig NO sea producción.`);
     }
   } else {
@@ -116,13 +129,20 @@ async function main() {
     console.log('\nPara aplicar estos cambios en el entorno de staging/emulador, ejecute:');
     console.log('  npx tsx scripts/safeSeedPackages.ts --apply\n');
   }
+
+  return report;
 }
 
 if (process.argv[1]?.endsWith('safeSeedPackages.ts')) {
-  main().catch((err) => {
-    console.error('Error durante la ejecución del seed:', err);
-    process.exit(1);
-  });
+  main()
+    .then((report) => {
+      const exitCode = report && report.summary.blockedCount > 0 ? 1 : 0;
+      process.exit(exitCode);
+    })
+    .catch((err) => {
+      console.error('Error durante la ejecución del seed:', err);
+      process.exit(1);
+    });
 }
 
 export { main };

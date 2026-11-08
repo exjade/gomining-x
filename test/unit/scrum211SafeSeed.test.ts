@@ -17,6 +17,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   SafeSeedService,
+  DefaultFirestorePackageStore,
   type SafeSeedReport,
   type PackageStoreAdapter,
 } from '../../src/services/admin/safeSeedService';
@@ -375,5 +376,35 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests', () =
     assert.equal(report.summary.createdCount, 0);
     assert.equal(report.summary.blockedCount, 2);
     assert.equal(store.docs.size, 0);
+  });
+
+  // 9. DEFAULT FIRESTORE STORE ADAPTER TESTS
+  it('instantiates DefaultFirestorePackageStore safely with on-demand fallback initialization', () => {
+    const defaultStore = new DefaultFirestorePackageStore();
+    assert.ok(defaultStore, 'DefaultFirestorePackageStore must instantiate without error');
+    assert.equal(typeof defaultStore.getExistingPackages, 'function');
+    assert.equal(typeof defaultStore.setPackageDoc, 'function');
+  });
+
+  it('DefaultFirestorePackageStore rejects setPackageDoc with explicit error when firestore is null', async () => {
+    // Force a null firestore instance via an explicit mock constructor
+    const nullStore = new (class extends DefaultFirestorePackageStore {
+      constructor() {
+        super(null as any);
+        (this as any).firestoreInstance = null;
+      }
+    })();
+
+    await assert.rejects(
+      async () => {
+        await nullStore.setPackageDoc('test-pkg', { name: 'Test' });
+      },
+      {
+        message: 'Cloud Firestore instance is not initialized',
+      }
+    );
+
+    const existing = await nullStore.getExistingPackages();
+    assert.equal(existing.size, 0);
   });
 });

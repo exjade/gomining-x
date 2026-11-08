@@ -1,10 +1,16 @@
-import type { Firestore } from 'firebase/firestore';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import {
+  getFirestore,
+  connectFirestoreEmulator,
+  type Firestore,
+} from 'firebase/firestore';
 import {
   db,
   collection,
   doc,
   getDocs,
   setDoc,
+  firebaseConfig,
 } from '../../utils/firebaseAuth';
 import { COMMERCIAL_PACKAGES_COLLECTION, validatePackageSchema } from './commercialPackageService';
 import { TARGET_PACKAGES_MANIFEST, type SeedPackageItem } from '../../data/seedManifest';
@@ -20,10 +26,34 @@ export interface PackageStoreAdapter {
 }
 
 export class DefaultFirestorePackageStore implements PackageStoreAdapter {
-  private firestoreInstance: Firestore | null;
+  private firestoreInstance: Firestore | null = null;
 
-  constructor(firestoreInstance: Firestore | null = db) {
-    this.firestoreInstance = firestoreInstance;
+  constructor(firestoreInstance?: Firestore | null) {
+    if (firestoreInstance) {
+      this.firestoreInstance = firestoreInstance;
+    } else if (db) {
+      this.firestoreInstance = db;
+    } else {
+      try {
+        const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+        this.firestoreInstance = getFirestore(app);
+
+        const nodeProcess = (globalThis as any).process;
+        const emulatorHost = nodeProcess?.env?.FIRESTORE_EMULATOR_HOST;
+        if (emulatorHost) {
+          const [host, portStr] = emulatorHost.split(':');
+          const port = parseInt(portStr || '8080', 10);
+          try {
+            connectFirestoreEmulator(this.firestoreInstance, host, port);
+          } catch {
+            // Already connected or duplicate call
+          }
+        }
+      } catch (err: any) {
+        console.warn('[DefaultFirestorePackageStore] Firestore init notice:', err?.message || err);
+        this.firestoreInstance = null;
+      }
+    }
   }
 
   async getExistingPackages(): Promise<Map<string, any>> {
