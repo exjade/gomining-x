@@ -1,6 +1,6 @@
 # Firestore Contract: Esquema, Índices, Reglas de Seguridad y Trazabilidad (SCRUM-210 / POUW-1.3)
 
-Este documento define formalmente el contrato de datos en Cloud Firestore para el catálogo dinámico de paquetes comerciales (`commercial_packages`), campañas (`campaigns`), trazabilidad de compras inmutables (`/miners/{uid}/miner/{minerId}`), índices compuestos y reglas de seguridad de Firestore.
+Este documento define formalmente el contrato de datos en Cloud Firestore para el catálogo dinámico de paquetes comerciales (`commercial_packages`), trazabilidad de compras inmutables (`/miners/{uid}/miner/{minerId}`), índices compuestos y reglas de seguridad de Firestore.
 
 ---
 
@@ -9,13 +9,15 @@ Este documento define formalmente el contrato de datos en Cloud Firestore para e
 | Concepto | Clasificación | Detalle / Justificación |
 |---|---|---|
 | Colección `commercial_packages/{packageId}` | `ACCEPTED_DECISION` | Aprobada en Fase 0 y `FASE-1_INIT.md`. |
-| Colección `campaigns/{campaignId}` | `ACCEPTED_DECISION` | Aprobada en `JIRA_pouwminer_story_paquetes_dinamicos.md` y `SCRUM-210`. |
-| Modelo de moneda en centavos enteros (`priceUsdCents`) | `ACCEPTED_DECISION` | Fijada para evitar pérdida de precisión con `double`/punto flotante. |
 | Separación `packageId != minerId` | `ACCEPTED_DECISION` | Aprobada explícitamente por el PO en `FASE-1_INIT.md`. |
 | Preservación del flujo de compra actual | `ACCEPTED_DECISION` | El modal crea instancia en `/miners/{uid}/miner/{minerId}` sin modificar compras históricas. |
-| Archivar vs. Hard Delete (`status='ARCHIVED'`) | `ACCEPTED_DECISION` | Prohibido el borrado físico de paquetes comerciales. |
+| Archivar vs. Hard Delete (`status='ARCHIVED'` + `isPublished=false`) | `ACCEPTED_DECISION` | Prohibido el borrado físico de paquetes comerciales. |
 | Moneda visible Client (USD) vs Cobro (USDT/crypto) | `ACCEPTED_DECISION` | El cliente muestra USD; el checkout liquida en crypto/USDT. |
+| Cadencia estándar (`cadence`) | `ACCEPTED_DECISION` | Estandarizado en `cadence` ('one_time' \| 'monthly'). Se retira el alias duplicado `billing`. |
+| Modelo de moneda en centavos enteros (`priceUsdCents`) | `PROPOSED` | Recomendación técnica de ingeniería para evitar pérdida de precisión por punto flotante; pendiente de ratificación final del PO. |
+| Clave de frontend (`frontendKey`) | `PROPOSED` | Clave observada en seeds para trazabilidad e idempotencia. |
 | IDs sugeridos (`preventa-01`, `minerx-01`, etc.) | `PROPOSED` | Propuestos para legibilidad e idempotencia; pendientes de confirmación final. |
+| Colección `campaigns/{campaignId}` | `OUT_OF_SCOPE` | Descuentos y campañas nuevas declaradas OUT OF SCOPE en `FASE-1_INIT.md`. Pertenecen a SCRUM-213. |
 | DisplayNames finales de MinerX 1–5 | `OPEN_QUESTION` | Requiere confirmación del PO antes de sembrar (`NEEDS_PO_DECISION`). |
 | Inclusión de los 16 niveles de Lanzamiento | `OPEN_QUESTION` | Requiere confirmación del PO antes de sembrar (`NEEDS_PO_DECISION`). |
 | Inclusión de los 22 tiers Custom | `OPEN_QUESTION` | Requiere confirmación del PO antes de sembrar (`NEEDS_PO_DECISION`). |
@@ -23,11 +25,11 @@ Este documento define formalmente el contrato de datos en Cloud Firestore para e
 
 ---
 
-## 2. Esquema de `commercial_packages/{packageId}`
+## 2. Esquema Estricto de `commercial_packages/{packageId}`
 
-### Campos Obligatorios y Preexistentes (Compatibilidad Retroactiva)
+### Campos Preexistentes (Compatibilidad Retroactiva)
 - `id` (string): Identificador único del documento.
-- `name` (string): Nombre administrativo o descriptivo del paquete.
+- `name` (string): Nombre descriptivo del paquete.
 - `powerTh` (number): Potencia computacional en TH/s (> 0).
 - `priceUsdt` (number): Precio nominal en USDT (> 0).
 - `durationDays` (number): Duración en días del contrato (ej. 365).
@@ -35,79 +37,43 @@ Este documento define formalmente el contrato de datos en Cloud Firestore para e
 - `isPublished` (boolean): Bandera de visibilidad en el storefront.
 - `variablePct` (number): Multiplicador variable porcentual (ej. 0.0, 2.5).
 - `commissionPct` (number): Comisión de plataforma (ej. 2.0).
-- `version` (number): Entero incremental (inicia en 1) que incrementa en cada actualización administrativa.
+- `version` (number): Entero incremental (inicia en 1) que se incrementa en cada actualización administrativa.
+- `description` (string, opcional): Descripción funcional del paquete.
+- `maxPurchasesPerUser` (number, opcional): Límite de compras por usuario.
 - `createdAt` (string ISO): Marca temporal de creación.
 - `updatedAt` (string ISO): Marca temporal de última modificación.
 
-### Campos Aditivos (SCRUM-205 / SCRUM-210)
+### Campos Aditivos Autorizados (KEEP)
 - `packageId` (string, opcional): Alias para `id` garantizando compatibilidad de referencias entre contratos.
 - `section` ('minerx' | 'preventa' | 'lanzamiento' | 'mensual'): Sección de la tienda donde se renderiza la oferta.
 - `packageType` ('fixed' | 'subscription' | 'custom'): Tipo de paquete.
-- `sortOrder` (number): Posición ordinal de ordenamiento visual dentro de la sección.
-- `displayName` (string): Etiqueta textual visible literal del frontend (ej. `1.46 TH`, `Inicio`).
-- `frontendKey` (string): Clave estable observada en el frontend para idempotencia y auditoría.
-- `source` ('frontend-seed' | 'admin'): Origen del registro.
-- `priceUsdCents` (int): Precio base exacto en centavos enteros de USD (ej. 1899 para $18.99).
-- `pricePerThCents` (int, opcional): Precio por TH en centavos (utilizado en Lanzamiento).
-- `priceUsdtCents` (int, opcional): Precio en centavos de USDT si aplica paridad directa.
-- `billing` ('one_time' | 'monthly', opcional): Modalidad de facturación.
-- `cadence` ('one_time' | 'monthly' | string, opcional): Cadencia de cobro (sinónimo interoperable de `billing`).
-- `finalPriceUsdCents` (int, opcional): Precio calculado por el servidor aplicando descuentos vigentes. Si no hay descuento activo, equivale a `priceUsdCents`.
+- `sortOrder` (number, opcional): Posición ordinal de ordenamiento visual dentro de la sección.
+- `displayName` (string, opcional): Etiqueta textual visible literal del frontend (ej. `1.46 TH`, `Inicio`).
+- `frontendKey` (string, opcional - PROPOSED): Clave estable observada en el frontend para auditoría.
+- `source` ('frontend-seed' | 'admin', opcional): Origen del registro.
+- `priceUsdCents` (int, opcional - PROPOSED): Precio base en centavos enteros de USD (ej. 1899 para $18.99).
 - `currency` ('USDT' | 'USD', opcional): Divisa declarada.
-- `dailyBtcText` (string, opcional): Rendimiento diario en BTC como texto literal (ej. `'0.00000062'`) para evitar truncamiento de punto flotante.
+- `cadence` ('one_time' | 'monthly' | string, opcional): Cadencia de facturación (estandarizada).
+- `dailyBtcText` (string, opcional): Rendimiento diario en BTC como texto literal (ej. `'0.00000062'`) para evitar truncamiento por punto flotante.
 - `roiPct` (number, opcional): Retorno anual estimado visible (ej. 52.5).
 - `limitedUnits` (int, opcional): Cupos totales disponibles (ej. 30 para preventa).
 - `availableUnits` (int, opcional): Cupos restantes disponibles para compra.
 - `soldUnits` (int, opcional): Unidades vendidas.
-- `publishedToStorefront` (boolean, opcional): Control secundario de publicación directa a storefront.
-- `subscription` (map, opcional): `{ initialTh: number, upgradeTargetTh: number }`.
-- `custom` (map, opcional): `{ minTh: number, maxTh: number, levels: number, minPriceUsdCents: number, maxPriceUsdCents: number }`.
-- `uiText` (map, opcional): `{ subtitle?: string, badge?: string, note?: string, ctaText?: string }`.
-- `discount` (map, opcional): Descuento directo por paquete:
-  ```json
-  {
-    "isActive": false,
-    "type": "percent",
-    "value": 0,
-    "label": "-10% PROMO",
-    "startsAt": "2026-11-01T00:00:00Z",
-    "endsAt": "2026-11-30T23:59:59Z"
-  }
-  ```
-- `campaignIds` (array<string>, opcional): IDs de campañas aplicables.
-- `maintenanceDiscountPct` (map, opcional): Descuentos en comisiones por nivel: `{ starter?: number, pro?: number, presale?: number }`.
-- `minerTemplateId` (string | null, opcional): Hook futuro a plantilla NFT (inicializado en `null`).
-- `updatedBy` (string, opcional): UID del administrador que ejecutó la última modificación.
-- `seededAt` (string ISO, opcional): Marca temporal de siembra automática.
+- `updatedBy` (string, opcional): UID del operador que realizó la última modificación.
+- `seededAt` (string ISO, opcional): Marca temporal de siembra.
+
+### Campos Retirados / Fuera de Alcance (OUT OF SCOPE / NO AUTORIZADOS)
+- `publishedToStorefront`: Retirado. Duplicaba la funcionalidad de `isPublished`.
+- `billing`: Retirado como campo duplicado; estandarizado unívocamente en `cadence`.
+- `finalPriceUsdCents`: Retirado. El cálculo dinámico de descuentos corresponde a SCRUM-213.
+- `discount` y `campaignIds`: Retirados. Pertenecen al motor de promociones de SCRUM-213.
+- `subscription`, `custom`, `uiText`, `maintenanceDiscountPct`, `minerTemplateId`, `pricePerThCents`, `priceUsdtCents`: Retirados por ser campos especulativos no requeridos por el frontend actual.
 
 ---
 
-## 3. Esquema de `campaigns/{campaignId}`
+## 3. Estado de Campañas y Descuentos (SCRUM-213)
 
-Permite la administración de campañas y descuentos globales o por sección/paquete:
-- `id` (string): Identificador único de la campaña (ej. `camp-black-friday-2026`).
-- `name` (string): Nombre descriptivo de la campaña.
-- `type` ('percent' | 'fixed'): Tipo de bonificación (porcentual o monto fijo en centavos).
-- `value` (number): Valor del descuento (porcentaje 1–100 o centavos enteros).
-- `startsAt` (string ISO): Fecha y hora de inicio de vigencia.
-- `endsAt` (string ISO): Fecha y hora de finalización de vigencia.
-- `isActive` (boolean): Interruptor administrativo de activación.
-- `priority` (number): Prioridad de resolución en caso de solapamiento.
-- `stackable` (boolean): Indica si puede acumularse con otros descuentos.
-- `appliesTo` (map): Ámbito de aplicación:
-  ```json
-  {
-    "all": false,
-    "sections": ["minerx", "preventa"],
-    "packageIds": ["minerx-01", "minerx-02"]
-  }
-  ```
-- `badgeText` (string, opcional): Texto de la insignia visual (ej. `OFERTA FLASH`).
-- `maxRedemptions` (number, opcional): Límite total de compras permitidas bajo la campaña.
-- `redeemedCount` (number, opcional): Total de redenciones registradas.
-- `createdBy` (string, opcional): UID del administrador creador.
-- `createdAt` (string ISO): Marca de tiempo de registro.
-- `updatedAt` (string ISO): Marca de tiempo de actualización.
+De acuerdo con `FASE-1_INIT.md` y `docs/c2c/FASE-1_001_Review.md`, la colección `/campaigns`, interfaces de `Campaign`, índices asociados y motor de descuentos fueron retirados íntegramente de SCRUM-210 por estar declarados explícitamente `OUT OF SCOPE`. Serán implementados en la tarea correspondiente (SCRUM-213) una vez autorizada.
 
 ---
 
@@ -130,33 +96,27 @@ export interface PurchasedPackageSnapshot {
   pricePaidUsd: number;
   pricePaidUsdt?: number;
   currency: string;
-  billing?: 'one_time' | 'monthly';
+  cadence?: 'one_time' | 'monthly' | string;
   durationDays: number;
   variablePct: number;
   commissionPct: number;
   dailyBtcText?: string;
   roiPct?: number;
-  discountApplied?: {
-    type: 'percent' | 'fixed';
-    value: number;
-    label: string;
-    campaignId?: string;
-  };
   packageVersion: number;
   purchasedAt: string;
 }
 ```
 
 ### Propiedades Garantizadas:
-1. `minerId != packageId`: Cada minero tiene un UID aleatorio/único (`minerId`) mientras que el paquete tiene un ID de plantilla estable (`packageId`).
-2. Desacoplamiento total: Si el administrador altera posteriormente el precio de `minerx-01` de $561.99 a $699.99 o cambia la potencia de 48 TH a 60 TH, las compras históricas conservan intacto su snapshot con los datos comprados en su momento.
-3. Inmutabilidad y Regla Anti-Borrado: Las reglas de Firestore impiden `delete` en `/miners/{uid}/miner/{minerId}`.
+1. `minerId != packageId`: Cada minero tiene un identificador único de instancia (`minerId`) mientras que el paquete posee un ID de catálogo estable (`packageId`).
+2. Desacoplamiento total: Modificaciones posteriores al catálogo (ej. actualizar potencia o precio a una nueva versión) no alteran el snapshot histórico de la compra.
+3. Regla Anti-Borrado Estricta: En `firestore.rules`, se prohíbe taxativamente el borrado de instancias (`allow delete: if false;`) y se eliminó cualquier `allow write` que pudiera permitirlo indirectamente.
 
 ---
 
 ## 5. Reglas de Seguridad en Cloud Firestore (`firestore.rules`)
 
-Se eliminó definitivamente el comodín `allow read, write: if true;` y se reemplazó por reglas granulares basadas en roles:
+Se eliminó el comodín inseguro y se implementó una política de permisos explícitos con protección anti-borrado real:
 
 ```javascript
 rules_version = '2';
@@ -178,37 +138,49 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == uid;
     }
 
+    // Instancias de mineros comprados:
+    // CORRECCIÓN ITERACIÓN 2: No utilizar "allow write", pues write incluye delete.
+    // Se definen operaciones explícitas read, create, update y bloqueo estricto de delete.
+    match /miners/{uid}/miner/{minerId} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid) || isAdmin();
+      allow update: if isOwner(uid) || isAdmin();
+      allow delete: if false;
+    }
+
     // Catálogo de paquetes comerciales:
     // Lectura pública SOLO para paquetes publicados (isPublished == true)
     // Lectura completa y edición restringida a Administradores
     // Hard delete PROHIBIDO (solo archivar mediante status='ARCHIVED' e isPublished=false)
     match /commercial_packages/{packageId} {
-      allow read: if resource.data.isPublished == true || isAdmin();
+      allow read: if (resource != null && resource.data.isPublished == true) || isAdmin();
       allow create, update: if isAdmin();
       allow delete: if false;
     }
 
-    // Campañas de la tienda:
-    // Lectura pública SOLO de campañas activas (isActive == true)
-    // Edición reservada a administradores; borrado físico prohibido
-    match /campaigns/{campaignId} {
-      allow read: if resource.data.isActive == true || isAdmin();
-      allow create, update: if isAdmin();
-      allow delete: if false;
-    }
-
-    // Instancias de mineros comprados:
-    // Lectura y escritura exclusiva del propietario de la cuenta o del administrador
-    // Borrado físico prohibido para garantizar integridad contable y de contratos
-    match /miners/{uid}/miner/{minerId} {
-      allow read, write: if isOwner(uid) || isAdmin();
-      allow delete: if false;
-    }
-
-    // Colecciones administrativas protegidas (admin_users, admin_workers, etc.)
+    // Colecciones administrativas protegidas
     match /admin_users/{userId} {
       allow read: if isAdmin() || (isAuthenticated() && request.auth.uid == userId);
       allow write: if isAdmin();
+      match /{allSubcollections=**} {
+        allow read, write: if isAdmin();
+      }
+    }
+
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAdmin() || (isAuthenticated() && (
+        request.auth.uid == userId ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'referral', 'commissionBalance', 'balance', 'totalCommissionsEarned',
+          'purchasesCount', 'lastPurchaseAt', 'firstPurchaseAt', 'sponsorId'
+        ])
+      ));
+      allow delete: if false;
+      match /{allSubcollections=**} {
+        allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      }
     }
 
     match /admin_workers/{workerId} {
@@ -241,6 +213,23 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /minerx_users/{userId} {
+      allow read, write: if isAdmin();
+      match /{allSubcollections=**} {
+        allow read, write: if isAdmin();
+      }
+    }
+
+    match /minerx_audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    match /minerx_app_data/{docId} {
+      allow read, write: if isAdmin();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
@@ -248,22 +237,20 @@ service cloud.firestore {
 }
 ```
 
+*Nota sobre validación:* Los tests automatizados en `test/unit/scrum210SchemaRules.test.ts` verifican estáticamente el contrato de código fuente (source-contract tests) de estas reglas. Para despliegues a producción se requerirá validación de comportamiento dinámico mediante el Firebase Local Emulator Suite.
+
 ---
 
 ## 6. Índices Compuestos (`firestore.indexes.json`)
 
-Se definieron los siguientes índices requeridos para las consultas de filtrado por sección, ordenamiento y vigencia:
+Se conservan estrictamente los índices compuestos indispensables para las consultas de paquetes comerciales y administración de usuarios:
 
 1. `commercial_packages`:
-   - `section` (ASC) + `isPublished` (ASC) + `publishedToStorefront` (ASC) + `sortOrder` (ASC): Consulta con doble validación de visibilidad de storefront.
-   - `section` (ASC) + `publishedToStorefront` (ASC) + `sortOrder` (ASC): Consulta filtrada por storefront directo.
-   - `section` (ASC) + `isPublished` (ASC) + `sortOrder` (ASC): Consulta principal del Client Storefront.
-   - `section` (ASC) + `sortOrder` (ASC): Consulta del panel de administración por pestaña.
-   - `isPublished` (ASC) + `sortOrder` (ASC): Consulta global de catálogo publicado.
+   - `section` (ASC) + `isPublished` (ASC) + `sortOrder` (ASC): Consulta principal de la tienda por sección para el cliente.
+   - `section` (ASC) + `sortOrder` (ASC): Consulta del panel de administración por sección.
+   - `isPublished` (ASC) + `sortOrder` (ASC): Catálogo general de ofertas publicadas.
    - `section` (ASC) + `status` (ASC) + `sortOrder` (ASC): Filtrado administrativo por estado y sección.
-   - `section` (ASC) + `updatedAt` (DESC): Auditoría de cambios recientes por sección.
-   - `status` (ASC) + `updatedAt` (DESC): Auditoría general de estado.
-2. `campaigns`:
-   - `isActive` (ASC) + `priority` (DESC): Resolución jerárquica de descuentos aplicables.
-   - `isActive` (ASC) + `startsAt` (ASC) + `endsAt` (ASC): Verificación de ventana temporal de vigencia.
-3. Se preservaron íntegramente los índices existentes para `admin_users` y `users`.
+   - `section` (ASC) + `updatedAt` (DESC): Auditoría y recencia de cambios por sección.
+   - `status` (ASC) + `updatedAt` (DESC): Auditoría y recencia por estado de paquete.
+2. `admin_users` y `users`: Se preservan los índices preexistentes para `status + registeredAt`, `email + registeredAt` y `role + registeredAt`.
+3. Índices de `campaigns` y los que incluían `publishedToStorefront` fueron eliminados.

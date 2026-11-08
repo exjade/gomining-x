@@ -48,7 +48,9 @@ service cloud.firestore {
     // Trazabilidad de compra: conserva minerId, packageId y snapshot económico
     // Desacoplado: compras históricas inmutables y protegidas contra borrado
     match /miners/{uid}/miner/{minerId} {
-      allow read, write: if isOwner(uid) || isAdmin();
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid) || isAdmin();
+      allow update: if isOwner(uid) || isAdmin();
       allow delete: if false;
     }
 
@@ -81,23 +83,12 @@ service cloud.firestore {
 
     // Paquetes comerciales de minería disponibles para la plataforma (commercial_packages/{packageId})
     // REGLAS DE SEGURIDAD POUW-1.3 (SCRUM-210):
-    // 1. Client/Público: SOLO lectura de paquetes publicados (isPublished == true || publishedToStorefront == true)
+    // 1. Client/Público: SOLO lectura de paquetes publicados (isPublished == true)
     // 2. Admin: lectura de todo el catálogo (incluyendo borradores y archivados)
     // 3. Escritura: estrictamente reservada a Administradores/Backend autorizado
     // 4. Borrado físico: PROHIBIDO (hard delete denegado; solo archivar vía status='ARCHIVED' e isPublished=false)
     match /commercial_packages/{packageId} {
-      allow read: if (resource != null && (resource.data.isPublished == true || resource.data.publishedToStorefront == true)) || isAdmin();
-      allow create, update: if isAdmin();
-      allow delete: if false;
-    }
-
-    // Campañas y Descuentos de la Tienda (campaigns/{campaignId})
-    // 1. Client/Público: lectura de campañas activas (isActive == true)
-    // 2. Admin: lectura total y administración
-    // 3. Escritura: estrictamente reservada a Admin
-    // 4. Borrado físico: PROHIBIDO
-    match /campaigns/{campaignId} {
-      allow read: if (resource != null && resource.data.isActive == true) || isAdmin();
+      allow read: if (resource != null && resource.data.isPublished == true) || isAdmin();
       allow create, update: if isAdmin();
       allow delete: if false;
     }

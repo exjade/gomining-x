@@ -193,85 +193,24 @@ export interface CommercialPackage {
   createdAt: string;
   updatedAt: string;
 
-  // Additive fields for dynamic storefront sections & catalog (SCRUM-205 / SCRUM-210)
+  // Additive fields for dynamic storefront catalog (SCRUM-210)
   packageId?: string;
   section?: 'minerx' | 'preventa' | 'lanzamiento' | 'mensual';
   packageType?: 'fixed' | 'subscription' | 'custom';
   sortOrder?: number;
   displayName?: string;
-  frontendKey?: string;
+  frontendKey?: string; // PROPOSED: stable key observed in frontend seeds
   source?: 'frontend-seed' | 'admin';
-  priceUsdCents?: number;
-  pricePerThCents?: number;
-  priceUsdtCents?: number;
-  billing?: 'one_time' | 'monthly';
-  cadence?: 'one_time' | 'monthly' | string;
-  finalPriceUsdCents?: number;
+  priceUsdCents?: number; // PROPOSED: integer cents for precise financial operations
   currency?: 'USDT' | 'USD';
+  cadence?: 'one_time' | 'monthly' | string;
   dailyBtcText?: string;
   roiPct?: number;
   limitedUnits?: number;
   availableUnits?: number;
   soldUnits?: number;
-  publishedToStorefront?: boolean;
-  subscription?: {
-    initialTh: number;
-    upgradeTargetTh: number;
-  };
-  custom?: {
-    minTh: number;
-    maxTh: number;
-    levels: number;
-    minPriceUsdCents: number;
-    maxPriceUsdCents: number;
-  };
-  uiText?: {
-    subtitle?: string;
-    badge?: string;
-    note?: string;
-    ctaText?: string;
-  };
-  discount?: {
-    isActive: boolean;
-    type: 'percent' | 'fixed';
-    value: number;
-    label: string;
-    startsAt?: string;
-    endsAt?: string;
-  };
-  campaignIds?: string[];
-  maintenanceDiscountPct?: {
-    starter?: number;
-    pro?: number;
-    presale?: number;
-  };
-  minerTemplateId?: string | null;
   updatedBy?: string;
   seededAt?: string;
-}
-
-// Storefront Campaign Specification (SCRUM-205 / SCRUM-210)
-export interface Campaign {
-  id: string;
-  name: string;
-  type: 'percent' | 'fixed';
-  value: number;
-  startsAt: string;
-  endsAt: string;
-  isActive: boolean;
-  priority: number;
-  stackable: boolean;
-  appliesTo: {
-    all?: boolean;
-    sections?: ('minerx' | 'preventa' | 'lanzamiento' | 'mensual')[];
-    packageIds?: string[];
-  };
-  badgeText?: string;
-  maxRedemptions?: number;
-  redeemedCount?: number;
-  createdBy?: string;
-  createdAt: string;
-  updatedAt: string;
 }
 
 // Purchased Package Snapshot for immutable audit & purchase traceability
@@ -286,19 +225,12 @@ export interface PurchasedPackageSnapshot {
   pricePaidUsd: number;
   pricePaidUsdt?: number;
   currency: string;
-  billing?: 'one_time' | 'monthly';
   cadence?: 'one_time' | 'monthly' | string;
   durationDays: number;
   variablePct: number;
   commissionPct: number;
   dailyBtcText?: string;
   roiPct?: number;
-  discountApplied?: {
-    type: 'percent' | 'fixed';
-    value: number;
-    label: string;
-    campaignId?: string;
-  };
   packageVersion: number;
   purchasedAt: string;
 }

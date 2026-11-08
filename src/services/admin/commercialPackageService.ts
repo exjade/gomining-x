@@ -5,7 +5,6 @@ import { apiFetch } from '../../utils/apiConfig';
 
 const STORAGE_KEY = 'minerx_admin_commercial_packages_v2';
 export const COMMERCIAL_PACKAGES_COLLECTION = 'commercial_packages';
-export const CAMPAIGNS_COLLECTION = 'campaigns';
 
 /**
  * Deserializes raw Firestore document data into typed CommercialPackage
@@ -42,25 +41,13 @@ export function deserializeCommercialPackageDoc(id: string, data: any): Commerci
     frontendKey: data.frontendKey,
     source: data.source,
     priceUsdCents,
-    pricePerThCents: typeof data.pricePerThCents === 'number' ? data.pricePerThCents : undefined,
-    priceUsdtCents: typeof data.priceUsdtCents === 'number' ? data.priceUsdtCents : undefined,
-    billing: data.billing ?? data.cadence,
     cadence: data.cadence ?? data.billing,
-    finalPriceUsdCents: typeof data.finalPriceUsdCents === 'number' ? data.finalPriceUsdCents : undefined,
     currency: data.currency,
     dailyBtcText: data.dailyBtcText,
     roiPct: typeof data.roiPct === 'number' ? data.roiPct : undefined,
     limitedUnits: typeof data.limitedUnits === 'number' ? data.limitedUnits : undefined,
     availableUnits: typeof data.availableUnits === 'number' ? data.availableUnits : undefined,
     soldUnits: typeof data.soldUnits === 'number' ? data.soldUnits : undefined,
-    publishedToStorefront: data.publishedToStorefront,
-    subscription: data.subscription,
-    custom: data.custom,
-    uiText: data.uiText,
-    discount: data.discount,
-    campaignIds: Array.isArray(data.campaignIds) ? data.campaignIds : undefined,
-    maintenanceDiscountPct: data.maintenanceDiscountPct,
-    minerTemplateId: data.minerTemplateId,
     updatedBy: data.updatedBy,
     seededAt: data.seededAt,
 
@@ -75,10 +62,9 @@ export function deserializeCommercialPackageDoc(id: string, data: any): Commerci
  */
 export function createPurchaseSnapshot(
   pkg: CommercialPackage,
-  pricePaidCents?: number,
-  discountApplied?: PurchasedPackageSnapshot['discountApplied']
+  pricePaidCents?: number
 ): PurchasedPackageSnapshot {
-  const finalCents = pricePaidCents ?? pkg.finalPriceUsdCents ?? pkg.priceUsdCents ?? Math.round(pkg.priceUsdt * 100);
+  const finalCents = pricePaidCents ?? pkg.priceUsdCents ?? Math.round(pkg.priceUsdt * 100);
   return {
     packageId: pkg.id,
     packageName: pkg.name,
@@ -90,14 +76,12 @@ export function createPurchaseSnapshot(
     pricePaidUsd: finalCents / 100,
     pricePaidUsdt: pkg.priceUsdt,
     currency: pkg.currency || 'USD',
-    billing: pkg.billing,
-    cadence: pkg.cadence ?? pkg.billing,
+    cadence: pkg.cadence,
     durationDays: pkg.durationDays,
     variablePct: pkg.variablePct,
     commissionPct: pkg.commissionPct,
     dailyBtcText: pkg.dailyBtcText,
     roiPct: pkg.roiPct,
-    discountApplied,
     packageVersion: pkg.version,
     purchasedAt: new Date().toISOString(),
   };
@@ -333,10 +317,8 @@ export class CommercialPackageService {
         ...existing,
         ...pkg,
         packageId: pkg.id,
-        billing: pkg.billing ?? pkg.cadence ?? existing?.billing,
-        cadence: pkg.cadence ?? pkg.billing ?? existing?.cadence,
+        cadence: pkg.cadence ?? existing?.cadence,
         priceUsdCents: pkg.priceUsdCents ?? (typeof pkg.priceUsdt === 'number' ? Math.round(pkg.priceUsdt * 100) : existing?.priceUsdCents),
-        finalPriceUsdCents: pkg.finalPriceUsdCents ?? pkg.priceUsdCents ?? existing?.finalPriceUsdCents,
         isPublished: pkg.isPublished ?? (pkg.status ? pkg.status === 'ACTIVE' : (existing?.status === 'ACTIVE')),
         version: newVersion,
         updatedAt: now
@@ -354,10 +336,8 @@ export class CommercialPackageService {
         ...pkg,
         id: newId,
         packageId: newId,
-        billing: pkg.billing ?? pkg.cadence,
-        cadence: pkg.cadence ?? pkg.billing,
+        cadence: pkg.cadence,
         priceUsdCents,
-        finalPriceUsdCents: pkg.finalPriceUsdCents ?? priceUsdCents,
         status: pkg.status || 'ACTIVE',
         isPublished: pkg.isPublished ?? true,
         version: 1,
@@ -452,52 +432,6 @@ export class CommercialPackageService {
         }).catch(() => {});
       } catch {}
     }
-  }
-
-  /**
-   * Explicitly archives a package without hard-deleting the document.
-   * Adheres strictly to SCRUM-210 decision:
-   * - status = 'ARCHIVED'
-   * - isPublished = false
-   * - packageId preserved
-   * - historical audit preserved
-   * - purchased miner instances and orders remain unaffected
-   */
-  public archivePackage(packageId: string): CommercialPackage | null {
-    const list = this.getPackages();
-    const pkg = list.find(p => p.id === packageId);
-    if (pkg) {
-      pkg.status = 'ARCHIVED';
-      pkg.isPublished = false;
-      pkg.updatedAt = new Date().toISOString();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-      this.audit.logAction('admin_sys', 'admin@minerx.cloud', 'SUPER_ADMIN', 'COMMERCIAL', 'ARCHIVE_PACKAGE', packageId, {
-        status: 'ARCHIVED',
-        isPublished: false
-      });
-
-      if (db) {
-        setDoc(doc(db, COMMERCIAL_PACKAGES_COLLECTION, packageId), {
-          ...pkg,
-          status: 'ARCHIVED',
-          isPublished: false,
-          updatedAt: pkg.updatedAt
-        }, { merge: true }).catch(err => {
-          console.error(`[CommercialPackageService] Error archiving package in Firestore:`, err);
-        });
-      }
-
-      try {
-        apiFetch('/api/packages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(pkg)
-        }).catch(() => {});
-      } catch {}
-
-      return pkg;
-    }
-    return null;
   }
 
   public togglePublish(packageId: string): void {

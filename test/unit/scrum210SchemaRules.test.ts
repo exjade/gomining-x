@@ -18,7 +18,6 @@ import { resolve } from 'node:path';
 import {
   CommercialPackageService,
   COMMERCIAL_PACKAGES_COLLECTION,
-  CAMPAIGNS_COLLECTION,
   deserializeCommercialPackageDoc,
   createPurchaseSnapshot,
   validatePackageSchema,
@@ -26,20 +25,20 @@ import {
 } from '../../src/services/admin/commercialPackageService.js';
 import type {
   CommercialPackage,
-  Campaign,
   PurchasedPackageSnapshot,
   PurchasedMinerInstance,
 } from '../../src/types/admin.js';
 
-describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Tests', () => {
+describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Tests (Iteration 2)', () => {
   const packageService = CommercialPackageService.getInstance();
 
-  it('exports correct canonical collection names', () => {
+  it('exports correct canonical collection name and excludes campaigns from scope', () => {
     assert.equal(COMMERCIAL_PACKAGES_COLLECTION, 'commercial_packages');
-    assert.equal(CAMPAIGNS_COLLECTION, 'campaigns');
+    // Ensure campaigns collection is out of scope for SCRUM-210
+    assert.equal((CommercialPackageService as any).CAMPAIGNS_COLLECTION, undefined);
   });
 
-  it('deserializes raw Firestore document with all SCRUM-205 / SCRUM-210 additive fields', () => {
+  it('deserializes raw Firestore document strictly with SCRUM-210 authorized fields', () => {
     const rawDoc = {
       name: 'Minero Preventa 1.46 TH',
       displayName: '1.46 TH',
@@ -51,16 +50,13 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
       powerTh: 1.46,
       priceUsdt: 18.99,
       priceUsdCents: 1899,
-      priceUsdtCents: 1899,
-      billing: 'one_time',
-      finalPriceUsdCents: 1899,
+      cadence: 'one_time',
       currency: 'USD',
       dailyBtcText: '0.00000062',
       roiPct: 52.5,
       limitedUnits: 30,
       availableUnits: 30,
       soldUnits: 0,
-      publishedToStorefront: true,
       durationDays: 365,
       variablePct: 0.0,
       commissionPct: 2.0,
@@ -68,27 +64,25 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
       isPublished: true,
       version: 1,
       description: 'Lote exclusivo de preventa con 30 cupos.',
-      discount: {
-        isActive: false,
-        type: 'percent',
-        value: 0,
-        label: '',
-      },
-      campaignIds: ['camp-launch-2026'],
-      maintenanceDiscountPct: {
-        starter: 0,
-        pro: 10,
-        presale: 15,
-      },
-      minerTemplateId: null,
       updatedBy: 'admin_sys',
       seededAt: '2026-11-07T00:00:00Z',
       createdAt: '2026-11-07T00:00:00Z',
       updatedAt: '2026-11-07T00:00:00Z',
+      // Speculative/promotional fields that should NOT be in the typed schema
+      discount: { isActive: true, value: 10 },
+      campaignIds: ['camp-1'],
+      publishedToStorefront: true,
+      finalPriceUsdCents: 1500,
+      subscription: { initialTh: 1 },
+      custom: { minTh: 1 },
+      uiText: { badge: 'hot' },
+      maintenanceDiscountPct: { presale: 10 },
+      minerTemplateId: 'tmpl-1',
     };
 
     const pkg = deserializeCommercialPackageDoc('preventa-01', rawDoc);
 
+    // Verified KEEP fields
     assert.equal(pkg.id, 'preventa-01');
     assert.equal(pkg.packageId, 'preventa-01');
     assert.equal(pkg.name, 'Minero Preventa 1.46 TH');
@@ -100,20 +94,32 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
     assert.equal(pkg.source, 'frontend-seed');
     assert.equal(pkg.powerTh, 1.46);
     assert.equal(pkg.priceUsdCents, 1899);
-    assert.equal(pkg.finalPriceUsdCents, 1899);
-    assert.equal(pkg.billing, 'one_time');
     assert.equal(pkg.cadence, 'one_time');
+    assert.equal(pkg.currency, 'USD');
     assert.equal(pkg.dailyBtcText, '0.00000062');
     assert.equal(pkg.roiPct, 52.5);
     assert.equal(pkg.limitedUnits, 30);
-    assert.equal(pkg.publishedToStorefront, true);
+    assert.equal(pkg.availableUnits, 30);
+    assert.equal(pkg.soldUnits, 0);
+    assert.equal(pkg.status, 'ACTIVE');
+    assert.equal(pkg.isPublished, true);
     assert.equal(pkg.version, 1);
-    assert.equal(pkg.minerTemplateId, null);
-    assert.deepEqual(pkg.campaignIds, ['camp-launch-2026']);
-    assert.equal(pkg.maintenanceDiscountPct?.presale, 15);
+
+    // Verified RETIRED / OUT OF SCOPE fields
+    assert.equal((pkg as any).publishedToStorefront, undefined);
+    assert.equal((pkg as any).finalPriceUsdCents, undefined);
+    assert.equal((pkg as any).discount, undefined);
+    assert.equal((pkg as any).campaignIds, undefined);
+    assert.equal((pkg as any).subscription, undefined);
+    assert.equal((pkg as any).custom, undefined);
+    assert.equal((pkg as any).uiText, undefined);
+    assert.equal((pkg as any).maintenanceDiscountPct, undefined);
+    assert.equal((pkg as any).minerTemplateId, undefined);
+    assert.equal((pkg as any).pricePerThCents, undefined);
+    assert.equal((pkg as any).priceUsdtCents, undefined);
   });
 
-  it('verifies cadence and billing bidirectional fallback and packageId alias', () => {
+  it('verifies cadence normalization and packageId alias', () => {
     // When only cadence is given
     const withCadence = deserializeCommercialPackageDoc('pkg-sub-1', {
       name: 'Plan Mensual Inicio',
@@ -122,23 +128,20 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
       cadence: 'monthly',
     });
     assert.equal(withCadence.cadence, 'monthly');
-    assert.equal(withCadence.billing, 'monthly');
     assert.equal(withCadence.packageId, 'pkg-sub-1');
 
-    // When only billing is given
+    // Legacy fallback: if old doc has billing, it normalizes into cadence
     const withBilling = deserializeCommercialPackageDoc('pkg-one-1', {
       name: 'Plan Un Solo Pago',
       powerTh: 48,
       priceUsdt: 561.99,
       billing: 'one_time',
     });
-    assert.equal(withBilling.billing, 'one_time');
     assert.equal(withBilling.cadence, 'one_time');
 
     // Snapshot retains cadence
     const snapshot = createPurchaseSnapshot(withCadence);
     assert.equal(snapshot.cadence, 'monthly');
-    assert.equal(snapshot.billing, 'monthly');
   });
 
   it('maintains backwards compatibility with legacy documents lacking additive fields', () => {
@@ -159,11 +162,10 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
     assert.equal(pkg.status, 'ACTIVE');
     assert.equal(pkg.isPublished, true);
     assert.equal(pkg.version, 1);
-    assert.equal(pkg.section, undefined); // ignored by dynamic storefront sections
+    assert.equal(pkg.section, undefined);
   });
 
   it('validates money integrity: exact integer cents with no floating point double precision loss', () => {
-    // Check various prices from frontend
     const testPrices = [
       { usdt: 18.99, expectedCents: 1899 },
       { usdt: 99.99, expectedCents: 9999 },
@@ -263,7 +265,7 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
     assert.equal(noPrice.valid, false);
   });
 
-  it('guarantees purchase traceability: snapshot decouples purchased instance from future catalog edits', () => {
+  it('guarantees purchase traceability: snapshot decouples purchased instance from future catalog edits (minerId != packageId)', () => {
     const originalPkg: CommercialPackage = {
       id: 'minerx-01',
       name: 'Minero 1',
@@ -274,9 +276,8 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
       powerTh: 48,
       priceUsdt: 561.99,
       priceUsdCents: 56199,
-      finalPriceUsdCents: 56199,
       currency: 'USD',
-      billing: 'one_time',
+      cadence: 'one_time',
       durationDays: 365,
       variablePct: 0.0,
       commissionPct: 2.0,
@@ -289,13 +290,8 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
       updatedAt: '2026-11-01T00:00:00Z',
     };
 
-    // 1. Capture snapshot at time of user purchase
-    const snapshot = createPurchaseSnapshot(originalPkg, 56199, {
-      type: 'percent',
-      value: 10,
-      label: '10% PROMO',
-      campaignId: 'camp-promo-1',
-    });
+    // 1. Capture snapshot at time of user purchase (no discountApplied in SCRUM-210)
+    const snapshot = createPurchaseSnapshot(originalPkg, 56199);
 
     const userMinerInstance: PurchasedMinerInstance = {
       minerId: 'MINER-USER-101',
@@ -306,10 +302,12 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
     };
 
     assert.equal(userMinerInstance.packageId, 'minerx-01');
+    assert.equal(userMinerInstance.minerId, 'MINER-USER-101');
+    assert.notEqual(userMinerInstance.minerId, userMinerInstance.packageId, 'minerId must be distinct from packageId');
     assert.equal(userMinerInstance.packageSnapshot.packageVersion, 1);
     assert.equal(userMinerInstance.packageSnapshot.pricePaidCents, 56199);
     assert.equal(userMinerInstance.packageSnapshot.powerTh, 48);
-    assert.equal(userMinerInstance.packageSnapshot.discountApplied?.label, '10% PROMO');
+    assert.equal((userMinerInstance.packageSnapshot as any).discountApplied, undefined);
 
     // 2. Later, Admin updates the commercial package (new price, different TH, updated name, version 2)
     const modifiedPkg: CommercialPackage = {
@@ -318,7 +316,6 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
       powerTh: 60,
       priceUsdt: 699.99,
       priceUsdCents: 69999,
-      finalPriceUsdCents: 69999,
       version: 2,
       updatedAt: '2026-11-15T00:00:00Z',
     };
@@ -332,8 +329,11 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
     assert.notEqual(userMinerInstance.packageSnapshot.powerTh, modifiedPkg.powerTh);
   });
 
-  it('enforces safe archiving: status = ARCHIVED, isPublished = false, preserves ID and historical records', () => {
-    // Create a temporary package
+  it('verifies safe archiving contract: status ARCHIVED and isPublished false preserves package document', () => {
+    // Verified concept: Archivar = status 'ARCHIVED' + isPublished false
+    // Admin CRUD archivePackage() belongs to SCRUM-217 and is NOT implemented here
+    assert.equal((packageService as any).archivePackage, undefined, 'archivePackage CRUD method belongs to SCRUM-217');
+
     const created = packageService.savePackage({
       name: 'Paquete Para Archivar',
       powerTh: 50,
@@ -345,59 +345,18 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
       commissionPct: 2,
     });
 
-    const originalId = created.id;
     assert.equal(created.status, 'ACTIVE');
     assert.equal(created.isPublished, true);
 
-    // Archive using archivePackage
-    const archived = packageService.archivePackage(originalId);
-    assert.ok(archived);
-    assert.equal(archived.id, originalId, 'Archived package must retain its stable ID');
-    assert.equal(archived.status, 'ARCHIVED', 'Status must transition to ARCHIVED');
-    assert.equal(archived.isPublished, false, 'isPublished must be false when archived');
-
-    // Verify package is not deleted from store
-    const retrieved = packageService.getPackageById(originalId);
-    assert.ok(retrieved, 'Package must remain present in database, not hard-deleted');
-    assert.equal(retrieved.status, 'ARCHIVED');
-    assert.equal(retrieved.isPublished, false);
+    // Toggle archive preserves the document and updates status/isPublished
+    packageService.toggleArchive(created.id);
+    const archived = packageService.getPackageById(created.id);
+    assert.ok(archived, 'Package must remain present in database, not hard-deleted');
+    assert.equal(archived.status, 'ARCHIVED');
+    assert.equal(archived.isPublished, false);
   });
 
-  it('validates campaigns collection schema per SCRUM-210 acceptance criteria', () => {
-    const testCampaign: Campaign = {
-      id: 'camp-black-friday-2026',
-      name: 'Black Friday Hashrate Boost',
-      type: 'percent',
-      value: 15,
-      startsAt: '2026-11-20T00:00:00Z',
-      endsAt: '2026-11-30T23:59:59Z',
-      isActive: true,
-      priority: 10,
-      stackable: false,
-      appliesTo: {
-        sections: ['minerx', 'preventa'],
-        packageIds: ['minerx-01', 'minerx-02'],
-      },
-      badgeText: '-15% PROMO',
-      maxRedemptions: 100,
-      redeemedCount: 12,
-      createdBy: 'admin_sys',
-      createdAt: '2026-11-07T00:00:00Z',
-      updatedAt: '2026-11-07T00:00:00Z',
-    };
-
-    assert.equal(testCampaign.id, 'camp-black-friday-2026');
-    assert.equal(testCampaign.type, 'percent');
-    assert.equal(testCampaign.value, 15);
-    assert.equal(testCampaign.isActive, true);
-    assert.equal(testCampaign.priority, 10);
-    assert.equal(testCampaign.stackable, false);
-    assert.deepEqual(testCampaign.appliesTo.sections, ['minerx', 'preventa']);
-    assert.deepEqual(testCampaign.appliesTo.packageIds, ['minerx-01', 'minerx-02']);
-    assert.equal(testCampaign.badgeText, '-15% PROMO');
-  });
-
-  it('verifies firestore.indexes.json includes composite indexes for commercial_packages and campaigns', () => {
+  it('verifies firestore.indexes.json includes composite indexes for commercial_packages and NO campaigns/storefront duplicates', () => {
     const indexesPath = resolve(process.cwd(), 'firestore.indexes.json');
     const content = JSON.parse(readFileSync(indexesPath, 'utf-8'));
     assert.ok(Array.isArray(content.indexes));
@@ -405,68 +364,118 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
     const packageIndexes = content.indexes.filter((idx: any) => idx.collectionGroup === 'commercial_packages');
     const campaignIndexes = content.indexes.filter((idx: any) => idx.collectionGroup === 'campaigns');
 
-    // Must have composite indexes for storefront section queries
-    assert.ok(packageIndexes.length >= 4, `Expected at least 4 package indexes, found ${packageIndexes.length}`);
-    assert.ok(campaignIndexes.length >= 2, `Expected at least 2 campaign indexes, found ${campaignIndexes.length}`);
+    // Campaigns composite indexes must be completely removed in SCRUM-210
+    assert.equal(campaignIndexes.length, 0, 'Campaign indexes must be completely removed (OUT OF SCOPE)');
+
+    // Commercial packages indexes must be present
+    assert.ok(packageIndexes.length >= 6, `Expected at least 6 package indexes, found ${packageIndexes.length}`);
+
+    // Must NOT contain publishedToStorefront in any index
+    const hasPublishedToStorefront = packageIndexes.some((idx: any) => {
+      const paths = idx.fields.map((f: any) => f.fieldPath);
+      return paths.includes('publishedToStorefront');
+    });
+    assert.equal(hasPublishedToStorefront, false, 'No index should reference retired publishedToStorefront');
 
     // Verify section + isPublished + sortOrder index
     const hasSectionPublishedSort = packageIndexes.some((idx: any) => {
       const paths = idx.fields.map((f: any) => f.fieldPath);
-      return paths.includes('section') && paths.includes('isPublished') && paths.includes('sortOrder');
+      return paths.length === 3 && paths[0] === 'section' && paths[1] === 'isPublished' && paths[2] === 'sortOrder';
     });
     assert.ok(hasSectionPublishedSort, 'Must have index for section + isPublished + sortOrder');
 
-    // Verify section + publishedToStorefront index
-    const hasSectionStorefrontSort = packageIndexes.some((idx: any) => {
+    // Verify section + sortOrder index
+    const hasSectionSort = packageIndexes.some((idx: any) => {
       const paths = idx.fields.map((f: any) => f.fieldPath);
-      return paths.includes('section') && paths.includes('publishedToStorefront') && paths.includes('sortOrder');
+      return paths.length === 2 && paths[0] === 'section' && paths[1] === 'sortOrder';
     });
-    assert.ok(hasSectionStorefrontSort, 'Must have composite index for section + publishedToStorefront + sortOrder');
+    assert.ok(hasSectionSort, 'Must have index for section + sortOrder');
 
-    // Verify campaigns priority index
-    const hasCampaignPriority = campaignIndexes.some((idx: any) => {
+    // Verify isPublished + sortOrder index
+    const hasPublishedSort = packageIndexes.some((idx: any) => {
       const paths = idx.fields.map((f: any) => f.fieldPath);
-      return paths.includes('isActive') && paths.includes('priority');
+      return paths.length === 2 && paths[0] === 'isPublished' && paths[1] === 'sortOrder';
     });
-    assert.ok(hasCampaignPriority, 'Must have index for isActive + priority in campaigns');
+    assert.ok(hasPublishedSort, 'Must have index for isPublished + sortOrder');
+
+    // Verify section + status + sortOrder index
+    const hasSectionStatusSort = packageIndexes.some((idx: any) => {
+      const paths = idx.fields.map((f: any) => f.fieldPath);
+      return paths.length === 3 && paths[0] === 'section' && paths[1] === 'status' && paths[2] === 'sortOrder';
+    });
+    assert.ok(hasSectionStatusSort, 'Must have index for section + status + sortOrder');
+
+    // Verify section + updatedAt index
+    const hasSectionUpdatedAt = packageIndexes.some((idx: any) => {
+      const paths = idx.fields.map((f: any) => f.fieldPath);
+      return paths.length === 2 && paths[0] === 'section' && paths[1] === 'updatedAt';
+    });
+    assert.ok(hasSectionUpdatedAt, 'Must have index for section + updatedAt');
+
+    // Verify status + updatedAt index
+    const hasStatusUpdatedAt = packageIndexes.some((idx: any) => {
+      const paths = idx.fields.map((f: any) => f.fieldPath);
+      return paths.length === 2 && paths[0] === 'status' && paths[1] === 'updatedAt';
+    });
+    assert.ok(hasStatusUpdatedAt, 'Must have index for status + updatedAt');
   });
 
-  it('verifies firestore.rules replaces open read/write with granular security rules', () => {
+  it('verifies firestore.rules source-contract: strictly forbids write on miners, requires explicit read/create/update and delete:false', () => {
     const rulesPath = resolve(process.cwd(), 'firestore.rules');
     const rulesContent = readFileSync(rulesPath, 'utf-8');
 
-    // 1. Must NOT contain open read/write for administrative or packages collection
+    // 1. Isolate the match block for /miners/{uid}/miner/{minerId}
+    const minerMatchRegex = /match\s+\/miners\/\{uid\}\/miner\/\{minerId\}\s*\{([^}]+)\}/s;
+    const minerMatch = rulesContent.match(minerMatchRegex);
+    assert.ok(minerMatch, 'Must find match block for /miners/{uid}/miner/{minerId}');
+    const minerBlockBody = minerMatch[1];
+
+    // Source-contract check: MUST NOT contain allow write (which inadvertently permits delete in Firestore rules)
     assert.equal(
-      rulesContent.includes('match /commercial_packages/{packageId} {\n      allow read, write: if true;'),
+      /allow\s+write\b/.test(minerBlockBody),
       false,
-      'commercial_packages must not have allow read, write: if true'
+      'SECURITY BUG FIX: /miners/{uid}/miner/{minerId} must NEVER contain "allow write", as write grants delete!'
     );
-    assert.equal(
-      rulesContent.includes('match /admin_users/{userId} {\n      allow read, write: if true;'),
-      false,
-      'admin_users must not have allow read, write: if true'
+
+    // Must explicitly declare read, create, update
+    assert.ok(
+      /allow\s+read:\s*if\s+isOwner\(uid\)\s*\|\|\s*isAdmin\(\);/.test(minerBlockBody),
+      'Must have explicit allow read'
+    );
+    assert.ok(
+      /allow\s+create:\s*if\s+isOwner\(uid\)\s*\|\|\s*isAdmin\(\);/.test(minerBlockBody),
+      'Must have explicit allow create'
+    );
+    assert.ok(
+      /allow\s+update:\s*if\s+isOwner\(uid\)\s*\|\|\s*isAdmin\(\);/.test(minerBlockBody),
+      'Must have explicit allow update'
+    );
+
+    // Must explicitly forbid delete
+    assert.ok(
+      /allow\s+delete:\s*if\s+false;/.test(minerBlockBody),
+      'Must have explicit allow delete: if false;'
     );
 
     // 2. Commercial packages: public read only if isPublished == true, write requires admin, delete is false
-    assert.ok(rulesContent.includes('match /commercial_packages/{packageId}'));
-    assert.ok(rulesContent.includes('resource.data.isPublished == true'));
-    assert.ok(rulesContent.includes('isAdmin()'));
-    assert.ok(rulesContent.includes('allow delete: if false;'));
+    const packageMatchRegex = /match\s+\/commercial_packages\/\{packageId\}\s*\{([^}]+)\}/s;
+    const packageMatch = rulesContent.match(packageMatchRegex);
+    assert.ok(packageMatch, 'Must find match block for /commercial_packages/{packageId}');
+    const packageBlockBody = packageMatch[1];
 
-    // 3. Campaigns: public read only if isActive == true, write requires admin, delete is false
-    assert.ok(rulesContent.includes('match /campaigns/{campaignId}'));
-    assert.ok(rulesContent.includes('resource.data.isActive == true'));
+    assert.ok(packageBlockBody.includes('resource.data.isPublished == true'));
+    assert.equal(packageBlockBody.includes('publishedToStorefront'), false, 'Must not reference retired publishedToStorefront');
+    assert.ok(/allow\s+create,\s*update:\s*if\s+isAdmin\(\);/.test(packageBlockBody));
+    assert.ok(/allow\s+delete:\s*if\s+false;/.test(packageBlockBody));
 
-    // 4. Miners instance: delete prohibited
-    assert.ok(rulesContent.includes('match /miners/{uid}/miner/{minerId}'));
-    assert.ok(rulesContent.includes('allow delete: if false;'));
+    // 3. Campaigns collection must NOT exist in firestore.rules (OUT OF SCOPE, SCRUM-213)
+    assert.equal(
+      rulesContent.includes('/campaigns'),
+      false,
+      'Campaigns collection rule must NOT exist in firestore.rules for SCRUM-210'
+    );
 
-    // 5. Admin contracts: client buyer can create contract on purchase, delete is false
-    assert.ok(rulesContent.includes('match /admin_contracts/{contractId}'));
-    assert.ok(rulesContent.includes('allow create: if isAdmin() || (isAuthenticated() && request.resource.data.userId == request.auth.uid);'));
-    assert.ok(rulesContent.includes('allow update: if isAdmin();'));
-
-    // 6. Default deny at end
+    // 4. Default deny at end
     assert.ok(rulesContent.includes('match /{document=**} {\n      allow read, write: if false;'));
   });
 
@@ -492,7 +501,6 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
         pricePaidCents: 1899,
         pricePaidUsd: 18.99,
         currency: 'USD',
-        billing: 'one_time',
         cadence: 'one_time',
         durationDays: 365,
         variablePct: 0,
