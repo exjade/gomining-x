@@ -514,15 +514,19 @@ export class CommercialPackageService {
     // Persist to local cache AFTER validation passes
     localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
 
-    // Guard direct Firestore writes from Node backend
+    // Guard direct Firestore writes:
+    // - In Node backend: prohibited without emulator host
+    // - For canonical packages: client-side direct writes to Cloud Firestore are forbidden (must go through backend API)
     const isNode = typeof window === 'undefined';
     const nodeProcess = (globalThis as any).process;
     const emulatorHost = nodeProcess?.env?.FIRESTORE_EMULATOR_HOST;
 
     if (db && (!isNode || emulatorHost)) {
-      setDoc(doc(db, COMMERCIAL_PACKAGES_COLLECTION, saved.id), saved, { merge: true }).catch(err => {
-        console.error(`[CommercialPackageService] Error syncing package ${saved.id} to Firestore:`, err);
-      });
+      if (!saved.section || emulatorHost) {
+        setDoc(doc(db, COMMERCIAL_PACKAGES_COLLECTION, saved.id), saved, { merge: true }).catch(err => {
+          console.error(`[CommercialPackageService] Error syncing package ${saved.id} to Firestore:`, err);
+        });
+      }
     }
 
     // Asynchronously synchronize with Express API Server
@@ -578,8 +582,23 @@ export class CommercialPackageService {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
           return data.package;
         }
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        // If the backend was completely unreachable (NETWORK_ERROR or BACKEND_NOT_FOUND_OR_BLAZE_REQUIRED),
+        // allow fallback to local handling in offline / unit test environment
+        if (errJson?.error === 'NETWORK_ERROR' || errJson?.error === 'BACKEND_NOT_FOUND_OR_BLAZE_REQUIRED') {
+          console.warn('[CommercialPackageService] Backend unreachable, falling back to local storage:', errJson.message || errJson.error);
+        } else {
+          // Backend actively responded with an error (e.g. 401 Unauthorized, 400 Bad Request)
+          // Strictly reject: do NOT silently bypass backend authorization or persistence rules!
+          const errMsg = errJson?.error || errJson?.details || `Backend returned HTTP ${res.status}`;
+          throw new Error(`Canonical package mutation rejected by backend (${res.status}): ${errMsg}`);
+        }
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.message?.includes('Canonical package mutation rejected by backend') || err?.message?.includes('Unauthorized')) {
+        throw err;
+      }
       console.warn('[CommercialPackageService] Notice calling canonical /api/catalog/packages endpoint:', err);
     }
 

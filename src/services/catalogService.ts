@@ -39,6 +39,7 @@ export type AdminCatalogResult = AdminCatalogInventory;
  *    FIRESTORE_EMULATOR_HOST until an authorized backend Firestore mechanism is approved by PO.
  *    Per AGENTS.md, Firebase Admin SDK, service accounts, or custom credentials must NOT be invented.
  */
+export const CLOUD_ADMIN_READ = 'BLOCKED / NEEDS_PO_DECISION';
 export const CLOUD_ADMIN_READ_STATUS = 'BLOCKED / NEEDS_PO_DECISION';
 export const CLOUD_MUTATION_STATUS = 'BLOCKED / NEEDS_PO_DECISION';
 

@@ -18,6 +18,7 @@ import {
   MemoryCatalogStoreAdapter,
   VALID_SECTIONS,
   type CatalogSection,
+  CLOUD_ADMIN_READ,
   CLOUD_ADMIN_READ_STATUS,
   CLOUD_MUTATION_STATUS,
 } from '../../src/services/catalogService';
@@ -1281,6 +1282,7 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
   // =========================================================================
   describe('Iteration 3 Architectural Blockers & Cloud Classification', () => {
     it('verifies explicit cloud read and mutation status classifications (NEEDS_PO_DECISION)', () => {
+      assert.equal(CLOUD_ADMIN_READ, 'BLOCKED / NEEDS_PO_DECISION');
       assert.equal(CLOUD_ADMIN_READ_STATUS, 'BLOCKED / NEEDS_PO_DECISION');
       assert.equal(CLOUD_MUTATION_STATUS, 'BLOCKED / NEEDS_PO_DECISION');
     });
@@ -1356,6 +1358,62 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
       assert.equal(canonicalDraft.status, 'DRAFT', 'Canonical DRAFT must not be promoted to ACTIVE');
       assert.equal(canonicalDraft.isPublished, false, 'Canonical unpublished must not be promoted to true');
       assert.equal(canonicalDraft.version, 1);
+    });
+
+    it('verifies validatePackageMutation error message specifies VALID_STATUSES on create with invalid status', () => {
+      const res = CatalogService.validatePackageMutation(
+        {
+          name: 'Invalid Status Test',
+          powerTh: 100,
+          priceUsdt: 1000,
+          section: 'minerx',
+          status: 'PENDING' as any,
+          isPublished: true,
+        },
+        { isCreate: true }
+      );
+      assert.equal(res.valid, false);
+      assert.ok(
+        res.errors.some(e => e.includes('Invalid status: must be one of [ACTIVE, ARCHIVED, DRAFT]')),
+        `Expected error message with ACTIVE, ARCHIVED, DRAFT, got: ${res.errors.join('; ')}`
+      );
+    });
+
+    it('verifies saveCanonicalPackage strictly rejects on backend HTTP 401 without bypassing to localStorage', async () => {
+      const commercialService = CommercialPackageService.getInstance();
+      const originalFetch = globalThis.fetch;
+
+      // Mock backend returning 401 Unauthorized
+      globalThis.fetch = async () => {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized: valid authenticated session required for catalog mutations' }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } }
+        );
+      };
+
+      try {
+        const unauthPackageId = `pkg-unauth-test-${Date.now()}`;
+        await assert.rejects(
+          async () => {
+            await commercialService.saveCanonicalPackage({
+              id: unauthPackageId,
+              name: 'Unauthorized Canonical Package',
+              powerTh: 200,
+              priceUsdt: 2500,
+              section: 'minerx',
+              status: 'ACTIVE',
+              isPublished: true,
+            });
+          },
+          /Canonical package mutation rejected by backend \(401\)/
+        );
+
+        // Verify that rejected package was NOT persisted in localStorage
+        const stored = commercialService.getPackageById(unauthPackageId);
+        assert.equal(stored, undefined, 'Package rejected by backend must not be saved to localStorage');
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
     });
 
     it('verifies FirestoreCatalogStoreAdapter strictly enforces emulator guard for remote Node writes', async () => {
