@@ -425,7 +425,7 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
 
   it('verifies firestore.rules source-contract: strictly forbids write on miners, requires explicit read/create/update and delete:false', () => {
     const rulesPath = resolve(process.cwd(), 'firestore.rules');
-    const rulesContent = readFileSync(rulesPath, 'utf-8');
+    const rulesContent = readFileSync(rulesPath, 'utf-8').replace(/\r\n/g, '\n');
 
     // 1. Isolate the match block for /miners/{uid}/miner/{minerId}
     const minerMatchRegex = /match\s+\/miners\/\{uid\}\/miner\/\{minerId\}\s*\{([^}]+)\}/s;

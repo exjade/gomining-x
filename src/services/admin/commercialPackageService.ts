@@ -242,7 +242,9 @@ export class CommercialPackageService {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(remotePackages));
           return remotePackages;
         } else {
-          await this.seedInitialPackagesToFirestore();
+          // SCRUM-211: Silent auto-seed on empty read removed. A read NEVER triggers a write.
+          console.warn('[CommercialPackageService] Remote commercial_packages collection is empty; silent auto-seed is removed per SCRUM-211.');
+          return [];
         }
       } catch (err) {
         console.warn('[CommercialPackageService] Notice fetching from Firestore, checking Express API:', err);
@@ -288,24 +290,12 @@ export class CommercialPackageService {
   }
 
   /**
-   * Seeds INITIAL_PACKAGES into Cloud Firestore (/commercial_packages)
+   * @deprecated Neutralized per SCRUM-211. Silent/legacy writes with INITIAL_PACKAGES are forbidden.
+   * Seeding must only be performed via SafeSeedService / safeSeedPackages script with explicit --apply.
    */
   public async seedInitialPackagesToFirestore(): Promise<number> {
-    if (!db) return 0;
-    let count = 0;
-    for (const pkg of INITIAL_PACKAGES) {
-      try {
-        await setDoc(doc(db, COMMERCIAL_PACKAGES_COLLECTION, pkg.id), {
-          ...pkg,
-          isPublished: true,
-          seededAt: new Date().toISOString()
-        }, { merge: true });
-        count++;
-      } catch (e) {
-        console.warn(`[CommercialPackageService] Failed to seed package ${pkg.id}:`, e);
-      }
-    }
-    return count;
+    console.warn('[CommercialPackageService] seedInitialPackagesToFirestore is deprecated and neutralized per SCRUM-211. Seeding is only authorized via safeSeedPackages CLI with explicit --apply.');
+    return 0;
   }
 
   public savePackage(pkg: Omit<CommercialPackage, 'createdAt' | 'updatedAt' | 'version' | 'id'> & { id?: string }): CommercialPackage {

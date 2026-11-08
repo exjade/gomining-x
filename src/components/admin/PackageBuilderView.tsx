@@ -132,18 +132,8 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
   };
 
   const handleSeedDefaults = async () => {
-    setIsSyncing(true);
-    try {
-      const count = await packageService.seedInitialPackagesToFirestore();
-      const refreshed = await packageService.fetchFirestorePackages();
-      setPackages(refreshed);
-      setSyncFeedback(`${count} paquetes iniciales publicados en Cloud Firestore.`);
-    } catch {
-      setSyncFeedback('Error al sembrar paquetes.');
-    } finally {
-      setIsSyncing(false);
-      setTimeout(() => setSyncFeedback(null), 3500);
-    }
+    setSyncFeedback('Siembra legacy inhabilitada por seguridad (SCRUM-211). Use el script CLI seguro con --apply.');
+    setTimeout(() => setSyncFeedback(null), 4000);
   };
 
   const handleTogglePublish = (id: string) => {
@@ -289,14 +279,14 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
 
           <button
             onClick={handleSeedDefaults}
-            disabled={isSyncing}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl border text-xs font-mono font-bold transition-all active:scale-[0.97] cursor-pointer ${
-              isDarkTheme ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20' : 'bg-cyan-50 border-cyan-200 text-cyan-700 hover:bg-cyan-100'
+            disabled={true}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl border text-xs font-mono font-bold transition-all cursor-not-allowed opacity-50 ${
+              isDarkTheme ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400' : 'bg-cyan-50 border-cyan-200 text-cyan-700'
             }`}
-            title="Subir paquetes iniciales a Cloud Firestore si la colección está vacía"
+            title="Siembra legacy inhabilitada por seguridad (SCRUM-211). Use el script CLI seguro de siembra con --apply."
           >
             <UploadCloud className="h-3.5 w-3.5" />
-            <span>Sembrar Paquetes</span>
+            <span>Sembrar Paquetes (CLI)</span>
           </button>
 
           {onNavigateToEngine && (
