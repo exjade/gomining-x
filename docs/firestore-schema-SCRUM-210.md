@@ -40,6 +40,7 @@ Este documento define formalmente el contrato de datos en Cloud Firestore para e
 - `updatedAt` (string ISO): Marca temporal de última modificación.
 
 ### Campos Aditivos (SCRUM-205 / SCRUM-210)
+- `packageId` (string, opcional): Alias para `id` garantizando compatibilidad de referencias entre contratos.
 - `section` ('minerx' | 'preventa' | 'lanzamiento' | 'mensual'): Sección de la tienda donde se renderiza la oferta.
 - `packageType` ('fixed' | 'subscription' | 'custom'): Tipo de paquete.
 - `sortOrder` (number): Posición ordinal de ordenamiento visual dentro de la sección.
@@ -50,6 +51,7 @@ Este documento define formalmente el contrato de datos en Cloud Firestore para e
 - `pricePerThCents` (int, opcional): Precio por TH en centavos (utilizado en Lanzamiento).
 - `priceUsdtCents` (int, opcional): Precio en centavos de USDT si aplica paridad directa.
 - `billing` ('one_time' | 'monthly', opcional): Modalidad de facturación.
+- `cadence` ('one_time' | 'monthly' | string, opcional): Cadencia de cobro (sinónimo interoperable de `billing`).
 - `finalPriceUsdCents` (int, opcional): Precio calculado por el servidor aplicando descuentos vigentes. Si no hay descuento activo, equivale a `priceUsdCents`.
 - `currency` ('USDT' | 'USD', opcional): Divisa declarada.
 - `dailyBtcText` (string, opcional): Rendimiento diario en BTC como texto literal (ej. `'0.00000062'`) para evitar truncamiento de punto flotante.
@@ -216,7 +218,9 @@ service cloud.firestore {
 
     match /admin_contracts/{contractId} {
       allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
-      allow write: if isAdmin();
+      allow create: if isAdmin() || (isAuthenticated() && request.resource.data.userId == request.auth.uid);
+      allow update: if isAdmin();
+      allow delete: if false;
     }
 
     match /admin_audit_logs/{logId} {
@@ -251,6 +255,8 @@ service cloud.firestore {
 Se definieron los siguientes índices requeridos para las consultas de filtrado por sección, ordenamiento y vigencia:
 
 1. `commercial_packages`:
+   - `section` (ASC) + `isPublished` (ASC) + `publishedToStorefront` (ASC) + `sortOrder` (ASC): Consulta con doble validación de visibilidad de storefront.
+   - `section` (ASC) + `publishedToStorefront` (ASC) + `sortOrder` (ASC): Consulta filtrada por storefront directo.
    - `section` (ASC) + `isPublished` (ASC) + `sortOrder` (ASC): Consulta principal del Client Storefront.
    - `section` (ASC) + `sortOrder` (ASC): Consulta del panel de administración por pestaña.
    - `isPublished` (ASC) + `sortOrder` (ASC): Consulta global de catálogo publicado.

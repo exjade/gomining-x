@@ -90,6 +90,7 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
     const pkg = deserializeCommercialPackageDoc('preventa-01', rawDoc);
 
     assert.equal(pkg.id, 'preventa-01');
+    assert.equal(pkg.packageId, 'preventa-01');
     assert.equal(pkg.name, 'Minero Preventa 1.46 TH');
     assert.equal(pkg.displayName, '1.46 TH');
     assert.equal(pkg.section, 'preventa');
@@ -100,6 +101,8 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
     assert.equal(pkg.powerTh, 1.46);
     assert.equal(pkg.priceUsdCents, 1899);
     assert.equal(pkg.finalPriceUsdCents, 1899);
+    assert.equal(pkg.billing, 'one_time');
+    assert.equal(pkg.cadence, 'one_time');
     assert.equal(pkg.dailyBtcText, '0.00000062');
     assert.equal(pkg.roiPct, 52.5);
     assert.equal(pkg.limitedUnits, 30);
@@ -108,6 +111,34 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
     assert.equal(pkg.minerTemplateId, null);
     assert.deepEqual(pkg.campaignIds, ['camp-launch-2026']);
     assert.equal(pkg.maintenanceDiscountPct?.presale, 15);
+  });
+
+  it('verifies cadence and billing bidirectional fallback and packageId alias', () => {
+    // When only cadence is given
+    const withCadence = deserializeCommercialPackageDoc('pkg-sub-1', {
+      name: 'Plan Mensual Inicio',
+      powerTh: 3.2,
+      priceUsdt: 18.99,
+      cadence: 'monthly',
+    });
+    assert.equal(withCadence.cadence, 'monthly');
+    assert.equal(withCadence.billing, 'monthly');
+    assert.equal(withCadence.packageId, 'pkg-sub-1');
+
+    // When only billing is given
+    const withBilling = deserializeCommercialPackageDoc('pkg-one-1', {
+      name: 'Plan Un Solo Pago',
+      powerTh: 48,
+      priceUsdt: 561.99,
+      billing: 'one_time',
+    });
+    assert.equal(withBilling.billing, 'one_time');
+    assert.equal(withBilling.cadence, 'one_time');
+
+    // Snapshot retains cadence
+    const snapshot = createPurchaseSnapshot(withCadence);
+    assert.equal(snapshot.cadence, 'monthly');
+    assert.equal(snapshot.billing, 'monthly');
   });
 
   it('maintains backwards compatibility with legacy documents lacking additive fields', () => {
@@ -192,6 +223,44 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
       priceUsdt: 744.99,
     });
     assert.equal(invalidPower.valid, false);
+
+    // Units validation: soldUnits cannot exceed limitedUnits
+    const oversold = validatePackageSchema({
+      name: 'Oversold Package',
+      powerTh: 10,
+      priceUsdCents: 5000,
+      limitedUnits: 30,
+      soldUnits: 31,
+    });
+    assert.equal(oversold.valid, false);
+    assert.ok(oversold.errors.some(e => e.includes('soldUnits cannot exceed limitedUnits')));
+
+    // Units validation: negative units rejected
+    const negativeUnits = validatePackageSchema({
+      name: 'Negative Units',
+      powerTh: 10,
+      priceUsdCents: 5000,
+      availableUnits: -5,
+    });
+    assert.equal(negativeUnits.valid, false);
+    assert.ok(negativeUnits.errors.some(e => e.includes('availableUnits cannot be negative')));
+
+    // Valid package with priceUsdCents only
+    const validCentsOnly = validatePackageSchema({
+      name: 'Cents Only',
+      powerTh: 20,
+      priceUsdCents: 1899,
+      limitedUnits: 30,
+      soldUnits: 5,
+    });
+    assert.equal(validCentsOnly.valid, true);
+
+    // Invalid when both prices missing
+    const noPrice = validatePackageSchema({
+      name: 'No Price',
+      powerTh: 20,
+    });
+    assert.equal(noPrice.valid, false);
   });
 
   it('guarantees purchase traceability: snapshot decouples purchased instance from future catalog edits', () => {
@@ -347,6 +416,13 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
     });
     assert.ok(hasSectionPublishedSort, 'Must have index for section + isPublished + sortOrder');
 
+    // Verify section + publishedToStorefront index
+    const hasSectionStorefrontSort = packageIndexes.some((idx: any) => {
+      const paths = idx.fields.map((f: any) => f.fieldPath);
+      return paths.includes('section') && paths.includes('publishedToStorefront') && paths.includes('sortOrder');
+    });
+    assert.ok(hasSectionStorefrontSort, 'Must have composite index for section + publishedToStorefront + sortOrder');
+
     // Verify campaigns priority index
     const hasCampaignPriority = campaignIndexes.some((idx: any) => {
       const paths = idx.fields.map((f: any) => f.fieldPath);
@@ -383,8 +459,55 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
 
     // 4. Miners instance: delete prohibited
     assert.ok(rulesContent.includes('match /miners/{uid}/miner/{minerId}'));
+    assert.ok(rulesContent.includes('allow delete: if false;'));
 
-    // 5. Default deny at end
+    // 5. Admin contracts: client buyer can create contract on purchase, delete is false
+    assert.ok(rulesContent.includes('match /admin_contracts/{contractId}'));
+    assert.ok(rulesContent.includes('allow create: if isAdmin() || (isAuthenticated() && request.resource.data.userId == request.auth.uid);'));
+    assert.ok(rulesContent.includes('allow update: if isAdmin();'));
+
+    // 6. Default deny at end
     assert.ok(rulesContent.includes('match /{document=**} {\n      allow read, write: if false;'));
+  });
+
+  it('verifies PurchasedMinerInstance supports client StoredMiner interoperability', () => {
+    const purchasedInstance: PurchasedMinerInstance = {
+      minerId: 'miner-98765',
+      id: 'miner-98765',
+      uid: 'user-abc',
+      packageId: 'preventa-01',
+      name: 'Minero Preventa 1.46 TH',
+      powerTh: 1.46,
+      price: 18.99,
+      currency: 'USD',
+      status: 'active',
+      network: 'USDT',
+      ownerWallet: '0x1234567890abcdef',
+      packageSnapshot: {
+        packageId: 'preventa-01',
+        packageName: 'Minero Preventa 1.46 TH',
+        section: 'preventa',
+        packageType: 'fixed',
+        powerTh: 1.46,
+        pricePaidCents: 1899,
+        pricePaidUsd: 18.99,
+        currency: 'USD',
+        billing: 'one_time',
+        cadence: 'one_time',
+        durationDays: 365,
+        variablePct: 0,
+        commissionPct: 2,
+        packageVersion: 1,
+        purchasedAt: '2026-11-07T00:00:00Z',
+      },
+      createdAt: '2026-11-07T00:00:00Z',
+    };
+
+    assert.equal(purchasedInstance.minerId, 'miner-98765');
+    assert.equal(purchasedInstance.id, 'miner-98765');
+    assert.equal(purchasedInstance.packageId, 'preventa-01');
+    assert.notEqual(purchasedInstance.minerId, purchasedInstance.packageId);
+    assert.equal(purchasedInstance.packageSnapshot.pricePaidCents, 1899);
+    assert.equal(purchasedInstance.packageSnapshot.cadence, 'one_time');
   });
 });

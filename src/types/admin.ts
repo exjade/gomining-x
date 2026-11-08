@@ -194,6 +194,7 @@ export interface CommercialPackage {
   updatedAt: string;
 
   // Additive fields for dynamic storefront sections & catalog (SCRUM-205 / SCRUM-210)
+  packageId?: string;
   section?: 'minerx' | 'preventa' | 'lanzamiento' | 'mensual';
   packageType?: 'fixed' | 'subscription' | 'custom';
   sortOrder?: number;
@@ -204,6 +205,7 @@ export interface CommercialPackage {
   pricePerThCents?: number;
   priceUsdtCents?: number;
   billing?: 'one_time' | 'monthly';
+  cadence?: 'one_time' | 'monthly' | string;
   finalPriceUsdCents?: number;
   currency?: 'USDT' | 'USD';
   dailyBtcText?: string;
@@ -285,6 +287,7 @@ export interface PurchasedPackageSnapshot {
   pricePaidUsdt?: number;
   currency: string;
   billing?: 'one_time' | 'monthly';
+  cadence?: 'one_time' | 'monthly' | string;
   durationDays: number;
   variablePct: number;
   commissionPct: number;
@@ -303,9 +306,18 @@ export interface PurchasedPackageSnapshot {
 // Client Miner Instance with Purchase Snapshot
 export interface PurchasedMinerInstance {
   minerId: string;
+  id?: string;
   uid: string;
   packageId: string;
   packageSnapshot: PurchasedPackageSnapshot;
+  name?: string;
+  powerTh?: number;
+  price?: number;
+  currency?: string;
+  status?: string;
+  txHash?: string;
+  network?: string;
+  ownerWallet?: string;
   createdAt: string;
 }
 

@@ -34,6 +34,7 @@ export function deserializeCommercialPackageDoc(id: string, data: any): Commerci
     maxPurchasesPerUser: data.maxPurchasesPerUser,
 
     // Additive fields
+    packageId: id,
     section: data.section,
     packageType: data.packageType,
     sortOrder: typeof data.sortOrder === 'number' ? data.sortOrder : undefined,
@@ -43,7 +44,8 @@ export function deserializeCommercialPackageDoc(id: string, data: any): Commerci
     priceUsdCents,
     pricePerThCents: typeof data.pricePerThCents === 'number' ? data.pricePerThCents : undefined,
     priceUsdtCents: typeof data.priceUsdtCents === 'number' ? data.priceUsdtCents : undefined,
-    billing: data.billing,
+    billing: data.billing ?? data.cadence,
+    cadence: data.cadence ?? data.billing,
     finalPriceUsdCents: typeof data.finalPriceUsdCents === 'number' ? data.finalPriceUsdCents : undefined,
     currency: data.currency,
     dailyBtcText: data.dailyBtcText,
@@ -89,6 +91,7 @@ export function createPurchaseSnapshot(
     pricePaidUsdt: pkg.priceUsdt,
     currency: pkg.currency || 'USD',
     billing: pkg.billing,
+    cadence: pkg.cadence ?? pkg.billing,
     durationDays: pkg.durationDays,
     variablePct: pkg.variablePct,
     commissionPct: pkg.commissionPct,
@@ -107,9 +110,18 @@ export function validatePackageSchema(pkg: Partial<CommercialPackage>): { valid:
   const errors: string[] = [];
   if (!pkg.name || !pkg.name.trim()) errors.push('Package name is required');
   if (typeof pkg.powerTh !== 'number' || pkg.powerTh <= 0) errors.push('powerTh must be a positive number');
-  if (typeof pkg.priceUsdt !== 'number' || pkg.priceUsdt <= 0) errors.push('priceUsdt must be positive');
+  
+  const hasValidPrice = (typeof pkg.priceUsdt === 'number' && pkg.priceUsdt > 0) || (typeof pkg.priceUsdCents === 'number' && pkg.priceUsdCents > 0);
+  if (!hasValidPrice) errors.push('A positive price (priceUsdt or priceUsdCents) is required');
+
   if (pkg.priceUsdCents !== undefined && (!Number.isInteger(pkg.priceUsdCents) || pkg.priceUsdCents <= 0)) {
     errors.push('priceUsdCents must be a positive integer representing cents');
+  }
+  if (typeof pkg.limitedUnits === 'number' && pkg.limitedUnits < 0) errors.push('limitedUnits cannot be negative');
+  if (typeof pkg.availableUnits === 'number' && pkg.availableUnits < 0) errors.push('availableUnits cannot be negative');
+  if (typeof pkg.soldUnits === 'number' && pkg.soldUnits < 0) errors.push('soldUnits cannot be negative');
+  if (typeof pkg.limitedUnits === 'number' && typeof pkg.soldUnits === 'number' && pkg.soldUnits > pkg.limitedUnits) {
+    errors.push('soldUnits cannot exceed limitedUnits');
   }
   if (pkg.section && !['minerx', 'preventa', 'lanzamiento', 'mensual'].includes(pkg.section)) {
     errors.push(`Invalid section: ${pkg.section}`);
@@ -320,6 +332,11 @@ export class CommercialPackageService {
       saved = {
         ...existing,
         ...pkg,
+        packageId: pkg.id,
+        billing: pkg.billing ?? pkg.cadence ?? existing?.billing,
+        cadence: pkg.cadence ?? pkg.billing ?? existing?.cadence,
+        priceUsdCents: pkg.priceUsdCents ?? (typeof pkg.priceUsdt === 'number' ? Math.round(pkg.priceUsdt * 100) : existing?.priceUsdCents),
+        finalPriceUsdCents: pkg.finalPriceUsdCents ?? pkg.priceUsdCents ?? existing?.finalPriceUsdCents,
         isPublished: pkg.isPublished ?? (pkg.status ? pkg.status === 'ACTIVE' : (existing?.status === 'ACTIVE')),
         version: newVersion,
         updatedAt: now
@@ -331,9 +348,16 @@ export class CommercialPackageService {
       }
       this.audit.logAction('admin_sys', 'admin@minerx.cloud', 'SUPER_ADMIN', 'COMMERCIAL', 'UPDATE_PACKAGE_VERSION', saved.id, { version: newVersion, pkg: saved });
     } else {
+      const newId = `pkg-${Date.now()}`;
+      const priceUsdCents = pkg.priceUsdCents ?? (typeof pkg.priceUsdt === 'number' ? Math.round(pkg.priceUsdt * 100) : undefined);
       saved = {
         ...pkg,
-        id: `pkg-${Date.now()}`,
+        id: newId,
+        packageId: newId,
+        billing: pkg.billing ?? pkg.cadence,
+        cadence: pkg.cadence ?? pkg.billing,
+        priceUsdCents,
+        finalPriceUsdCents: pkg.finalPriceUsdCents ?? priceUsdCents,
         status: pkg.status || 'ACTIVE',
         isPublished: pkg.isPublished ?? true,
         version: 1,
