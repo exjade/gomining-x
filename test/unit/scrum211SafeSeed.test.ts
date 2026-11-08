@@ -59,7 +59,7 @@ class MockPackageStoreAdapter implements PackageStoreAdapter {
   }
 }
 
-describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Iteration 2)', () => {
+describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Iteration 3)', () => {
   const safeSeedService = SafeSeedService.getInstance();
   const packageService = CommercialPackageService.getInstance();
 
@@ -95,6 +95,14 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Itera
       assert.equal(jsonPkg.currency, tsPkg.currency);
       assert.equal(jsonPkg.description, tsPkg.description);
       assert.equal(jsonPkg.provenance, tsPkg.provenance);
+
+      // FINDING 2 (ITERATION 3): durationDays, variablePct, commissionPct are omitted in both JSON and TS catalog
+      assert.equal(jsonPkg.durationDays, undefined, `JSON package ${jsonPkg.id} must omit durationDays`);
+      assert.equal(tsPkg.durationDays, undefined, `TS package ${tsPkg.id} must omit durationDays`);
+      assert.equal(jsonPkg.variablePct, undefined, `JSON package ${jsonPkg.id} must omit variablePct`);
+      assert.equal(tsPkg.variablePct, undefined, `TS package ${tsPkg.id} must omit variablePct`);
+      assert.equal(jsonPkg.commissionPct, undefined, `JSON package ${jsonPkg.id} must omit commissionPct`);
+      assert.equal(tsPkg.commissionPct, undefined, `TS package ${tsPkg.id} must omit commissionPct`);
     }
 
     // Parity for custom tiers
@@ -452,6 +460,31 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Itera
       assert.equal(docData.publishedToStorefront, undefined);
       assert.equal(docData.campaignIds, undefined);
       assert.equal(docData.discount, undefined);
+
+      // FINDING 1 (ITERATION 3): description is omitted when null/empty; NEVER materialized as "" in Firestore
+      assert.equal(
+        'description' in docData,
+        false,
+        `Document ${id} must NOT contain 'description' in docData when no authorized copy exists`
+      );
+      assert.notEqual(docData.description, '');
+
+      // FINDING 2 (ITERATION 3): No invented business defaults (variablePct, commissionPct, durationDays)
+      assert.equal(
+        'variablePct' in docData,
+        false,
+        `Document ${id} must NOT contain 'variablePct' in Firestore writes without authorized source evidence`
+      );
+      assert.equal(
+        'commissionPct' in docData,
+        false,
+        `Document ${id} must NOT contain 'commissionPct' in Firestore writes without authorized source evidence`
+      );
+      assert.equal(
+        'durationDays' in docData,
+        false,
+        `Document ${id} must NOT contain 'durationDays' in Firestore writes without authorized source evidence`
+      );
     }
   });
 
@@ -617,5 +650,186 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Itera
       if (originalEmulator) process.env.FIRESTORE_EMULATOR_HOST = originalEmulator;
       else delete process.env.FIRESTORE_EMULATOR_HOST;
     }
+  });
+
+  // 16. FINDING 1 (ITERATION 3): NO MATERIALIZAR description VACÍA
+  it('guarantees description is completely omitted when null/empty and NEVER materialized as empty string ""', async () => {
+    const store = new MockPackageStoreAdapter();
+
+    // 1. Verify against the official 30-package catalog
+    await safeSeedService.executeSafeSeed({
+      apply: true,
+      dryRun: false,
+      targetCatalog: TARGET_PACKAGES_MANIFEST,
+      storeAdapter: store,
+    });
+
+    assert.equal(store.docs.size, 30);
+    for (const [id, docData] of store.docs.entries()) {
+      // Mandated check by PO: !("description" in docData)
+      assert.equal(
+        !('description' in docData),
+        true,
+        `Document ${id} must satisfy !("description" in docData)`
+      );
+      assert.equal(docData.description, undefined);
+      assert.notEqual(docData.description, '');
+    }
+
+    // 2. Custom test: verify that description: "" or description: null does NOT write description
+    store.reset();
+    const customTestCatalog: any[] = [
+      {
+        id: 'test-null-desc',
+        packageId: 'test-null-desc',
+        name: 'Test Null Description',
+        powerTh: 10,
+        priceUsdt: 100,
+        section: 'minerx',
+        packageType: 'fixed',
+        sortOrder: 1,
+        description: null,
+      },
+      {
+        id: 'test-empty-desc',
+        packageId: 'test-empty-desc',
+        name: 'Test Empty Description',
+        powerTh: 10,
+        priceUsdt: 100,
+        section: 'minerx',
+        packageType: 'fixed',
+        sortOrder: 2,
+        description: '',
+      },
+      {
+        id: 'test-whitespace-desc',
+        packageId: 'test-whitespace-desc',
+        name: 'Test Whitespace Description',
+        powerTh: 10,
+        priceUsdt: 100,
+        section: 'minerx',
+        packageType: 'fixed',
+        sortOrder: 3,
+        description: '   ',
+      },
+      {
+        id: 'test-authorized-desc',
+        packageId: 'test-authorized-desc',
+        name: 'Test Authorized Description',
+        powerTh: 10,
+        priceUsdt: 100,
+        section: 'minerx',
+        packageType: 'fixed',
+        sortOrder: 4,
+        description: 'Contrato verificado con respaldo oficial',
+      },
+    ];
+
+    await safeSeedService.executeSafeSeed({
+      apply: true,
+      dryRun: false,
+      targetCatalog: customTestCatalog,
+      storeAdapter: store,
+    });
+
+    const docNull = store.docs.get('test-null-desc');
+    assert.equal('description' in docNull, false, 'null description must be omitted');
+
+    const docEmpty = store.docs.get('test-empty-desc');
+    assert.equal('description' in docEmpty, false, 'empty string description must be omitted');
+
+    const docWhitespace = store.docs.get('test-whitespace-desc');
+    assert.equal('description' in docWhitespace, false, 'whitespace-only description must be omitted');
+
+    const docAuth = store.docs.get('test-authorized-desc');
+    assert.equal('description' in docAuth, true, 'authorized description must be included');
+    assert.equal(docAuth.description, 'Contrato verificado con respaldo oficial');
+  });
+
+  // 17. FINDING 2 (ITERATION 3): NO INVENTAR VALORES DE NEGOCIO (variablePct, commissionPct, durationDays)
+  it('guarantees variablePct, commissionPct, and durationDays are strictly omitted without authorized evidence', async () => {
+    // 1. Manifest Parity: zero packages have invented business defaults
+    for (const pkg of TARGET_PACKAGES_MANIFEST) {
+      assert.equal(pkg.variablePct, undefined, `Package ${pkg.id} must NOT have variablePct`);
+      assert.equal(pkg.commissionPct, undefined, `Package ${pkg.id} must NOT have commissionPct`);
+      assert.equal(pkg.durationDays, undefined, `Package ${pkg.id} must NOT have durationDays`);
+    }
+
+    // 2. Execution Parity: Firestore documents do NOT contain variablePct, commissionPct, or durationDays
+    const store = new MockPackageStoreAdapter();
+    await safeSeedService.executeSafeSeed({
+      apply: true,
+      dryRun: false,
+      targetCatalog: TARGET_PACKAGES_MANIFEST,
+      storeAdapter: store,
+    });
+
+    assert.equal(store.docs.size, 30);
+    for (const [id, docData] of store.docs.entries()) {
+      assert.equal(
+        !('variablePct' in docData),
+        true,
+        `Document ${id} must satisfy !("variablePct" in docData)`
+      );
+      assert.equal(
+        !('commissionPct' in docData),
+        true,
+        `Document ${id} must satisfy !("commissionPct" in docData)`
+      );
+      assert.equal(
+        !('durationDays' in docData),
+        true,
+        `Document ${id} must satisfy !("durationDays" in docData)`
+      );
+      assert.notEqual(docData.variablePct, 0);
+      assert.notEqual(docData.commissionPct, 2);
+      assert.notEqual(docData.durationDays, 365);
+      assert.notEqual(docData.durationDays, 30);
+    }
+
+    // 3. Selective inclusion: only explicit numbers are written
+    store.reset();
+    const selectiveCatalog: any[] = [
+      {
+        id: 'test-no-business-vals',
+        packageId: 'test-no-business-vals',
+        name: 'Test No Business Vals',
+        powerTh: 10,
+        priceUsdt: 100,
+        section: 'minerx',
+        packageType: 'fixed',
+        sortOrder: 1,
+      },
+      {
+        id: 'test-authorized-business-vals',
+        packageId: 'test-authorized-business-vals',
+        name: 'Test Authorized Business Vals',
+        powerTh: 10,
+        priceUsdt: 100,
+        section: 'minerx',
+        packageType: 'fixed',
+        sortOrder: 2,
+        durationDays: 180,
+        variablePct: 3.5,
+        commissionPct: 1.0,
+      },
+    ];
+
+    await safeSeedService.executeSafeSeed({
+      apply: true,
+      dryRun: false,
+      targetCatalog: selectiveCatalog,
+      storeAdapter: store,
+    });
+
+    const docNoVals = store.docs.get('test-no-business-vals');
+    assert.equal('variablePct' in docNoVals, false);
+    assert.equal('commissionPct' in docNoVals, false);
+    assert.equal('durationDays' in docNoVals, false);
+
+    const docWithVals = store.docs.get('test-authorized-business-vals');
+    assert.equal(docWithVals.durationDays, 180);
+    assert.equal(docWithVals.variablePct, 3.5);
+    assert.equal(docWithVals.commissionPct, 1.0);
   });
 });

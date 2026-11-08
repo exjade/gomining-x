@@ -182,10 +182,10 @@ export interface CommercialPackage {
   name: string;
   powerTh: number;
   priceUsdt: number;
-  durationDays: number;
+  durationDays?: number;
   status: 'ACTIVE' | 'ARCHIVED' | 'DRAFT';
-  variablePct: number;
-  commissionPct: number;
+  variablePct?: number;
+  commissionPct?: number;
   version: number;
   maxPurchasesPerUser?: number;
   description?: string | null;
@@ -226,9 +226,9 @@ export interface PurchasedPackageSnapshot {
   pricePaidUsdt?: number;
   currency: string;
   cadence?: 'one_time' | 'monthly' | string;
-  durationDays: number;
-  variablePct: number;
-  commissionPct: number;
+  durationDays?: number;
+  variablePct?: number;
+  commissionPct?: number;
   dailyBtcText?: string;
   roiPct?: number;
   packageVersion: number;

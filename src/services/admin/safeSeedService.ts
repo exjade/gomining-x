@@ -243,19 +243,33 @@ export class SafeSeedService {
           priceUsdt: pkg.priceUsdt,
           currency: pkg.currency || 'USD',
           cadence: pkg.cadence,
-          durationDays: pkg.durationDays,
           status: 'ACTIVE',
           isPublished: true,
           version: 1,
-          variablePct: pkg.variablePct ?? 0,
-          commissionPct: pkg.commissionPct ?? 2,
           frontendKey: pkg.frontendKey,
           source: 'frontend-seed',
-          description: pkg.description || '',
           seededAt: nowIso,
           createdAt: pkg.createdAt || nowIso,
           updatedAt: pkg.updatedAt || nowIso,
         };
+
+        // FINDING 1: Do NOT materialize empty description string ("").
+        // Only include description when a non-empty string exists backed by an authorized source.
+        if (typeof pkg.description === 'string' && pkg.description.trim().length > 0) {
+          docPayload.description = pkg.description.trim();
+        }
+
+        // FINDING 2: Do NOT materialize invented business defaults (durationDays, variablePct, commissionPct).
+        // Only include them if an exact value is backed by an authorized source for that package.
+        if (typeof pkg.durationDays === 'number') {
+          docPayload.durationDays = pkg.durationDays;
+        }
+        if (typeof pkg.variablePct === 'number') {
+          docPayload.variablePct = pkg.variablePct;
+        }
+        if (typeof pkg.commissionPct === 'number') {
+          docPayload.commissionPct = pkg.commissionPct;
+        }
 
         if (pkg.dailyBtcText !== undefined) docPayload.dailyBtcText = pkg.dailyBtcText;
         if (pkg.roiPct !== undefined) docPayload.roiPct = pkg.roiPct;

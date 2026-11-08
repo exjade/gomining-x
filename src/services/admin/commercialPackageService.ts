@@ -24,13 +24,21 @@ export function deserializeCommercialPackageDoc(id: string, data: any): Commerci
     name: docData.name || 'Paquete Minero',
     powerTh: Number(docData.powerTh) || 0,
     priceUsdt,
-    durationDays: Number(docData.durationDays) || 365,
+    durationDays: docData.durationDays !== undefined && docData.durationDays !== null
+      ? Number(docData.durationDays)
+      : undefined,
     status,
     isPublished,
-    variablePct: Number(docData.variablePct) || 0,
-    commissionPct: Number(docData.commissionPct) || 2,
+    variablePct: docData.variablePct !== undefined && docData.variablePct !== null
+      ? Number(docData.variablePct)
+      : undefined,
+    commissionPct: docData.commissionPct !== undefined && docData.commissionPct !== null
+      ? Number(docData.commissionPct)
+      : undefined,
     version: Number(docData.version) || 1,
-    description: docData.description || '',
+    description: docData.description !== undefined && docData.description !== null && String(docData.description).trim().length > 0
+      ? String(docData.description).trim()
+      : undefined,
     maxPurchasesPerUser: docData.maxPurchasesPerUser,
 
     // Additive fields

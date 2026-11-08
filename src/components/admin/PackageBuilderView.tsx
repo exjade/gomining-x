@@ -180,9 +180,9 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
       name: pkg.name,
       powerTh: pkg.powerTh,
       priceUsdt: pkg.priceUsdt,
-      durationDays: pkg.durationDays,
-      variablePct: pkg.variablePct,
-      commissionPct: pkg.commissionPct,
+      durationDays: pkg.durationDays ?? 365,
+      variablePct: pkg.variablePct ?? 0.0,
+      commissionPct: pkg.commissionPct ?? 2.0,
       description: pkg.description || ''
     });
     setIsModalOpen(true);
@@ -190,8 +190,8 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
 
   const handleOpenSimulation = (pkg: CommercialPackage) => {
     setSimulationPkg(pkg);
-    setModalSimVarPct(pkg.variablePct);
-    setModalSimCommPct(pkg.commissionPct);
+    setModalSimVarPct(pkg.variablePct ?? 0);
+    setModalSimCommPct(pkg.commissionPct ?? 0);
     setSimHours(24);
   };
 
@@ -428,7 +428,9 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
             
             // Cálculo de rendimiento para cada paquete usando la tasa canónica
             const basePrl = pkg.powerTh * formBaseRate * 24;
-            const netDailyPrl = basePrl * (1 + pkg.variablePct / 100) * (1 - pkg.commissionPct / 100);
+            const varPct = pkg.variablePct ?? 0;
+            const comPct = pkg.commissionPct ?? 0;
+            const netDailyPrl = basePrl * (1 + varPct / 100) * (1 - comPct / 100);
             const netDailyUsd = netDailyPrl * effectivePrlPrice;
             const pkgAnnualRoi = pkg.priceUsdt > 0 ? (((netDailyUsd * 365) - pkg.priceUsdt) / pkg.priceUsdt) * 100 : 0;
 
@@ -487,7 +489,7 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
                     <div className="flex justify-between items-center">
                       <span className={isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}>Variable / Comisión:</span>
                       <span className="font-semibold text-purple-400">
-                        {pkg.variablePct >= 0 ? `+${pkg.variablePct}%` : `${pkg.variablePct}%`} var / -{pkg.commissionPct}% com
+                        {(pkg.variablePct ?? 0) >= 0 ? `+${pkg.variablePct ?? 0}%` : `${pkg.variablePct ?? 0}%`} var / -{pkg.commissionPct ?? 0}% com
                       </span>
                     </div>
                     <div className={`flex justify-between items-center pt-1 border-t ${isDarkTheme ? 'border-white/5' : 'border-slate-200'}`}>
