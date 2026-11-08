@@ -492,6 +492,8 @@ describe('SCRUM-217: PackageBuilder Canonical CRUD & Backend-First Integration T
       await assert.rejects(
         () => service.saveCanonicalPackage({
           name: 'Fail Network',
+          packageType: 'fixed',
+          sortOrder: 1,
           powerTh: 10,
           priceUsdt: 100,
           section: 'minerx',
@@ -506,6 +508,8 @@ describe('SCRUM-217: PackageBuilder Canonical CRUD & Backend-First Integration T
       await assert.rejects(
         () => service.saveCanonicalPackage({
           name: 'Fail 400',
+          packageType: 'fixed',
+          sortOrder: 1,
           powerTh: 10,
           priceUsdt: 100,
           section: 'minerx',
@@ -520,6 +524,8 @@ describe('SCRUM-217: PackageBuilder Canonical CRUD & Backend-First Integration T
       await assert.rejects(
         () => service.saveCanonicalPackage({
           name: 'Fail 401',
+          packageType: 'fixed',
+          sortOrder: 1,
           powerTh: 10,
           priceUsdt: 100,
           section: 'minerx',
@@ -544,6 +550,419 @@ describe('SCRUM-217: PackageBuilder Canonical CRUD & Backend-First Integration T
       );
 
       globalThis.fetch = originalFetch;
+    });
+  });
+
+  describe('4. Review Blocker Verification Suite (SCRUM-217 Iteration 2)', () => {
+    // BLOCKER 1: BACKEND CREATE DEBE EXIGIR packageType Y sortOrder
+    describe('Blocker 1: Backend & Service CREATE requires packageType and sortOrder', () => {
+      it('validatePackageMutation rejects CREATE when packageType is missing', () => {
+        const res = CatalogService.validatePackageMutation(
+          {
+            name: 'No PackageType Miner',
+            powerTh: 100,
+            priceUsdt: 1000,
+            section: 'minerx',
+            sortOrder: 1,
+            status: 'ACTIVE',
+            isPublished: true,
+          },
+          { isCreate: true }
+        );
+        assert.equal(res.valid, false);
+        assert.ok(res.errors.some(e => e.includes('packageType is required on package creation')));
+      });
+
+      it('validatePackageMutation rejects CREATE when packageType is invalid', () => {
+        const res = CatalogService.validatePackageMutation(
+          {
+            name: 'Invalid PackageType Miner',
+            powerTh: 100,
+            priceUsdt: 1000,
+            section: 'minerx',
+            packageType: 'invalid_type' as any,
+            sortOrder: 1,
+            status: 'ACTIVE',
+            isPublished: true,
+          },
+          { isCreate: true }
+        );
+        assert.equal(res.valid, false);
+        assert.ok(res.errors.some(e => e.includes('Invalid packageType')));
+      });
+
+      it('validatePackageMutation rejects CREATE when sortOrder is missing', () => {
+        const res = CatalogService.validatePackageMutation(
+          {
+            name: 'No SortOrder Miner',
+            powerTh: 100,
+            priceUsdt: 1000,
+            section: 'minerx',
+            packageType: 'fixed',
+            status: 'ACTIVE',
+            isPublished: true,
+          },
+          { isCreate: true }
+        );
+        assert.equal(res.valid, false);
+        assert.ok(res.errors.some(e => e.includes('sortOrder is required on package creation')));
+      });
+
+      it('validatePackageMutation rejects CREATE when sortOrder is negative or NaN', () => {
+        const negativeRes = CatalogService.validatePackageMutation(
+          {
+            name: 'Negative SortOrder Miner',
+            powerTh: 100,
+            priceUsdt: 1000,
+            section: 'minerx',
+            packageType: 'fixed',
+            sortOrder: -1,
+            status: 'ACTIVE',
+            isPublished: true,
+          },
+          { isCreate: true }
+        );
+        assert.equal(negativeRes.valid, false);
+        assert.ok(negativeRes.errors.some(e => e.includes('sortOrder must be a number >= 0')));
+
+        const nanRes = CatalogService.validatePackageMutation(
+          {
+            name: 'NaN SortOrder Miner',
+            powerTh: 100,
+            priceUsdt: 1000,
+            section: 'minerx',
+            packageType: 'fixed',
+            sortOrder: NaN,
+            status: 'ACTIVE',
+            isPublished: true,
+          },
+          { isCreate: true }
+        );
+        assert.equal(nanRes.valid, false);
+        assert.ok(nanRes.errors.some(e => e.includes('sortOrder must be a number >= 0')));
+      });
+
+      it('savePackage on UPDATE preserves existing packageType and sortOrder when omitted', async () => {
+        const { MemoryCatalogStoreAdapter } = await import('../../src/services/catalogService.js');
+        const memoryAdapter = new MemoryCatalogStoreAdapter([
+          {
+            id: 'pkg-exist-1',
+            packageId: 'pkg-exist-1',
+            name: 'Existing Miner',
+            powerTh: 100,
+            priceUsdt: 1000,
+            section: 'minerx',
+            packageType: 'subscription',
+            sortOrder: 4,
+            status: 'ACTIVE',
+            isPublished: true,
+            version: 1,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ]);
+        const catalogService = new CatalogService(memoryAdapter);
+
+        const updated = await catalogService.savePackage({
+          id: 'pkg-exist-1',
+          name: 'Existing Miner Updated',
+          powerTh: 120,
+          priceUsdt: 1200,
+          section: 'minerx',
+        });
+
+        assert.equal(updated.packageType, 'subscription');
+        assert.equal(updated.sortOrder, 4);
+        assert.equal(updated.version, 2);
+      });
+
+      it('savePackage on UPDATE validates packageType and sortOrder if provided', async () => {
+        const { MemoryCatalogStoreAdapter } = await import('../../src/services/catalogService.js');
+        const memoryAdapter = new MemoryCatalogStoreAdapter([
+          {
+            id: 'pkg-exist-2',
+            packageId: 'pkg-exist-2',
+            name: 'Existing Miner 2',
+            powerTh: 100,
+            priceUsdt: 1000,
+            section: 'minerx',
+            packageType: 'fixed',
+            sortOrder: 1,
+            status: 'ACTIVE',
+            isPublished: true,
+            version: 1,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ]);
+        const catalogService = new CatalogService(memoryAdapter);
+
+        await assert.rejects(
+          () => catalogService.savePackage({
+            id: 'pkg-exist-2',
+            name: 'Existing Miner 2 Bad Type',
+            powerTh: 100,
+            priceUsdt: 1000,
+            section: 'minerx',
+            packageType: 'bogus' as any,
+          }),
+          /Invalid packageType/
+        );
+
+        await assert.rejects(
+          () => catalogService.savePackage({
+            id: 'pkg-exist-2',
+            name: 'Existing Miner 2 Bad Order',
+            powerTh: 100,
+            priceUsdt: 1000,
+            section: 'minerx',
+            sortOrder: -5,
+          }),
+          /sortOrder must be a number >= 0/
+        );
+      });
+    });
+
+    // BLOCKER 2: EL FORMULARIO TODAVÍA INVENTA DATOS
+    describe('Blocker 2: Form does not inject invented defaults or auto-copy displayName', () => {
+      const packageBuilderSrc = fs.readFileSync(
+        path.resolve(WORKTREE_ROOT, 'src/components/admin/PackageBuilderView.tsx'),
+        'utf-8'
+      );
+
+      it('does NOT initialize sortOrder with "1" in CREATE state', () => {
+        assert.equal(
+          packageBuilderSrc.includes("sortOrder: '1'"),
+          false,
+          'PackageBuilder must NOT initialize sortOrder with "1"'
+        );
+      });
+
+      it('does NOT auto-copy name to displayName when displayName is empty', () => {
+        assert.equal(
+          packageBuilderSrc.includes('displayName || pkg.name'),
+          false,
+          'PackageBuilder handleOpenEdit must NOT copy pkg.name into displayName'
+        );
+        assert.equal(
+          packageBuilderSrc.includes('displayName.trim() || formData.name.trim()'),
+          false,
+          'PackageBuilder handleSave must NOT copy formData.name into displayName'
+        );
+      });
+
+      it('does NOT use fallbacks in handleOpenEdit (section, packageType, sortOrder, status, isPublished)', () => {
+        assert.equal(
+          packageBuilderSrc.includes("section || 'minerx'"),
+          false,
+          'handleOpenEdit must NOT fall back to "minerx"'
+        );
+        assert.equal(
+          packageBuilderSrc.includes("packageType || 'fixed'"),
+          false,
+          'handleOpenEdit must NOT fall back to "fixed"'
+        );
+        assert.equal(
+          packageBuilderSrc.includes("sortOrder ?? '1'"),
+          false,
+          'handleOpenEdit must NOT fall back to "1"'
+        );
+        assert.equal(
+          packageBuilderSrc.includes("status || 'ACTIVE'"),
+          false,
+          'handleOpenEdit must NOT fall back to "ACTIVE"'
+        );
+        assert.equal(
+          packageBuilderSrc.includes("isPublished ?? false"),
+          false,
+          'handleOpenEdit must NOT fall back to false'
+        );
+      });
+    });
+
+    // BLOCKER 3: ARCHIVED NUNCA PUEDE ESTAR PUBLICADO
+    describe('Blocker 3: ARCHIVED invariant isPublished=false strictly enforced in both layers', () => {
+      it('validatePackageMutation rejects CREATE when status=ARCHIVED and isPublished=true', () => {
+        const res = CatalogService.validatePackageMutation(
+          {
+            name: 'Archived Published Miner',
+            powerTh: 100,
+            priceUsdt: 1000,
+            section: 'minerx',
+            packageType: 'fixed',
+            sortOrder: 1,
+            status: 'ARCHIVED',
+            isPublished: true,
+          },
+          { isCreate: true }
+        );
+        assert.equal(res.valid, false);
+        assert.ok(res.errors.some(e => e.includes('An ARCHIVED package cannot be published')));
+      });
+
+      it('validatePackageMutation rejects UPDATE when status=ARCHIVED and isPublished=true', () => {
+        const res = CatalogService.validatePackageMutation(
+          {
+            id: 'pkg-arc-pub',
+            status: 'ARCHIVED',
+            isPublished: true,
+          },
+          { isUpdate: true }
+        );
+        assert.equal(res.valid, false);
+        assert.ok(res.errors.some(e => e.includes('An ARCHIVED package cannot be published')));
+      });
+
+      it('savePackage throws when trying to save status=ARCHIVED and isPublished=true', async () => {
+        const { MemoryCatalogStoreAdapter } = await import('../../src/services/catalogService.js');
+        const memoryAdapter = new MemoryCatalogStoreAdapter();
+        const catalogService = new CatalogService(memoryAdapter);
+
+        await assert.rejects(
+          () => catalogService.savePackage({
+            name: 'Archived Pub Attempt',
+            powerTh: 100,
+            priceUsdt: 1000,
+            section: 'minerx',
+            packageType: 'fixed',
+            sortOrder: 1,
+            status: 'ARCHIVED',
+            isPublished: true,
+          }),
+          /An ARCHIVED package cannot be published/
+        );
+      });
+
+      it('PackageBuilderView disables Publish button for ARCHIVED packages in UI and returns early in handleTogglePublish', () => {
+        const packageBuilderSrc = fs.readFileSync(
+          path.resolve(WORKTREE_ROOT, 'src/components/admin/PackageBuilderView.tsx'),
+          'utf-8'
+        );
+        assert.ok(
+          packageBuilderSrc.includes('disabled={isMutating || isArchived}'),
+          'Publish button must be disabled when isArchived is true'
+        );
+        assert.ok(
+          packageBuilderSrc.includes("if (pkg.isLegacy || pkg.status === 'ARCHIVED') return;"),
+          'handleTogglePublish must return early when status is ARCHIVED'
+        );
+      });
+    });
+
+    // BLOCKER 4: fetchAdminCatalog DEBE FALLAR CERRADO
+    describe('Blocker 4: fetchAdminCatalog fail-closed on corrupt or invalid HTTP 200 responses', () => {
+      it('throws when HTTP 200 returns HTML / invalid non-JSON body', async () => {
+        const service = CommercialPackageService.getInstance();
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async () => new Response('<html><body>502 Bad Gateway</body></html>', {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+
+        try {
+          await assert.rejects(
+            () => service.fetchAdminCatalog(),
+            /Admin catalog fetch rejected/
+          );
+        } finally {
+          globalThis.fetch = originalFetch;
+        }
+      });
+
+      it('throws when HTTP 200 returns malformed non-JSON string', async () => {
+        const service = CommercialPackageService.getInstance();
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async () => new Response('not a valid json {{{{', {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        try {
+          await assert.rejects(
+            () => service.fetchAdminCatalog(),
+            /invalid JSON response from backend/
+          );
+        } finally {
+          globalThis.fetch = originalFetch;
+        }
+      });
+
+      it('throws when HTTP 200 returns empty object {} without canonical or legacy', async () => {
+        const service = CommercialPackageService.getInstance();
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async () => new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        try {
+          await assert.rejects(
+            () => service.fetchAdminCatalog(),
+            /response must contain valid canonical and legacy arrays/
+          );
+        } finally {
+          globalThis.fetch = originalFetch;
+        }
+      });
+
+      it('throws when HTTP 200 returns canonical as non-array', async () => {
+        const service = CommercialPackageService.getInstance();
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async () => new Response(JSON.stringify({ canonical: 'not_an_array', legacy: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        try {
+          await assert.rejects(
+            () => service.fetchAdminCatalog(),
+            /response must contain valid canonical and legacy arrays/
+          );
+        } finally {
+          globalThis.fetch = originalFetch;
+        }
+      });
+
+      it('throws when HTTP 200 returns legacy as non-array', async () => {
+        const service = CommercialPackageService.getInstance();
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async () => new Response(JSON.stringify({ canonical: [], legacy: null }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        try {
+          await assert.rejects(
+            () => service.fetchAdminCatalog(),
+            /response must contain valid canonical and legacy arrays/
+          );
+        } finally {
+          globalThis.fetch = originalFetch;
+        }
+      });
+
+      it('does NOT update local cache when response fails closed', async () => {
+        const service = CommercialPackageService.getInstance();
+        const originalFetch = globalThis.fetch;
+
+        // Populate store with known data
+        localStorage.setItem('minerx_admin_commercial_packages_v2', JSON.stringify([{ id: 'pkg-safe', name: 'Safe' }]));
+
+        globalThis.fetch = async () => new Response(JSON.stringify({ error: 'Corrupt' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        try {
+          await assert.rejects(() => service.fetchAdminCatalog());
+          // Local storage must remain intact
+          const cached = JSON.parse(localStorage.getItem('minerx_admin_commercial_packages_v2') || '[]');
+          assert.equal(cached.length, 1);
+          assert.equal(cached[0].id, 'pkg-safe');
+        } finally {
+          globalThis.fetch = originalFetch;
+        }
+      });
     });
   });
 });

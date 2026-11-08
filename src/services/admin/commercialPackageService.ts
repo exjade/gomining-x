@@ -127,12 +127,32 @@ export function validatePackageSchema(
   if (p.section && !['minerx', 'preventa', 'lanzamiento', 'mensual'].includes(p.section)) {
     errors.push(`Invalid section: ${p.section}`);
   }
-  if (p.packageType && !['fixed', 'subscription', 'custom'].includes(p.packageType)) {
-    errors.push(`Invalid packageType: ${p.packageType}`);
-  }
 
-  // Canonical CREATE strictly requires explicit status and isPublished (no default assumptions or auto-publish)
+  // Canonical CREATE strictly requires packageType, sortOrder, status, and isPublished (SCRUM-217)
   if (options?.isCreate) {
+    if (p.section) {
+      if (!p.packageType) {
+        errors.push('packageType is required on package creation (must be one of [fixed, subscription, custom])');
+      } else if (!['fixed', 'subscription', 'custom'].includes(p.packageType)) {
+        errors.push(`Invalid packageType: ${p.packageType}`);
+      }
+
+      if (p.sortOrder === undefined || p.sortOrder === null) {
+        errors.push('sortOrder is required on package creation (must be a number >= 0)');
+      } else if (typeof p.sortOrder !== 'number' || isNaN(p.sortOrder) || p.sortOrder < 0) {
+        errors.push('sortOrder must be a number >= 0');
+      }
+    } else {
+      if (p.packageType && !['fixed', 'subscription', 'custom'].includes(p.packageType)) {
+        errors.push(`Invalid packageType: ${p.packageType}`);
+      }
+      if (p.sortOrder !== undefined && p.sortOrder !== null) {
+        if (typeof p.sortOrder !== 'number' || isNaN(p.sortOrder) || p.sortOrder < 0) {
+          errors.push('sortOrder must be a number >= 0');
+        }
+      }
+    }
+
     if (p.status === undefined || p.status === null) {
       errors.push('status is required on package creation (must be explicitly ACTIVE, DRAFT, or ARCHIVED)');
     } else if (!['ACTIVE', 'ARCHIVED', 'DRAFT'].includes(p.status)) {
@@ -143,12 +163,25 @@ export function validatePackageSchema(
       errors.push('isPublished is required on package creation (must be an explicit boolean true or false)');
     }
   } else {
+    if (p.packageType && !['fixed', 'subscription', 'custom'].includes(p.packageType)) {
+      errors.push(`Invalid packageType: ${p.packageType}`);
+    }
+    if (p.sortOrder !== undefined && p.sortOrder !== null) {
+      if (typeof p.sortOrder !== 'number' || isNaN(p.sortOrder) || p.sortOrder < 0) {
+        errors.push('sortOrder must be a number >= 0');
+      }
+    }
     if (p.status && !['ACTIVE', 'ARCHIVED', 'DRAFT'].includes(p.status)) {
       errors.push(`Invalid status: ${p.status}`);
     }
     if (p.isPublished !== undefined && typeof p.isPublished !== 'boolean') {
       errors.push('isPublished must be a boolean (true or false)');
     }
+  }
+
+  // Invariant: ARCHIVED can never be published (SCRUM-217 Blocker 3)
+  if (p.status === 'ARCHIVED' && p.isPublished === true) {
+    errors.push('An ARCHIVED package cannot be published (isPublished must be false when status is ARCHIVED)');
   }
 
   if (p.currency !== undefined && p.currency !== 'USD') {
@@ -574,11 +607,25 @@ export class CommercialPackageService {
       throw new Error(`Admin catalog fetch rejected by backend (${res.status}): ${msg}`);
     }
 
-    const data = await res.json().catch(() => ({ canonical: [], legacy: [] }));
-    const canonical: CommercialPackage[] = Array.isArray(data.canonical) ? data.canonical : [];
-    const legacy: CommercialPackage[] = Array.isArray(data.legacy) ? data.legacy : [];
+    let data: any;
+    try {
+      data = await res.json();
+    } catch (parseErr: any) {
+      throw new Error(`Admin catalog fetch rejected: invalid JSON response from backend (${parseErr?.message || parseErr})`);
+    }
 
-    // Cache the combined or canonical packages
+    if (!data || typeof data !== 'object') {
+      throw new Error('Admin catalog fetch rejected: response body is not a valid JSON object');
+    }
+
+    if (!Array.isArray(data.canonical) || !Array.isArray(data.legacy)) {
+      throw new Error('Admin catalog fetch rejected: response must contain valid canonical and legacy arrays');
+    }
+
+    const canonical: CommercialPackage[] = data.canonical;
+    const legacy: CommercialPackage[] = data.legacy;
+
+    // Cache the combined or canonical packages strictly after validated 2xx response
     const all = [...canonical, ...legacy];
     if (all.length > 0) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(all));

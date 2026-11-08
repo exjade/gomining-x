@@ -162,7 +162,7 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
   };
 
   const handleTogglePublish = async (pkg: CommercialPackage) => {
-    if (pkg.isLegacy) return;
+    if (pkg.isLegacy || pkg.status === 'ARCHIVED') return;
     setIsMutating(true);
     setCrudError(null);
     try {
@@ -226,7 +226,7 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
     packageType: '',
     powerTh: '',
     priceUsdt: '',
-    sortOrder: '1',
+    sortOrder: '',
     status: '',
     isPublished: null,
     cadence: '',
@@ -253,7 +253,7 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
       packageType: '',
       powerTh: '',
       priceUsdt: '',
-      sortOrder: '1',
+      sortOrder: '',
       status: '',
       isPublished: null,
       cadence: '',
@@ -278,14 +278,14 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
     setShowAdvancedFields(false);
     setFormData({
       name: pkg.name || '',
-      displayName: pkg.displayName || pkg.name || '',
-      section: pkg.section || 'minerx',
-      packageType: pkg.packageType || 'fixed',
-      powerTh: String(pkg.powerTh ?? ''),
-      priceUsdt: String(pkg.priceUsdt ?? ''),
-      sortOrder: String(pkg.sortOrder ?? '1'),
-      status: pkg.status || 'ACTIVE',
-      isPublished: pkg.isPublished ?? false,
+      displayName: pkg.displayName || '',
+      section: (pkg.section as CatalogSection) || '',
+      packageType: (pkg.packageType as any) || '',
+      powerTh: pkg.powerTh !== undefined && pkg.powerTh !== null ? String(pkg.powerTh) : '',
+      priceUsdt: pkg.priceUsdt !== undefined && pkg.priceUsdt !== null ? String(pkg.priceUsdt) : '',
+      sortOrder: pkg.sortOrder !== undefined && pkg.sortOrder !== null ? String(pkg.sortOrder) : '',
+      status: pkg.status || '',
+      isPublished: typeof pkg.isPublished === 'boolean' ? pkg.isPublished : null,
       cadence: pkg.cadence || '',
       dailyBtcText: pkg.dailyBtcText || '',
       roiPct: pkg.roiPct !== undefined ? String(pkg.roiPct) : '',
@@ -334,6 +334,10 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
       setModalError('El precio (USDT) debe ser un número positivo.');
       return;
     }
+    if (formData.sortOrder === '' || formData.sortOrder === null || formData.sortOrder === undefined) {
+      setModalError('El orden de presentación (sortOrder) es obligatorio y debe ser un número mayor o igual a 0.');
+      return;
+    }
     const sortOrderNum = Number(formData.sortOrder);
     if (isNaN(sortOrderNum) || sortOrderNum < 0) {
       setModalError('El orden de presentación (sortOrder) debe ser un número mayor o igual a 0.');
@@ -347,10 +351,13 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
       setModalError('Debe indicar explícitamente si el paquete está publicado en tienda.');
       return;
     }
+    if (formData.status === 'ARCHIVED' && formData.isPublished === true) {
+      setModalError('Un paquete con estado ARCHIVED no puede estar publicado (isPublished debe ser falso).');
+      return;
+    }
 
     const payload: any = {
       name: formData.name.trim(),
-      displayName: formData.displayName.trim() || formData.name.trim(),
       section: formData.section,
       packageType: formData.packageType,
       powerTh: powerNum,
@@ -359,6 +366,10 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
       status: formData.status,
       isPublished: formData.isPublished,
     };
+
+    if (formData.displayName.trim()) {
+      payload.displayName = formData.displayName.trim();
+    }
 
     if (editingPkg) {
       payload.id = editingPkg.id;
@@ -699,7 +710,7 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
                       </span>
                       <div className="flex items-center gap-1.5">
                         <span className="text-[10px] font-mono px-2 py-0.5 rounded-full border bg-cyan-500/10 text-cyan-400 border-cyan-500/20 font-bold uppercase">
-                          {pkg.section || 'minerx'}
+                          {pkg.section || '—'}
                         </span>
                         <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border font-bold ${
                           pkg.status === 'ACTIVE'
@@ -773,12 +784,20 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
                     <div className="flex items-center justify-between gap-1.5 flex-wrap">
                       <button
                         onClick={() => handleTogglePublish(pkg)}
-                        disabled={isMutating}
-                        title={pkg.isPublished ? 'Ocultar de la app GoMining' : 'Publicar a la app GoMining'}
-                        className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-mono font-bold transition-all active:scale-[0.97] cursor-pointer flex items-center gap-1 ${
-                          pkg.isPublished && !isArchived
-                            ? 'border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10'
-                            : 'border-slate-500/30 text-slate-400 hover:bg-slate-500/10'
+                        disabled={isMutating || isArchived}
+                        title={
+                          isArchived
+                            ? 'Un paquete archivado no puede ser publicado'
+                            : pkg.isPublished
+                            ? 'Ocultar de la app GoMining'
+                            : 'Publicar a la app GoMining'
+                        }
+                        className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-mono font-bold transition-all flex items-center gap-1 ${
+                          isArchived
+                            ? 'opacity-40 cursor-not-allowed border-slate-700 text-slate-500'
+                            : pkg.isPublished
+                            ? 'border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 cursor-pointer active:scale-[0.97]'
+                            : 'border-slate-500/30 text-slate-400 hover:bg-slate-500/10 cursor-pointer active:scale-[0.97]'
                         }`}
                       >
                         <Globe className="h-3 w-3" />
@@ -1159,7 +1178,7 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
                     type="text"
                     value={formData.displayName}
                     onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
-                    placeholder="Opcional (toma el nombre si está vacío)"
+                    placeholder="Opcional"
                     className="w-full px-3.5 py-2.5 rounded-2xl bg-[#090D16] border border-white/10 text-white focus:border-[#05DF72] outline-none"
                   />
                 </div>
@@ -1262,7 +1281,14 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
                   <select
                     required
                     value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                    onChange={(e) => {
+                      const val = e.target.value as any;
+                      setFormData(prev => ({
+                        ...prev,
+                        status: val,
+                        isPublished: val === 'ARCHIVED' ? false : prev.isPublished,
+                      }));
+                    }}
                     className="w-full px-3.5 py-2.5 rounded-2xl bg-[#090D16] border border-white/10 text-white focus:border-[#05DF72] outline-none"
                   >
                     <option value="">-- Seleccionar Estado --</option>
@@ -1283,7 +1309,7 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
                     className="w-full px-3.5 py-2.5 rounded-2xl bg-[#090D16] border border-white/10 text-white focus:border-[#05DF72] outline-none"
                   >
                     <option value="">-- Seleccionar Publicación --</option>
-                    <option value="true">Sí (Visible en GoMining)</option>
+                    <option value="true" disabled={formData.status === 'ARCHIVED'}>Sí (Visible en GoMining)</option>
                     <option value="false">No (Oculto)</option>
                   </select>
                 </div>

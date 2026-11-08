@@ -739,6 +739,8 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
       powerTh: 80,
       priceUsdt: 800,
       section: 'minerx',
+      packageType: 'fixed',
+      sortOrder: 1,
       status: 'DRAFT',
       isPublished: false,
     });
@@ -752,6 +754,8 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
       powerTh: 80,
       priceUsdt: 800,
       section: 'minerx',
+      packageType: 'fixed',
+      sortOrder: 1,
       status: 'ACTIVE',
       isPublished: true,
     });
@@ -962,6 +966,8 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
         powerTh: 90,
         priceUsdt: 950,
         section: 'minerx',
+        packageType: 'fixed',
+        sortOrder: 1,
         status: 'DRAFT',
         isPublished: false,
       }, { updatedBy: 'usr_valid_operator' });
@@ -1008,6 +1014,8 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
         powerTh: 60,
         priceUsdt: 600,
         section: 'minerx',
+        packageType: 'fixed',
+        sortOrder: 1,
         status: 'ACTIVE',
         isPublished: true,
         updatedBy: 'spoofed_hacker_id',
@@ -1026,6 +1034,8 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
         powerTh: 70,
         priceUsdt: 700,
         section: 'minerx',
+        packageType: 'fixed',
+        sortOrder: 1,
         status: 'ACTIVE',
         isPublished: true,
         updatedBy: 'attacker_unverified',
@@ -1217,6 +1227,8 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
             powerTh: 75,
             priceUsdt: 750,
             section: 'minerx',
+            packageType: 'fixed',
+            sortOrder: 1,
             status: 'DRAFT',
             isPublished: false,
             updatedBy: 'hacker_spoofed_identity', // Must be ignored!

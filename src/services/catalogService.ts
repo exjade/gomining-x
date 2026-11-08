@@ -285,17 +285,23 @@ export class CatalogService {
       errors.push(`Invalid or missing section: must be one of [${VALID_SECTIONS.join(', ')}]`);
     }
 
-    // PackageType
-    if (p.packageType && !VALID_PACKAGE_TYPES.includes(p.packageType as any)) {
-      errors.push(`Invalid packageType: must be one of [${VALID_PACKAGE_TYPES.join(', ')}]`);
-    }
+    const isCreate = Boolean(options?.isCreate || options?.isUpdate === false);
 
-    // Status and isPublished handling:
-    // On canonical CREATE (options?.isCreate === true or when isUpdate === false):
-    // status and isPublished are strictly mandatory (no default assumptions or auto-publish).
-    // On UPDATE (options?.isUpdate === true):
-    // optional; preserves existing values when omitted.
-    if (options?.isCreate || options?.isUpdate === false) {
+    // Canonical CREATE strictly requires packageType, sortOrder, status, and isPublished (SCRUM-217)
+    // On UPDATE: preserves existing values when omitted, but validates if provided
+    if (isCreate) {
+      if (!p.packageType) {
+        errors.push(`packageType is required on package creation (must be one of [${VALID_PACKAGE_TYPES.join(', ')}])`);
+      } else if (!VALID_PACKAGE_TYPES.includes(p.packageType as any)) {
+        errors.push(`Invalid packageType: must be one of [${VALID_PACKAGE_TYPES.join(', ')}]`);
+      }
+
+      if (p.sortOrder === undefined || p.sortOrder === null) {
+        errors.push('sortOrder is required on package creation (must be a number >= 0)');
+      } else if (typeof p.sortOrder !== 'number' || isNaN(p.sortOrder) || p.sortOrder < 0) {
+        errors.push('sortOrder must be a number >= 0');
+      }
+
       if (p.status === undefined || p.status === null) {
         errors.push('status is required on package creation (must be explicitly ACTIVE, DRAFT, or ARCHIVED)');
       } else if (!VALID_STATUSES.includes(p.status as any)) {
@@ -306,12 +312,29 @@ export class CatalogService {
         errors.push('isPublished is required on package creation (must be an explicit boolean true or false)');
       }
     } else {
+      if (p.packageType !== undefined && p.packageType !== null) {
+        if (!VALID_PACKAGE_TYPES.includes(p.packageType as any)) {
+          errors.push(`Invalid packageType: must be one of [${VALID_PACKAGE_TYPES.join(', ')}]`);
+        }
+      }
+      if (p.sortOrder !== undefined && p.sortOrder !== null) {
+        if (typeof p.sortOrder !== 'number' || isNaN(p.sortOrder) || p.sortOrder < 0) {
+          errors.push('sortOrder must be a number >= 0');
+        }
+      }
       if (p.status && !VALID_STATUSES.includes(p.status as any)) {
         errors.push(`Invalid status: must be one of [${VALID_STATUSES.join(', ')}]`);
       }
       if (p.isPublished !== undefined && typeof p.isPublished !== 'boolean') {
         errors.push('isPublished must be a boolean (true or false)');
       }
+    }
+
+    // Invariant: ARCHIVED can never be published (SCRUM-217 Blocker 3)
+    const effectiveStatus = p.status ?? options?.existingPackage?.status;
+    const effectiveIsPublished = p.isPublished ?? options?.existingPackage?.isPublished;
+    if (effectiveStatus === 'ARCHIVED' && effectiveIsPublished === true) {
+      errors.push('An ARCHIVED package cannot be published (isPublished must be false when status is ARCHIVED)');
     }
 
     // Visible catalog currency must continue strictly USD
@@ -478,6 +501,10 @@ export class CatalogService {
       } else {
         delete saved.updatedBy;
       }
+    }
+
+    if (saved.status === 'ARCHIVED' && saved.isPublished === true) {
+      throw new Error('An ARCHIVED package cannot be published (isPublished must be false when status is ARCHIVED)');
     }
 
     await this.adapter.savePackage(saved);

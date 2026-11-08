@@ -469,6 +469,8 @@ describe('SCRUM-217 / POUW-1.7: Firebase Admin SDK Backend Auth Prerequisite', (
         powerTh: 150,
         priceUsdt: 1500,
         section: 'minerx',
+        packageType: 'fixed',
+        sortOrder: 1,
         status: 'DRAFT',
         isPublished: false,
       }, { updatedBy: 'usr_admin_authorized' });
@@ -527,6 +529,8 @@ describe('SCRUM-217 / POUW-1.7: Firebase Admin SDK Backend Auth Prerequisite', (
         powerTh: 50,
         priceUsdt: 500,
         section: 'minerx',
+        packageType: 'fixed',
+        sortOrder: 1,
         status: 'ACTIVE',
         isPublished: true,
       });
