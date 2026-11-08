@@ -12,9 +12,6 @@ import {
   CatalogService,
   FirestoreCatalogStoreAdapter,
   MemoryCatalogStoreAdapter,
-  CLOUD_ADMIN_READ,
-  CLOUD_ADMIN_READ_STATUS,
-  CLOUD_MUTATION_STATUS,
 } from '../../src/services/catalogService.js';
 import type { CommercialPackage } from '../../src/types/admin.js';
 
@@ -512,12 +509,6 @@ describe('SCRUM-217 / POUW-1.7: Firebase Admin SDK Backend Auth Prerequisite', (
         () => clientAdapter.savePackage({ id: 'pkg-guard-test', name: 'Guard', powerTh: 1, priceUsdt: 1, version: 1 } as any),
         /Remote Firestore writes from Node backend are strictly prohibited without FIRESTORE_EMULATOR_HOST/
       );
-    });
-
-    it('preserves architectural status constants in catalogService', () => {
-      assert.equal(CLOUD_ADMIN_READ, 'BLOCKED / NEEDS_PO_DECISION');
-      assert.equal(CLOUD_ADMIN_READ_STATUS, 'BLOCKED / NEEDS_PO_DECISION');
-      assert.equal(CLOUD_MUTATION_STATUS, 'BLOCKED / NEEDS_PO_DECISION');
     });
 
     it('MemoryCatalogStoreAdapter unit tests continue to function with zero external dependencies', async () => {

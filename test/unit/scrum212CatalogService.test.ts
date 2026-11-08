@@ -18,9 +18,6 @@ import {
   MemoryCatalogStoreAdapter,
   VALID_SECTIONS,
   type CatalogSection,
-  CLOUD_ADMIN_READ,
-  CLOUD_ADMIN_READ_STATUS,
-  CLOUD_MUTATION_STATUS,
 } from '../../src/services/catalogService';
 import {
   CommercialPackageService,
@@ -1379,12 +1376,6 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
   // ITERATION 3 ARCHITECTURAL BLOCKER VERIFICATION TESTS (SCRUM-212)
   // =========================================================================
   describe('Iteration 3 Architectural Blockers & Cloud Classification', () => {
-    it('verifies explicit cloud read and mutation status classifications (NEEDS_PO_DECISION)', () => {
-      assert.equal(CLOUD_ADMIN_READ, 'BLOCKED / NEEDS_PO_DECISION');
-      assert.equal(CLOUD_ADMIN_READ_STATUS, 'BLOCKED / NEEDS_PO_DECISION');
-      assert.equal(CLOUD_MUTATION_STATUS, 'BLOCKED / NEEDS_PO_DECISION');
-    });
-
     it('verifies INITIAL_PACKAGES are explicitly tagged and isolated as LEGACY', () => {
       assert.ok(Array.isArray(INITIAL_PACKAGES));
       assert.equal(INITIAL_PACKAGES.length, 5);

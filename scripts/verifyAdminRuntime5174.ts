@@ -1,10 +1,10 @@
-import { spawn, type ChildProcess } from 'child_process';
+import { spawn, execSync, type ChildProcess } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import type { Server } from 'http';
-import { app, setCatalogService } from '../server/server.js';
+import { app, setCatalogService, setUsersFilePath } from '../server/server.js';
 import { CatalogService, MemoryCatalogStoreAdapter } from '../src/services/catalogService.js';
 import type { CommercialPackage } from '../src/types/admin.js';
 
@@ -109,13 +109,62 @@ const samplePackages: CommercialPackage[] = [
   },
 ];
 
+function killProcTree(proc: ChildProcess | null) {
+  if (!proc || !proc.pid) return;
+  try {
+    if (process.platform === 'win32') {
+      execSync(`taskkill /pid ${proc.pid} /T /F`, { stdio: 'ignore' });
+    } else {
+      proc.kill('SIGKILL');
+    }
+  } catch {
+    try {
+      proc.kill('SIGKILL');
+    } catch {}
+  }
+}
+
 async function main() {
   console.log('=== SCRUM-217 RUNTIME ADMIN 5174 VERIFICATION ===');
-  let originalUsersJson = '';
   let server: Server | null = null;
   let viteProc: ChildProcess | null = null;
   let chromeProc: ChildProcess | null = null;
+  let ws: WebSocket | null = null;
   let tempChromeDir = '';
+  let tempUsersDir = '';
+  const initialUsersJson = fs.existsSync(USERS_FILE) ? fs.readFileSync(USERS_FILE, 'utf-8') : null;
+
+  const cleanupOnSignal = () => {
+    try {
+      if (ws) {
+        try { ws.close(); } catch {}
+      }
+      killProcTree(chromeProc);
+      killProcTree(viteProc);
+      if (server) {
+        if (typeof (server as any).closeAllConnections === 'function') {
+          (server as any).closeAllConnections();
+        }
+        server.close();
+      }
+    } catch {}
+    try {
+      setUsersFilePath(null);
+      delete process.env.USERS_FILE_PATH;
+    } catch {}
+    try {
+      if (tempUsersDir && fs.existsSync(tempUsersDir)) {
+        fs.rmSync(tempUsersDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+      }
+    } catch {}
+    try {
+      if (tempChromeDir && fs.existsSync(tempChromeDir)) {
+        fs.rmSync(tempChromeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+      }
+    } catch {}
+  };
+  process.once('SIGINT', () => { cleanupOnSignal(); process.exit(130); });
+  process.once('SIGTERM', () => { cleanupOnSignal(); process.exit(143); });
 
   try {
     // 1. Safe in-memory catalog store setup (ZERO production writes)
@@ -124,10 +173,10 @@ async function main() {
     const catalog = new CatalogService(mockStore);
     setCatalogService(catalog);
 
-    // 2. Setup safe test admin user
-    if (fs.existsSync(USERS_FILE)) {
-      originalUsersJson = fs.readFileSync(USERS_FILE, 'utf-8');
-    }
+    // 2. Setup safe isolated test admin user in temp storage (NEVER touches server/data/users.json)
+    console.log('[1b/7] Isolating test authentication store in temp directory...');
+    tempUsersDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scrum217-auth-'));
+    const tempUsersFile = path.join(tempUsersDir, 'users.json');
     const safeUsers = {
       users: [
         {
@@ -142,15 +191,18 @@ async function main() {
         },
       ],
     };
-    fs.writeFileSync(USERS_FILE, JSON.stringify(safeUsers, null, 2), 'utf-8');
+    fs.writeFileSync(tempUsersFile, JSON.stringify(safeUsers, null, 2), 'utf-8');
+    process.env.USERS_FILE_PATH = tempUsersFile;
+    setUsersFilePath(tempUsersFile);
 
     // 3. Start Express backend on port 3001
     console.log('[2/7] Starting safe local Express backend on port 3001...');
-    server = await new Promise<Server>((resolve) => {
+    server = await new Promise<Server>((resolve, reject) => {
       const s = app.listen(3001, () => {
         console.log('  -> Express server listening on http://localhost:3001');
         resolve(s);
       });
+      s.once('error', reject);
     });
 
     // 4. Start Vite on port 5174
@@ -159,6 +211,9 @@ async function main() {
       cwd: WORKTREE_ROOT,
       shell: true,
       stdio: 'pipe',
+    });
+    viteProc.on('error', (err) => {
+      console.error('Vite process error:', err);
     });
 
     // Wait for Vite to become responsive
@@ -181,7 +236,13 @@ async function main() {
     // 5. Launch Chrome headless with clean isolated profile
     console.log('[4/7] Launching Headless Chrome with CDP on port 9222...');
     tempChromeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chrome-scrum217-'));
-    const chromePath = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+    const chromeCandidates = [
+      process.env.CHROME_PATH,
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Google\\Chrome\\Application\\chrome.exe') : '',
+    ].filter(Boolean) as string[];
+    const chromePath = chromeCandidates.find((p) => fs.existsSync(p)) || process.env.CHROME_PATH || 'chrome';
     chromeProc = spawn(chromePath, [
       '--headless=new',
       '--remote-debugging-port=9222',
@@ -190,6 +251,9 @@ async function main() {
       `--user-data-dir=${tempChromeDir}`,
       'about:blank',
     ]);
+    chromeProc.on('error', (err) => {
+      console.error('Chrome process error:', err);
+    });
 
     // Wait for Chrome CDP
     let pageWsUrl = '';
@@ -209,8 +273,8 @@ async function main() {
     if (!pageWsUrl) throw new Error('Failed to connect to Chrome CDP port 9222');
 
     // 6. Connect WebSocket and define CDP helpers
-    const ws = new WebSocket(pageWsUrl);
-    await new Promise((resolve) => (ws.onopen = resolve));
+    ws = new WebSocket(pageWsUrl);
+    await new Promise((resolve) => (ws!.onopen = resolve));
 
     let msgId = 1;
     function cdpSend(method: string, params: any = {}): Promise<any> {
@@ -310,7 +374,7 @@ async function main() {
     `);
     console.log('\n--- CHECK 1: Catálogo Admin Carga ---');
     console.log('Result:', JSON.stringify(check1, null, 2));
-    if (!check1.hasMinerX || !check1.hasPreventa || !check1.hasLanzamiento || !check1.hasMensual) {
+    if (!check1.hasMinerX || !check1.hasPreventa || !check1.hasLanzamiento || !check1.hasMensual || !check1.hasArchived) {
       throw new Error('Check 1 Failed: Canonical packages not loaded in Admin catalog');
     }
 
@@ -318,15 +382,27 @@ async function main() {
     console.log('\n--- CHECK 2: Filtros (MinerX, Preventa, Lanzamiento, Mensual) ---');
     const check2 = await evaluate(`
       (async () => {
-        const results = {};
-        const buttons = Array.from(document.querySelectorAll('button'));
+        const results = {
+          hasPreventaBtn: false,
+          hasLanzamientoBtn: false,
+          hasMensualBtn: false,
+          hasMinerxBtn: false,
+          hasAllBtn: false,
+          afterPreventaClick: [],
+          afterLanzamientoClick: [],
+          afterMensualClick: [],
+          afterMinerXClick: [],
+          afterAllClick: [],
+        };
+        const getButtons = () => Array.from(document.querySelectorAll('button'));
 
         function getVisiblePackageNames() {
           return Array.from(document.querySelectorAll('div.grid:not(.opacity-75) h3')).map(e => e.textContent.trim());
         }
 
         // Test Preventa
-        const prevBtn = buttons.find(b => b.textContent.trim() === 'Preventa');
+        const prevBtn = getButtons().find(b => b.textContent.trim() === 'Preventa');
+        results.hasPreventaBtn = Boolean(prevBtn);
         if (prevBtn) {
           prevBtn.click();
           await new Promise(r => setTimeout(r, 200));
@@ -334,7 +410,8 @@ async function main() {
         results.afterPreventaClick = getVisiblePackageNames();
 
         // Test Lanzamiento
-        const lanzBtn = buttons.find(b => b.textContent.trim() === 'Lanzamiento');
+        const lanzBtn = getButtons().find(b => b.textContent.trim() === 'Lanzamiento');
+        results.hasLanzamientoBtn = Boolean(lanzBtn);
         if (lanzBtn) {
           lanzBtn.click();
           await new Promise(r => setTimeout(r, 200));
@@ -342,7 +419,8 @@ async function main() {
         results.afterLanzamientoClick = getVisiblePackageNames();
 
         // Test Mensual
-        const mensBtn = buttons.find(b => b.textContent.trim() === 'Mensual');
+        const mensBtn = getButtons().find(b => b.textContent.trim() === 'Mensual');
+        results.hasMensualBtn = Boolean(mensBtn);
         if (mensBtn) {
           mensBtn.click();
           await new Promise(r => setTimeout(r, 200));
@@ -350,7 +428,8 @@ async function main() {
         results.afterMensualClick = getVisiblePackageNames();
 
         // Test MinerX
-        const minerxBtn = buttons.find(b => b.textContent.trim() === 'MinerX');
+        const minerxBtn = getButtons().find(b => b.textContent.trim() === 'MinerX');
+        results.hasMinerxBtn = Boolean(minerxBtn);
         if (minerxBtn) {
           minerxBtn.click();
           await new Promise(r => setTimeout(r, 200));
@@ -358,7 +437,8 @@ async function main() {
         results.afterMinerXClick = getVisiblePackageNames();
 
         // Restore Todas las Secciones
-        const allBtn = buttons.find(b => b.textContent.includes('Todas las Secciones'));
+        const allBtn = getButtons().find(b => b.textContent.includes('Todas las Secciones'));
+        results.hasAllBtn = Boolean(allBtn);
         if (allBtn) {
           allBtn.click();
           await new Promise(r => setTimeout(r, 200));
@@ -370,6 +450,81 @@ async function main() {
     `);
     console.log('Result:', JSON.stringify(check2, null, 2));
 
+    if (
+      !check2.hasPreventaBtn ||
+      !check2.hasLanzamientoBtn ||
+      !check2.hasMensualBtn ||
+      !check2.hasMinerxBtn ||
+      !check2.hasAllBtn
+    ) {
+      throw new Error(
+        `Check 2 Failed: One or more section filter buttons were not found: ${JSON.stringify({
+          Preventa: check2.hasPreventaBtn,
+          Lanzamiento: check2.hasLanzamientoBtn,
+          Mensual: check2.hasMensualBtn,
+          MinerX: check2.hasMinerxBtn,
+          TodasLasSecciones: check2.hasAllBtn,
+        })}`
+      );
+    }
+
+    const arraysEqual = (a: string[], b: string[]) => {
+      if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+      return a.every((val, idx) => val === b[idx]);
+    };
+
+    const expectedPreventa = ['Preventa Early Alpha'];
+    const expectedLanzamiento = ['Lanzamiento Especial'];
+    const expectedMensual = ['Mensual Plus'];
+    const expectedMinerX = ['MinerX Titan Pro', 'Archived Legacy Miner'];
+    const expectedAll = [
+      'MinerX Titan Pro',
+      'Preventa Early Alpha',
+      'Lanzamiento Especial',
+      'Mensual Plus',
+      'Archived Legacy Miner',
+    ];
+
+    if (!arraysEqual(check2.afterPreventaClick, expectedPreventa)) {
+      throw new Error(
+        `Check 2 Failed: Preventa filter mismatch. Expected ${JSON.stringify(expectedPreventa)}, got ${JSON.stringify(check2.afterPreventaClick)}`
+      );
+    }
+    if (!arraysEqual(check2.afterLanzamientoClick, expectedLanzamiento)) {
+      throw new Error(
+        `Check 2 Failed: Lanzamiento filter mismatch. Expected ${JSON.stringify(expectedLanzamiento)}, got ${JSON.stringify(check2.afterLanzamientoClick)}`
+      );
+    }
+    if (!arraysEqual(check2.afterMensualClick, expectedMensual)) {
+      throw new Error(
+        `Check 2 Failed: Mensual filter mismatch. Expected ${JSON.stringify(expectedMensual)}, got ${JSON.stringify(check2.afterMensualClick)}`
+      );
+    }
+    if (!arraysEqual(check2.afterMinerXClick, expectedMinerX)) {
+      throw new Error(
+        `Check 2 Failed: MinerX filter mismatch. Expected ${JSON.stringify(expectedMinerX)}, got ${JSON.stringify(check2.afterMinerXClick)}`
+      );
+    }
+    if (!arraysEqual(check2.afterAllClick, expectedAll)) {
+      throw new Error(
+        `Check 2 Failed: Todas las Secciones filter mismatch. Expected ${JSON.stringify(expectedAll)}, got ${JSON.stringify(check2.afterAllClick)}`
+      );
+    }
+
+    // Verify legacy packages never contaminate active section lists
+    const sectionLists = [
+      { name: 'Preventa', list: check2.afterPreventaClick },
+      { name: 'Lanzamiento', list: check2.afterLanzamientoClick },
+      { name: 'Mensual', list: check2.afterMensualClick },
+      { name: 'MinerX', list: check2.afterMinerXClick },
+      { name: 'Todas las Secciones', list: check2.afterAllClick },
+    ];
+    for (const sec of sectionLists) {
+      if (sec.list.some((title: string) => title.includes('Minero 1') || title.toLowerCase().includes('entry'))) {
+        throw new Error(`Check 2 Failed: Legacy package contaminated section list '${sec.name}': ${JSON.stringify(sec.list)}`);
+      }
+    }
+
     // CHECK 3: Legacy aparece read-only
     console.log('\n--- CHECK 3: Legacy Aparece Read-Only ---');
     const check3 = await evaluate(`
@@ -380,9 +535,14 @@ async function main() {
         const immutableBadge = Array.from(document.querySelectorAll('span')).find(s => s.textContent.includes('Inmutable'));
         const noEditableBadge = Array.from(document.querySelectorAll('span')).find(s => s.textContent.includes('No editable'));
 
-        // Ensure no edit button exists on the legacy card
+        // Ensure no edit button or interactive button exists on the legacy card
         const legacyCard = legacyBadge ? legacyBadge.closest('.rounded-3xl') : null;
-        const hasEditButton = legacyCard ? Boolean(legacyCard.querySelector('button[title*="Editar"], button:has(.lucide-edit-3)')) : false;
+        const legacyButtons = legacyCard ? Array.from(legacyCard.querySelectorAll('button')) : [];
+        const hasEditButton = legacyButtons.some(b =>
+          b.textContent.toLowerCase().includes('edit') ||
+          Boolean(b.getAttribute('title')?.toLowerCase().includes('edit')) ||
+          Boolean(b.querySelector('.lucide-edit-3, svg.lucide-edit-3, svg'))
+        ) || legacyButtons.length > 0;
 
         return {
           hasLegacySection: Boolean(legacyHeading),
@@ -395,8 +555,17 @@ async function main() {
       })()
     `);
     console.log('Result:', JSON.stringify(check3, null, 2));
-    if (!check3.hasLegacyBadge || !check3.hasNoEditableNotice || check3.hasEditButtonOnLegacy) {
-      throw new Error('Check 3 Failed: Legacy package is not properly isolated as read-only');
+    if (
+      !check3.hasLegacySection ||
+      !check3.hasLegacyBadge ||
+      !check3.hasLegacyCardTitle ||
+      !check3.hasImmutableNotice ||
+      !check3.hasNoEditableNotice ||
+      check3.hasEditButtonOnLegacy
+    ) {
+      throw new Error(
+        `Check 3 Failed: Legacy package is not properly isolated as read-only. Status: ${JSON.stringify(check3)}`
+      );
     }
 
     // CHECK 4: Modal CREATE abre con campos limpios
@@ -426,6 +595,9 @@ async function main() {
       })()
     `);
     console.log('Result:', JSON.stringify(check4, null, 2));
+    if (check4.error || !check4.modalOpen) {
+      throw new Error(`Check 4 Failed: Modal CREATE did not open properly: ${check4.error || 'modal overlay missing'}`);
+    }
     if (
       check4.sectionValue !== '' ||
       check4.packageTypeValue !== '' ||
@@ -472,13 +644,27 @@ async function main() {
           isNotUsdtInLabel: priceLabel ? !priceLabel.textContent.includes('(USDT)') : false,
           simPreviewText: simPreviewSpan ? simPreviewSpan.textContent.trim() : null,
           isUsdInSimPreview: simPreviewSpan ? simPreviewSpan.textContent.includes('USD') : false,
+          isNotUsdtInSimPreview: simPreviewSpan ? !simPreviewSpan.textContent.includes('USDT') : false,
           cardPrices: cardPrices,
-          allCardsUseUsd: cardPrices.every(p => p.includes('USD') && !p.includes('USDT'))
+          cardPriceCount: cardPrices.length,
+          allCardsUseUsd: cardPrices.length > 0 && cardPrices.every(p => p.includes('USD') && !p.includes('USDT'))
         };
       })()
     `);
     console.log('Result:', JSON.stringify(check5, null, 2));
-    if (!check5.isUsdInLabel || !check5.isUsdInSimPreview || !check5.allCardsUseUsd) {
+    if (!check5.cardPrices || check5.cardPrices.length === 0) {
+      throw new Error('Check 5 Failed: cardPrices is empty (vacuous assertion prevented)');
+    }
+    if (check5.cardPrices.length !== 5) {
+      throw new Error(`Check 5 Failed: Expected 5 canonical card prices on all-sections view, found ${check5.cardPrices.length}`);
+    }
+    if (
+      !check5.isUsdInLabel ||
+      !check5.isNotUsdtInLabel ||
+      !check5.isUsdInSimPreview ||
+      !check5.isNotUsdtInSimPreview ||
+      !check5.allCardsUseUsd
+    ) {
       throw new Error('Check 5 Failed: Visible canonical currency is not strictly USD');
     }
 
@@ -560,8 +746,11 @@ async function main() {
       })()
     `);
     console.log('Result:', JSON.stringify(check6, null, 2));
-    if (!check6.isDisabled || !check6.hasCursorNotAllowed) {
-      throw new Error('Check 6 Failed: ARCHIVED package does not have publish disabled');
+    if (check6.error || !check6.cardFound) {
+      throw new Error(`Check 6 Failed: Archived package card was not found: ${check6.error || 'card missing'}`);
+    }
+    if (!check6.buttonText || check6.buttonText !== 'Oculto' || !check6.isDisabled || !check6.hasCursorNotAllowed) {
+      throw new Error(`Check 6 Failed: ARCHIVED package does not have publish disabled (buttonText: ${check6.buttonText}, isDisabled: ${check6.isDisabled}, cursorNotAllowed: ${check6.hasCursorNotAllowed})`);
     }
 
     // CHECK 7: Un error backend se muestra y NO simula éxito/cierre del modal
@@ -646,28 +835,49 @@ async function main() {
       throw new Error('Check 7 Failed: Backend error did not preserve open modal or display error');
     }
 
-    ws.close();
+    if (ws) {
+      try { ws.close(); } catch {}
+    }
     console.log('\n[7/7] ALL 7 BROWSER ACCEPTANCE CHECKS PASSED PERFECTLY!');
   } finally {
     // Teardown everything cleanly
-    if (chromeProc) chromeProc.kill('SIGKILL');
-    if (viteProc) viteProc.kill('SIGKILL');
+    if (ws) {
+      try { ws.close(); } catch {}
+    }
+    killProcTree(chromeProc);
+    killProcTree(viteProc);
     if (server) {
+      if (typeof (server as any).closeAllConnections === 'function') {
+        (server as any).closeAllConnections();
+      }
       await new Promise<void>((resolve) => server!.close(() => resolve()));
     }
-    if (originalUsersJson) {
-      fs.writeFileSync(USERS_FILE, originalUsersJson, 'utf-8');
+    setUsersFilePath(null);
+    delete process.env.USERS_FILE_PATH;
+    if (tempUsersDir && fs.existsSync(tempUsersDir)) {
+      try {
+        fs.rmSync(tempUsersDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+      } catch {}
     }
     if (tempChromeDir && fs.existsSync(tempChromeDir)) {
       try {
-        fs.rmSync(tempChromeDir, { recursive: true, force: true });
+        fs.rmSync(tempChromeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
       } catch {}
     }
-    console.log('Teardown complete: Chrome, Vite, Express stopped. server/data/users.json restored.');
+    const finalUsersJson = fs.existsSync(USERS_FILE) ? fs.readFileSync(USERS_FILE, 'utf-8') : null;
+    if (initialUsersJson !== finalUsersJson) {
+      console.error('FATAL INTEGRITY VIOLATION: server/data/users.json was modified by verification harness!');
+      process.exit(1);
+    }
+    console.log('Teardown complete: Chrome, Vite, Express stopped. server/data/users.json remained completely untouched.');
   }
 }
 
-main().catch((err) => {
-  console.error('\n!!! VERIFICATION FAILED !!!\n', err);
-  process.exit(1);
-});
+main()
+  .then(() => {
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error('\n!!! VERIFICATION FAILED !!!\n', err);
+    process.exit(1);
+  });

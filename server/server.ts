@@ -282,10 +282,21 @@ export function writeAuditLog(record: Omit<AuditRecord, 'id' | 'timestamp'> & Pa
   }
 }
 
+let customUsersFilePath: string | null = null;
+
+export function setUsersFilePath(customPath: string | null): void {
+  customUsersFilePath = customPath;
+}
+
+export function getUsersFilePath(): string {
+  return customUsersFilePath || process.env.USERS_FILE_PATH || USERS_FILE;
+}
+
 export function readUsers(): { users: UserAccount[] } {
   try {
-    if (fs.existsSync(USERS_FILE)) {
-      return JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8'));
+    const targetFile = getUsersFilePath();
+    if (fs.existsSync(targetFile)) {
+      return JSON.parse(fs.readFileSync(targetFile, 'utf-8'));
     }
   } catch (err) {
     console.error('Error reading users file:', err);
@@ -295,7 +306,8 @@ export function readUsers(): { users: UserAccount[] } {
 
 export function writeUsers(data: { users: UserAccount[] }) {
   try {
-    fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    const targetFile = getUsersFilePath();
+    fs.writeFileSync(targetFile, JSON.stringify(data, null, 2), 'utf-8');
   } catch (err) {
     console.error('Error writing users file:', err);
   }
