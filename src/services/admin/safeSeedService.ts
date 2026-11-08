@@ -37,21 +37,23 @@ export class DefaultFirestorePackageStore implements PackageStoreAdapter {
       try {
         const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
         this.firestoreInstance = getFirestore(app);
-
-        const nodeProcess = (globalThis as any).process;
-        const emulatorHost = nodeProcess?.env?.FIRESTORE_EMULATOR_HOST;
-        if (emulatorHost) {
-          const [host, portStr] = emulatorHost.split(':');
-          const port = parseInt(portStr || '8080', 10);
-          try {
-            connectFirestoreEmulator(this.firestoreInstance, host, port);
-          } catch {
-            // Already connected or duplicate call
-          }
-        }
       } catch (err: any) {
         console.warn('[DefaultFirestorePackageStore] Firestore init notice:', err?.message || err);
         this.firestoreInstance = null;
+      }
+    }
+
+    if (this.firestoreInstance) {
+      const nodeProcess = (globalThis as any).process;
+      const emulatorHost = nodeProcess?.env?.FIRESTORE_EMULATOR_HOST;
+      if (emulatorHost) {
+        const [host, portStr] = emulatorHost.split(':');
+        const port = parseInt(portStr || '8080', 10);
+        try {
+          connectFirestoreEmulator(this.firestoreInstance, host, port);
+        } catch {
+          // Already connected or duplicate call
+        }
       }
     }
   }

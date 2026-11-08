@@ -40,7 +40,11 @@ async function main(customArgs?: string[]): Promise<SafeSeedReport | null> {
   }
 
   // Strict security check: reject remote staging flags
-  if (args.includes('--allow-remote-staging') || process.env.ALLOW_REMOTE_SEED === 'true') {
+  const isAllowRemoteEnv = Boolean(
+    process.env.ALLOW_REMOTE_SEED &&
+    !['false', '0', ''].includes(process.env.ALLOW_REMOTE_SEED.trim().toLowerCase())
+  );
+  if (args.includes('--allow-remote-staging') || isAllowRemoteEnv) {
     const errorMsg = 'Remote apply is strictly disabled in SCRUM-211. --allow-remote-staging and ALLOW_REMOTE_SEED have been removed.';
     console.error(`\n❌ ERROR DE SEGURIDAD (SCRUM-211):`);
     console.error(`   --allow-remote-staging y ALLOW_REMOTE_SEED han sido deshabilitados por decisión del PO.`);
@@ -139,7 +143,7 @@ async function main(customArgs?: string[]): Promise<SafeSeedReport | null> {
   return report;
 }
 
-if (process.argv[1]?.endsWith('safeSeedPackages.ts')) {
+if (/safeSeedPackages(\.[cm]?[jt]s)?$/i.test(process.argv[1] || '')) {
   main()
     .then((report) => {
       const exitCode = report && report.summary.blockedCount > 0 ? 1 : 0;

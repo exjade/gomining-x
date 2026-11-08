@@ -78,6 +78,30 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Itera
     assert.equal(manifestJson.packages.length, 30);
     assert.equal(TARGET_PACKAGES_MANIFEST.length, 30);
     assert.equal(CUSTOM_TIERS_MANIFEST.length, 22);
+
+    // Deep field parity between JSON manifest and TypeScript catalog
+    for (let i = 0; i < TARGET_PACKAGES_MANIFEST.length; i++) {
+      const tsPkg = TARGET_PACKAGES_MANIFEST[i];
+      const jsonPkg = manifestJson.packages[i];
+      assert.equal(jsonPkg.id, tsPkg.id);
+      assert.equal(jsonPkg.packageId, tsPkg.packageId);
+      assert.equal(jsonPkg.name, tsPkg.name);
+      assert.equal(jsonPkg.displayName, tsPkg.displayName);
+      assert.equal(jsonPkg.section, tsPkg.section);
+      assert.equal(jsonPkg.packageType, tsPkg.packageType);
+      assert.equal(jsonPkg.sortOrder, tsPkg.sortOrder);
+      assert.equal(jsonPkg.powerTh, tsPkg.powerTh);
+      assert.equal(jsonPkg.priceUsdt, tsPkg.priceUsdt);
+      assert.equal(jsonPkg.currency, tsPkg.currency);
+      assert.equal(jsonPkg.description, tsPkg.description);
+      assert.equal(jsonPkg.provenance, tsPkg.provenance);
+    }
+
+    // Parity for custom tiers
+    for (let i = 0; i < CUSTOM_TIERS_MANIFEST.length; i++) {
+      assert.equal(manifestJson.customTiers[i].powerTh, CUSTOM_TIERS_MANIFEST[i].powerTh);
+      assert.equal(manifestJson.customTiers[i].priceUsd, CUSTOM_TIERS_MANIFEST[i].priceUsd);
+    }
   });
 
   // 2. FINDING 1: FUENTES MINERX 1–5 REVALIDATED EXCLUSIVELY AGAINST AUTHORIZED DOCS
@@ -157,6 +181,16 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Itera
     assert.notEqual(customRow.displayName, 'Personalizado', 'Must not regress to "Personalizado"');
     assert.equal(customRow.name.toLowerCase().includes('personalizado'), false);
     assert.equal(customRow.displayName.toLowerCase().includes('personalizado'), false);
+
+    // Also verify JSON manifest strictly has "Custom"
+    const manifestPath = resolve(process.cwd(), 'docs/paquetes_dinamicos/seed-manifest.json');
+    const manifestJson = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+    const jsonCustomRow = manifestJson.packages.find((p: any) => p.id === 'minerx-custom');
+    assert.ok(jsonCustomRow);
+    assert.equal(jsonCustomRow.name, 'Custom');
+    assert.equal(jsonCustomRow.displayName, 'Custom');
+    assert.notEqual(jsonCustomRow.name, 'Personalizado');
+    assert.notEqual(jsonCustomRow.displayName, 'Personalizado');
   });
 
   // 4. FINDING 3: NO INVENTAR NOMBRES NI DESCRIPCIONES
@@ -274,6 +308,17 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Itera
 
       // 3. ALLOW_REMOTE_SEED=true env var must fail fast
       process.env.ALLOW_REMOTE_SEED = 'true';
+      await assert.rejects(
+        async () => {
+          await runSafeSeedScript(['--apply']);
+        },
+        {
+          message: /Remote apply is strictly disabled in SCRUM-211/,
+        }
+      );
+
+      // 4. Any truthy ALLOW_REMOTE_SEED (e.g. '1') must also fail fast
+      process.env.ALLOW_REMOTE_SEED = '1';
       await assert.rejects(
         async () => {
           await runSafeSeedScript(['--apply']);
@@ -541,5 +586,36 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Itera
     assert.ok(defaultStore, 'DefaultFirestorePackageStore must instantiate without error');
     assert.equal(typeof defaultStore.getExistingPackages, 'function');
     assert.equal(typeof defaultStore.setPackageDoc, 'function');
+  });
+
+  it('DefaultFirestorePackageStore rejects setPackageDoc with explicit error when firestore is null', async () => {
+    const originalEmulator = process.env.FIRESTORE_EMULATOR_HOST;
+    try {
+      // With emulator configured: ensures the remote apply security guard passes
+      process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
+
+      // Force a null firestore instance via an explicit mock constructor
+      const nullStore = new (class extends DefaultFirestorePackageStore {
+        constructor() {
+          super(null as any);
+          (this as any).firestoreInstance = null;
+        }
+      })();
+
+      await assert.rejects(
+        async () => {
+          await nullStore.setPackageDoc('test-pkg', { name: 'Test' });
+        },
+        {
+          message: 'Cloud Firestore instance is not initialized',
+        }
+      );
+
+      const existing = await nullStore.getExistingPackages();
+      assert.equal(existing.size, 0);
+    } finally {
+      if (originalEmulator) process.env.FIRESTORE_EMULATOR_HOST = originalEmulator;
+      else delete process.env.FIRESTORE_EMULATOR_HOST;
+    }
   });
 });
