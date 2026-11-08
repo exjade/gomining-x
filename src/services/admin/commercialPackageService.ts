@@ -15,7 +15,7 @@ export function deserializeCommercialPackageDoc(id: string, data: any): Commerci
   const priceUsdt = Number(docData.priceUsdt) || 0;
   const priceUsdCents = typeof docData.priceUsdCents === 'number'
     ? docData.priceUsdCents
-    : (priceUsdt > 0 ? Math.round(priceUsdt * 100) : undefined);
+    : undefined;
   const status = docData.status || 'ACTIVE';
   const isPublished = docData.isPublished ?? (status === 'ACTIVE');
 
@@ -98,8 +98,9 @@ export function validatePackageSchema(pkg: Partial<CommercialPackage>): { valid:
   if (!p.name || !p.name.trim()) errors.push('Package name is required');
   if (typeof p.powerTh !== 'number' || p.powerTh <= 0) errors.push('powerTh must be a positive number');
   
-  const hasValidPrice = (typeof p.priceUsdt === 'number' && p.priceUsdt > 0) || (typeof p.priceUsdCents === 'number' && p.priceUsdCents > 0);
-  if (!hasValidPrice) errors.push('A positive price (priceUsdt or priceUsdCents) is required');
+  if (typeof p.priceUsdt !== 'number' || p.priceUsdt <= 0) {
+    errors.push('priceUsdt must be a positive number');
+  }
 
   if (p.priceUsdCents !== undefined && (!Number.isInteger(p.priceUsdCents) || p.priceUsdCents <= 0)) {
     errors.push('priceUsdCents must be a positive integer representing cents');
@@ -321,7 +322,7 @@ export class CommercialPackageService {
         ...pkg,
         packageId: pkg.id,
         cadence: pkg.cadence ?? existing?.cadence,
-        priceUsdCents: pkg.priceUsdCents ?? (typeof pkg.priceUsdt === 'number' ? Math.round(pkg.priceUsdt * 100) : existing?.priceUsdCents),
+        priceUsdCents: typeof pkg.priceUsdCents === 'number' ? pkg.priceUsdCents : existing?.priceUsdCents,
         isPublished: pkg.isPublished ?? (pkg.status ? pkg.status === 'ACTIVE' : (existing?.status === 'ACTIVE')),
         version: newVersion,
         updatedAt: now
@@ -334,13 +335,12 @@ export class CommercialPackageService {
       this.audit.logAction('admin_sys', 'admin@minerx.cloud', 'SUPER_ADMIN', 'COMMERCIAL', 'UPDATE_PACKAGE_VERSION', saved.id, { version: newVersion, pkg: saved });
     } else {
       const newId = `pkg-${Date.now()}`;
-      const priceUsdCents = pkg.priceUsdCents ?? (typeof pkg.priceUsdt === 'number' ? Math.round(pkg.priceUsdt * 100) : undefined);
       saved = {
         ...pkg,
         id: newId,
         packageId: newId,
         cadence: pkg.cadence,
-        priceUsdCents,
+        priceUsdCents: typeof pkg.priceUsdCents === 'number' ? pkg.priceUsdCents : undefined,
         status: pkg.status || 'ACTIVE',
         isPublished: pkg.isPublished ?? true,
         version: 1,

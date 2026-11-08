@@ -158,7 +158,7 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
     assert.equal(pkg.name, 'Legacy Package 1');
     assert.equal(pkg.powerTh, 48);
     assert.equal(pkg.priceUsdt, 561.99);
-    assert.equal(pkg.priceUsdCents, 56199); // automatically inferred in cents
+    assert.equal(pkg.priceUsdCents, undefined); // priceUsdCents is PROPOSED and NOT auto-inferred
     assert.equal(pkg.status, 'ACTIVE');
     assert.equal(pkg.isPublished, true);
     assert.equal(pkg.version, 1);
@@ -230,6 +230,7 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
     const oversold = validatePackageSchema({
       name: 'Oversold Package',
       powerTh: 10,
+      priceUsdt: 50,
       priceUsdCents: 5000,
       limitedUnits: 30,
       soldUnits: 31,
@@ -241,21 +242,23 @@ describe('SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Te
     const negativeUnits = validatePackageSchema({
       name: 'Negative Units',
       powerTh: 10,
+      priceUsdt: 50,
       priceUsdCents: 5000,
       availableUnits: -5,
     });
     assert.equal(negativeUnits.valid, false);
     assert.ok(negativeUnits.errors.some(e => e.includes('availableUnits cannot be negative')));
 
-    // Valid package with priceUsdCents only
-    const validCentsOnly = validatePackageSchema({
-      name: 'Cents Only',
+    // Rejects package where priceUsdt is missing even if priceUsdCents is provided
+    const missingPriceUsdt = validatePackageSchema({
+      name: 'Missing priceUsdt',
       powerTh: 20,
       priceUsdCents: 1899,
       limitedUnits: 30,
       soldUnits: 5,
     });
-    assert.equal(validCentsOnly.valid, true);
+    assert.equal(missingPriceUsdt.valid, false);
+    assert.ok(missingPriceUsdt.errors.some(e => e.includes('priceUsdt must be a positive number')));
 
     // Invalid when both prices missing
     const noPrice = validatePackageSchema({

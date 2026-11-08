@@ -14,15 +14,12 @@ Este documento define formalmente el contrato de datos en Cloud Firestore para e
 | Archivar vs. Hard Delete (`status='ARCHIVED'` + `isPublished=false`) | `ACCEPTED_DECISION` | Prohibido el borrado físico de paquetes comerciales. |
 | Moneda visible Client (USD) vs Cobro (USDT/crypto) | `ACCEPTED_DECISION` | El cliente muestra USD; el checkout liquida en crypto/USDT. |
 | Cadencia estándar (`cadence`) | `ACCEPTED_DECISION` | Estandarizado en `cadence` ('one_time' \| 'monthly'). Se retira el alias duplicado `billing`. |
-| Modelo de moneda en centavos enteros (`priceUsdCents`) | `PROPOSED` | Recomendación técnica de ingeniería para evitar pérdida de precisión por punto flotante; pendiente de ratificación final del PO. |
+| Modelo de moneda en centavos enteros (`priceUsdCents`) | `PROPOSED` | Recomendación técnica de ingeniería para representación exacta de dinero. Mientras permanezca `PROPOSED`, NO se calcula ni infiere automáticamente en `deserializeCommercialPackageDoc`, NO se persiste automáticamente en `savePackage`, NO sustituye al precio base aceptado (`priceUsdt`) ni es requisito del schema. |
 | Clave de frontend (`frontendKey`) | `PROPOSED` | Clave observada en seeds para trazabilidad e idempotencia. |
-| IDs sugeridos (`preventa-01`, `minerx-01`, etc.) | `PROPOSED` | Propuestos para legibilidad e idempotencia; pendientes de confirmación final. |
+| IDs sugeridos (`preventa-01`, `minerx-01`, etc.) | `PROPOSED` | Propuestos para legibilidad e idempotencia del seed; no alteran labels, niveles ni precios del baseline. |
 | Metadatos de auditoría interna (`source`, `updatedBy`, `seededAt`) | `PROPOSED` | Metadatos aditivos para trazabilidad operativa sin impacto en reglas de negocio. |
 | Colección `campaigns/{campaignId}` | `OUT_OF_SCOPE` | Descuentos y campañas nuevas declaradas OUT OF SCOPE en `FASE-1_INIT.md`. Pertenecen a SCRUM-213. |
-| DisplayNames finales de MinerX 1–5 | `OPEN_QUESTION` | Requiere confirmación del PO antes de sembrar (`NEEDS_PO_DECISION`). |
-| Inclusión de los 16 niveles de Lanzamiento | `OPEN_QUESTION` | Requiere confirmación del PO antes de sembrar (`NEEDS_PO_DECISION`). |
-| Inclusión de los 22 tiers Custom | `OPEN_QUESTION` | Requiere confirmación del PO antes de sembrar (`NEEDS_PO_DECISION`). |
-| Cuarto plan Mensual ("Máximo") | `OPEN_QUESTION` | Requiere confirmación del PO antes de sembrar (`NEEDS_PO_DECISION`). |
+| Catálogo y UI del frontend como baseline (`main@99e0461`) | `ACCEPTED_DECISION` | El frontend actual es el baseline visual y funcional de la historia SCRUM-206. Se preservan exactamente nombres, precios, tabs, 16 niveles de lanzamiento, 22 tiers de custom, 4 planes mensuales (incluyendo "Máximo"), contenido, diseño y flujo de compra. No se modifican ni se inventan catálogos alternativos. |
 
 ---
 
@@ -52,7 +49,7 @@ Este documento define formalmente el contrato de datos en Cloud Firestore para e
 - `displayName` (string, opcional): Etiqueta textual visible literal del frontend (ej. `1.46 TH`, `Inicio`).
 - `frontendKey` (string, opcional - PROPOSED): Clave estable observada en el frontend para auditoría.
 - `source` ('frontend-seed' | 'admin', opcional): Origen del registro.
-- `priceUsdCents` (int, opcional - PROPOSED): Precio base en centavos enteros de USD (ej. 1899 para $18.99).
+- `priceUsdCents` (int, opcional - PROPOSED): Propuesta técnica para centavos enteros. Mientras siga PROPOSED, no se infiere ni persiste automáticamente en `commercial_packages`, ni sustituye al precio base aceptado `priceUsdt`.
 - `currency` ('USDT' | 'USD', opcional): Divisa declarada.
 - `cadence` ('one_time' | 'monthly' | string, opcional): Cadencia de facturación (estandarizada).
 - `dailyBtcText` (string, opcional): Rendimiento diario en BTC como texto literal (ej. `'0.00000062'`) para evitar truncamiento por punto flotante.
