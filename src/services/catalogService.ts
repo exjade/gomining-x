@@ -27,30 +27,41 @@ export interface CatalogStoreAdapter {
 /**
  * Default Firestore adapter for CatalogService.
  * Strictly read-only on reads; NEVER executes silent writes or auto-seed.
+ * Supports passing an optional Firestore instance (e.g. for testing / emulator).
  */
 export class FirestoreCatalogStoreAdapter implements CatalogStoreAdapter {
+  private firestoreInstance: any = null;
+
+  constructor(firestoreInstance?: any) {
+    if (firestoreInstance) {
+      this.firestoreInstance = firestoreInstance;
+    } else if (db) {
+      this.firestoreInstance = db;
+    }
+  }
+
   async getPackages(): Promise<CommercialPackage[]> {
-    if (!db) {
+    if (!this.firestoreInstance) {
       return [];
     }
-    const snap = await getDocs(collection(db, COMMERCIAL_PACKAGES_COLLECTION));
-    if (snap.empty) {
+    const snap = await getDocs(collection(this.firestoreInstance, COMMERCIAL_PACKAGES_COLLECTION));
+    if (!snap || snap.empty) {
       return [];
     }
-    return snap.docs.map(d => deserializeCommercialPackageDoc(d.id, d.data()));
+    return snap.docs.map((d: any) => deserializeCommercialPackageDoc(d.id, d.data()));
   }
 
   async savePackage(pkg: CommercialPackage): Promise<void> {
-    if (!db) {
+    if (!this.firestoreInstance) {
       throw new Error('Firestore is not initialized');
     }
-    await setDoc(doc(db, COMMERCIAL_PACKAGES_COLLECTION, pkg.id), pkg, { merge: true });
+    await setDoc(doc(this.firestoreInstance, COMMERCIAL_PACKAGES_COLLECTION, pkg.id), pkg, { merge: true });
   }
 
   async getPackageById(id: string): Promise<CommercialPackage | null> {
-    if (!db) return null;
-    const snap = await getDoc(doc(db, COMMERCIAL_PACKAGES_COLLECTION, id));
-    if (!snap.exists()) return null;
+    if (!this.firestoreInstance) return null;
+    const snap = await getDoc(doc(this.firestoreInstance, COMMERCIAL_PACKAGES_COLLECTION, id));
+    if (!snap || !snap.exists()) return null;
     return deserializeCommercialPackageDoc(snap.id, snap.data());
   }
 }
@@ -172,6 +183,21 @@ export class CatalogService {
     const p = pkg || {};
     const errors: string[] = [];
 
+    // packageId != minerId rule: commercial package is an offer/template, not a miner instance
+    if ((p as any).minerId !== undefined) {
+      errors.push('minerId is invalid on commercial_packages: a package is an offer/template, not a miner instance');
+    }
+
+    // ID consistency when both id and packageId are supplied
+    if (p.id && p.packageId && p.id !== p.packageId) {
+      errors.push(`id ('${p.id}') and packageId ('${p.packageId}') must match`);
+    }
+
+    // Legacy package overwrite protection: legacy records must be preserved physically without mutation
+    if (options?.existingPackage && CatalogService.isLegacyPackage(options.existingPackage)) {
+      errors.push(`Cannot overwrite or mutate physically preserved legacy package: ${options.existingPackage.id}`);
+    }
+
     // packageId stability
     if (options?.isUpdate && options.existingPackage) {
       const existingId = options.existingPackage.packageId || options.existingPackage.id;
@@ -216,6 +242,11 @@ export class CatalogService {
       errors.push(`Invalid status: must be one of [${VALID_STATUSES.join(', ')}]`);
     }
 
+    // Visible catalog currency must continue strictly USD
+    if (p.currency !== undefined && p.currency !== 'USD') {
+      errors.push(`Visible catalog currency must remain strictly 'USD' (received: '${p.currency}')`);
+    }
+
     // Units validations
     if (p.limitedUnits !== undefined && (typeof p.limitedUnits !== 'number' || p.limitedUnits < 0 || isNaN(p.limitedUnits))) {
       errors.push('limitedUnits cannot be negative');
@@ -235,12 +266,31 @@ export class CatalogService {
       errors.push('priceUsdCents must be a positive integer representing cents');
     }
 
-    // Out of scope boundaries: SCRUM-213 price fields
-    if ((p as any).finalPriceUsdCents !== undefined) {
-      errors.push('finalPriceUsdCents is out of scope for SCRUM-212 and belongs to SCRUM-213');
+    // Out of scope boundaries: SCRUM-213 price fields and promotional pricing
+    const outOfScopeScrum213Fields = [
+      'finalPriceUsdCents',
+      'campaigns',
+      'discounts',
+      'discount',
+      'priority',
+      'stackable',
+      'promotions',
+      'promotionalPrice',
+      'promoPrice',
+      'discountActive',
+      'discountType',
+      'discountValue',
+      'discountLabel',
+    ];
+    for (const field of outOfScopeScrum213Fields) {
+      if ((p as any)[field] !== undefined) {
+        errors.push(`${field} is out of scope for SCRUM-212 and belongs to SCRUM-213`);
+      }
     }
-    if ((p as any).campaigns !== undefined || (p as any).discounts !== undefined || (p as any).promotions !== undefined) {
-      errors.push('campaigns and discounts are out of scope for SCRUM-212 and belong to SCRUM-213');
+
+    // Synthetic identity rejection: admin_sys and admin@minerx.cloud must never be accepted as authoritative
+    if (p.updatedBy && (p.updatedBy === 'admin_sys' || p.updatedBy === 'admin@minerx.cloud')) {
+      errors.push(`Synthetic credential '${p.updatedBy}' is not an authoritative administrative identity`);
     }
 
     return { valid: errors.length === 0, errors };
@@ -324,7 +374,7 @@ export class CatalogService {
         updatedAt: now,
       };
 
-      if (options?.updatedBy && typeof options.updatedBy === 'string' && options.updatedBy.trim()) {
+      if (options?.updatedBy && typeof options.updatedBy === 'string' && options.updatedBy.trim() && options.updatedBy !== 'admin_sys' && options.updatedBy !== 'admin@minerx.cloud') {
         saved.updatedBy = options.updatedBy.trim();
       } else {
         delete saved.updatedBy;
@@ -342,7 +392,7 @@ export class CatalogService {
         updatedAt: now,
       };
 
-      if (options?.updatedBy && typeof options.updatedBy === 'string' && options.updatedBy.trim()) {
+      if (options?.updatedBy && typeof options.updatedBy === 'string' && options.updatedBy.trim() && options.updatedBy !== 'admin_sys' && options.updatedBy !== 'admin@minerx.cloud') {
         saved.updatedBy = options.updatedBy.trim();
       }
     }
@@ -357,11 +407,16 @@ export class CatalogService {
    * isPublished = false
    * Preserves packageId, history, orders, contracts.
    * NO physical deletion.
+   * Legacy packages cannot be archived/overwritten.
    */
   public async archivePackage(packageId: string, options?: { updatedBy?: string }): Promise<CommercialPackage> {
     const existing = await this.adapter.getPackageById(packageId);
     if (!existing) {
       throw new Error(`Package not found: ${packageId}`);
+    }
+
+    if (CatalogService.isLegacyPackage(existing)) {
+      throw new Error(`Cannot overwrite or archive physically preserved legacy package: ${packageId}`);
     }
 
     const now = new Date().toISOString();
@@ -375,7 +430,7 @@ export class CatalogService {
       updatedAt: now,
     };
 
-    if (options?.updatedBy && typeof options.updatedBy === 'string' && options.updatedBy.trim()) {
+    if (options?.updatedBy && typeof options.updatedBy === 'string' && options.updatedBy.trim() && options.updatedBy !== 'admin_sys' && options.updatedBy !== 'admin@minerx.cloud') {
       archived.updatedBy = options.updatedBy.trim();
     } else {
       delete archived.updatedBy;

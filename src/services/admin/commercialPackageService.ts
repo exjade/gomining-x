@@ -99,7 +99,7 @@ export function createPurchaseSnapshot(
 }
 
 /**
- * Validates package schema requirements per SCRUM-210.
+ * Validates package schema requirements per SCRUM-210 and SCRUM-212.
  */
 export function validatePackageSchema(pkg: Partial<CommercialPackage>): { valid: boolean; errors: string[] } {
   const p = pkg || {};
@@ -129,11 +129,34 @@ export function validatePackageSchema(pkg: Partial<CommercialPackage>): { valid:
   if (p.status && !['ACTIVE', 'ARCHIVED', 'DRAFT'].includes(p.status)) {
     errors.push(`Invalid status: ${p.status}`);
   }
-  if ((p as any).finalPriceUsdCents !== undefined) {
-    errors.push('finalPriceUsdCents is out of scope for SCRUM-212 and belongs to SCRUM-213');
+  if (p.currency !== undefined && p.currency !== 'USD') {
+    errors.push(`Visible catalog currency must remain strictly 'USD' (received: '${p.currency}')`);
   }
-  if ((p as any).campaigns !== undefined || (p as any).discounts !== undefined || (p as any).promotions !== undefined) {
-    errors.push('campaigns and discounts are out of scope for SCRUM-212 and belong to SCRUM-213');
+  if ((p as any).minerId !== undefined) {
+    errors.push('minerId is invalid on commercial_packages: a package is an offer/template, not a miner instance');
+  }
+  const outOfScopeScrum213Fields = [
+    'finalPriceUsdCents',
+    'campaigns',
+    'discounts',
+    'discount',
+    'priority',
+    'stackable',
+    'promotions',
+    'promotionalPrice',
+    'promoPrice',
+    'discountActive',
+    'discountType',
+    'discountValue',
+    'discountLabel',
+  ];
+  for (const field of outOfScopeScrum213Fields) {
+    if ((p as any)[field] !== undefined) {
+      errors.push(`${field} is out of scope for SCRUM-212 and belongs to SCRUM-213`);
+    }
+  }
+  if (p.updatedBy && (p.updatedBy === 'admin_sys' || p.updatedBy === 'admin@minerx.cloud')) {
+    errors.push(`Synthetic credential '${p.updatedBy}' is not an authoritative administrative identity`);
   }
   return { valid: errors.length === 0, errors };
 }
@@ -342,14 +365,19 @@ export class CommercialPackageService {
   public savePackage(
     pkg: Omit<CommercialPackage, 'createdAt' | 'updatedAt' | 'version' | 'id'> & { id?: string; updatedBy?: string }
   ): CommercialPackage {
+    const validation = validatePackageSchema(pkg as Partial<CommercialPackage>);
+    if (!validation.valid) {
+      throw new Error(`Package mutation rejected: ${validation.errors.join('; ')}`);
+    }
+
     const list = this.getPackages();
     const now = new Date().toISOString();
     let saved: CommercialPackage;
 
     if (pkg.id) {
       const idx = list.findIndex(p => p.id === pkg.id);
-      const existing = list[idx];
-      const newVersion = (existing?.version || 1) + 1;
+      const existing = idx >= 0 ? list[idx] : undefined;
+      const newVersion = existing ? (Number(existing.version) || 1) + 1 : 1;
       saved = {
         ...existing,
         ...pkg,
@@ -361,7 +389,7 @@ export class CommercialPackageService {
         updatedAt: now
       } as CommercialPackage;
 
-      if (pkg.updatedBy && typeof pkg.updatedBy === 'string' && pkg.updatedBy.trim()) {
+      if (pkg.updatedBy && typeof pkg.updatedBy === 'string' && pkg.updatedBy.trim() && pkg.updatedBy !== 'admin_sys' && pkg.updatedBy !== 'admin@minerx.cloud') {
         saved.updatedBy = pkg.updatedBy.trim();
         this.audit.logAction(saved.updatedBy, saved.updatedBy, 'SUPER_ADMIN', 'COMMERCIAL', 'UPDATE_PACKAGE_VERSION', saved.id, { version: newVersion, pkg: saved });
       } else {
@@ -388,9 +416,11 @@ export class CommercialPackageService {
         updatedAt: now
       } as CommercialPackage;
 
-      if (pkg.updatedBy && typeof pkg.updatedBy === 'string' && pkg.updatedBy.trim()) {
+      if (pkg.updatedBy && typeof pkg.updatedBy === 'string' && pkg.updatedBy.trim() && pkg.updatedBy !== 'admin_sys' && pkg.updatedBy !== 'admin@minerx.cloud') {
         saved.updatedBy = pkg.updatedBy.trim();
         this.audit.logAction(saved.updatedBy, saved.updatedBy, 'SUPER_ADMIN', 'COMMERCIAL', 'CREATE_PACKAGE', saved.id, { pkg: saved });
+      } else {
+        delete saved.updatedBy;
       }
 
       list.unshift(saved);
@@ -421,16 +451,19 @@ export class CommercialPackageService {
     const list = this.getPackages();
     const idx = list.findIndex(p => p.id === packageId || p.id.replace(/-/g, '_') === packageId.replace(/-/g, '_'));
     if (idx >= 0) {
+      const existing = list[idx];
       const updated: CommercialPackage = {
-        ...list[idx],
+        ...existing,
         variablePct,
         commissionPct,
-        version: list[idx].version + 1,
+        version: (Number(existing.version) || 1) + 1,
         updatedAt: new Date().toISOString()
       };
-      if (updatedBy && typeof updatedBy === 'string' && updatedBy.trim()) {
+      if (updatedBy && typeof updatedBy === 'string' && updatedBy.trim() && updatedBy !== 'admin_sys' && updatedBy !== 'admin@minerx.cloud') {
         updated.updatedBy = updatedBy.trim();
         this.audit.logAction(updated.updatedBy, updated.updatedBy, 'SUPER_ADMIN', 'COMMERCIAL', 'UPDATE_PACKAGE_VARIABLES', packageId, { variablePct, commissionPct });
+      } else {
+        delete updated.updatedBy;
       }
 
       list[idx] = updated;
@@ -455,17 +488,20 @@ export class CommercialPackageService {
     return null;
   }
 
-
   public toggleArchive(packageId: string, updatedBy?: string): void {
     const list = this.getPackages();
     const pkg = list.find(p => p.id === packageId);
     if (pkg) {
-      pkg.status = pkg.status === 'ACTIVE' ? 'ARCHIVED' : 'ACTIVE';
+      const transitioningToArchive = pkg.status === 'ACTIVE';
+      pkg.status = transitioningToArchive ? 'ARCHIVED' : 'ACTIVE';
       pkg.isPublished = pkg.status === 'ACTIVE';
+      pkg.version = (Number(pkg.version) || 1) + 1;
       pkg.updatedAt = new Date().toISOString();
-      if (updatedBy && typeof updatedBy === 'string' && updatedBy.trim()) {
+      if (updatedBy && typeof updatedBy === 'string' && updatedBy.trim() && updatedBy !== 'admin_sys' && updatedBy !== 'admin@minerx.cloud') {
         pkg.updatedBy = updatedBy.trim();
         this.audit.logAction(pkg.updatedBy, pkg.updatedBy, 'SUPER_ADMIN', 'COMMERCIAL', 'TOGGLE_PACKAGE_STATUS', packageId, { newStatus: pkg.status });
+      } else {
+        delete pkg.updatedBy;
       }
 
       localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
@@ -475,6 +511,7 @@ export class CommercialPackageService {
           ...pkg,
           status: pkg.status,
           isPublished: pkg.isPublished,
+          version: pkg.version,
           updatedAt: pkg.updatedAt
         }, { merge: true }).catch(err => {
           console.error(`[CommercialPackageService] Error updating archive status in Firestore:`, err);
@@ -482,11 +519,19 @@ export class CommercialPackageService {
       }
 
       try {
-        apiFetch(`/api/catalog/packages/${encodeURIComponent(pkg.id)}/archive`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ updatedBy })
-        }).catch(() => {});
+        if (transitioningToArchive) {
+          apiFetch(`/api/catalog/packages/${encodeURIComponent(pkg.id)}/archive`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ updatedBy: pkg.updatedBy })
+          }).catch(() => {});
+        } else {
+          apiFetch('/api/catalog/packages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(pkg)
+          }).catch(() => {});
+        }
       } catch {}
     }
   }
@@ -496,10 +541,13 @@ export class CommercialPackageService {
     const pkg = list.find(p => p.id === packageId);
     if (pkg) {
       pkg.isPublished = !pkg.isPublished;
+      pkg.version = (Number(pkg.version) || 1) + 1;
       pkg.updatedAt = new Date().toISOString();
-      if (updatedBy && typeof updatedBy === 'string' && updatedBy.trim()) {
+      if (updatedBy && typeof updatedBy === 'string' && updatedBy.trim() && updatedBy !== 'admin_sys' && updatedBy !== 'admin@minerx.cloud') {
         pkg.updatedBy = updatedBy.trim();
         this.audit.logAction(pkg.updatedBy, pkg.updatedBy, 'SUPER_ADMIN', 'COMMERCIAL', 'TOGGLE_PUBLISH_STATUS', packageId, { isPublished: pkg.isPublished });
+      } else {
+        delete pkg.updatedBy;
       }
 
       localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
@@ -508,6 +556,7 @@ export class CommercialPackageService {
         setDoc(doc(db, COMMERCIAL_PACKAGES_COLLECTION, packageId), {
           ...pkg,
           isPublished: pkg.isPublished,
+          version: pkg.version,
           updatedAt: pkg.updatedAt
         }, { merge: true }).catch(err => {
           console.error(`[CommercialPackageService] Error updating publish status in Firestore:`, err);

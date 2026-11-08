@@ -473,7 +473,7 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
       campaigns: [{ id: 'camp-1' }],
     } as any);
     assert.equal(withCampaigns.valid, false);
-    assert.ok(withCampaigns.errors.some(e => e.includes('campaigns and discounts are out of scope for SCRUM-212')));
+    assert.ok(withCampaigns.errors.some(e => e.includes('out of scope for SCRUM-212')));
 
     const withDiscounts = CatalogService.validatePackageMutation({
       name: 'Miner With Discount',
@@ -483,7 +483,27 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
       discounts: [10],
     } as any);
     assert.equal(withDiscounts.valid, false);
-    assert.ok(withDiscounts.errors.some(e => e.includes('campaigns and discounts are out of scope for SCRUM-212')));
+    assert.ok(withDiscounts.errors.some(e => e.includes('out of scope for SCRUM-212')));
+
+    // Also verify priority, stackable, discount, and promotionalPrice are rejected
+    for (const forbidden of [
+      { priority: 1 },
+      { stackable: true },
+      { discount: { isActive: true } },
+      { promotionalPrice: 50 },
+      { promoPrice: 50 },
+      { discountActive: true }
+    ]) {
+      const res = CatalogService.validatePackageMutation({
+        name: 'Forbidden Miner',
+        powerTh: 10,
+        priceUsdt: 100,
+        section: 'minerx',
+        ...forbidden,
+      } as any);
+      assert.equal(res.valid, false, `Expected ${Object.keys(forbidden)[0]} to be rejected`);
+      assert.ok(res.errors.some(e => e.includes('out of scope for SCRUM-212')));
+    }
   });
 
   // 20. no Client changes and no synthetic credentials (admin_sys / admin@minerx.cloud)
@@ -501,6 +521,201 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
     assert.equal(updated.updatedBy, undefined, 'Must NOT invent admin_sys or admin@minerx.cloud when no real identity is provided');
     assert.notEqual(updated.updatedBy, 'admin_sys');
     assert.notEqual(updated.updatedBy, 'admin@minerx.cloud');
+  });
+
+  // Legacy Preservation: Reject overwriting or mutating physically preserved legacy packages
+  it('protects physically preserved legacy packages from being overwritten or mutated', async () => {
+    const { service } = createTestCatalogService();
+
+    // 1. Validation rejects overwriting legacy package
+    const validation = CatalogService.validatePackageMutation(
+      {
+        id: 'pkg-miner-2',
+        name: 'Minero 2 Attempt Overwrite',
+        powerTh: 120,
+        priceUsdt: 1500,
+        section: 'minerx',
+      },
+      {
+        isUpdate: true,
+        existingPackage: fixtureLegacyPackage2,
+      }
+    );
+    assert.equal(validation.valid, false);
+    assert.ok(validation.errors.some(e => e.includes('Cannot overwrite or mutate physically preserved legacy package')));
+
+    // 2. savePackage throws when targeting legacy package
+    await assert.rejects(
+      async () => {
+        await service.savePackage({
+          id: 'pkg-miner-2',
+          name: 'Minero 2 Attempt Overwrite',
+          powerTh: 120,
+          priceUsdt: 1500,
+          section: 'minerx',
+        });
+      },
+      /Cannot overwrite or mutate physically preserved legacy package/
+    );
+
+    // 3. archivePackage throws when targeting legacy package
+    await assert.rejects(
+      async () => {
+        await service.archivePackage('pkg-miner-2');
+      },
+      /Cannot overwrite or archive physically preserved legacy package/
+    );
+  });
+
+  // PackageId != MinerId contract enforcement
+  it('enforces packageId != minerId (rejects minerId on commercial package mutations)', () => {
+    const withMinerId = CatalogService.validatePackageMutation({
+      id: 'pkg-minerx-01',
+      minerId: 'miner-worker-123',
+      name: 'Confused Package',
+      powerTh: 100,
+      priceUsdt: 1000,
+      section: 'minerx',
+    } as any);
+    assert.equal(withMinerId.valid, false);
+    assert.ok(withMinerId.errors.some(e => e.includes('minerId is invalid on commercial_packages')));
+  });
+
+  // ID consistency enforcement
+  it('enforces that id and packageId must match if both are supplied', () => {
+    const mismatched = CatalogService.validatePackageMutation({
+      id: 'pkg-minerx-01',
+      packageId: 'pkg-minerx-02',
+      name: 'Mismatched ID',
+      powerTh: 100,
+      priceUsdt: 1000,
+      section: 'minerx',
+    });
+    assert.equal(mismatched.valid, false);
+    assert.ok(mismatched.errors.some(e => e.includes('must match')));
+  });
+
+  // Visible catalog currency enforcement
+  it('enforces visible catalog currency strictly USD', () => {
+    const validUsd = CatalogService.validatePackageMutation({
+      name: 'Valid USD Miner',
+      powerTh: 100,
+      priceUsdt: 1000,
+      section: 'minerx',
+      currency: 'USD',
+    });
+    assert.equal(validUsd.valid, true);
+
+    const invalidCurrency = CatalogService.validatePackageMutation({
+      name: 'Invalid EUR Miner',
+      powerTh: 100,
+      priceUsdt: 1000,
+      section: 'minerx',
+      currency: 'EUR' as any,
+    });
+    assert.equal(invalidCurrency.valid, false);
+    assert.ok(invalidCurrency.errors.some(e => e.includes('Visible catalog currency must remain strictly \'USD\'')));
+  });
+
+  // Synthetic credential rejection
+  it('rejects synthetic credentials admin_sys and admin@minerx.cloud as authoritative identities', () => {
+    const withAdminSys = CatalogService.validatePackageMutation({
+      name: 'Miner With Synthetic Admin',
+      powerTh: 100,
+      priceUsdt: 1000,
+      section: 'minerx',
+      updatedBy: 'admin_sys',
+    });
+    assert.equal(withAdminSys.valid, false);
+    assert.ok(withAdminSys.errors.some(e => e.includes('Synthetic credential')));
+
+    const withAdminEmail = CatalogService.validatePackageMutation({
+      name: 'Miner With Synthetic Email',
+      powerTh: 100,
+      priceUsdt: 1000,
+      section: 'minerx',
+      updatedBy: 'admin@minerx.cloud',
+    });
+    assert.equal(withAdminEmail.valid, false);
+    assert.ok(withAdminEmail.errors.some(e => e.includes('Synthetic credential')));
+  });
+
+  // CommercialPackageService mutation validations
+  it('CommercialPackageService validates mutations and rejects invalid inputs', () => {
+    const commercialService = CommercialPackageService.getInstance();
+
+    // Rejects invalid mutation with negative power
+    assert.throws(
+      () => {
+        commercialService.savePackage({
+          name: 'Invalid Power',
+          powerTh: -10,
+          priceUsdt: 500,
+          section: 'minerx',
+        } as any);
+      },
+      /Package mutation rejected/
+    );
+
+    // Rejects invalid mutation with out-of-scope fields
+    assert.throws(
+      () => {
+        commercialService.savePackage({
+          name: 'Invalid With Discount',
+          powerTh: 50,
+          priceUsdt: 500,
+          section: 'minerx',
+          finalPriceUsdCents: 4900,
+        } as any);
+      },
+      /Package mutation rejected/
+    );
+
+    // Successfully creates and updates a valid package with version increments
+    const saved = commercialService.savePackage({
+      name: 'Valid Dynamic Miner',
+      powerTh: 80,
+      priceUsdt: 800,
+      section: 'minerx',
+    });
+    assert.equal(saved.status, 'ACTIVE');
+    assert.equal(saved.version, 1);
+
+    const updated = commercialService.savePackage({
+      ...saved,
+      powerTh: 85,
+    });
+    assert.equal(updated.version, 2);
+    assert.equal(updated.powerTh, 85);
+  });
+
+  // FirestoreCatalogStoreAdapter behavior with null / custom store
+  it('FirestoreCatalogStoreAdapter handles null firestore gracefully and supports constructor injection', async () => {
+    const { FirestoreCatalogStoreAdapter } = await import('../../src/services/catalogService');
+
+    // Null firestore adapter returns empty on getPackages and throws on save
+    const nullAdapter = new FirestoreCatalogStoreAdapter(null);
+    const pkgs = await nullAdapter.getPackages();
+    assert.deepEqual(pkgs, []);
+    const byId = await nullAdapter.getPackageById('any-id');
+    assert.equal(byId, null);
+    await assert.rejects(
+      async () => {
+        await nullAdapter.savePackage(fixtureMinerxPublished);
+      },
+      /Firestore is not initialized/
+    );
+
+    // Custom mock firestore adapter
+    const mockMap = new Map<string, any>();
+    mockMap.set(fixtureMinerxPublished.id, fixtureMinerxPublished);
+    const mockStore = {
+      mockDocs: [fixtureMinerxPublished],
+    };
+    const mockAdapter = new FirestoreCatalogStoreAdapter({
+      // Mock duck-typed firestore instance
+    });
+    assert.ok(mockAdapter);
   });
 
   // CommercialPackageService integration tests

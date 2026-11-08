@@ -472,8 +472,10 @@ app.get('/api/catalog/storefront', (req, res) => {
   const section = req.query.section as string;
   const packages = readPackages();
 
-  if (section && !CANONICAL_SECTIONS.includes(section as any)) {
-    return res.status(400).json({ error: `Invalid section: ${section}. Must be one of: ${CANONICAL_SECTIONS.join(', ')}` });
+  if (!section || !CANONICAL_SECTIONS.includes(section as any)) {
+    return res.status(400).json({
+      error: `Missing or invalid section query parameter: '${section}'. Must be one of: ${CANONICAL_SECTIONS.join(', ')}`
+    });
   }
 
   const storefrontPackages = packages
@@ -481,7 +483,7 @@ app.get('/api/catalog/storefront', (req, res) => {
       pkg &&
       typeof pkg.section === 'string' &&
       CANONICAL_SECTIONS.includes(pkg.section) &&
-      (!section || pkg.section === section) &&
+      pkg.section === section &&
       pkg.isPublished === true &&
       pkg.status === 'ACTIVE' &&
       !pkg.isLegacy
@@ -551,14 +553,20 @@ function validatePackageMutationPayload(pkg: any, existingPkg?: any): { valid: b
   if (typeof pkg.priceUsdt !== 'number' || pkg.priceUsdt <= 0 || isNaN(pkg.priceUsdt)) {
     errors.push('priceUsdt must be a positive number');
   }
-  if (pkg.section && !CANONICAL_SECTIONS.includes(pkg.section)) {
-    errors.push(`Invalid section: ${pkg.section}`);
+  if (!pkg.section || !CANONICAL_SECTIONS.includes(pkg.section)) {
+    errors.push(`Invalid or missing section: ${pkg.section}. Must be one of: ${CANONICAL_SECTIONS.join(', ')}`);
   }
   if (pkg.packageType && !['fixed', 'subscription', 'custom'].includes(pkg.packageType)) {
     errors.push(`Invalid packageType: ${pkg.packageType}`);
   }
   if (pkg.status && !['ACTIVE', 'ARCHIVED', 'DRAFT'].includes(pkg.status)) {
     errors.push(`Invalid status: ${pkg.status}`);
+  }
+  if (pkg.currency !== undefined && pkg.currency !== 'USD') {
+    errors.push(`Visible catalog currency must remain strictly 'USD' (received: '${pkg.currency}')`);
+  }
+  if (pkg.minerId !== undefined) {
+    errors.push('minerId is invalid on commercial_packages: a package is an offer/template, not a miner instance');
   }
   if (pkg.limitedUnits !== undefined && (typeof pkg.limitedUnits !== 'number' || pkg.limitedUnits < 0 || isNaN(pkg.limitedUnits))) {
     errors.push('limitedUnits cannot be negative');
@@ -572,6 +580,9 @@ function validatePackageMutationPayload(pkg: any, existingPkg?: any): { valid: b
   if (typeof pkg.limitedUnits === 'number' && typeof pkg.soldUnits === 'number' && pkg.soldUnits > pkg.limitedUnits) {
     errors.push('soldUnits cannot exceed limitedUnits');
   }
+  if (existingPkg && (!existingPkg.section || existingPkg.isLegacy || !CANONICAL_SECTIONS.includes(existingPkg.section))) {
+    errors.push(`Cannot overwrite physically preserved legacy package: ${existingPkg.id}`);
+  }
   if (existingPkg && (pkg.packageId || pkg.id)) {
     const targetId = pkg.packageId || pkg.id;
     const currentId = existingPkg.packageId || existingPkg.id;
@@ -579,14 +590,37 @@ function validatePackageMutationPayload(pkg: any, existingPkg?: any): { valid: b
       errors.push(`packageId must remain stable: cannot change ${currentId} to ${targetId}`);
     }
   }
-  if (pkg.finalPriceUsdCents !== undefined || pkg.campaigns !== undefined || pkg.discounts !== undefined) {
-    errors.push('finalPriceUsdCents, campaigns and discounts are out of scope for SCRUM-212 and belong to SCRUM-213');
+  const outOfScopeScrum213Fields = [
+    'finalPriceUsdCents',
+    'campaigns',
+    'discounts',
+    'discount',
+    'priority',
+    'stackable',
+    'promotions',
+    'promotionalPrice',
+    'promoPrice',
+    'discountActive',
+    'discountType',
+    'discountValue',
+    'discountLabel',
+  ];
+  for (const field of outOfScopeScrum213Fields) {
+    if (pkg[field] !== undefined) {
+      errors.push(`Field '${field}' is out of scope for SCRUM-212 and belongs to SCRUM-213`);
+    }
+  }
+  if (pkg.updatedBy && (pkg.updatedBy === 'admin_sys' || pkg.updatedBy === 'admin@minerx.cloud')) {
+    errors.push(`Synthetic credential '${pkg.updatedBy}' is not an authoritative administrative identity`);
   }
   return { valid: errors.length === 0, errors };
 }
 
 // 2a.5 Canonical Package Save / Update Endpoint
 app.post(['/api/catalog/packages', '/api/packages', '/api/commercial-packages'], (req, res) => {
+  if (req.path === '/api/packages' || req.path === '/api/commercial-packages') {
+    res.setHeader('X-Catalog-Legacy', 'true');
+  }
   const pkg = req.body;
   const packages = readPackages();
   const packageId = pkg?.packageId || pkg?.id;
@@ -611,7 +645,7 @@ app.post(['/api/catalog/packages', '/api/packages', '/api/commercial-packages'],
       version: nextVersion,
       updatedAt: now
     };
-    if (pkg.updatedBy && typeof pkg.updatedBy === 'string' && pkg.updatedBy.trim()) {
+    if (pkg.updatedBy && typeof pkg.updatedBy === 'string' && pkg.updatedBy.trim() && pkg.updatedBy !== 'admin_sys' && pkg.updatedBy !== 'admin@minerx.cloud') {
       saved.updatedBy = pkg.updatedBy.trim();
     } else {
       delete saved.updatedBy;
@@ -629,7 +663,7 @@ app.post(['/api/catalog/packages', '/api/packages', '/api/commercial-packages'],
       createdAt: now,
       updatedAt: now
     };
-    if (pkg.updatedBy && typeof pkg.updatedBy === 'string' && pkg.updatedBy.trim()) {
+    if (pkg.updatedBy && typeof pkg.updatedBy === 'string' && pkg.updatedBy.trim() && pkg.updatedBy !== 'admin_sys' && pkg.updatedBy !== 'admin@minerx.cloud') {
       saved.updatedBy = pkg.updatedBy.trim();
     }
     packages.unshift(saved);
@@ -651,6 +685,10 @@ app.post('/api/catalog/packages/:id/archive', (req, res) => {
   }
 
   const existing = packages[idx];
+  if (!existing.section || existing.isLegacy || !CANONICAL_SECTIONS.includes(existing.section)) {
+    return res.status(400).json({ error: `Cannot overwrite or archive physically preserved legacy package: ${id}` });
+  }
+
   const now = new Date().toISOString();
   const archived = {
     ...existing,
@@ -660,7 +698,7 @@ app.post('/api/catalog/packages/:id/archive', (req, res) => {
     updatedAt: now
   };
 
-  if (updatedBy && typeof updatedBy === 'string' && updatedBy.trim()) {
+  if (updatedBy && typeof updatedBy === 'string' && updatedBy.trim() && updatedBy !== 'admin_sys' && updatedBy !== 'admin@minerx.cloud') {
     archived.updatedBy = updatedBy.trim();
   } else {
     delete archived.updatedBy;
