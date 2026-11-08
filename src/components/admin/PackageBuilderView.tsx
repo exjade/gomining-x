@@ -331,7 +331,7 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
     }
     const priceNum = Number(formData.priceUsdt);
     if (isNaN(priceNum) || priceNum <= 0) {
-      setModalError('El precio (USDT) debe ser un número positivo.');
+      setModalError('El precio (USD) debe ser un número positivo.');
       return;
     }
     if (formData.sortOrder === '' || formData.sortOrder === null || formData.sortOrder === undefined) {
@@ -362,6 +362,7 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
       packageType: formData.packageType,
       powerTh: powerNum,
       priceUsdt: priceNum,
+      currency: 'USD',
       sortOrder: sortOrderNum,
       status: formData.status,
       isPublished: formData.isPublished,
@@ -752,7 +753,7 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
                     }`}>
                       <div className="flex justify-between items-center">
                         <span className={isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}>Precio Comercial:</span>
-                        <span className="font-bold text-[#05DF72] text-sm">${pkg.priceUsdt} USDT</span>
+                        <span className="font-bold text-[#05DF72] text-sm">${pkg.priceUsdt} USD</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className={isDarkTheme ? 'text-slate-400' : 'text-slate-600 font-medium'}>Rendimiento Estimado:</span>
@@ -1242,7 +1243,7 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
 
                 <div>
                   <label className="block text-xs font-semibold mb-1 text-slate-300">
-                    Precio Comercial (USDT) *
+                    Precio Comercial (USD) *
                   </label>
                   <input
                     type="number"
@@ -1479,7 +1480,7 @@ export const PackageBuilderView: React.FC<PackageBuilderViewProps> = ({
                       <strong className={formAnnualRoi >= 0 ? 'text-[#05DF72]' : 'text-rose-400'}>
                         {formAnnualRoi >= 0 ? `+${formAnnualRoi.toFixed(1)}%` : `${formAnnualRoi.toFixed(1)}%`} / año
                       </strong>
-                      <span className="text-[10px] text-slate-400 block">sobre ${formPriceNum} USDT</span>
+                      <span className="text-[10px] text-slate-400 block">sobre ${formPriceNum} USD</span>
                     </div>
                   </div>
                 </div>

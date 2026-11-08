@@ -1086,4 +1086,160 @@ describe('SCRUM-217: PackageBuilder Canonical CRUD & Backend-First Integration T
       });
     });
   });
+
+  describe('5. Iteration 3: Canonical Display Currency USD & Materialization', () => {
+    const packageBuilderSrc = fs.readFileSync(
+      path.resolve(WORKTREE_ROOT, 'src/components/admin/PackageBuilderView.tsx'),
+      'utf-8'
+    );
+
+    it('1. PackageBuilder form label presents Precio Comercial (USD) * (not USDT)', () => {
+      assert.ok(
+        packageBuilderSrc.includes('Precio Comercial (USD) *'),
+        'Form label must be "Precio Comercial (USD) *"'
+      );
+      assert.equal(
+        packageBuilderSrc.includes('Precio Comercial (USDT) *'),
+        false,
+        'Form label must NOT mention USDT'
+      );
+    });
+
+    it('2. PackageBuilder validation message states price in USD', () => {
+      assert.ok(
+        packageBuilderSrc.includes("setModalError('El precio (USD) debe ser un número positivo.');"),
+        'Validation message must specify USD'
+      );
+      assert.equal(
+        packageBuilderSrc.includes("setModalError('El precio (USDT) debe ser un número positivo.');"),
+        false,
+        'Validation message must NOT specify USDT'
+      );
+    });
+
+    it('3. Canonical package cards display price as USD', () => {
+      assert.ok(
+        packageBuilderSrc.includes('${pkg.priceUsdt} USD'),
+        'Canonical package cards must show ${pkg.priceUsdt} USD'
+      );
+      assert.equal(
+        packageBuilderSrc.includes('text-[#05DF72] text-sm">${pkg.priceUsdt} USDT</span>'),
+        false,
+        'Canonical package cards must NOT show ${pkg.priceUsdt} USDT'
+      );
+    });
+
+    it('4. Modal live simulation preview states price in USD', () => {
+      assert.ok(
+        packageBuilderSrc.includes('sobre ${formPriceNum} USD'),
+        'Live simulation preview must show "sobre ${formPriceNum} USD"'
+      );
+      assert.equal(
+        packageBuilderSrc.includes('sobre ${formPriceNum} USDT'),
+        false,
+        'Live simulation preview must NOT show USDT'
+      );
+    });
+
+    it('5. PackageBuilder CREATE payload explicitly materializes currency: "USD"', () => {
+      assert.ok(
+        packageBuilderSrc.includes("currency: 'USD'"),
+        'CREATE payload must explicitly materialize currency: "USD"'
+      );
+    });
+
+    it('6. Technical field priceUsdt is preserved (not renamed)', () => {
+      assert.ok(
+        packageBuilderSrc.includes('priceUsdt: priceNum'),
+        'Must preserve technical field priceUsdt'
+      );
+      assert.ok(
+        packageBuilderSrc.includes('priceUsdt: string'),
+        'Must preserve priceUsdt in form data interface'
+      );
+    });
+
+    it('7. CatalogService.validatePackageMutation rejects currency: "USDT" for catalog packages', () => {
+      const res = CatalogService.validatePackageMutation({
+        name: 'USDT Catalog Miner',
+        powerTh: 100,
+        priceUsdt: 1000,
+        section: 'minerx',
+        packageType: 'fixed',
+        sortOrder: 1,
+        status: 'ACTIVE',
+        isPublished: true,
+        currency: 'USDT' as any,
+      }, { isCreate: true });
+
+      assert.equal(res.valid, false);
+      assert.ok(
+        res.errors.some(e => e.includes("Visible catalog currency must remain strictly 'USD'")),
+        'Must reject non-USD catalog currency'
+      );
+    });
+
+    it('8. CatalogService.savePackage materializes currency: "USD" on CREATE when omitted', async () => {
+      const savedInMem: CommercialPackage[] = [];
+      const mockAdapter = {
+        getPackages: async () => savedInMem,
+        savePackage: async (p: CommercialPackage) => { savedInMem.push(p); },
+        getPackageById: async (id: string) => savedInMem.find(p => p.id === id) || null,
+      };
+      const catalog = new CatalogService(mockAdapter as any);
+
+      const created = await catalog.savePackage({
+        name: 'Default Currency Miner',
+        powerTh: 150,
+        priceUsdt: 1500,
+        section: 'minerx',
+        packageType: 'fixed',
+        sortOrder: 1,
+        status: 'ACTIVE',
+        isPublished: true,
+      }, { updatedBy: 'usr_valid_admin' });
+
+      assert.equal(created.currency, 'USD', 'Must materialize currency: "USD" on CREATE');
+    });
+
+    it('9. CatalogService.savePackage preserves currency: "USD" on UPDATE', async () => {
+      const existingPkg: CommercialPackage = {
+        id: 'pkg-exist-1',
+        packageId: 'pkg-exist-1',
+        name: 'Existing Miner',
+        powerTh: 100,
+        priceUsdt: 1000,
+        currency: 'USD',
+        section: 'minerx',
+        packageType: 'fixed',
+        sortOrder: 1,
+        status: 'ACTIVE',
+        isPublished: true,
+        version: 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      const savedInMem: CommercialPackage[] = [existingPkg];
+      const mockAdapter = {
+        getPackages: async () => savedInMem,
+        savePackage: async (p: CommercialPackage) => {
+          const idx = savedInMem.findIndex(x => x.id === p.id);
+          if (idx >= 0) savedInMem[idx] = p;
+          else savedInMem.push(p);
+        },
+        getPackageById: async (id: string) => savedInMem.find(p => p.id === id) || null,
+      };
+      const catalog = new CatalogService(mockAdapter as any);
+
+      const updated = await catalog.savePackage({
+        id: 'pkg-exist-1',
+        name: 'Existing Miner Renamed',
+        powerTh: 120,
+        priceUsdt: 1200,
+        section: 'minerx',
+      }, { updatedBy: 'usr_valid_admin' });
+
+      assert.equal(updated.currency, 'USD', 'Must preserve currency: "USD" on UPDATE');
+    });
+  });
 });

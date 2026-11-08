@@ -470,6 +470,7 @@ export class CatalogService {
       saved = {
         ...existing,
         ...cleanPkg,
+        currency: cleanPkg.currency ?? existing.currency ?? 'USD',
         id: existing.id,
         packageId: existing.packageId || existing.id,
         version: nextVersion,
@@ -490,6 +491,7 @@ export class CatalogService {
       const generatedId = targetId || `pkg-${Date.now()}`;
       saved = {
         ...cleanPkg,
+        currency: cleanPkg.currency || 'USD',
         id: generatedId,
         packageId: generatedId,
         status: cleanPkg.status as 'ACTIVE' | 'ARCHIVED' | 'DRAFT',
