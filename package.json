@@ -12,7 +12,7 @@
     "dev:server": "node server/server.ts",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "node --import tsx --test test/unit/profitabilityService.test.ts test/unit/vastOffersService.test.ts test/unit/strategyEngine.test.ts test/unit/miningVisualizationService.test.ts test/unit/commercialPackagesSync.test.ts test/unit/userManagementSync.test.ts",
+    "test": "node --import tsx --test test/unit/profitabilityService.test.ts test/unit/vastOffersService.test.ts test/unit/strategyEngine.test.ts test/unit/miningVisualizationService.test.ts test/unit/commercialPackagesSync.test.ts test/unit/userManagementSync.test.ts test/unit/scrum210SchemaRules.test.ts",
     "start": "tsx server/server.ts",
     "electron:dev": "concurrently -n \"SERVER,CLIENT,ELECTRON\" -c \"cyan,emerald,magenta\" \"tsx watch server/server.ts\" \"vite\" \"electron .\"",
     "build:exe": "npm run build && electron-builder --win --dir",

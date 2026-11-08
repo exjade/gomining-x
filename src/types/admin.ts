@@ -192,6 +192,121 @@ export interface CommercialPackage {
   isPublished?: boolean;
   createdAt: string;
   updatedAt: string;
+
+  // Additive fields for dynamic storefront sections & catalog (SCRUM-205 / SCRUM-210)
+  section?: 'minerx' | 'preventa' | 'lanzamiento' | 'mensual';
+  packageType?: 'fixed' | 'subscription' | 'custom';
+  sortOrder?: number;
+  displayName?: string;
+  frontendKey?: string;
+  source?: 'frontend-seed' | 'admin';
+  priceUsdCents?: number;
+  pricePerThCents?: number;
+  priceUsdtCents?: number;
+  billing?: 'one_time' | 'monthly';
+  finalPriceUsdCents?: number;
+  currency?: 'USDT' | 'USD';
+  dailyBtcText?: string;
+  roiPct?: number;
+  limitedUnits?: number;
+  availableUnits?: number;
+  soldUnits?: number;
+  publishedToStorefront?: boolean;
+  subscription?: {
+    initialTh: number;
+    upgradeTargetTh: number;
+  };
+  custom?: {
+    minTh: number;
+    maxTh: number;
+    levels: number;
+    minPriceUsdCents: number;
+    maxPriceUsdCents: number;
+  };
+  uiText?: {
+    subtitle?: string;
+    badge?: string;
+    note?: string;
+    ctaText?: string;
+  };
+  discount?: {
+    isActive: boolean;
+    type: 'percent' | 'fixed';
+    value: number;
+    label: string;
+    startsAt?: string;
+    endsAt?: string;
+  };
+  campaignIds?: string[];
+  maintenanceDiscountPct?: {
+    starter?: number;
+    pro?: number;
+    presale?: number;
+  };
+  minerTemplateId?: string | null;
+  updatedBy?: string;
+  seededAt?: string;
+}
+
+// Storefront Campaign Specification (SCRUM-205 / SCRUM-210)
+export interface Campaign {
+  id: string;
+  name: string;
+  type: 'percent' | 'fixed';
+  value: number;
+  startsAt: string;
+  endsAt: string;
+  isActive: boolean;
+  priority: number;
+  stackable: boolean;
+  appliesTo: {
+    all?: boolean;
+    sections?: ('minerx' | 'preventa' | 'lanzamiento' | 'mensual')[];
+    packageIds?: string[];
+  };
+  badgeText?: string;
+  maxRedemptions?: number;
+  redeemedCount?: number;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Purchased Package Snapshot for immutable audit & purchase traceability
+export interface PurchasedPackageSnapshot {
+  packageId: string;
+  packageName: string;
+  displayName?: string;
+  section?: 'minerx' | 'preventa' | 'lanzamiento' | 'mensual';
+  packageType?: 'fixed' | 'subscription' | 'custom';
+  powerTh: number;
+  pricePaidCents: number;
+  pricePaidUsd: number;
+  pricePaidUsdt?: number;
+  currency: string;
+  billing?: 'one_time' | 'monthly';
+  durationDays: number;
+  variablePct: number;
+  commissionPct: number;
+  dailyBtcText?: string;
+  roiPct?: number;
+  discountApplied?: {
+    type: 'percent' | 'fixed';
+    value: number;
+    label: string;
+    campaignId?: string;
+  };
+  packageVersion: number;
+  purchasedAt: string;
+}
+
+// Client Miner Instance with Purchase Snapshot
+export interface PurchasedMinerInstance {
+  minerId: string;
+  uid: string;
+  packageId: string;
+  packageSnapshot: PurchasedPackageSnapshot;
+  createdAt: string;
 }
 
 // Contract & Allocation

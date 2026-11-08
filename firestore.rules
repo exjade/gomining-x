@@ -1,69 +1,134 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // MinerX Cloud Telemetry & Platform Administration Security Rules
-    // Completely isolated from GoMining client collections (/users, /miners, /referrals)
+    // Helper security functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.admin == true ||
+        request.auth.token.role in ['ADMIN', 'SUPER_ADMIN', 'FINANCE', 'OPERATOR'] ||
+        exists(/databases/$(database)/documents/admin_users/$(request.auth.uid))
+      );
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
 
     // Colección de Administradores y Operadores de la Plataforma
     match /admin_users/{userId} {
-      allow read, write: if true;
+      allow read: if isAdmin() || (isAuthenticated() && request.auth.uid == userId);
+      allow write: if isAdmin();
       match /{allSubcollections=**} {
-        allow read, write: if true;
+        allow read, write: if isAdmin();
       }
     }
 
     // Colección de Usuarios y Clientes de la Plataforma (/users)
     match /users/{userId} {
-      allow read, write: if true;
+      allow read: if true; // Public read for sponsor referral code lookup
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'referral', 'commissionBalance', 'balance', 'totalCommissionsEarned',
+          'purchasesCount', 'lastPurchaseAt', 'firstPurchaseAt', 'sponsorId'
+        ])
+      );
+      allow delete: if false;
       match /{allSubcollections=**} {
-        allow read, write: if true;
+        allow read, write: if isAuthenticated() && request.auth.uid == userId;
       }
     }
 
-    // Colección de Flota de Workers y Racks
+    // Instancias de mineros comprados por usuarios (/miners/{uid}/miner/{minerId})
+    // Trazabilidad de compra: conserva minerId, packageId y snapshot económico
+    // Desacoplado: compras históricas inmutables y protegidas contra borrado
+    match /miners/{uid}/miner/{minerId} {
+      allow read, write: if isOwner(uid) || isAdmin();
+      allow delete: if false;
+    }
+
+    // Flota de Workers y Racks
     match /admin_workers/{workerId} {
-      allow read, write: if true;
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
     // Contratos y Asignaciones Administrativas
     match /admin_contracts/{contractId} {
-      allow read, write: if true;
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow write: if isAdmin();
     }
 
     // Registro de Auditoría de la Plataforma
     match /admin_audit_logs/{logId} {
-      allow read, write: if true;
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false; // Inmutabilidad estricta
     }
 
     // Ajustes y Configuración de MinerX
     match /admin_settings/{settingId} {
-      allow read, write: if true;
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
-    // Paquetes comerciales de minería disponibles para la plataforma
+    // Paquetes comerciales de minería disponibles para la plataforma (commercial_packages/{packageId})
+    // REGLAS DE SEGURIDAD POUW-1.3 (SCRUM-210):
+    // 1. Client/Público: SOLO lectura de paquetes publicados (isPublished == true)
+    // 2. Admin: lectura de todo el catálogo (incluyendo borradores y archivados)
+    // 3. Escritura: estrictamente reservada a Administradores/Backend autorizado
+    // 4. Borrado físico: PROHIBIDO (hard delete denegado; solo archivar vía status='ARCHIVED' e isPublished=false)
     match /commercial_packages/{packageId} {
-      allow read, write: if true;
+      allow read: if resource.data.isPublished == true || isAdmin();
+      allow create, update: if isAdmin();
+      allow delete: if false;
     }
 
-    // Órdenes y pagos de paquetes
+    // Campañas y Descuentos de la Tienda (campaigns/{campaignId})
+    // 1. Client/Público: lectura de campañas activas (isActive == true)
+    // 2. Admin: lectura total y administración
+    // 3. Escritura: estrictamente reservada a Admin
+    // 4. Borrado físico: PROHIBIDO
+    match /campaigns/{campaignId} {
+      allow read: if resource.data.isActive == true || isAdmin();
+      allow create, update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // Órdenes y pagos de paquetes (admin_orders/{orderId})
     match /admin_orders/{orderId} {
-      allow read, write: if true;
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin();
+      allow delete: if false;
     }
 
     // Compatibilidad retroactiva con minerx_*
     match /minerx_users/{userId} {
-      allow read, write: if true;
+      allow read, write: if isAdmin();
       match /{allSubcollections=**} {
-        allow read, write: if true;
+        allow read, write: if isAdmin();
       }
     }
 
     match /minerx_audit_logs/{logId} {
-      allow read, write: if true;
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
     }
 
     match /minerx_app_data/{docId} {
-      allow read, write: if true;
+      allow read, write: if isAdmin();
+    }
+
+    // Default deny all other paths
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

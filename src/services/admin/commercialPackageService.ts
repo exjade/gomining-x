@@ -1,10 +1,127 @@
-import type { CommercialPackage } from '../../types/admin';
+import type { CommercialPackage, PurchasedPackageSnapshot } from '../../types/admin';
 import { AdminAuditService } from './adminAuditService';
 import { db, collection, doc, getDocs, setDoc, onSnapshot } from '../../utils/firebaseAuth';
 import { apiFetch } from '../../utils/apiConfig';
 
 const STORAGE_KEY = 'minerx_admin_commercial_packages_v2';
 export const COMMERCIAL_PACKAGES_COLLECTION = 'commercial_packages';
+export const CAMPAIGNS_COLLECTION = 'campaigns';
+
+/**
+ * Deserializes raw Firestore document data into typed CommercialPackage
+ * handling legacy fields as well as SCRUM-205 / SCRUM-210 additive fields.
+ */
+export function deserializeCommercialPackageDoc(id: string, data: any): CommercialPackage {
+  const priceUsdt = Number(data.priceUsdt) || 0;
+  const priceUsdCents = typeof data.priceUsdCents === 'number'
+    ? data.priceUsdCents
+    : (priceUsdt > 0 ? Math.round(priceUsdt * 100) : undefined);
+  const status = data.status || 'ACTIVE';
+  const isPublished = data.isPublished ?? (status === 'ACTIVE');
+
+  return {
+    id,
+    name: data.name || 'Paquete Minero',
+    powerTh: Number(data.powerTh) || 0,
+    priceUsdt,
+    durationDays: Number(data.durationDays) || 365,
+    status,
+    isPublished,
+    variablePct: Number(data.variablePct) || 0,
+    commissionPct: Number(data.commissionPct) || 2,
+    version: Number(data.version) || 1,
+    description: data.description || '',
+    maxPurchasesPerUser: data.maxPurchasesPerUser,
+
+    // Additive fields
+    section: data.section,
+    packageType: data.packageType,
+    sortOrder: typeof data.sortOrder === 'number' ? data.sortOrder : undefined,
+    displayName: data.displayName,
+    frontendKey: data.frontendKey,
+    source: data.source,
+    priceUsdCents,
+    pricePerThCents: typeof data.pricePerThCents === 'number' ? data.pricePerThCents : undefined,
+    priceUsdtCents: typeof data.priceUsdtCents === 'number' ? data.priceUsdtCents : undefined,
+    billing: data.billing,
+    finalPriceUsdCents: typeof data.finalPriceUsdCents === 'number' ? data.finalPriceUsdCents : undefined,
+    currency: data.currency,
+    dailyBtcText: data.dailyBtcText,
+    roiPct: typeof data.roiPct === 'number' ? data.roiPct : undefined,
+    limitedUnits: typeof data.limitedUnits === 'number' ? data.limitedUnits : undefined,
+    availableUnits: typeof data.availableUnits === 'number' ? data.availableUnits : undefined,
+    soldUnits: typeof data.soldUnits === 'number' ? data.soldUnits : undefined,
+    publishedToStorefront: data.publishedToStorefront,
+    subscription: data.subscription,
+    custom: data.custom,
+    uiText: data.uiText,
+    discount: data.discount,
+    campaignIds: Array.isArray(data.campaignIds) ? data.campaignIds : undefined,
+    maintenanceDiscountPct: data.maintenanceDiscountPct,
+    minerTemplateId: data.minerTemplateId,
+    updatedBy: data.updatedBy,
+    seededAt: data.seededAt,
+
+    createdAt: data.createdAt || new Date().toISOString(),
+    updatedAt: data.updatedAt || new Date().toISOString(),
+  };
+}
+
+/**
+ * Creates an immutable snapshot of package economic data at purchase time.
+ * Decouples the purchased miner instance from future catalog/price changes.
+ */
+export function createPurchaseSnapshot(
+  pkg: CommercialPackage,
+  pricePaidCents?: number,
+  discountApplied?: PurchasedPackageSnapshot['discountApplied']
+): PurchasedPackageSnapshot {
+  const finalCents = pricePaidCents ?? pkg.finalPriceUsdCents ?? pkg.priceUsdCents ?? Math.round(pkg.priceUsdt * 100);
+  return {
+    packageId: pkg.id,
+    packageName: pkg.name,
+    displayName: pkg.displayName,
+    section: pkg.section,
+    packageType: pkg.packageType,
+    powerTh: pkg.powerTh,
+    pricePaidCents: finalCents,
+    pricePaidUsd: finalCents / 100,
+    pricePaidUsdt: pkg.priceUsdt,
+    currency: pkg.currency || 'USD',
+    billing: pkg.billing,
+    durationDays: pkg.durationDays,
+    variablePct: pkg.variablePct,
+    commissionPct: pkg.commissionPct,
+    dailyBtcText: pkg.dailyBtcText,
+    roiPct: pkg.roiPct,
+    discountApplied,
+    packageVersion: pkg.version,
+    purchasedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Validates package schema requirements per SCRUM-210.
+ */
+export function validatePackageSchema(pkg: Partial<CommercialPackage>): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  if (!pkg.name || !pkg.name.trim()) errors.push('Package name is required');
+  if (typeof pkg.powerTh !== 'number' || pkg.powerTh <= 0) errors.push('powerTh must be a positive number');
+  if (typeof pkg.priceUsdt !== 'number' || pkg.priceUsdt <= 0) errors.push('priceUsdt must be positive');
+  if (pkg.priceUsdCents !== undefined && (!Number.isInteger(pkg.priceUsdCents) || pkg.priceUsdCents <= 0)) {
+    errors.push('priceUsdCents must be a positive integer representing cents');
+  }
+  if (pkg.section && !['minerx', 'preventa', 'lanzamiento', 'mensual'].includes(pkg.section)) {
+    errors.push(`Invalid section: ${pkg.section}`);
+  }
+  if (pkg.packageType && !['fixed', 'subscription', 'custom'].includes(pkg.packageType)) {
+    errors.push(`Invalid packageType: ${pkg.packageType}`);
+  }
+  if (pkg.status && !['ACTIVE', 'ARCHIVED', 'DRAFT'].includes(pkg.status)) {
+    errors.push(`Invalid status: ${pkg.status}`);
+  }
+  return { valid: errors.length === 0, errors };
+}
 
 export const INITIAL_PACKAGES: CommercialPackage[] = [
   {
@@ -119,25 +236,9 @@ export class CommercialPackageService {
       try {
         const snap = await getDocs(collection(db, COMMERCIAL_PACKAGES_COLLECTION));
         if (!snap.empty) {
-          const remotePackages: CommercialPackage[] = snap.docs.map(d => {
-            const data = d.data();
-            return {
-              id: d.id,
-              name: data.name || 'Paquete Minero',
-              powerTh: Number(data.powerTh) || 0,
-              priceUsdt: Number(data.priceUsdt) || 0,
-              durationDays: Number(data.durationDays) || 365,
-              status: data.status || 'ACTIVE',
-              isPublished: data.isPublished ?? (data.status === 'ACTIVE'),
-              variablePct: Number(data.variablePct) || 0,
-              commissionPct: Number(data.commissionPct) || 2,
-              version: Number(data.version) || 1,
-              description: data.description || '',
-              maxPurchasesPerUser: data.maxPurchasesPerUser,
-              createdAt: data.createdAt || new Date().toISOString(),
-              updatedAt: data.updatedAt || new Date().toISOString()
-            };
-          });
+          const remotePackages: CommercialPackage[] = snap.docs.map(d =>
+            deserializeCommercialPackageDoc(d.id, d.data())
+          );
           localStorage.setItem(STORAGE_KEY, JSON.stringify(remotePackages));
           return remotePackages;
         } else {
@@ -172,25 +273,9 @@ export class CommercialPackageService {
       const colRef = collection(db, COMMERCIAL_PACKAGES_COLLECTION);
       return onSnapshot(colRef, (snap) => {
         if (!snap.empty) {
-          const remotePackages: CommercialPackage[] = snap.docs.map(d => {
-            const data = d.data();
-            return {
-              id: d.id,
-              name: data.name || 'Paquete Minero',
-              powerTh: Number(data.powerTh) || 0,
-              priceUsdt: Number(data.priceUsdt) || 0,
-              durationDays: Number(data.durationDays) || 365,
-              status: data.status || 'ACTIVE',
-              isPublished: data.isPublished ?? (data.status === 'ACTIVE'),
-              variablePct: Number(data.variablePct) || 0,
-              commissionPct: Number(data.commissionPct) || 2,
-              version: Number(data.version) || 1,
-              description: data.description || '',
-              maxPurchasesPerUser: data.maxPurchasesPerUser,
-              createdAt: data.createdAt || new Date().toISOString(),
-              updatedAt: data.updatedAt || new Date().toISOString()
-            };
-          });
+          const remotePackages: CommercialPackage[] = snap.docs.map(d =>
+            deserializeCommercialPackageDoc(d.id, d.data())
+          );
           localStorage.setItem(STORAGE_KEY, JSON.stringify(remotePackages));
           callback(remotePackages);
         }
@@ -343,6 +428,52 @@ export class CommercialPackageService {
         }).catch(() => {});
       } catch {}
     }
+  }
+
+  /**
+   * Explicitly archives a package without hard-deleting the document.
+   * Adheres strictly to SCRUM-210 decision:
+   * - status = 'ARCHIVED'
+   * - isPublished = false
+   * - packageId preserved
+   * - historical audit preserved
+   * - purchased miner instances and orders remain unaffected
+   */
+  public archivePackage(packageId: string): CommercialPackage | null {
+    const list = this.getPackages();
+    const pkg = list.find(p => p.id === packageId);
+    if (pkg) {
+      pkg.status = 'ARCHIVED';
+      pkg.isPublished = false;
+      pkg.updatedAt = new Date().toISOString();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+      this.audit.logAction('admin_sys', 'admin@minerx.cloud', 'SUPER_ADMIN', 'COMMERCIAL', 'ARCHIVE_PACKAGE', packageId, {
+        status: 'ARCHIVED',
+        isPublished: false
+      });
+
+      if (db) {
+        setDoc(doc(db, COMMERCIAL_PACKAGES_COLLECTION, packageId), {
+          ...pkg,
+          status: 'ARCHIVED',
+          isPublished: false,
+          updatedAt: pkg.updatedAt
+        }, { merge: true }).catch(err => {
+          console.error(`[CommercialPackageService] Error archiving package in Firestore:`, err);
+        });
+      }
+
+      try {
+        apiFetch('/api/packages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(pkg)
+        }).catch(() => {});
+      } catch {}
+
+      return pkg;
+    }
+    return null;
   }
 
   public togglePublish(packageId: string): void {
