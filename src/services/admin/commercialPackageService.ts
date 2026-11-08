@@ -2,6 +2,7 @@ import type { CommercialPackage, PurchasedPackageSnapshot } from '../../types/ad
 import { AdminAuditService } from './adminAuditService';
 import { db, collection, doc, getDocs, setDoc, onSnapshot } from '../../utils/firebaseAuth';
 import { apiFetch } from '../../utils/apiConfig';
+import { CatalogService, type CatalogSection } from '../catalogService';
 
 const STORAGE_KEY = 'minerx_admin_commercial_packages_v2';
 export const COMMERCIAL_PACKAGES_COLLECTION = 'commercial_packages';
@@ -128,6 +129,12 @@ export function validatePackageSchema(pkg: Partial<CommercialPackage>): { valid:
   if (p.status && !['ACTIVE', 'ARCHIVED', 'DRAFT'].includes(p.status)) {
     errors.push(`Invalid status: ${p.status}`);
   }
+  if ((p as any).finalPriceUsdCents !== undefined) {
+    errors.push('finalPriceUsdCents is out of scope for SCRUM-212 and belongs to SCRUM-213');
+  }
+  if ((p as any).campaigns !== undefined || (p as any).discounts !== undefined || (p as any).promotions !== undefined) {
+    errors.push('campaigns and discounts are out of scope for SCRUM-212 and belong to SCRUM-213');
+  }
   return { valid: errors.length === 0, errors };
 }
 
@@ -144,6 +151,7 @@ export const INITIAL_PACKAGES: CommercialPackage[] = [
     commissionPct: 2.0,
     version: 1,
     description: 'Paquete de entrada optimizado para minería continua de PearlHash.',
+    isLegacy: true,
     createdAt: '2026-10-01T00:00:00Z',
     updatedAt: '2026-10-01T00:00:00Z'
   },
@@ -159,6 +167,7 @@ export const INITIAL_PACKAGES: CommercialPackage[] = [
     commissionPct: 2.0,
     version: 1,
     description: 'Rendimiento equilibrado con multiplicador variable del +2.5%.',
+    isLegacy: true,
     createdAt: '2026-10-01T00:00:00Z',
     updatedAt: '2026-10-01T00:00:00Z'
   },
@@ -174,6 +183,7 @@ export const INITIAL_PACKAGES: CommercialPackage[] = [
     commissionPct: 1.8,
     version: 1,
     description: 'Alta potencia para operadores profesionales con +5.0% de variable.',
+    isLegacy: true,
     createdAt: '2026-10-01T00:00:00Z',
     updatedAt: '2026-10-01T00:00:00Z'
   },
@@ -189,6 +199,7 @@ export const INITIAL_PACKAGES: CommercialPackage[] = [
     commissionPct: 1.5,
     version: 1,
     description: 'Potencia industrial con tasa preferencial de comisión reducida.',
+    isLegacy: true,
     createdAt: '2026-10-01T00:00:00Z',
     updatedAt: '2026-10-01T00:00:00Z'
   },
@@ -204,6 +215,7 @@ export const INITIAL_PACKAGES: CommercialPackage[] = [
     commissionPct: 1.0,
     version: 1,
     description: 'Máxima capacidad computacional con variable premium del +10.0%.',
+    isLegacy: true,
     createdAt: '2026-10-01T00:00:00Z',
     updatedAt: '2026-10-01T00:00:00Z'
   }
@@ -237,7 +249,8 @@ export class CommercialPackageService {
 
   /**
    * Fetch all commercial packages from Cloud Firestore collection /commercial_packages.
-   * If remote collection is empty or fails, falls back to Express API endpoint (/api/packages) or local cache.
+   * If remote collection is empty, returns empty list per SCRUM-211 (reads never write/auto-seed).
+   * Decoupled from legacy fallback: legacy packages without section are never returned as storefront catalog.
    */
   public async fetchFirestorePackages(): Promise<CommercialPackage[]> {
     if (db) {
@@ -259,14 +272,15 @@ export class CommercialPackageService {
       }
     }
 
-    // Secondary fallback: Express API Server
+    // Secondary fallback: Express API Server canonical endpoint
     try {
-      const res = await apiFetch('/api/packages');
+      const res = await apiFetch('/api/catalog/admin');
       if (res.ok) {
         const remoteApi = await res.json();
-        if (Array.isArray(remoteApi) && remoteApi.length > 0) {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(remoteApi));
-          return remoteApi;
+        const packages = Array.isArray(remoteApi) ? remoteApi : (remoteApi.canonical || []);
+        if (packages.length > 0) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(packages));
+          return packages;
         }
       }
     } catch {}
@@ -298,6 +312,25 @@ export class CommercialPackageService {
   }
 
   /**
+   * Storefront read by section per SCRUM-212 contract.
+   * Strictly returns published ACTIVE packages matching requested section ordered by sortOrder ASC.
+   * Completely excludes legacy without section, DRAFT, ARCHIVED, or unpublished packages.
+   */
+  public getStorefrontPackages(section: CatalogSection): CommercialPackage[] {
+    const list = this.getPackages();
+    return CatalogService.filterStorefrontPackages(list, section);
+  }
+
+  /**
+   * Administrative catalog view per SCRUM-212 contract.
+   * Returns canonical packages (ACTIVE, DRAFT, ARCHIVED) and physically preserved legacy items separated.
+   */
+  public getAdminCatalog(): { canonical: CommercialPackage[]; legacy: CommercialPackage[] } {
+    const list = this.getPackages();
+    return CatalogService.separateCatalogAndLegacy(list);
+  }
+
+  /**
    * @deprecated Neutralized per SCRUM-211. Silent/legacy writes with INITIAL_PACKAGES are forbidden.
    * Seeding must only be performed via SafeSeedService / safeSeedPackages script with explicit --apply.
    */
@@ -306,7 +339,9 @@ export class CommercialPackageService {
     return 0;
   }
 
-  public savePackage(pkg: Omit<CommercialPackage, 'createdAt' | 'updatedAt' | 'version' | 'id'> & { id?: string }): CommercialPackage {
+  public savePackage(
+    pkg: Omit<CommercialPackage, 'createdAt' | 'updatedAt' | 'version' | 'id'> & { id?: string; updatedBy?: string }
+  ): CommercialPackage {
     const list = this.getPackages();
     const now = new Date().toISOString();
     let saved: CommercialPackage;
@@ -325,12 +360,19 @@ export class CommercialPackageService {
         version: newVersion,
         updatedAt: now
       } as CommercialPackage;
+
+      if (pkg.updatedBy && typeof pkg.updatedBy === 'string' && pkg.updatedBy.trim()) {
+        saved.updatedBy = pkg.updatedBy.trim();
+        this.audit.logAction(saved.updatedBy, saved.updatedBy, 'SUPER_ADMIN', 'COMMERCIAL', 'UPDATE_PACKAGE_VERSION', saved.id, { version: newVersion, pkg: saved });
+      } else {
+        delete saved.updatedBy;
+      }
+
       if (idx >= 0) {
         list[idx] = saved;
       } else {
         list.push(saved);
       }
-      this.audit.logAction('admin_sys', 'admin@minerx.cloud', 'SUPER_ADMIN', 'COMMERCIAL', 'UPDATE_PACKAGE_VERSION', saved.id, { version: newVersion, pkg: saved });
     } else {
       const newId = `pkg-${Date.now()}`;
       saved = {
@@ -345,8 +387,13 @@ export class CommercialPackageService {
         createdAt: now,
         updatedAt: now
       } as CommercialPackage;
+
+      if (pkg.updatedBy && typeof pkg.updatedBy === 'string' && pkg.updatedBy.trim()) {
+        saved.updatedBy = pkg.updatedBy.trim();
+        this.audit.logAction(saved.updatedBy, saved.updatedBy, 'SUPER_ADMIN', 'COMMERCIAL', 'CREATE_PACKAGE', saved.id, { pkg: saved });
+      }
+
       list.unshift(saved);
-      this.audit.logAction('admin_sys', 'admin@minerx.cloud', 'SUPER_ADMIN', 'COMMERCIAL', 'CREATE_PACKAGE', saved.id, { pkg: saved });
     }
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
@@ -360,7 +407,7 @@ export class CommercialPackageService {
 
     // Asynchronously synchronize with Express API Server
     try {
-      apiFetch('/api/packages', {
+      apiFetch('/api/catalog/packages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(saved)
@@ -370,7 +417,7 @@ export class CommercialPackageService {
     return saved;
   }
 
-  public updatePackageVariables(packageId: string, variablePct: number, commissionPct: number): CommercialPackage | null {
+  public updatePackageVariables(packageId: string, variablePct: number, commissionPct: number, updatedBy?: string): CommercialPackage | null {
     const list = this.getPackages();
     const idx = list.findIndex(p => p.id === packageId || p.id.replace(/-/g, '_') === packageId.replace(/-/g, '_'));
     if (idx >= 0) {
@@ -381,9 +428,13 @@ export class CommercialPackageService {
         version: list[idx].version + 1,
         updatedAt: new Date().toISOString()
       };
+      if (updatedBy && typeof updatedBy === 'string' && updatedBy.trim()) {
+        updated.updatedBy = updatedBy.trim();
+        this.audit.logAction(updated.updatedBy, updated.updatedBy, 'SUPER_ADMIN', 'COMMERCIAL', 'UPDATE_PACKAGE_VARIABLES', packageId, { variablePct, commissionPct });
+      }
+
       list[idx] = updated;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-      this.audit.logAction('admin_sys', 'admin@minerx.cloud', 'SUPER_ADMIN', 'COMMERCIAL', 'UPDATE_PACKAGE_VARIABLES', packageId, { variablePct, commissionPct });
 
       if (db) {
         setDoc(doc(db, COMMERCIAL_PACKAGES_COLLECTION, updated.id), updated, { merge: true }).catch(err => {
@@ -392,7 +443,7 @@ export class CommercialPackageService {
       }
 
       try {
-        apiFetch('/api/packages', {
+        apiFetch('/api/catalog/packages', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updated)
@@ -404,15 +455,20 @@ export class CommercialPackageService {
     return null;
   }
 
-  public toggleArchive(packageId: string): void {
+
+  public toggleArchive(packageId: string, updatedBy?: string): void {
     const list = this.getPackages();
     const pkg = list.find(p => p.id === packageId);
     if (pkg) {
       pkg.status = pkg.status === 'ACTIVE' ? 'ARCHIVED' : 'ACTIVE';
       pkg.isPublished = pkg.status === 'ACTIVE';
       pkg.updatedAt = new Date().toISOString();
+      if (updatedBy && typeof updatedBy === 'string' && updatedBy.trim()) {
+        pkg.updatedBy = updatedBy.trim();
+        this.audit.logAction(pkg.updatedBy, pkg.updatedBy, 'SUPER_ADMIN', 'COMMERCIAL', 'TOGGLE_PACKAGE_STATUS', packageId, { newStatus: pkg.status });
+      }
+
       localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-      this.audit.logAction('admin_sys', 'admin@minerx.cloud', 'SUPER_ADMIN', 'COMMERCIAL', 'TOGGLE_PACKAGE_STATUS', packageId, { newStatus: pkg.status });
 
       if (db) {
         setDoc(doc(db, COMMERCIAL_PACKAGES_COLLECTION, packageId), {
@@ -426,23 +482,27 @@ export class CommercialPackageService {
       }
 
       try {
-        apiFetch('/api/packages', {
+        apiFetch(`/api/catalog/packages/${encodeURIComponent(pkg.id)}/archive`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(pkg)
+          body: JSON.stringify({ updatedBy })
         }).catch(() => {});
       } catch {}
     }
   }
 
-  public togglePublish(packageId: string): void {
+  public togglePublish(packageId: string, updatedBy?: string): void {
     const list = this.getPackages();
     const pkg = list.find(p => p.id === packageId);
     if (pkg) {
       pkg.isPublished = !pkg.isPublished;
       pkg.updatedAt = new Date().toISOString();
+      if (updatedBy && typeof updatedBy === 'string' && updatedBy.trim()) {
+        pkg.updatedBy = updatedBy.trim();
+        this.audit.logAction(pkg.updatedBy, pkg.updatedBy, 'SUPER_ADMIN', 'COMMERCIAL', 'TOGGLE_PUBLISH_STATUS', packageId, { isPublished: pkg.isPublished });
+      }
+
       localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-      this.audit.logAction('admin_sys', 'admin@minerx.cloud', 'SUPER_ADMIN', 'COMMERCIAL', 'TOGGLE_PUBLISH_STATUS', packageId, { isPublished: pkg.isPublished });
 
       if (db) {
         setDoc(doc(db, COMMERCIAL_PACKAGES_COLLECTION, packageId), {
@@ -455,7 +515,7 @@ export class CommercialPackageService {
       }
 
       try {
-        apiFetch('/api/packages', {
+        apiFetch('/api/catalog/packages', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(pkg)

@@ -46,6 +46,89 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+export const LEGACY_PACKAGES: any[] = [
+  {
+    id: 'pkg-miner-1',
+    name: 'Minero 1 Entry',
+    powerTh: 48,
+    priceUsdt: 561.99,
+    durationDays: 365,
+    status: 'ACTIVE',
+    isPublished: true,
+    variablePct: 0.0,
+    commissionPct: 2.0,
+    version: 1,
+    description: 'Paquete de entrada optimizado para minería continua de PearlHash.',
+    isLegacy: true,
+    createdAt: '2026-10-01T00:00:00Z',
+    updatedAt: '2026-10-01T00:00:00Z'
+  },
+  {
+    id: 'pkg-miner-2',
+    name: 'Minero 2 Standard',
+    powerTh: 64,
+    priceUsdt: 744.99,
+    durationDays: 365,
+    status: 'ACTIVE',
+    isPublished: true,
+    variablePct: 2.5,
+    commissionPct: 2.0,
+    version: 1,
+    description: 'Rendimiento equilibrado con multiplicador variable del +2.5%.',
+    isLegacy: true,
+    createdAt: '2026-10-01T00:00:00Z',
+    updatedAt: '2026-10-01T00:00:00Z'
+  },
+  {
+    id: 'pkg-miner-3',
+    name: 'Minero 3 Pro',
+    powerTh: 96,
+    priceUsdt: 1111.99,
+    durationDays: 365,
+    status: 'ACTIVE',
+    isPublished: true,
+    variablePct: 5.0,
+    commissionPct: 1.8,
+    version: 1,
+    description: 'Alta potencia para operadores profesionales con +5.0% de variable.',
+    isLegacy: true,
+    createdAt: '2026-10-01T00:00:00Z',
+    updatedAt: '2026-10-01T00:00:00Z'
+  },
+  {
+    id: 'pkg-miner-4',
+    name: 'Minero 4 Master',
+    powerTh: 128,
+    priceUsdt: 1474.99,
+    durationDays: 365,
+    status: 'ACTIVE',
+    isPublished: true,
+    variablePct: 7.5,
+    commissionPct: 1.5,
+    version: 1,
+    description: 'Potencia industrial con tasa preferencial de comisión reducida.',
+    isLegacy: true,
+    createdAt: '2026-10-01T00:00:00Z',
+    updatedAt: '2026-10-01T00:00:00Z'
+  },
+  {
+    id: 'pkg-miner-5',
+    name: 'Minero 5 Enterprise',
+    powerTh: 192,
+    priceUsdt: 2201.99,
+    durationDays: 365,
+    status: 'ACTIVE',
+    isPublished: true,
+    variablePct: 10.0,
+    commissionPct: 1.0,
+    version: 1,
+    description: 'Máxima capacidad computacional con variable premium del +10.0%.',
+    isLegacy: true,
+    createdAt: '2026-10-01T00:00:00Z',
+    updatedAt: '2026-10-01T00:00:00Z'
+  }
+];
+
 export function readPackages(): any[] {
   try {
     if (fs.existsSync(PACKAGES_FILE)) {
@@ -54,83 +137,7 @@ export function readPackages(): any[] {
   } catch (err) {
     console.error('Error reading packages file:', err);
   }
-  return [
-    {
-      id: 'pkg-miner-1',
-      name: 'Minero 1 Entry',
-      powerTh: 48,
-      priceUsdt: 561.99,
-      durationDays: 365,
-      status: 'ACTIVE',
-      isPublished: true,
-      variablePct: 0.0,
-      commissionPct: 2.0,
-      version: 1,
-      description: 'Paquete de entrada optimizado para minería continua de PearlHash.',
-      createdAt: '2026-10-01T00:00:00Z',
-      updatedAt: '2026-10-01T00:00:00Z'
-    },
-    {
-      id: 'pkg-miner-2',
-      name: 'Minero 2 Standard',
-      powerTh: 64,
-      priceUsdt: 744.99,
-      durationDays: 365,
-      status: 'ACTIVE',
-      isPublished: true,
-      variablePct: 2.5,
-      commissionPct: 2.0,
-      version: 1,
-      description: 'Rendimiento equilibrado con multiplicador variable del +2.5%.',
-      createdAt: '2026-10-01T00:00:00Z',
-      updatedAt: '2026-10-01T00:00:00Z'
-    },
-    {
-      id: 'pkg-miner-3',
-      name: 'Minero 3 Pro',
-      powerTh: 96,
-      priceUsdt: 1111.99,
-      durationDays: 365,
-      status: 'ACTIVE',
-      isPublished: true,
-      variablePct: 5.0,
-      commissionPct: 1.8,
-      version: 1,
-      description: 'Alta potencia para operadores profesionales con +5.0% de variable.',
-      createdAt: '2026-10-01T00:00:00Z',
-      updatedAt: '2026-10-01T00:00:00Z'
-    },
-    {
-      id: 'pkg-miner-4',
-      name: 'Minero 4 Master',
-      powerTh: 128,
-      priceUsdt: 1474.99,
-      durationDays: 365,
-      status: 'ACTIVE',
-      isPublished: true,
-      variablePct: 7.5,
-      commissionPct: 1.5,
-      version: 1,
-      description: 'Potencia industrial con tasa preferencial de comisión reducida.',
-      createdAt: '2026-10-01T00:00:00Z',
-      updatedAt: '2026-10-01T00:00:00Z'
-    },
-    {
-      id: 'pkg-miner-5',
-      name: 'Minero 5 Enterprise',
-      powerTh: 192,
-      priceUsdt: 2201.99,
-      durationDays: 365,
-      status: 'ACTIVE',
-      isPublished: true,
-      variablePct: 10.0,
-      commissionPct: 1.0,
-      version: 1,
-      description: 'Máxima capacidad computacional con variable premium del +10.0%.',
-      createdAt: '2026-10-01T00:00:00Z',
-      updatedAt: '2026-10-01T00:00:00Z'
-    }
-  ];
+  return LEGACY_PACKAGES.map(p => ({ ...p }));
 }
 
 export function writePackages(packages: any[]): void {
@@ -456,49 +463,212 @@ app.post('/api/config', (req, res) => {
 });
 
 // 2a. Commercial Packages Endpoints (Platform Admin Packages)
-app.get(['/api/packages', '/api/commercial-packages'], (_req, res) => {
+const CANONICAL_SECTIONS = ['minerx', 'preventa', 'lanzamiento', 'mensual'] as const;
+
+// 2a.1 Canonical Storefront Endpoint (SCRUM-212)
+// Strictly returns canonical packages for the requested section that are published and ACTIVE.
+// Excludes legacy without section, DRAFT, ARCHIVED, and unpublished packages.
+app.get('/api/catalog/storefront', (req, res) => {
+  const section = req.query.section as string;
   const packages = readPackages();
-  res.json(packages);
+
+  if (section && !CANONICAL_SECTIONS.includes(section as any)) {
+    return res.status(400).json({ error: `Invalid section: ${section}. Must be one of: ${CANONICAL_SECTIONS.join(', ')}` });
+  }
+
+  const storefrontPackages = packages
+    .filter((pkg: any) =>
+      pkg &&
+      typeof pkg.section === 'string' &&
+      CANONICAL_SECTIONS.includes(pkg.section) &&
+      (!section || pkg.section === section) &&
+      pkg.isPublished === true &&
+      pkg.status === 'ACTIVE' &&
+      !pkg.isLegacy
+    )
+    .sort((a: any, b: any) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+
+  res.setHeader('Cache-Control', 'no-cache');
+  res.json(storefrontPackages);
 });
 
-app.post(['/api/packages', '/api/commercial-packages'], (req, res) => {
-  const pkg = req.body;
-  if (!pkg || !pkg.name || !pkg.powerTh) {
-    return res.status(400).json({ error: 'Nombre y potencia requeridos para el paquete' });
-  }
+// 2a.2 Canonical Admin Catalog Endpoint (SCRUM-212)
+// Exposes new canonical catalog (ACTIVE, DRAFT, ARCHIVED) and physically preserved legacy separated.
+app.get('/api/catalog/admin', (req, res) => {
+  const section = req.query.section as string;
+  const status = req.query.status as string;
   const packages = readPackages();
+
+  const canonical: any[] = [];
+  const legacy: any[] = [];
+
+  for (const pkg of packages) {
+    if (pkg && typeof pkg.section === 'string' && CANONICAL_SECTIONS.includes(pkg.section)) {
+      if (section && pkg.section !== section) continue;
+      if (status && pkg.status !== status) continue;
+      canonical.push(pkg);
+    } else {
+      legacy.push({
+        ...pkg,
+        isLegacy: true,
+      });
+    }
+  }
+
+  res.json({ canonical, legacy });
+});
+
+// 2a.3 Legacy Packages Endpoints (Preserved for backward compatibility)
+// Explicitly marked and separated as LEGACY; not the canonical dynamic storefront source.
+app.get(['/api/packages', '/api/commercial-packages'], (_req, res) => {
+  const packages = readPackages();
+  res.setHeader('X-Catalog-Legacy', 'true');
+  res.setHeader('X-Catalog-Notice', 'Legacy package endpoint. Storefront dynamic catalog uses /api/catalog/storefront');
+
+  // Tag any legacy items lacking section
+  const markedPackages = packages.map((pkg: any) => {
+    if (!pkg.section || !CANONICAL_SECTIONS.includes(pkg.section)) {
+      return { ...pkg, isLegacy: true };
+    }
+    return pkg;
+  });
+
+  res.json(markedPackages);
+});
+
+// 2a.4 Canonical Mutation Validation helper
+function validatePackageMutationPayload(pkg: any, existingPkg?: any): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  if (!pkg) {
+    return { valid: false, errors: ['Body is required'] };
+  }
+  if (!pkg.name || typeof pkg.name !== 'string' || !pkg.name.trim()) {
+    errors.push('Nombre requerido para el paquete');
+  }
+  if (typeof pkg.powerTh !== 'number' || pkg.powerTh <= 0 || isNaN(pkg.powerTh)) {
+    errors.push('powerTh must be a positive number');
+  }
+  if (typeof pkg.priceUsdt !== 'number' || pkg.priceUsdt <= 0 || isNaN(pkg.priceUsdt)) {
+    errors.push('priceUsdt must be a positive number');
+  }
+  if (pkg.section && !CANONICAL_SECTIONS.includes(pkg.section)) {
+    errors.push(`Invalid section: ${pkg.section}`);
+  }
+  if (pkg.packageType && !['fixed', 'subscription', 'custom'].includes(pkg.packageType)) {
+    errors.push(`Invalid packageType: ${pkg.packageType}`);
+  }
+  if (pkg.status && !['ACTIVE', 'ARCHIVED', 'DRAFT'].includes(pkg.status)) {
+    errors.push(`Invalid status: ${pkg.status}`);
+  }
+  if (pkg.limitedUnits !== undefined && (typeof pkg.limitedUnits !== 'number' || pkg.limitedUnits < 0 || isNaN(pkg.limitedUnits))) {
+    errors.push('limitedUnits cannot be negative');
+  }
+  if (pkg.availableUnits !== undefined && (typeof pkg.availableUnits !== 'number' || pkg.availableUnits < 0 || isNaN(pkg.availableUnits))) {
+    errors.push('availableUnits cannot be negative');
+  }
+  if (pkg.soldUnits !== undefined && (typeof pkg.soldUnits !== 'number' || pkg.soldUnits < 0 || isNaN(pkg.soldUnits))) {
+    errors.push('soldUnits cannot be negative');
+  }
+  if (typeof pkg.limitedUnits === 'number' && typeof pkg.soldUnits === 'number' && pkg.soldUnits > pkg.limitedUnits) {
+    errors.push('soldUnits cannot exceed limitedUnits');
+  }
+  if (existingPkg && (pkg.packageId || pkg.id)) {
+    const targetId = pkg.packageId || pkg.id;
+    const currentId = existingPkg.packageId || existingPkg.id;
+    if (targetId !== currentId) {
+      errors.push(`packageId must remain stable: cannot change ${currentId} to ${targetId}`);
+    }
+  }
+  if (pkg.finalPriceUsdCents !== undefined || pkg.campaigns !== undefined || pkg.discounts !== undefined) {
+    errors.push('finalPriceUsdCents, campaigns and discounts are out of scope for SCRUM-212 and belong to SCRUM-213');
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+// 2a.5 Canonical Package Save / Update Endpoint
+app.post(['/api/catalog/packages', '/api/packages', '/api/commercial-packages'], (req, res) => {
+  const pkg = req.body;
+  const packages = readPackages();
+  const packageId = pkg?.packageId || pkg?.id;
+  const existingIdx = packageId ? packages.findIndex((p: any) => p.id === packageId || p.packageId === packageId) : -1;
+  const existingPkg = existingIdx >= 0 ? packages[existingIdx] : undefined;
+
+  const validation = validatePackageMutationPayload(pkg, existingPkg);
+  if (!validation.valid) {
+    return res.status(400).json({ error: 'Validación de paquete fallida', details: validation.errors });
+  }
+
   const now = new Date().toISOString();
   let saved: any;
 
-  if (pkg.id) {
-    const idx = packages.findIndex(p => p.id === pkg.id);
-    if (idx >= 0) {
-      saved = {
-        ...packages[idx],
-        ...pkg,
-        version: (packages[idx].version || 1) + 1,
-        updatedAt: now
-      };
-      packages[idx] = saved;
+  if (existingPkg) {
+    const nextVersion = (Number(existingPkg.version) || 1) + 1;
+    saved = {
+      ...existingPkg,
+      ...pkg,
+      id: existingPkg.id,
+      packageId: existingPkg.packageId || existingPkg.id,
+      version: nextVersion,
+      updatedAt: now
+    };
+    if (pkg.updatedBy && typeof pkg.updatedBy === 'string' && pkg.updatedBy.trim()) {
+      saved.updatedBy = pkg.updatedBy.trim();
     } else {
-      saved = { ...pkg, version: 1, updatedAt: now };
-      packages.push(saved);
+      delete saved.updatedBy;
     }
+    packages[existingIdx] = saved;
   } else {
+    const newId = packageId || `pkg-${Date.now()}`;
     saved = {
       ...pkg,
-      id: `pkg-${Date.now()}`,
+      id: newId,
+      packageId: newId,
       version: 1,
       status: pkg.status || 'ACTIVE',
       isPublished: pkg.isPublished ?? true,
       createdAt: now,
       updatedAt: now
     };
+    if (pkg.updatedBy && typeof pkg.updatedBy === 'string' && pkg.updatedBy.trim()) {
+      saved.updatedBy = pkg.updatedBy.trim();
+    }
     packages.unshift(saved);
   }
 
   writePackages(packages);
   res.json({ success: true, package: saved });
+});
+
+// 2a.6 Canonical Package Archive Endpoint (SCRUM-212)
+app.post('/api/catalog/packages/:id/archive', (req, res) => {
+  const { id } = req.params;
+  const { updatedBy } = req.body || {};
+  const packages = readPackages();
+  const idx = packages.findIndex((p: any) => p.id === id || p.packageId === id);
+
+  if (idx < 0) {
+    return res.status(404).json({ error: `Paquete no encontrado: ${id}` });
+  }
+
+  const existing = packages[idx];
+  const now = new Date().toISOString();
+  const archived = {
+    ...existing,
+    status: 'ARCHIVED',
+    isPublished: false,
+    version: (Number(existing.version) || 1) + 1,
+    updatedAt: now
+  };
+
+  if (updatedBy && typeof updatedBy === 'string' && updatedBy.trim()) {
+    archived.updatedBy = updatedBy.trim();
+  } else {
+    delete archived.updatedBy;
+  }
+
+  packages[idx] = archived;
+  writePackages(packages);
+  res.json({ success: true, package: archived });
 });
 
 // 2b. Admin Contracts Endpoints (Client-purchased miners allocated to platform)

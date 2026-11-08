@@ -211,6 +211,7 @@ export interface CommercialPackage {
   soldUnits?: number;
   updatedBy?: string;
   seededAt?: string;
+  isLegacy?: boolean;
 }
 
 // Purchased Package Snapshot for immutable audit & purchase traceability
