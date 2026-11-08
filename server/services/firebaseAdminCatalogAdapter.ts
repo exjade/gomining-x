@@ -9,7 +9,6 @@ export const ADMIN_APP_NAME = 'minerx-backend-admin';
 
 export interface FirebaseAdminCatalogStoreAdapterOptions {
   firestore?: Firestore | any;
-  credentialsPath?: string;
   projectId?: string;
 }
 
@@ -47,10 +46,6 @@ export class FirebaseAdminCatalogStoreAdapter implements CatalogStoreAdapter {
 
   private initFirebaseAdmin(opts: FirebaseAdminCatalogStoreAdapterOptions): void {
     try {
-      if (opts.credentialsPath && fs.existsSync(opts.credentialsPath)) {
-        process.env.GOOGLE_APPLICATION_CREDENTIALS = opts.credentialsPath;
-      }
-
       const credPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
       const hasValidCredentials = Boolean(credPath && fs.existsSync(credPath));
       const hasEmulator = Boolean(process.env.FIRESTORE_EMULATOR_HOST);

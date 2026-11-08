@@ -545,6 +545,101 @@ export class CommercialPackageService {
   }
 
   /**
+   * CANONICAL ADMIN CATALOG FETCH (SCRUM-212 / SCRUM-217):
+   * Fetches administrative catalog directly from Express API endpoint (/api/catalog/admin).
+   * Backend-first and fail-closed: returns { canonical: CommercialPackage[], legacy: CommercialPackage[] }.
+   * Updates local cache upon successful 2xx response.
+   */
+  public async fetchAdminCatalog(query?: { section?: CatalogSection; status?: 'ACTIVE' | 'ARCHIVED' | 'DRAFT' }): Promise<{
+    canonical: CommercialPackage[];
+    legacy: CommercialPackage[];
+  }> {
+    let url = '/api/catalog/admin';
+    const params = new URLSearchParams();
+    if (query?.section) params.set('section', query.section);
+    if (query?.status) params.set('status', query.status);
+    const qs = params.toString();
+    if (qs) url += `?${qs}`;
+
+    let res: Response;
+    try {
+      res = await apiFetch(url);
+    } catch (netErr: any) {
+      throw new Error(`Error fetching admin catalog: network error (${netErr?.message || netErr})`);
+    }
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      const msg = errJson?.error || errJson?.details || `Backend returned HTTP ${res.status}`;
+      throw new Error(`Admin catalog fetch rejected by backend (${res.status}): ${msg}`);
+    }
+
+    const data = await res.json().catch(() => ({ canonical: [], legacy: [] }));
+    const canonical: CommercialPackage[] = Array.isArray(data.canonical) ? data.canonical : [];
+    const legacy: CommercialPackage[] = Array.isArray(data.legacy) ? data.legacy : [];
+
+    // Cache the combined or canonical packages
+    const all = [...canonical, ...legacy];
+    if (all.length > 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+    }
+
+    return { canonical, legacy };
+  }
+
+  /**
+   * CANONICAL ARCHIVE MUTATION PATH (SCRUM-212 / SCRUM-217):
+   * Archives a canonical commercial package via backend Express API (/api/catalog/packages/:id/archive).
+   * Strictly backend-first and fail-closed:
+   * - Must NOT write to localStorage before backend confirms archive.
+   * - If backend responds with error or fails, strictly throws.
+   * - Only updates local cache upon HTTP 2xx confirmation.
+   */
+  public async archiveCanonicalPackage(packageId: string): Promise<CommercialPackage> {
+    if (!packageId || typeof packageId !== 'string' || !packageId.trim()) {
+      throw new Error('Package id is required for archiveCanonicalPackage');
+    }
+
+    let res: Response;
+    try {
+      res = await apiFetch(`/api/catalog/packages/${encodeURIComponent(packageId.trim())}/archive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (netErr: any) {
+      throw new Error(`Canonical package archive rejected: network error (${netErr?.message || netErr})`);
+    }
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      const errMsg = errJson?.error || errJson?.details || `Backend returned HTTP ${res.status}`;
+      throw new Error(`Canonical package archive rejected by backend (${res.status}): ${errMsg}`);
+    }
+
+    const data = await res.json().catch(() => ({}));
+    if (!data?.package || data.success === false) {
+      const detail = data?.error || data?.details || 'backend did not return confirmed archived package';
+      throw new Error(`Canonical package archive rejected: ${detail}`);
+    }
+
+    // Only update local cache AFTER HTTP 2xx + confirmed package from backend
+    const list = this.getPackages();
+    const targetId = data.package.id;
+    const targetPkgId = data.package.packageId;
+    const idx = list.findIndex(
+      p =>
+        p.id === targetId ||
+        (targetPkgId && p.id === targetPkgId) ||
+        (p.packageId && (p.packageId === targetId || (targetPkgId && p.packageId === targetPkgId)))
+    );
+    if (idx >= 0) list[idx] = data.package;
+    else list.unshift(data.package);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+
+    return data.package;
+  }
+
+  /**
    * CANONICAL MUTATION PATH (SCRUM-212 / Target for SCRUM-217 Admin CRUD):
    * Saves or updates a canonical commercial package via backend Express API.
    * Strictly backend-first and fail-closed:
@@ -557,12 +652,14 @@ export class CommercialPackageService {
    */
   public async saveCanonicalPackage(
     pkg: Partial<CommercialPackage> & {
-      name: string;
-      powerTh: number;
-      priceUsdt: number;
-      section: CatalogSection;
-      status: 'ACTIVE' | 'ARCHIVED' | 'DRAFT';
-      isPublished: boolean;
+      id?: string;
+      packageId?: string;
+      name?: string;
+      powerTh?: number;
+      priceUsdt?: number;
+      section?: CatalogSection;
+      status?: 'ACTIVE' | 'ARCHIVED' | 'DRAFT';
+      isPublished?: boolean;
     },
     options?: { updatedBy?: string }
   ): Promise<CommercialPackage> {
