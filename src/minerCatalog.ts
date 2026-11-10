@@ -1,5 +1,6 @@
 export type MinerPlan = {
   id: string
+  packageId?: string
   label: string
   powerTh: number
   price: number
@@ -99,6 +100,21 @@ export const monthlyMinerPlans: MinerPlan[] = [
   { id: 'monthly-pro', label: 'Pro', powerTh: 24.20, price: 249.99, currency: 'USD', cadence: 'monthly' },
   { id: 'monthly-max', label: 'Máximo', powerTh: 48.66, price: 499.99, currency: 'USD', cadence: 'monthly' },
 ]
+
+export function getSectionFallbackPlans(section: 'minerx' | 'preventa' | 'lanzamiento' | 'mensual'): MinerPlan[] {
+  switch (section) {
+    case 'minerx':
+      return oneTimeMinerPlans
+    case 'preventa':
+      return presaleMinerPlans
+    case 'lanzamiento':
+      return launchMinerPlans
+    case 'mensual':
+      return monthlyMinerPlans
+    default:
+      return []
+  }
+}
 
 export const customMinerPriceTiers: Array<{ powerTh: number; priceUsd: number }> = [
   { powerTh: 1, priceUsd: 12.99 },

@@ -1,0 +1,2135 @@
+{
+  "timestamp": "2026-11-09T13:01:36.022Z",
+  "viewport": {
+    "width": 1280,
+    "height": 900
+  },
+  "baselineCommit": "99e046164113dd5edd704cd7f49558b2748e0636",
+  "baselineUrl": "http://127.0.0.1:5194/home?modal=paywall-create",
+  "correctiveUrl": "http://127.0.0.1:5195/home?modal=paywall-create",
+  "views": {
+    "01-modal-packages-tab": {
+      "viewName": "Paquetes MinerX Tab",
+      "geometryDeltas": {
+        "modal": {
+          "dx": 0,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "rows": [
+          {
+            "index": 0,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 1,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 2,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 3,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          }
+        ]
+      },
+      "pixelDiff": {
+        "mismatchedPixels": 0,
+        "totalPixels": 1152000,
+        "mismatchPercentage": 0
+      },
+      "baselineState": {
+        "modalRect": {
+          "x": 360,
+          "y": 36,
+          "width": 560,
+          "height": 828
+        },
+        "tabs": [
+          {
+            "id": "miner-tab-packages",
+            "text": "Paquetes MinerX",
+            "active": true,
+            "rect": {
+              "x": 390,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-presale",
+            "text": "Preventa",
+            "active": false,
+            "rect": {
+              "x": 515,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-launch",
+            "text": "Lanzamiento",
+            "active": false,
+            "rect": {
+              "x": 640,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-monthly",
+            "text": "Mensual",
+            "active": false,
+            "rect": {
+              "x": 765,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          }
+        ],
+        "rows": [
+          {
+            "title": "1.46 TH30 disp.",
+            "price": "$18.99 USD",
+            "detail": "0.00000062 BTC/día",
+            "roi": "ROI 52.5%*",
+            "available": "30 disp.",
+            "isActive": true,
+            "rect": {
+              "x": 385,
+              "y": 372.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "8.33 TH30 disp.",
+            "price": "$99.99 USD",
+            "detail": "0.00000354 BTC/día",
+            "roi": "ROI 55.62%*",
+            "available": "30 disp.",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 452.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "21.05 TH30 disp.",
+            "price": "$249.99 USD",
+            "detail": "0.00000894 BTC/día",
+            "roi": "ROI 56.47%*",
+            "available": "30 disp.",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 532.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "42.44 TH30 disp.",
+            "price": "$499.99 USD",
+            "detail": "0.00001802 BTC/día",
+            "roi": "ROI 57.17%*",
+            "available": "30 disp.",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 612.78125,
+              "width": 510,
+              "height": 72
+            }
+          }
+        ],
+        "customRow": {
+          "title": "✦Custom",
+          "price": "$12.99 USD – $54,768.99 USD",
+          "detail": "1–5,000 TH · 22 niveles",
+          "isActive": false,
+          "rect": {
+            "x": 385,
+            "y": 692.78125,
+            "width": 510,
+            "height": 72
+          }
+        },
+        "heading": "Elige una potencia para tu minero MinerX",
+        "configSummary": "Precio total $18.99 USDPotencia 1.46 THEficiencia 15 W/THCatálogo 5/11/2026",
+        "primaryButtonDisabled": false,
+        "stage2Title": "Crear un minero",
+        "stage2Eyebrow": "CONFIGURADOR DE MINERO",
+        "stage2Total": "",
+        "stage2Grid": [],
+        "bodyText": "×CONFIGURADOR DE MINEROCrear un mineroElige tu minero digital respaldado por potencia real. Todos los precios en USD ($).Paquetes MinerXPreventaLanzamientoMensualElige una potencia para tu minero MinerX1.46 TH30 disp.$18.99 USD0.00000062 BTC/díaROI 52.5%*8.33 TH30 disp.$99.99 USD0.00000354 BTC/díaROI 55.62%*21.05 TH30 disp.$249.99 USD0.00000894 BTC/díaROI 56.47%*42.44 TH30 disp.$499.99 USD0.00001802 BTC/díaROI 57.17%*✦Custom$12.99 USD – $54,768.99 USD1–5,000 TH · 22 nivelesPrecio total $18.99 USDPotencia 1.46 THEficiencia 15 W/THCatálogo 5/11/2026Código promocionalCancelarContinuar a la compra →"
+      },
+      "correctiveState": {
+        "modalRect": {
+          "x": 360,
+          "y": 36,
+          "width": 560,
+          "height": 828
+        },
+        "tabs": [
+          {
+            "id": "miner-tab-packages",
+            "text": "Paquetes MinerX",
+            "active": true,
+            "rect": {
+              "x": 390,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-presale",
+            "text": "Preventa",
+            "active": false,
+            "rect": {
+              "x": 515,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-launch",
+            "text": "Lanzamiento",
+            "active": false,
+            "rect": {
+              "x": 640,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-monthly",
+            "text": "Mensual",
+            "active": false,
+            "rect": {
+              "x": 765,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          }
+        ],
+        "rows": [
+          {
+            "title": "1.46 TH30 disp.",
+            "price": "$18.99 USD",
+            "detail": "0.00000062 BTC/día",
+            "roi": "ROI 52.5%*",
+            "available": "30 disp.",
+            "isActive": true,
+            "rect": {
+              "x": 385,
+              "y": 372.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "8.33 TH30 disp.",
+            "price": "$99.99 USD",
+            "detail": "0.00000354 BTC/día",
+            "roi": "ROI 55.62%*",
+            "available": "30 disp.",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 452.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "21.05 TH30 disp.",
+            "price": "$249.99 USD",
+            "detail": "0.00000894 BTC/día",
+            "roi": "ROI 56.47%*",
+            "available": "30 disp.",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 532.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "42.44 TH30 disp.",
+            "price": "$499.99 USD",
+            "detail": "0.00001802 BTC/día",
+            "roi": "ROI 57.17%*",
+            "available": "30 disp.",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 612.78125,
+              "width": 510,
+              "height": 72
+            }
+          }
+        ],
+        "customRow": {
+          "title": "✦Custom",
+          "price": "$12.99 USD – $54,768.99 USD",
+          "detail": "1–5,000 TH · 22 niveles",
+          "isActive": false,
+          "rect": {
+            "x": 385,
+            "y": 692.78125,
+            "width": 510,
+            "height": 72
+          }
+        },
+        "heading": "Elige una potencia para tu minero MinerX",
+        "configSummary": "Precio total $18.99 USDPotencia 1.46 THEficiencia 15 W/THCatálogo 5/11/2026",
+        "primaryButtonDisabled": false,
+        "stage2Title": "Crear un minero",
+        "stage2Eyebrow": "CONFIGURADOR DE MINERO",
+        "stage2Total": "",
+        "stage2Grid": [],
+        "bodyText": "×CONFIGURADOR DE MINEROCrear un mineroElige tu minero digital respaldado por potencia real. Todos los precios en USD ($).Paquetes MinerXPreventaLanzamientoMensualElige una potencia para tu minero MinerX1.46 TH30 disp.$18.99 USD0.00000062 BTC/díaROI 52.5%*8.33 TH30 disp.$99.99 USD0.00000354 BTC/díaROI 55.62%*21.05 TH30 disp.$249.99 USD0.00000894 BTC/díaROI 56.47%*42.44 TH30 disp.$499.99 USD0.00001802 BTC/díaROI 57.17%*✦Custom$12.99 USD – $54,768.99 USD1–5,000 TH · 22 nivelesPrecio total $18.99 USDPotencia 1.46 THEficiencia 15 W/THCatálogo 5/11/2026Código promocionalCancelarContinuar a la compra →"
+      },
+      "passed": true
+    },
+    "02-modal-presale-tab": {
+      "viewName": "Preventa Tab",
+      "geometryDeltas": {
+        "modal": {
+          "dx": 0,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "rows": [
+          {
+            "index": 0,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 1,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 2,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 3,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          }
+        ]
+      },
+      "pixelDiff": {
+        "mismatchedPixels": 0,
+        "totalPixels": 1152000,
+        "mismatchPercentage": 0
+      },
+      "baselineState": {
+        "modalRect": {
+          "x": 360,
+          "y": 36,
+          "width": 560,
+          "height": 828
+        },
+        "tabs": [
+          {
+            "id": "miner-tab-packages",
+            "text": "Paquetes MinerX",
+            "active": false,
+            "rect": {
+              "x": 390,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-presale",
+            "text": "Preventa",
+            "active": true,
+            "rect": {
+              "x": 515,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-launch",
+            "text": "Lanzamiento",
+            "active": false,
+            "rect": {
+              "x": 640,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-monthly",
+            "text": "Mensual",
+            "active": false,
+            "rect": {
+              "x": 765,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          }
+        ],
+        "rows": [
+          {
+            "title": "1.46 TH30 disp.",
+            "price": "$18.99 USD",
+            "detail": "0.00000062 BTC/día",
+            "roi": "ROI 52.5%*",
+            "available": "30 disp.",
+            "isActive": true,
+            "rect": {
+              "x": 385,
+              "y": 372.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "8.33 TH30 disp.",
+            "price": "$99.99 USD",
+            "detail": "0.00000354 BTC/día",
+            "roi": "ROI 55.62%*",
+            "available": "30 disp.",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 452.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "21.05 TH30 disp.",
+            "price": "$249.99 USD",
+            "detail": "0.00000894 BTC/día",
+            "roi": "ROI 56.47%*",
+            "available": "30 disp.",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 532.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "42.44 TH30 disp.",
+            "price": "$499.99 USD",
+            "detail": "0.00001802 BTC/día",
+            "roi": "ROI 57.17%*",
+            "available": "30 disp.",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 612.78125,
+              "width": 510,
+              "height": 72
+            }
+          }
+        ],
+        "customRow": null,
+        "heading": "4 niveles exclusivos limitados a 30 unidades cada unoPREVENTA LIMITADA",
+        "configSummary": "Precio total $18.99 USDPotencia 1.46 THEficiencia 15 W/THCatálogo 5/11/2026",
+        "primaryButtonDisabled": false,
+        "stage2Title": "Crear un minero",
+        "stage2Eyebrow": "CONFIGURADOR DE MINERO",
+        "stage2Total": "",
+        "stage2Grid": [],
+        "bodyText": "×CONFIGURADOR DE MINEROCrear un mineroElige tu minero digital respaldado por potencia real. Todos los precios en USD ($).Paquetes MinerXPreventaLanzamientoMensual4 niveles exclusivos limitados a 30 unidades cada unoPREVENTA LIMITADA1.46 TH30 disp.$18.99 USD0.00000062 BTC/díaROI 52.5%*8.33 TH30 disp.$99.99 USD0.00000354 BTC/díaROI 55.62%*21.05 TH30 disp.$249.99 USD0.00000894 BTC/díaROI 56.47%*42.44 TH30 disp.$499.99 USD0.00001802 BTC/díaROI 57.17%*Precio total $18.99 USDPotencia 1.46 THEficiencia 15 W/THCatálogo 5/11/2026Código promocionalCancelarContinuar a la compra →"
+      },
+      "correctiveState": {
+        "modalRect": {
+          "x": 360,
+          "y": 36,
+          "width": 560,
+          "height": 828
+        },
+        "tabs": [
+          {
+            "id": "miner-tab-packages",
+            "text": "Paquetes MinerX",
+            "active": false,
+            "rect": {
+              "x": 390,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-presale",
+            "text": "Preventa",
+            "active": true,
+            "rect": {
+              "x": 515,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-launch",
+            "text": "Lanzamiento",
+            "active": false,
+            "rect": {
+              "x": 640,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-monthly",
+            "text": "Mensual",
+            "active": false,
+            "rect": {
+              "x": 765,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          }
+        ],
+        "rows": [
+          {
+            "title": "1.46 TH30 disp.",
+            "price": "$18.99 USD",
+            "detail": "0.00000062 BTC/día",
+            "roi": "ROI 52.5%*",
+            "available": "30 disp.",
+            "isActive": true,
+            "rect": {
+              "x": 385,
+              "y": 372.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "8.33 TH30 disp.",
+            "price": "$99.99 USD",
+            "detail": "0.00000354 BTC/día",
+            "roi": "ROI 55.62%*",
+            "available": "30 disp.",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 452.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "21.05 TH30 disp.",
+            "price": "$249.99 USD",
+            "detail": "0.00000894 BTC/día",
+            "roi": "ROI 56.47%*",
+            "available": "30 disp.",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 532.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "42.44 TH30 disp.",
+            "price": "$499.99 USD",
+            "detail": "0.00001802 BTC/día",
+            "roi": "ROI 57.17%*",
+            "available": "30 disp.",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 612.78125,
+              "width": 510,
+              "height": 72
+            }
+          }
+        ],
+        "customRow": null,
+        "heading": "4 niveles exclusivos limitados a 30 unidades cada unoPREVENTA LIMITADA",
+        "configSummary": "Precio total $18.99 USDPotencia 1.46 THEficiencia 15 W/THCatálogo 5/11/2026",
+        "primaryButtonDisabled": false,
+        "stage2Title": "Crear un minero",
+        "stage2Eyebrow": "CONFIGURADOR DE MINERO",
+        "stage2Total": "",
+        "stage2Grid": [],
+        "bodyText": "×CONFIGURADOR DE MINEROCrear un mineroElige tu minero digital respaldado por potencia real. Todos los precios en USD ($).Paquetes MinerXPreventaLanzamientoMensual4 niveles exclusivos limitados a 30 unidades cada unoPREVENTA LIMITADA1.46 TH30 disp.$18.99 USD0.00000062 BTC/díaROI 52.5%*8.33 TH30 disp.$99.99 USD0.00000354 BTC/díaROI 55.62%*21.05 TH30 disp.$249.99 USD0.00000894 BTC/díaROI 56.47%*42.44 TH30 disp.$499.99 USD0.00001802 BTC/díaROI 57.17%*Precio total $18.99 USDPotencia 1.46 THEficiencia 15 W/THCatálogo 5/11/2026Código promocionalCancelarContinuar a la compra →"
+      },
+      "passed": true
+    },
+    "03-modal-launch-tab": {
+      "viewName": "Lanzamiento Tab",
+      "geometryDeltas": {
+        "modal": {
+          "dx": 0,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "rows": [
+          {
+            "index": 0,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 1,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 2,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 3,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 4,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 5,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 6,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 7,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 8,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 9,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 10,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 11,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 12,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 13,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 14,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 15,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          }
+        ]
+      },
+      "pixelDiff": {
+        "mismatchedPixels": 0,
+        "totalPixels": 1152000,
+        "mismatchPercentage": 0
+      },
+      "baselineState": {
+        "modalRect": {
+          "x": 360,
+          "y": 36,
+          "width": 560,
+          "height": 828
+        },
+        "tabs": [
+          {
+            "id": "miner-tab-packages",
+            "text": "Paquetes MinerX",
+            "active": false,
+            "rect": {
+              "x": 390,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-presale",
+            "text": "Preventa",
+            "active": false,
+            "rect": {
+              "x": 515,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-launch",
+            "text": "Lanzamiento",
+            "active": true,
+            "rect": {
+              "x": 640,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-monthly",
+            "text": "Mensual",
+            "active": false,
+            "rect": {
+              "x": 765,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          }
+        ],
+        "rows": [
+          {
+            "title": "42.44 TH",
+            "price": "$499.99 USD",
+            "detail": "0.00001802 BTC/día",
+            "roi": "ROI 57.17%*",
+            "available": "",
+            "isActive": true,
+            "rect": {
+              "x": 385,
+              "y": 372.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "64 TH",
+            "price": "$759.99 USD",
+            "detail": "0.00002717 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 452.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "96 TH",
+            "price": "$1,139.99 USD",
+            "detail": "0.00004075 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 532.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "128 TH",
+            "price": "$1,519.99 USD",
+            "detail": "0.00005434 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 612.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "192 TH",
+            "price": "$2,279.99 USD",
+            "detail": "0.00008150 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 692.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "256 TH",
+            "price": "$3,039.99 USD",
+            "detail": "0.00010867 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 772.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "384 TH",
+            "price": "$4,559.99 USD",
+            "detail": "0.00016301 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 852.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "512 TH",
+            "price": "$6,079.99 USD",
+            "detail": "0.00021734 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 932.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "768 TH",
+            "price": "$9,119.99 USD",
+            "detail": "0.00032602 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 1012.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "1,024 TH",
+            "price": "$12,159.99 USD",
+            "detail": "0.00043469 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 1092.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "1,536 TH",
+            "price": "$18,239.99 USD",
+            "detail": "0.00065203 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 1172.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "2,048 TH",
+            "price": "$24,319.99 USD",
+            "detail": "0.00086938 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 1252.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "2,560 TH",
+            "price": "$30,399.99 USD",
+            "detail": "0.00108672 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 1332.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "3,584 TH",
+            "price": "$42,559.99 USD",
+            "detail": "0.00152141 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 1412.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "4,096 TH",
+            "price": "$48,639.99 USD",
+            "detail": "0.00173875 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 1492.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "5,000 TH",
+            "price": "$54,768.99 USD",
+            "detail": "0.00212250 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 1572.78125,
+              "width": 510,
+              "height": 72
+            }
+          }
+        ],
+        "customRow": null,
+        "heading": "16 niveles estándar desde 42.44 TH ($499.99 USD) hasta 5,000 THLANZAMIENTO",
+        "configSummary": "Precio total $499.99 USDPotencia 42.44 THEficiencia 15 W/THCatálogo 5/11/2026",
+        "primaryButtonDisabled": false,
+        "stage2Title": "Crear un minero",
+        "stage2Eyebrow": "CONFIGURADOR DE MINERO",
+        "stage2Total": "",
+        "stage2Grid": [],
+        "bodyText": "×CONFIGURADOR DE MINEROCrear un mineroElige tu minero digital respaldado por potencia real. Todos los precios en USD ($).Paquetes MinerXPreventaLanzamientoMensual16 niveles estándar desde 42.44 TH ($499.99 USD) hasta 5,000 THLANZAMIENTO42.44 TH$499.99 USD0.00001802 BTC/díaROI 57.17%*64 TH$759.99 USD0.00002717 BTC/díaROI 57.2%*96 TH$1,139.99 USD0.00004075 BTC/díaROI 57.2%*128 TH$1,519.99 USD0.00005434 BTC/díaROI 57.2%*192 TH$2,279.99 USD0.00008150 BTC/díaROI 57.2%*256 TH$3,039.99 USD0.00010867 BTC/díaROI 57.2%*384 TH$4,559.99 USD0.00016301 BTC/díaROI 57.2%*512 TH$6,079.99 USD0.00021734 BTC/díaROI 57.2%*768 TH$9,119.99 USD0.00032602 BTC/díaROI 57.2%*1,024 TH$12,159.99 USD0.00043469 BTC/díaROI 57.2%*1,536 TH$18,239.99 USD0.00065203 BTC/díaROI 57.2%*2,048 TH$24,319.99 USD0.00086938 BTC/díaROI 57.2%*2,560 TH$30,399.99 USD0.00108672 BTC/díaROI 57.2%*3,584 TH$42,559.99 USD0.00152141 BTC/díaROI 57.2%*4,096 TH$48,639.99 USD0.00173875 BTC/díaROI 57.2%*5,000 TH$54,768.99 USD0.00212250 BTC/díaROI 57.2%*Precio total $499.99 USDPotencia 42.44 THEficiencia 15 W/THCatálogo 5/11/2026Código promocionalCancelarContinuar a la compra →"
+      },
+      "correctiveState": {
+        "modalRect": {
+          "x": 360,
+          "y": 36,
+          "width": 560,
+          "height": 828
+        },
+        "tabs": [
+          {
+            "id": "miner-tab-packages",
+            "text": "Paquetes MinerX",
+            "active": false,
+            "rect": {
+              "x": 390,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-presale",
+            "text": "Preventa",
+            "active": false,
+            "rect": {
+              "x": 515,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-launch",
+            "text": "Lanzamiento",
+            "active": true,
+            "rect": {
+              "x": 640,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-monthly",
+            "text": "Mensual",
+            "active": false,
+            "rect": {
+              "x": 765,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          }
+        ],
+        "rows": [
+          {
+            "title": "42.44 TH",
+            "price": "$499.99 USD",
+            "detail": "0.00001802 BTC/día",
+            "roi": "ROI 57.17%*",
+            "available": "",
+            "isActive": true,
+            "rect": {
+              "x": 385,
+              "y": 372.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "64 TH",
+            "price": "$759.99 USD",
+            "detail": "0.00002717 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 452.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "96 TH",
+            "price": "$1,139.99 USD",
+            "detail": "0.00004075 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 532.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "128 TH",
+            "price": "$1,519.99 USD",
+            "detail": "0.00005434 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 612.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "192 TH",
+            "price": "$2,279.99 USD",
+            "detail": "0.00008150 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 692.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "256 TH",
+            "price": "$3,039.99 USD",
+            "detail": "0.00010867 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 772.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "384 TH",
+            "price": "$4,559.99 USD",
+            "detail": "0.00016301 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 852.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "512 TH",
+            "price": "$6,079.99 USD",
+            "detail": "0.00021734 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 932.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "768 TH",
+            "price": "$9,119.99 USD",
+            "detail": "0.00032602 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 1012.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "1,024 TH",
+            "price": "$12,159.99 USD",
+            "detail": "0.00043469 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 1092.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "1,536 TH",
+            "price": "$18,239.99 USD",
+            "detail": "0.00065203 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 1172.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "2,048 TH",
+            "price": "$24,319.99 USD",
+            "detail": "0.00086938 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 1252.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "2,560 TH",
+            "price": "$30,399.99 USD",
+            "detail": "0.00108672 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 1332.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "3,584 TH",
+            "price": "$42,559.99 USD",
+            "detail": "0.00152141 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 1412.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "4,096 TH",
+            "price": "$48,639.99 USD",
+            "detail": "0.00173875 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 1492.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "5,000 TH",
+            "price": "$54,768.99 USD",
+            "detail": "0.00212250 BTC/día",
+            "roi": "ROI 57.2%*",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 1572.78125,
+              "width": 510,
+              "height": 72
+            }
+          }
+        ],
+        "customRow": null,
+        "heading": "16 niveles estándar desde 42.44 TH ($499.99 USD) hasta 5,000 THLANZAMIENTO",
+        "configSummary": "Precio total $499.99 USDPotencia 42.44 THEficiencia 15 W/THCatálogo 5/11/2026",
+        "primaryButtonDisabled": false,
+        "stage2Title": "Crear un minero",
+        "stage2Eyebrow": "CONFIGURADOR DE MINERO",
+        "stage2Total": "",
+        "stage2Grid": [],
+        "bodyText": "×CONFIGURADOR DE MINEROCrear un mineroElige tu minero digital respaldado por potencia real. Todos los precios en USD ($).Paquetes MinerXPreventaLanzamientoMensual16 niveles estándar desde 42.44 TH ($499.99 USD) hasta 5,000 THLANZAMIENTO42.44 TH$499.99 USD0.00001802 BTC/díaROI 57.17%*64 TH$759.99 USD0.00002717 BTC/díaROI 57.2%*96 TH$1,139.99 USD0.00004075 BTC/díaROI 57.2%*128 TH$1,519.99 USD0.00005434 BTC/díaROI 57.2%*192 TH$2,279.99 USD0.00008150 BTC/díaROI 57.2%*256 TH$3,039.99 USD0.00010867 BTC/díaROI 57.2%*384 TH$4,559.99 USD0.00016301 BTC/díaROI 57.2%*512 TH$6,079.99 USD0.00021734 BTC/díaROI 57.2%*768 TH$9,119.99 USD0.00032602 BTC/díaROI 57.2%*1,024 TH$12,159.99 USD0.00043469 BTC/díaROI 57.2%*1,536 TH$18,239.99 USD0.00065203 BTC/díaROI 57.2%*2,048 TH$24,319.99 USD0.00086938 BTC/díaROI 57.2%*2,560 TH$30,399.99 USD0.00108672 BTC/díaROI 57.2%*3,584 TH$42,559.99 USD0.00152141 BTC/díaROI 57.2%*4,096 TH$48,639.99 USD0.00173875 BTC/díaROI 57.2%*5,000 TH$54,768.99 USD0.00212250 BTC/díaROI 57.2%*Precio total $499.99 USDPotencia 42.44 THEficiencia 15 W/THCatálogo 5/11/2026Código promocionalCancelarContinuar a la compra →"
+      },
+      "passed": true
+    },
+    "04-modal-monthly-tab": {
+      "viewName": "Mensual Tab",
+      "geometryDeltas": {
+        "modal": {
+          "dx": 0,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "rows": [
+          {
+            "index": 0,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 1,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 2,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 3,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          }
+        ]
+      },
+      "pixelDiff": {
+        "mismatchedPixels": 0,
+        "totalPixels": 1152000,
+        "mismatchPercentage": 0
+      },
+      "baselineState": {
+        "modalRect": {
+          "x": 360,
+          "y": 36,
+          "width": 560,
+          "height": 828
+        },
+        "tabs": [
+          {
+            "id": "miner-tab-packages",
+            "text": "Paquetes MinerX",
+            "active": false,
+            "rect": {
+              "x": 390,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-presale",
+            "text": "Preventa",
+            "active": false,
+            "rect": {
+              "x": 515,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-launch",
+            "text": "Lanzamiento",
+            "active": false,
+            "rect": {
+              "x": 640,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-monthly",
+            "text": "Mensual",
+            "active": true,
+            "rect": {
+              "x": 765,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          }
+        ],
+        "rows": [
+          {
+            "title": "Inicio",
+            "price": "$39.99 USD",
+            "detail": "3.82 TH",
+            "roi": "/ mes",
+            "available": "",
+            "isActive": true,
+            "rect": {
+              "x": 385,
+              "y": 372.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "Plus",
+            "price": "$99.99 USD",
+            "detail": "9.61 TH",
+            "roi": "/ mes",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 452.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "Pro",
+            "price": "$249.99 USD",
+            "detail": "24.20 TH",
+            "roi": "/ mes",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 532.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "Máximo",
+            "price": "$499.99 USD",
+            "detail": "48.66 TH",
+            "roi": "/ mes",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 612.78125,
+              "width": 510,
+              "height": 72
+            }
+          }
+        ],
+        "customRow": null,
+        "heading": "Elige una potencia para consultar el rendimiento mensual",
+        "configSummary": "Precio total $39.99 USD · Eficiencia 15 W/TH · Catálogo 5/11/2026",
+        "primaryButtonDisabled": false,
+        "stage2Title": "Crear un minero",
+        "stage2Eyebrow": "CONFIGURADOR DE MINERO",
+        "stage2Total": "",
+        "stage2Grid": [],
+        "bodyText": "×CONFIGURADOR DE MINEROCrear un mineroElige tu minero digital respaldado por potencia real. Todos los precios en USD ($).Paquetes MinerXPreventaLanzamientoMensualElige una potencia para consultar el rendimiento mensualInicio$39.99 USD3.82 TH/ mesPlus$99.99 USD9.61 TH/ mesPro$249.99 USD24.20 TH/ mesMáximo$499.99 USD48.66 TH/ mesInicio3.82 TH · $39.99 USD / mesElige un plan superior para aumentar la potencia de tu minero.A diarioMensualAnualPrecio BTC de referencia i$90,000 USD ⌄Token de mantenimientoPEARL (-20%)USDTPago estimado de pool:$4.38 USD0.00004865 BTCMantenimiento:HASTA -20%-$2.02 USD40.33920000 PEARLRecompensa neta estimada: i$2.36 USDROI estimado anual: ihasta 57.17%*El token de mantenimiento (PEARL) se deposita y se convierte en Crédito de Mantenimiento para descontar costos diarios.Precio total $39.99 USD · Eficiencia 15 W/TH · Catálogo 5/11/2026Código promocionalCancelarContinuar a la compra →"
+      },
+      "correctiveState": {
+        "modalRect": {
+          "x": 360,
+          "y": 36,
+          "width": 560,
+          "height": 828
+        },
+        "tabs": [
+          {
+            "id": "miner-tab-packages",
+            "text": "Paquetes MinerX",
+            "active": false,
+            "rect": {
+              "x": 390,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-presale",
+            "text": "Preventa",
+            "active": false,
+            "rect": {
+              "x": 515,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-launch",
+            "text": "Lanzamiento",
+            "active": false,
+            "rect": {
+              "x": 640,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-monthly",
+            "text": "Mensual",
+            "active": true,
+            "rect": {
+              "x": 765,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          }
+        ],
+        "rows": [
+          {
+            "title": "Inicio",
+            "price": "$39.99 USD",
+            "detail": "3.82 TH",
+            "roi": "/ mes",
+            "available": "",
+            "isActive": true,
+            "rect": {
+              "x": 385,
+              "y": 372.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "Plus",
+            "price": "$99.99 USD",
+            "detail": "9.61 TH",
+            "roi": "/ mes",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 452.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "Pro",
+            "price": "$249.99 USD",
+            "detail": "24.20 TH",
+            "roi": "/ mes",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 532.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "Máximo",
+            "price": "$499.99 USD",
+            "detail": "48.66 TH",
+            "roi": "/ mes",
+            "available": "",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 612.78125,
+              "width": 510,
+              "height": 72
+            }
+          }
+        ],
+        "customRow": null,
+        "heading": "Elige una potencia para consultar el rendimiento mensual",
+        "configSummary": "Precio total $39.99 USD · Eficiencia 15 W/TH · Catálogo 5/11/2026",
+        "primaryButtonDisabled": false,
+        "stage2Title": "Crear un minero",
+        "stage2Eyebrow": "CONFIGURADOR DE MINERO",
+        "stage2Total": "",
+        "stage2Grid": [],
+        "bodyText": "×CONFIGURADOR DE MINEROCrear un mineroElige tu minero digital respaldado por potencia real. Todos los precios en USD ($).Paquetes MinerXPreventaLanzamientoMensualElige una potencia para consultar el rendimiento mensualInicio$39.99 USD3.82 TH/ mesPlus$99.99 USD9.61 TH/ mesPro$249.99 USD24.20 TH/ mesMáximo$499.99 USD48.66 TH/ mesInicio3.82 TH · $39.99 USD / mesElige un plan superior para aumentar la potencia de tu minero.A diarioMensualAnualPrecio BTC de referencia i$90,000 USD ⌄Token de mantenimientoPEARL (-20%)USDTPago estimado de pool:$4.38 USD0.00004865 BTCMantenimiento:HASTA -20%-$2.02 USD40.33920000 PEARLRecompensa neta estimada: i$2.36 USDROI estimado anual: ihasta 57.17%*El token de mantenimiento (PEARL) se deposita y se convierte en Crédito de Mantenimiento para descontar costos diarios.Precio total $39.99 USD · Eficiencia 15 W/TH · Catálogo 5/11/2026Código promocionalCancelarContinuar a la compra →"
+      },
+      "passed": true
+    },
+    "05-modal-checkout-review-step": {
+      "viewName": "Stage 2 Checkout Review Step",
+      "geometryDeltas": {
+        "modal": {
+          "dx": 0,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "rows": []
+      },
+      "pixelDiff": {
+        "mismatchedPixels": 0,
+        "totalPixels": 1152000,
+        "mismatchPercentage": 0
+      },
+      "baselineState": {
+        "modalRect": {
+          "x": 340,
+          "y": 36,
+          "width": 600,
+          "height": 828
+        },
+        "tabs": [],
+        "rows": [],
+        "customRow": null,
+        "heading": "",
+        "configSummary": "",
+        "primaryButtonDisabled": true,
+        "stage2Title": "Revisa tu minero",
+        "stage2Eyebrow": "PASO 2 DE 2 · CONFIRMAR COMPRA",
+        "stage2Total": "Precio total$18.99 USD",
+        "stage2Grid": [
+          "Potencia1.46 TH",
+          "Eficiencia15 W/TH",
+          "ModalidadPaquetes MinerX",
+          "Token de mantenimientoPEARL (-20% dto)"
+        ],
+        "bodyText": "×PASO 2 DE 2 · CONFIRMAR COMPRARevisa tu mineroPotencia1.46 THEficiencia15 W/THModalidadPaquetes MinerXToken de mantenimientoPEARL (-20% dto)Precio total$18.99 USD◉Conecta tu wallet para pagarAl continuar podrás elegir una wallet compatible.CONECTARiCatálogo observado el 5 nov 2026, 5:00 p.m.. Todos los precios están expresados en USD. La tesorería del protocolo recibe los fondos y se genera un comprobante con hash verificable.Revisaré la red, importe en USD y el destino en mi wallet antes de aprobar.VolverConectar wallet y pagar ↗Otras opciones de simulación localSaldo local disponible: USD 0.00.Añadir con saldo local ✓Guardar pedido pendiente"
+      },
+      "correctiveState": {
+        "modalRect": {
+          "x": 340,
+          "y": 36,
+          "width": 600,
+          "height": 828
+        },
+        "tabs": [],
+        "rows": [],
+        "customRow": null,
+        "heading": "",
+        "configSummary": "",
+        "primaryButtonDisabled": true,
+        "stage2Title": "Revisa tu minero",
+        "stage2Eyebrow": "PASO 2 DE 2 · CONFIRMAR COMPRA",
+        "stage2Total": "Precio total$18.99 USD",
+        "stage2Grid": [
+          "Potencia1.46 TH",
+          "Eficiencia15 W/TH",
+          "ModalidadPaquetes MinerX",
+          "Token de mantenimientoPEARL (-20% dto)"
+        ],
+        "bodyText": "×PASO 2 DE 2 · CONFIRMAR COMPRARevisa tu mineroPotencia1.46 THEficiencia15 W/THModalidadPaquetes MinerXToken de mantenimientoPEARL (-20% dto)Precio total$18.99 USD◉Conecta tu wallet para pagarAl continuar podrás elegir una wallet compatible.CONECTARiCatálogo observado el 5 nov 2026, 5:00 p.m.. Todos los precios están expresados en USD. La tesorería del protocolo recibe los fondos y se genera un comprobante con hash verificable.Revisaré la red, importe en USD y el destino en mi wallet antes de aprobar.VolverConectar wallet y pagar ↗Otras opciones de simulación localSaldo local disponible: USD 0.00.Añadir con saldo local ✓Guardar pedido pendiente"
+      },
+      "passed": true
+    },
+    "06-modal-custom-selected": {
+      "viewName": "Paquetes Tab - Custom Selected",
+      "geometryDeltas": {
+        "modal": {
+          "dx": 0,
+          "dy": 0,
+          "dw": 0,
+          "dh": 0
+        },
+        "rows": [
+          {
+            "index": 0,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 1,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 2,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          },
+          {
+            "index": 3,
+            "dx": 0,
+            "dy": 0,
+            "dw": 0,
+            "dh": 0
+          }
+        ]
+      },
+      "pixelDiff": {
+        "mismatchedPixels": 0,
+        "totalPixels": 1152000,
+        "mismatchPercentage": 0
+      },
+      "baselineState": {
+        "modalRect": {
+          "x": 360,
+          "y": 36,
+          "width": 560,
+          "height": 828
+        },
+        "tabs": [
+          {
+            "id": "miner-tab-packages",
+            "text": "Paquetes MinerX",
+            "active": true,
+            "rect": {
+              "x": 390,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-presale",
+            "text": "Preventa",
+            "active": false,
+            "rect": {
+              "x": 515,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-launch",
+            "text": "Lanzamiento",
+            "active": false,
+            "rect": {
+              "x": 640,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-monthly",
+            "text": "Mensual",
+            "active": false,
+            "rect": {
+              "x": 765,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          }
+        ],
+        "rows": [
+          {
+            "title": "1.46 TH30 disp.",
+            "price": "$18.99 USD",
+            "detail": "0.00000062 BTC/día",
+            "roi": "ROI 52.5%*",
+            "available": "30 disp.",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 372.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "8.33 TH30 disp.",
+            "price": "$99.99 USD",
+            "detail": "0.00000354 BTC/día",
+            "roi": "ROI 55.62%*",
+            "available": "30 disp.",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 452.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "21.05 TH30 disp.",
+            "price": "$249.99 USD",
+            "detail": "0.00000894 BTC/día",
+            "roi": "ROI 56.47%*",
+            "available": "30 disp.",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 532.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "42.44 TH30 disp.",
+            "price": "$499.99 USD",
+            "detail": "0.00001802 BTC/día",
+            "roi": "ROI 57.17%*",
+            "available": "30 disp.",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 612.78125,
+              "width": 510,
+              "height": 72
+            }
+          }
+        ],
+        "customRow": {
+          "title": "✦Custom",
+          "price": "$12.99 USD – $54,768.99 USD",
+          "detail": "1–5,000 TH · 22 niveles",
+          "isActive": true,
+          "rect": {
+            "x": 385,
+            "y": 692.78125,
+            "width": 510,
+            "height": 72
+          }
+        },
+        "heading": "Elige una potencia para tu minero MinerX",
+        "configSummary": "Precio total $12.99 USDPotencia 1.00 THEficiencia 15 W/THCatálogo 5/11/2026",
+        "primaryButtonDisabled": false,
+        "stage2Title": "Crear un minero",
+        "stage2Eyebrow": "CONFIGURADOR DE MINERO",
+        "stage2Total": "",
+        "stage2Grid": [],
+        "bodyText": "×CONFIGURADOR DE MINEROCrear un mineroElige tu minero digital respaldado por potencia real. Todos los precios en USD ($).Paquetes MinerXPreventaLanzamientoMensualElige una potencia para tu minero MinerX1.46 TH30 disp.$18.99 USD0.00000062 BTC/díaROI 52.5%*8.33 TH30 disp.$99.99 USD0.00000354 BTC/díaROI 55.62%*21.05 TH30 disp.$249.99 USD0.00000894 BTC/díaROI 56.47%*42.44 TH30 disp.$499.99 USD0.00001802 BTC/díaROI 57.17%*✦Custom$12.99 USD – $54,768.99 USD1–5,000 TH · 22 nivelesPrecio total $12.99 USDPotencia 1.00 THEficiencia 15 W/THCatálogo 5/11/2026Código promocionalCancelarContinuar a la compra →"
+      },
+      "correctiveState": {
+        "modalRect": {
+          "x": 360,
+          "y": 36,
+          "width": 560,
+          "height": 828
+        },
+        "tabs": [
+          {
+            "id": "miner-tab-packages",
+            "text": "Paquetes MinerX",
+            "active": true,
+            "rect": {
+              "x": 390,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-presale",
+            "text": "Preventa",
+            "active": false,
+            "rect": {
+              "x": 515,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-launch",
+            "text": "Lanzamiento",
+            "active": false,
+            "rect": {
+              "x": 640,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          },
+          {
+            "id": "miner-tab-monthly",
+            "text": "Mensual",
+            "active": false,
+            "rect": {
+              "x": 765,
+              "y": 271.78125,
+              "width": 125,
+              "height": 36
+            }
+          }
+        ],
+        "rows": [
+          {
+            "title": "1.46 TH30 disp.",
+            "price": "$18.99 USD",
+            "detail": "0.00000062 BTC/día",
+            "roi": "ROI 52.5%*",
+            "available": "30 disp.",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 372.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "8.33 TH30 disp.",
+            "price": "$99.99 USD",
+            "detail": "0.00000354 BTC/día",
+            "roi": "ROI 55.62%*",
+            "available": "30 disp.",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 452.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "21.05 TH30 disp.",
+            "price": "$249.99 USD",
+            "detail": "0.00000894 BTC/día",
+            "roi": "ROI 56.47%*",
+            "available": "30 disp.",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 532.78125,
+              "width": 510,
+              "height": 72
+            }
+          },
+          {
+            "title": "42.44 TH30 disp.",
+            "price": "$499.99 USD",
+            "detail": "0.00001802 BTC/día",
+            "roi": "ROI 57.17%*",
+            "available": "30 disp.",
+            "isActive": false,
+            "rect": {
+              "x": 385,
+              "y": 612.78125,
+              "width": 510,
+              "height": 72
+            }
+          }
+        ],
+        "customRow": {
+          "title": "✦Custom",
+          "price": "$12.99 USD – $54,768.99 USD",
+          "detail": "1–5,000 TH · 22 niveles",
+          "isActive": true,
+          "rect": {
+            "x": 385,
+            "y": 692.78125,
+            "width": 510,
+            "height": 72
+          }
+        },
+        "heading": "Elige una potencia para tu minero MinerX",
+        "configSummary": "Precio total $12.99 USDPotencia 1.00 THEficiencia 15 W/THCatálogo 5/11/2026",
+        "primaryButtonDisabled": false,
+        "stage2Title": "Crear un minero",
+        "stage2Eyebrow": "CONFIGURADOR DE MINERO",
+        "stage2Total": "",
+        "stage2Grid": [],
+        "bodyText": "×CONFIGURADOR DE MINEROCrear un mineroElige tu minero digital respaldado por potencia real. Todos los precios en USD ($).Paquetes MinerXPreventaLanzamientoMensualElige una potencia para tu minero MinerX1.46 TH30 disp.$18.99 USD0.00000062 BTC/díaROI 52.5%*8.33 TH30 disp.$99.99 USD0.00000354 BTC/díaROI 55.62%*21.05 TH30 disp.$249.99 USD0.00000894 BTC/díaROI 56.47%*42.44 TH30 disp.$499.99 USD0.00001802 BTC/díaROI 57.17%*✦Custom$12.99 USD – $54,768.99 USD1–5,000 TH · 22 nivelesPrecio total $12.99 USDPotencia 1.00 THEficiencia 15 W/THCatálogo 5/11/2026Código promocionalCancelarContinuar a la compra →"
+      },
+      "passed": true
+    }
+  },
+  "verifications": {
+    "view1_packages": {
+      "passed": true
+    },
+    "view2_presale": {
+      "passed": true
+    },
+    "view3_launch": {
+      "passed": true
+    },
+    "view4_monthly": {
+      "passed": true
+    },
+    "view5_checkout": {
+      "passed": true,
+      "consentButtonEnabled": true
+    },
+    "view6_custom": {
+      "passed": true,
+      "customRowActive": true,
+      "configSummaryMatched": true,
+      "editorRoundtripVerified": true
+    }
+  },
+  "screenshots": {
+    "01-modal-packages-tab-baseline": {
+      "filename": "01-modal-packages-tab-baseline.png",
+      "sizeBytes": 279211
+    },
+    "01-modal-packages-tab-corrective": {
+      "filename": "01-modal-packages-tab-corrective.png",
+      "sizeBytes": 279211
+    },
+    "01-modal-packages-tab-diff": {
+      "filename": "01-modal-packages-tab-diff.png",
+      "sizeBytes": 181546
+    },
+    "01-modal-packages-tab-side-by-side": {
+      "filename": "01-modal-packages-tab-side-by-side.png",
+      "sizeBytes": 702758
+    },
+    "01-modal-packages-tab": {
+      "filename": "01-modal-packages-tab.png",
+      "sizeBytes": 279211
+    },
+    "02-modal-presale-tab-baseline": {
+      "filename": "02-modal-presale-tab-baseline.png",
+      "sizeBytes": 284643
+    },
+    "02-modal-presale-tab-corrective": {
+      "filename": "02-modal-presale-tab-corrective.png",
+      "sizeBytes": 284643
+    },
+    "02-modal-presale-tab-diff": {
+      "filename": "02-modal-presale-tab-diff.png",
+      "sizeBytes": 186821
+    },
+    "02-modal-presale-tab-side-by-side": {
+      "filename": "02-modal-presale-tab-side-by-side.png",
+      "sizeBytes": 711348
+    },
+    "02-modal-presale-tab": {
+      "filename": "02-modal-presale-tab.png",
+      "sizeBytes": 284643
+    },
+    "03-modal-launch-tab-baseline": {
+      "filename": "03-modal-launch-tab-baseline.png",
+      "sizeBytes": 276675
+    },
+    "03-modal-launch-tab-corrective": {
+      "filename": "03-modal-launch-tab-corrective.png",
+      "sizeBytes": 276675
+    },
+    "03-modal-launch-tab-diff": {
+      "filename": "03-modal-launch-tab-diff.png",
+      "sizeBytes": 179733
+    },
+    "03-modal-launch-tab-side-by-side": {
+      "filename": "03-modal-launch-tab-side-by-side.png",
+      "sizeBytes": 698895
+    },
+    "03-modal-launch-tab": {
+      "filename": "03-modal-launch-tab.png",
+      "sizeBytes": 276675
+    },
+    "04-modal-monthly-tab-baseline": {
+      "filename": "04-modal-monthly-tab-baseline.png",
+      "sizeBytes": 268115
+    },
+    "04-modal-monthly-tab-corrective": {
+      "filename": "04-modal-monthly-tab-corrective.png",
+      "sizeBytes": 268115
+    },
+    "04-modal-monthly-tab-diff": {
+      "filename": "04-modal-monthly-tab-diff.png",
+      "sizeBytes": 172407
+    },
+    "04-modal-monthly-tab-side-by-side": {
+      "filename": "04-modal-monthly-tab-side-by-side.png",
+      "sizeBytes": 685280
+    },
+    "04-modal-monthly-tab": {
+      "filename": "04-modal-monthly-tab.png",
+      "sizeBytes": 268115
+    },
+    "05-modal-checkout-review-step-baseline": {
+      "filename": "05-modal-checkout-review-step-baseline.png",
+      "sizeBytes": 181985
+    },
+    "05-modal-checkout-review-step-corrective": {
+      "filename": "05-modal-checkout-review-step-corrective.png",
+      "sizeBytes": 181985
+    },
+    "05-modal-checkout-review-step-diff": {
+      "filename": "05-modal-checkout-review-step-diff.png",
+      "sizeBytes": 131698
+    },
+    "05-modal-checkout-review-step-side-by-side": {
+      "filename": "05-modal-checkout-review-step-side-by-side.png",
+      "sizeBytes": 543827
+    },
+    "05-modal-checkout-review-step": {
+      "filename": "05-modal-checkout-review-step.png",
+      "sizeBytes": 181985
+    },
+    "06-modal-custom-selected-baseline": {
+      "filename": "06-modal-custom-selected-baseline.png",
+      "sizeBytes": 279443
+    },
+    "06-modal-custom-selected-corrective": {
+      "filename": "06-modal-custom-selected-corrective.png",
+      "sizeBytes": 279443
+    },
+    "06-modal-custom-selected-diff": {
+      "filename": "06-modal-custom-selected-diff.png",
+      "sizeBytes": 181550
+    },
+    "06-modal-custom-selected-side-by-side": {
+      "filename": "06-modal-custom-selected-side-by-side.png",
+      "sizeBytes": 701915
+    },
+    "06-modal-custom-selected": {
+      "filename": "06-modal-custom-selected.png",
+      "sizeBytes": 279443
+    }
+  },
+  "status": "SUCCESS",
+  "allVerificationsPassed": true
+}

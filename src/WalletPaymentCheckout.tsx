@@ -8,10 +8,10 @@ import { fetchPaymentQuote, formatAssetAmount, formatCatalogPrice, type PaymentA
 import { CryptoIcon, type CryptoSymbol } from './CryptoIcon'
 import { QuoteDetailsSkeleton } from './Skeletons'
 import { buildSolanaPaymentTransaction } from './solanaPayment'
-import { registerWalletMinerPurchase } from './demoStore'
 import { startMiningSimulation } from './miningSimulation'
 import { useAuth } from './AuthContext'
-import { savePurchasedMiner, creditDirectReferralCommission, recordMinerPurchaseToAdmin, type StoredMiner } from './firebase'
+import { savePurchasedMiner, creditDirectReferralCommission, recordMinerPurchaseToAdmin } from './firebase'
+import { completeWalletMinerPurchase, type PurchaseAdminRecorder } from './minerPurchaseFlow'
 import type { WalletId, WalletSession } from './walletSession'
 
 export type PaymentReceipt = {
@@ -80,20 +80,26 @@ export function WalletPaymentCheckout({
   productName,
   amount,
   currency,
+  packageId,
+  purchaseMode = 'once',
   initialNetworkId = 'bnb',
   session,
   onClose,
   onPaid,
+  recordPurchaseToAdmin: customRecordPurchaseToAdmin,
 }: {
   productName: string
   amount: number
   currency: PaymentCurrency
+  packageId?: string
+  purchaseMode?: 'once' | 'monthly'
   initialNetworkId?: PaymentNetworkId
   initialWalletId?: string
   session?: WalletSession
   onClose: (requestPending?: boolean, notice?: string) => void
   onResumeWalletConnect?: (url: string) => void
   onPaid: (receipt: PaymentReceipt) => void
+  recordPurchaseToAdmin?: PurchaseAdminRecorder
 }) {
   const navigate = useNavigate()
   const { open: openAppKit } = useAppKit()
@@ -242,101 +248,29 @@ export function WalletPaymentCheckout({
     const explorerUrl = `${activeDestination.blockExplorer}/tx/${txHash}`
 
     // Create synthetic on-chain miner if product is a miner
-    const isMiner = productName.toLowerCase().includes('miner') || productName.toLowerCase().includes('esencial') || productName.toLowerCase().includes('pro') || productName.toLowerCase().includes('th') || productName.toLowerCase().includes('preventa') || productName.toLowerCase().includes('lanzamiento')
     let createdMinerId = ''
-    if (isMiner) {
-      const parsedTh = (() => {
-        const match = productName.match(/([\d.]+)\s*TH/i)
-        if (match) return Number(match[1])
-        const lower = productName.toLowerCase()
-        if (lower.includes('enterprise')) return 192
-        if (lower.includes('master')) return 128
-        if (lower.includes('pro')) return 96
-        if (lower.includes('standard')) return 64
-        if (lower.includes('entry')) return 48
-        if (lower.includes('max')) return 42.44
-        if (lower.includes('esencial')) return 5.83
-        return Number((amount / 12.99).toFixed(2)) || 1.46
-      })()
-
-      const derivedPackageId = (() => {
-        const lower = productName.toLowerCase()
-        if (lower.includes('entry')) return 'pkg-miner-1'
-        if (lower.includes('standard')) return 'pkg-miner-2'
-        if (lower.includes('pro')) return 'pkg-miner-3'
-        if (lower.includes('master')) return 'pkg-miner-4'
-        if (lower.includes('enterprise')) return 'pkg-miner-5'
-        return undefined
-      })()
-
-      const miner = registerWalletMinerPurchase(
-        {
-          name: productName,
-          powerTh: parsedTh,
-          efficiency: 15,
-          price: quote?.catalogUsd ?? amount,
-          purchaseMode: 'once',
-          ownerWallet: activeAddress,
-        },
+    const completionResult = await completeWalletMinerPurchase(
+      {
+        productName,
+        amount,
+        packageId,
+        purchaseMode,
+        activeAddress,
         txHash,
-        activeDestination.name,
-      )
-      createdMinerId = miner.id
-      startMiningSimulation(miner.id, miner.name, miner.powerTh)
-
-      // Persist to Firestore: /miners/{uid}/miner/{minerId}
-      if (user) {
-        const storedMiner: StoredMiner = {
-          id: createdMinerId,
-          uid: user.uid,
-          name: productName,
-          powerTh: parsedTh,
-          efficiency: 15,
-          efficiencyWattsPerTh: 15,
-          price: quote?.catalogUsd ?? amount,
-          currency: 'USD',
-          status: 'active',
-          txHash,
-          createdAt: null,
-          network: activeDestination.name,
-          ownerWallet: activeAddress,
-          visualTraits: {
-            wallColor: '#7c3aed',
-            bodyColor: '#1e1b4b',
-            bottomColor: '#e2e8f0',
-            fansColor: '#1e293b',
-            screenColor: '#22c55e',
-            buttonsColor: '#64748b',
-            topColor: '#0f172a',
-            stickers: 'gomining-classic',
-          },
-        }
-        try {
-          await savePurchasedMiner(user.uid, storedMiner)
-          await creditDirectReferralCommission(user.uid, user.email || '', quote?.catalogUsd ?? amount, createdMinerId, txHash)
-          await linkWallet(activeAddress)
-        } catch (persistErr) {
-          console.error('Error persisting miner or referral commission to Firestore:', persistErr)
-        }
+        networkName: activeDestination.name,
+        catalogUsd: quote?.catalogUsd,
+        user,
+      },
+      {
+        recordPurchaseToAdmin: customRecordPurchaseToAdmin ?? recordMinerPurchaseToAdmin,
+        saveMinerToFirestore: savePurchasedMiner,
+        creditReferral: creditDirectReferralCommission,
+        linkActiveWallet: linkWallet,
+        onSimulationStart: startMiningSimulation,
       }
-
-      // Record purchased miner to platform admin dashboard (/admin_contracts & /admin_orders)
-      try {
-        await recordMinerPurchaseToAdmin({
-          minerId: createdMinerId,
-          uid: user?.uid,
-          email: user?.email || '',
-          name: productName,
-          powerTh: parsedTh,
-          price: quote?.catalogUsd ?? amount,
-          txHash,
-          network: activeDestination.name,
-          ownerWallet: activeAddress,
-          packageId: derivedPackageId,
-        })
-      } catch (adminErr) {
-        console.warn('Error recording miner purchase to admin platform:', adminErr)
-      }
+    )
+    if (completionResult) {
+      createdMinerId = completionResult.createdMinerId
     }
 
     const currentQuote = quote ?? {

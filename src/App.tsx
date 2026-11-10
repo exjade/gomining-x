@@ -14,7 +14,8 @@ import { CryptoIcon } from './CryptoIcon'
 import { isPaymentNetworkId, type PaymentNetworkId } from './paymentDestinations'
 import { AppRouteSkeleton, MetricValueSkeleton, PoolTableSkeleton, Skeleton, WalletIdentitySkeleton } from './Skeletons'
 import { convertCatalogPriceToUsd, formatAssetAmount, formatCatalogPrice, type PaymentCurrency } from './paymentQuote'
-import { customMinerPriceTiers, launchMinerPlans, MINER_CATALOG_OBSERVED_AT, monthlyMinerPlans, oneTimeMinerPlans, presaleMinerPlans } from './minerCatalog'
+import { customMinerPriceTiers, MINER_CATALOG_OBSERVED_AT, getSectionFallbackPlans, type MinerPlan } from './minerCatalog'
+import { fetchStorefrontCatalog, clearCatalogCache, TAB_TO_SECTION, SECTION_TO_TAB, type CatalogSection } from './catalogClient'
 import { MinerCreationScreen } from './components/miner-builder/MinerCreationScreen'
 import { CreateMinerModal } from './components/miner-builder/CreateMinerModal'
 import { MinerOptionList } from './components/miner-builder/MinerOptionList'
@@ -36,6 +37,11 @@ import { LandingPage } from './LandingPage'
 import { ReferralPage } from './ReferralPage'
 import { usePersonalization } from './personalization'
 import {
+  buildMinerBuilderCheckoutPayload,
+  createWalletCheckoutState,
+  payPendingMinerOrderAndRecordToAdmin,
+} from './minerPurchaseFlow'
+import {
   subscribeToStorefrontSections,
   recordMinerPurchaseToAdmin,
   savePurchasedMiner,
@@ -56,7 +62,6 @@ import {
   formatDemoCurrency,
   formatWalletBalance,
   getDemoMiningPower,
-  payPendingDemoMiner,
   simulateDemoPresale,
   simulateDemoWithdrawal,
   setDemoWorkerActivationMode,
@@ -78,7 +83,7 @@ function AppContent() {
   const [purchaseOpen, setPurchaseOpen] = useState(false)
   const [topUpOpen, setTopUpOpen] = useState(false)
   const [minerBuilderOpen, setMinerBuilderOpen] = useState(false)
-  const [walletCheckout, setWalletCheckout] = useState<{ productName: string; amount: number; currency: PaymentCurrency; networkId?: PaymentNetworkId; walletId?: WalletId } | null>(null)
+  const [walletCheckout, setWalletCheckout] = useState<{ productName: string; amount: number; currency: PaymentCurrency; packageId?: string; purchaseMode?: 'once' | 'monthly'; networkId?: PaymentNetworkId; walletId?: WalletId } | null>(null)
   const [paymentReceipts, setPaymentReceipts] = useState<PaymentReceipt[]>([])
   const { theme, language, toggleTheme, setAppLanguage, t } = usePersonalization()
   const walletSession = useWalletSession()
@@ -151,9 +156,11 @@ function AppContent() {
     const networkValue = params.get('gmPayNetwork')
     const networkId = isPaymentNetworkId(networkValue) ? networkValue : null
     const requestedWallet = params.get('gmPayWallet')
+    const packageId = params.get('gmPayPackageId') || params.get('packageId') || undefined
+    const purchaseMode = params.get('purchaseMode') === 'monthly' ? 'monthly' : 'once'
     const walletIds: WalletId[] = ['solflare', 'phantom', 'metamask', 'coinbase', 'trustwallet', 'tronlink', 'unisat']
     if (productName && Number.isFinite(amount) && amount > 0 && currency === 'USD') {
-      setWalletCheckout({ productName: productName.slice(0, 120), amount, currency: 'USD', networkId: networkId ?? undefined, walletId: walletIds.find((id) => id === requestedWallet) })
+      setWalletCheckout({ productName: productName.slice(0, 120), amount, currency: 'USD', packageId, purchaseMode, networkId: networkId ?? undefined, walletId: walletIds.find((id) => id === requestedWallet) })
     }
   }, [location.pathname, location.search])
 
@@ -466,10 +473,10 @@ function AppContent() {
         }}
       />}
       {topUpOpen && <DemoTopUpDialog walletSession={effectiveWalletSession} onClose={() => setTopUpOpen(false)} onPayWithWallet={(amount, networkId, walletId) => { setTopUpOpen(false); setWalletCheckout({ productName: 'Recarga de saldo', amount, currency: 'USD', networkId, walletId }) }} onConfirm={(amount) => { addDemoFunds(amount); setTopUpOpen(false) }} />}
-      {minerBuilderOpen && <MinerBuilderDialog balance={demo.balance} walletSession={effectiveWalletSession} onClose={closeMinerBuilder} onPayWithWallet={(productName, amount, currency) => {
+      {minerBuilderOpen && <MinerBuilderDialog balance={demo.balance} walletSession={effectiveWalletSession} onClose={closeMinerBuilder} onPayWithWallet={(productName, amount, currency, packageId, purchaseMode) => {
         closeMinerBuilder()
         setMinerBuilderOpen(false)
-        setWalletCheckout({ productName, amount, currency })
+        setWalletCheckout(createWalletCheckoutState(productName, amount, currency, packageId, purchaseMode))
       }} onComplete={async (input) => {
         const priceUsd = await convertCatalogPriceToUsd(input.price, input.currency)
         const demoInput = { ...input, price: priceUsd, ownerWallet: activeWalletAddress || effectiveWalletSession.connection?.address }
@@ -514,7 +521,7 @@ function AppContent() {
           txHash: `sim_${minerId}`,
           network: 'LOCAL_BALANCE',
           ownerWallet: demoInput.ownerWallet,
-          packageId: (input as any).packageId,
+          packageId: input.packageId,
         }).catch(() => {})
         setSessionEvents((items) => [`${input.name} · ${input.powerTh.toFixed(2)} TH añadidos a la granja`, ...items].slice(0, 5))
         setToast("Minero añadido a la granja local; saldo y comprobante actualizados")
@@ -527,7 +534,7 @@ function AppContent() {
         setToast("Pedido local registrado; el saldo se descuenta al pagarlo desde Mis mineros")
         return { ok: true, receipt: result.receipt }
       }} />}
-      {walletCheckout && <WalletPaymentCheckout productName={walletCheckout.productName} amount={walletCheckout.amount} currency={walletCheckout.currency} initialNetworkId={walletCheckout.networkId} initialWalletId={walletCheckout.walletId} session={effectiveWalletSession} onClose={closeWalletCheckout} onResumeWalletConnect={(url) => {
+      {walletCheckout && <WalletPaymentCheckout productName={walletCheckout.productName} amount={walletCheckout.amount} currency={walletCheckout.currency} packageId={walletCheckout.packageId} purchaseMode={walletCheckout.purchaseMode} initialNetworkId={walletCheckout.networkId} initialWalletId={walletCheckout.walletId} session={effectiveWalletSession} onClose={closeWalletCheckout} onResumeWalletConnect={(url) => {
         const resume = new URL(url, window.location.origin)
         navigate({ pathname: resume.pathname, search: resume.search, hash: resume.hash }, { replace: true })
       }} onPaid={(receipt: PaymentReceipt) => {
@@ -1240,26 +1247,16 @@ function MinerPanel({ openMinerBuilder, openTopUp }: { openMinerBuilder: () => v
         <div className="panel-toolbar"><div><h2>Pedidos locales pendientes</h2><p>El minero se añade a la granja al completar el pago con saldo local.</p></div><span className="checkout-local-badge">LOCAL</span></div>
         <div className="pending-miner-list">{demo.pendingMinerOrders.map((order) => <article className="pending-miner-row" key={order.id}>
           <div><span className="card-kicker">PAGO PENDIENTE · {order.purchaseMode === 'monthly' ? 'MENSUAL' : 'UNA SOLA VEZ'}</span><strong>{order.name} · {order.powerTh.toFixed(2)} TH</strong><small>{formatDemoCurrency(order.price)} · creado {order.createdAt}</small></div>
-          <div className="pending-miner-actions"><button className="button button-primary button-small" type="button" onClick={() => {
-            const result = payPendingDemoMiner(order.id)
+          <div className="pending-miner-actions"><button className="button button-primary button-small" type="button" onClick={async () => {
+            const result = await payPendingMinerOrderAndRecordToAdmin(order, {
+              user,
+              recordPurchaseToAdmin: recordMinerPurchaseToAdmin,
+            })
             if (!result.ok) {
-              setPendingFeedback(result.message)
-              if (result.required > result.available) openTopUp()
+              setPendingFeedback(result.message ?? 'No se pudo completar el pago local.')
+              if (result.required !== undefined && result.available !== undefined && result.required > result.available) openTopUp()
               return
             }
-            const minerId = result.receipt?.id ? `miner_${result.receipt.id}` : `miner_${order.id}`
-            recordMinerPurchaseToAdmin({
-              minerId,
-              uid: user?.uid,
-              email: user?.email || '',
-              name: order.name,
-              powerTh: order.powerTh,
-              price: order.price,
-              txHash: `sim_pending_${order.id}`,
-              network: 'LOCAL_BALANCE',
-              ownerWallet: order.ownerWallet || 'INTERNAL',
-              packageId: order.packageId,
-            }).catch(() => {})
             setPendingFeedback(`Pedido local completado · ${result.receipt?.id}`)
           }}>Pagar con saldo local</button><button className="button button-quiet button-small" type="button" onClick={() => { cancelPendingDemoMiner(order.id); setPendingFeedback('Pedido local cancelado.') }}>Cancelar</button></div>
         </article>)}</div>
@@ -1516,9 +1513,9 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
   balance: number
   walletSession: ReturnType<typeof useWalletSession>
   onClose: () => void
-  onPayWithWallet: (productName: string, amount: number, currency: PaymentCurrency) => void
-  onComplete: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; durationDays?: number }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
-  onDefer: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; durationDays?: number }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
+  onPayWithWallet: (productName: string, amount: number, currency: PaymentCurrency, packageId?: string, purchaseMode?: 'once' | 'monthly') => void
+  onComplete: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; packageId?: string; durationDays?: number }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
+  onDefer: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; packageId?: string; durationDays?: number }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
 }) {
   const [storefrontSections, setStorefrontSections] = useState<StorefrontSectionsConfig>(DEFAULT_STOREFRONT_SECTIONS)
   const [categoryTab, setCategoryTab] = useState<MinerCategoryTab>('packages')
@@ -1532,6 +1529,31 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
   const [accepted, setAccepted] = useState(false)
   const [receipt, setReceipt] = useState<DemoReceipt | null>(null)
   const [feedback, setFeedback] = useState('')
+  const [plansByTab, setPlansByTab] = useState<Partial<Record<MinerCategoryTab, MinerPlan[]>>>({})
+
+  useEffect(() => {
+    let active = true
+    const sections: CatalogSection[] = ['minerx', 'preventa', 'lanzamiento', 'mensual']
+    Promise.all(
+      sections.map(async (sec) => {
+        const plans = await fetchStorefrontCatalog(sec)
+        return [SECTION_TO_TAB[sec], plans] as const
+      })
+    ).then((results) => {
+      if (active) {
+        const map: Partial<Record<MinerCategoryTab, MinerPlan[]>> = {}
+        for (const [tab, plans] of results) {
+          map[tab] = plans
+        }
+        setPlansByTab(map)
+      }
+    }).catch(() => {})
+
+    return () => {
+      active = false
+      clearCatalogCache()
+    }
+  }, [])
 
   useEffect(() => {
     const unsubscribe = subscribeToStorefrontSections((cfg) => {
@@ -1544,41 +1566,45 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
 
   // Auto-switch to active tab if current tab gets disabled by admin
   useEffect(() => {
+    const pickFirstPlan = (tab: MinerCategoryTab) => {
+      const plans = plansByTab[tab] ?? getSectionFallbackPlans(TAB_TO_SECTION[tab])
+      return plans[0]?.id ?? ''
+    }
     if (categoryTab === 'presale' && !storefrontSections.showPresale) {
       if (storefrontSections.showLaunch) {
         setCategoryTab('launch')
-        setPresetId('launch-42')
+        setPresetId(pickFirstPlan('launch'))
       } else if (storefrontSections.showMonthly) {
         setCategoryTab('monthly')
-        setPresetId(monthlyMinerPlans[0].id)
+        setPresetId(pickFirstPlan('monthly'))
       } else {
         setCategoryTab('packages')
-        setPresetId('')
+        setPresetId(pickFirstPlan('packages'))
       }
     } else if (categoryTab === 'launch' && !storefrontSections.showLaunch) {
       if (storefrontSections.showPresale) {
         setCategoryTab('presale')
-        setPresetId('presale-1')
+        setPresetId(pickFirstPlan('presale'))
       } else if (storefrontSections.showMonthly) {
         setCategoryTab('monthly')
-        setPresetId(monthlyMinerPlans[0].id)
+        setPresetId(pickFirstPlan('monthly'))
       } else {
         setCategoryTab('packages')
-        setPresetId('')
+        setPresetId(pickFirstPlan('packages'))
       }
     } else if (categoryTab === 'monthly' && !storefrontSections.showMonthly) {
       if (storefrontSections.showPresale) {
         setCategoryTab('presale')
-        setPresetId('presale-1')
+        setPresetId(pickFirstPlan('presale'))
       } else if (storefrontSections.showLaunch) {
         setCategoryTab('launch')
-        setPresetId('launch-42')
+        setPresetId(pickFirstPlan('launch'))
       } else {
         setCategoryTab('packages')
-        setPresetId('')
+        setPresetId(pickFirstPlan('packages'))
       }
     }
-  }, [storefrontSections, categoryTab])
+  }, [storefrontSections, categoryTab, plansByTab])
 
   useEffect(() => {
     if (!storefrontSections.showCustom && (presetId === 'custom' || isCustomEditorOpen)) {
@@ -1588,11 +1614,20 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
   }, [storefrontSections.showCustom, presetId, isCustomEditorOpen])
 
   const activePlans = useMemo(() => {
-    if (categoryTab === 'packages') return oneTimeMinerPlans
-    if (categoryTab === 'presale') return presaleMinerPlans
-    if (categoryTab === 'monthly') return monthlyMinerPlans
-    return launchMinerPlans
-  }, [categoryTab])
+    return plansByTab[categoryTab] ?? getSectionFallbackPlans(TAB_TO_SECTION[categoryTab])
+  }, [categoryTab, plansByTab])
+
+  // Ensure selected presetId exists in activePlans; otherwise select the first plan of the tab
+  useEffect(() => {
+    if (categoryTab === 'packages' && presetId === 'custom') return
+    if (activePlans.length > 0) {
+      if (!activePlans.some((p) => p.id === presetId)) {
+        setPresetId(activePlans[0].id)
+      }
+    } else if (presetId !== '') {
+      setPresetId('')
+    }
+  }, [activePlans, categoryTab, presetId])
 
   const visibleTabs = useMemo<MinerCategoryTab[]>(() => {
     const tabs: MinerCategoryTab[] = ['packages']
@@ -1606,16 +1641,13 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
   const isCustom = categoryTab === 'packages' && presetId === 'custom' && storefrontSections.showCustom
   const isCustomEditor = isCustom && isCustomEditorOpen
   const customTier = customMinerPriceTiers[customPowerIndex]
-  const powerTh = isCustom ? customTier.powerTh : (selected?.powerTh ?? 48)
-  const total = isCustom ? customTier.priceUsd : (selected?.price ?? 561.99)
-  const currency: PaymentCurrency = 'USD'
-  const purchaseMode: 'once' | 'monthly' = categoryTab === 'monthly' ? 'monthly' : 'once'
-  const selectedLabel = selected?.label ?? `${powerTh} TH`
-  const productName = isCustom
-    ? `Minero personalizado · ${powerTh} TH`
-    : selectedLabel.toLowerCase().startsWith('minero')
-      ? `${selectedLabel} · ${powerTh} TH`
-      : `Minero ${selectedLabel} · ${powerTh} TH`
+  const { powerTh, productName, amount: total, currency, packageId, purchaseMode } =
+    buildMinerBuilderCheckoutPayload({
+      selected,
+      isCustom,
+      customTier,
+      categoryTab,
+    })
   const observedAtLabel = new Date(MINER_CATALOG_OBSERVED_AT).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })
 
   // Calculations for dynamic ROI & maintenance card
@@ -1645,6 +1677,7 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
       price: total,
       currency,
       purchaseMode,
+      packageId,
       durationDays: purchaseMode === 'monthly' ? 30 : undefined,
     }
     try {
@@ -1717,7 +1750,7 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
             {feedback && <small className="inline-feedback" role="status">{feedback}</small>}
             <div className="purchase-modal-actions">
               <button className="button button-quiet" onClick={() => { setAccepted(false); setStage('configure') }}>Volver</button>
-              <button className="button button-primary" disabled={!accepted} onClick={() => onPayWithWallet(productName, total, 'USD')}>
+              <button className="button button-primary" disabled={!accepted} onClick={() => onPayWithWallet(productName, total, 'USD', packageId, purchaseMode)}>
                 {walletSession.connection ? `Pagar con ${walletSession.connection.name}` : 'Conectar wallet y pagar'} <span>↗</span>
               </button>
             </div>
@@ -1822,7 +1855,8 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
                     onChange={(tab) => {
                       setIsCustomEditorOpen(false)
                       setCategoryTab(tab)
-                      setPresetId(tab === 'launch' ? 'launch-42' : tab === 'monthly' ? monthlyMinerPlans[0].id : 'presale-1')
+                      const targetPlans = plansByTab[tab] ?? getSectionFallbackPlans(TAB_TO_SECTION[tab])
+                      setPresetId(targetPlans[0]?.id ?? '')
                     }}
                   />
 
