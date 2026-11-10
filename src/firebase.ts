@@ -43,7 +43,7 @@ const env = (typeof import.meta !== 'undefined' && (import.meta as any).env)
   : (process.env || {})
 
 const firebaseConfig = {
-  apiKey: env.VITE_FIREBASE_API_KEY ?? '',
+  apiKey: env.VITE_FIREBASE_API_KEY || 'AIzaSyMockKeyForTestingOnly',
   authDomain: env.VITE_FIREBASE_AUTH_DOMAIN ?? '',
   projectId: env.VITE_FIREBASE_PROJECT_ID ?? '',
   storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET ?? '',
@@ -886,10 +886,45 @@ export async function assignSponsorToUser(
 
 /** Saves purchased miner to Firestore at /miners/{uid}/miner/{minerId} */
 export async function savePurchasedMiner(uid: string, minerData: StoredMiner) {
-  const minerRef = doc(db, 'miners', uid, 'miner', minerData.id)
+  if (!minerData || typeof minerData !== 'object') {
+    throw new Error('Cannot save miner without valid minerData')
+  }
+
+  const cleanUid = uid?.trim()
+  if (!cleanUid) {
+    throw new Error('Cannot save miner without a valid uid')
+  }
+
+  const minerId = minerData.id?.trim()
+  if (!minerId) {
+    throw new Error('Cannot save miner without a valid minerId')
+  }
+
+  const canonicalPackageId = minerData.packageId?.trim()
+  const lowerPkg = canonicalPackageId?.toLowerCase() || ''
+  if (!canonicalPackageId || lowerPkg.startsWith('pkg-miner_') || lowerPkg.startsWith('pkg-miner-') || lowerPkg.startsWith('pkg-miner')) {
+    throw new Error(`Cannot save miner without a valid canonical packageId: '${minerData.packageId}'`)
+  }
+
+  const minerRef = doc(db, 'miners', cleanUid, 'miner', minerId)
+  const nowIso = new Date().toISOString()
+  const snap = minerData.packageSnapshot
   await setDoc(minerRef, {
     ...minerData,
+    id: minerId,
+    uid: cleanUid,
+    packageId: canonicalPackageId,
+    packageSnapshot: {
+      name: snap?.name?.trim() || minerData.name,
+      powerTh: (typeof snap?.powerTh === 'number' && snap.powerTh > 0) ? snap.powerTh : minerData.powerTh,
+      price: (typeof snap?.price === 'number' && snap.price >= 0) ? snap.price : minerData.price,
+      currency: snap?.currency || minerData.currency || 'USD',
+      cadence: snap?.cadence || minerData.cadence || minerData.purchaseMode || 'once',
+      purchaseMode: snap?.purchaseMode || minerData.purchaseMode || minerData.cadence || 'once',
+      packageId: canonicalPackageId,
+    },
     createdAt: serverTimestamp(),
+    createdAtIso: nowIso,
   })
 }
 
@@ -1025,95 +1060,24 @@ export const DEFAULT_COMMERCIAL_PACKAGES: PublishedCommercialPackage[] = [
   },
 ]
 
-function parseCommercialPackageDoc(id: string, data: any): PublishedCommercialPackage {
-  return {
-    id,
-    name: data.name || 'Paquete Minero',
-    powerTh: Number(data.powerTh) || 0,
-    priceUsdt: Number(data.priceUsdt) || 0,
-    durationDays: Number(data.durationDays) || 365,
-    status: data.status || 'ACTIVE',
-    isPublished: data.isPublished ?? (data.status === 'ACTIVE'),
-    variablePct: Number(data.variablePct) || 0,
-    commissionPct: Number(data.commissionPct) || 2,
-    version: Number(data.version) || 1,
-    description: data.description || '',
-    createdAt: data.createdAt,
-    updatedAt: data.updatedAt,
-  }
-}
-
 /**
- * Subscribes to published commercial packages from Cloud Firestore /commercial_packages in real-time.
- * Automatically triggers callback on live updates made by the admin in MinerX.
+ * Subscribes to published commercial packages.
+ * DIRECT FIRESTORE READS ON commercial_packages ARE STRICTLY FORBIDDEN.
+ * Canonical client catalog uses GET /api/catalog/storefront.
  */
 export function subscribeToPublishedCommercialPackages(
   callback: (packages: PublishedCommercialPackage[]) => void
 ): () => void {
-  try {
-    const colRef = collection(db, 'commercial_packages')
-    const unsubscribe = onSnapshot(
-      colRef,
-      (snap) => {
-        if (!snap.empty) {
-          const active = snap.docs
-            .map((d) => parseCommercialPackageDoc(d.id, d.data()))
-            .filter((p) => p.status === 'ACTIVE' && p.isPublished !== false)
-          if (active.length > 0) {
-            callback(active)
-            return
-          }
-        }
-        callback(DEFAULT_COMMERCIAL_PACKAGES)
-      },
-      (err) => {
-        console.warn('[GoMining] Real-time subscription error for commercial packages, falling back:', err)
-        fetchPublishedCommercialPackages().then(callback).catch(() => callback(DEFAULT_COMMERCIAL_PACKAGES))
-      }
-    )
-    return unsubscribe
-  } catch (err) {
-    console.warn('[GoMining] Could not initialize commercial packages listener:', err)
-    fetchPublishedCommercialPackages().then(callback).catch(() => callback(DEFAULT_COMMERCIAL_PACKAGES))
-    return () => {}
-  }
+  callback(DEFAULT_COMMERCIAL_PACKAGES)
+  return () => {}
 }
 
 /**
- * Fetches published commercial packages from Cloud Firestore /commercial_packages.
- * Falls back to Express REST API and DEFAULT_COMMERCIAL_PACKAGES if empty or uninitialized.
+ * Fetches published commercial packages.
+ * DIRECT FIRESTORE READS ON commercial_packages ARE STRICTLY FORBIDDEN.
+ * Canonical client catalog uses GET /api/catalog/storefront.
  */
 export async function fetchPublishedCommercialPackages(): Promise<PublishedCommercialPackage[]> {
-  try {
-    const colRef = collection(db, 'commercial_packages')
-    const snap = await getDocs(colRef)
-    if (!snap.empty) {
-      const active = snap.docs
-        .map((d) => parseCommercialPackageDoc(d.id, d.data()))
-        .filter((p) => p.status === 'ACTIVE' && p.isPublished !== false)
-
-      if (active.length > 0) return active
-    }
-  } catch (err) {
-    console.warn('[GoMining] Error fetching published commercial packages from Firestore:', err)
-  }
-
-  // Dual fallback: Attempt Express REST backend endpoint if running locally
-  try {
-    const res = await fetch('http://127.0.0.1:3001/api/packages', { signal: AbortSignal.timeout(1200) })
-    if (res.ok) {
-      const data = await res.json()
-      if (Array.isArray(data) && data.length > 0) {
-        const active = data
-          .map((p: any) => parseCommercialPackageDoc(p.id, p))
-          .filter((p: any) => p.status === 'ACTIVE' && p.isPublished !== false)
-        if (active.length > 0) return active
-      }
-    }
-  } catch {
-    // REST backend is optional/offline, fall back to default catalog
-  }
-
   return DEFAULT_COMMERCIAL_PACKAGES
 }
 
@@ -1251,15 +1215,30 @@ export async function recordMinerPurchaseToAdmin(params: {
   ownerWallet?: string
   packageId?: string
 }): Promise<void> {
+  if (!params || typeof params !== 'object') {
+    throw new Error('Cannot record miner purchase without valid parameters')
+  }
+
+  const minerId = params.minerId?.trim()
+  if (!minerId) {
+    throw new Error('Cannot record miner purchase without a valid minerId')
+  }
+
+  const packageId = params.packageId?.trim()
+  const lowerPkg = packageId?.toLowerCase() || ''
+  if (!packageId || lowerPkg.startsWith('pkg-miner_') || lowerPkg.startsWith('pkg-miner-') || lowerPkg.startsWith('pkg-miner')) {
+    throw new Error(`Invalid packageId for miner purchase: '${params.packageId}'. Canonical purchase requires a valid packageId.`)
+  }
+
   const now = new Date().toISOString()
-  const buyerEmail = params.email || (params.ownerWallet ? `wallet_${params.ownerWallet.slice(0, 6)}@crypto.com` : 'cliente@gomining.cloud')
-  const buyerUid = params.uid || 'usr_client'
+  const buyerUid = params.uid?.trim() || 'usr_client'
+  const buyerEmail = params.email?.trim() || (params.ownerWallet ? `wallet_${params.ownerWallet.slice(0, 6)}@crypto.com` : 'cliente@gomining.cloud')
 
   const contractDoc: AdminContractRecord = {
-    id: params.minerId,
+    id: minerId,
     userId: buyerUid,
     userEmail: buyerEmail,
-    packageId: params.packageId || `pkg-${params.minerId}`,
+    packageId: packageId,
     packageName: params.name,
     contractedTh: params.powerTh,
     allocatedTh: params.powerTh,
@@ -1267,18 +1246,18 @@ export async function recordMinerPurchaseToAdmin(params: {
     pricePaidUsdt: params.price,
     variablePct: 0,
     commissionPct: 2,
-    workerId: `vwk-${params.minerId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}`,
+    workerId: `vwk-${minerId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}`,
     activatedAt: now,
     expiresAt: new Date(Date.now() + 365 * 86400000).toISOString(),
     accumulatedProductionPrl: 0,
     accumulatedNetProfitUsd: 0,
     lastCalculatedAt: now,
-    txHash: params.txHash || `tx_${params.minerId}`,
+    txHash: params.txHash || `tx_${minerId}`,
     network: params.network || 'USDT',
     source: 'GoMining Client',
   }
 
-  const orderId = `ord_${params.minerId.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+  const orderId = `ord_${minerId.replace(/[^a-zA-Z0-9_-]/g, '_')}`
   const orderDoc: AdminOrderRecord = {
     orderId,
     attemptId: `att_${Date.now()}`,
@@ -1286,7 +1265,7 @@ export async function recordMinerPurchaseToAdmin(params: {
     userId: buyerUid,
     userEmail: buyerEmail,
     userName: buyerEmail.split('@')[0] || 'Cliente GoMining',
-    packageId: params.packageId || `pkg-${params.minerId}`,
+    packageId: packageId,
     packageName: params.name,
     contractedTh: params.powerTh,
     amountUsd: params.price,
@@ -1294,19 +1273,19 @@ export async function recordMinerPurchaseToAdmin(params: {
     cryptoAmount: `${params.price} USDT`,
     paymentNetwork: params.network || 'TRON',
     recipientAddress: params.ownerWallet || 'PLATFORM_TREASURY',
-    txHash: params.txHash || `tx_${params.minerId}`,
+    txHash: params.txHash || `tx_${minerId}`,
     confirmations: 12,
     requiredConfirmations: 12,
     status: 'SETTLED',
     bridgeStatus: 'NONE',
-    activatedMinerId: params.minerId,
-    idempotencyKey: `ord_${params.minerId}`,
+    activatedMinerId: minerId,
+    idempotencyKey: `ord_${minerId}`,
     settledAt: now,
   }
 
   try {
     await Promise.all([
-      setDoc(doc(db, 'admin_contracts', params.minerId), contractDoc, { merge: true }),
+      setDoc(doc(db, 'admin_contracts', minerId), contractDoc, { merge: true }),
       setDoc(doc(db, 'admin_orders', orderId), orderDoc, { merge: true }),
     ])
   } catch (err) {

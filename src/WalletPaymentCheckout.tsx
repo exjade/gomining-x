@@ -249,28 +249,35 @@ export function WalletPaymentCheckout({
 
     // Create synthetic on-chain miner if product is a miner
     let createdMinerId = ''
-    const completionResult = await completeWalletMinerPurchase(
-      {
-        productName,
-        amount,
-        packageId,
-        purchaseMode,
-        activeAddress,
-        txHash,
-        networkName: activeDestination.name,
-        catalogUsd: quote?.catalogUsd,
-        user,
-      },
-      {
-        recordPurchaseToAdmin: customRecordPurchaseToAdmin ?? recordMinerPurchaseToAdmin,
-        saveMinerToFirestore: savePurchasedMiner,
-        creditReferral: creditDirectReferralCommission,
-        linkActiveWallet: linkWallet,
-        onSimulationStart: startMiningSimulation,
+    try {
+      const completionResult = await completeWalletMinerPurchase(
+        {
+          productName,
+          amount,
+          packageId,
+          purchaseMode,
+          activeAddress,
+          txHash,
+          networkName: activeDestination.name,
+          catalogUsd: quote?.catalogUsd,
+          user,
+        },
+        {
+          recordPurchaseToAdmin: customRecordPurchaseToAdmin ?? recordMinerPurchaseToAdmin,
+          saveMinerToFirestore: savePurchasedMiner,
+          creditReferral: creditDirectReferralCommission,
+          linkActiveWallet: linkWallet,
+          onSimulationStart: startMiningSimulation,
+        }
+      )
+      if (completionResult) {
+        createdMinerId = completionResult.createdMinerId
       }
-    )
-    if (completionResult) {
-      createdMinerId = completionResult.createdMinerId
+    } catch (err) {
+      console.error('Error completing wallet miner purchase:', err)
+      setError(err instanceof Error ? err.message : 'Error completando la compra del minero')
+      setPaying(false)
+      return
     }
 
     const currentQuote = quote ?? {

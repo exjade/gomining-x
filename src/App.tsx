@@ -479,15 +479,26 @@ function AppContent() {
         setMinerBuilderOpen(false)
         setWalletCheckout(createWalletCheckoutState(productName, amount, currency, packageId, purchaseMode))
       }} onComplete={async (input) => {
+        const canonicalPackageId = input.packageId?.trim()
+        const lowerPkg = canonicalPackageId?.toLowerCase() || ''
+        if (!canonicalPackageId || lowerPkg.startsWith('pkg-miner_') || lowerPkg.startsWith('pkg-miner-') || lowerPkg.startsWith('pkg-miner')) {
+          return { ok: false, message: `No se puede completar la compra sin un packageId canónico válido: '${input.packageId}'` }
+        }
         const priceUsd = await convertCatalogPriceToUsd(input.price, input.currency)
-        const demoInput = { ...input, price: priceUsd, ownerWallet: activeWalletAddress || effectiveWalletSession.connection?.address }
+        const demoInput = { ...input, packageId: canonicalPackageId, price: priceUsd, ownerWallet: activeWalletAddress || effectiveWalletSession.connection?.address }
         const result = buyDemoMiner(demoInput)
         if (!result.ok) return { ok: false, message: result.message }
-        const minerId = result.receipt?.id ? `miner_${result.receipt.id}` : `miner_${Date.now()}`
+        const minerId = result.miner.id
         if (user) {
+          const cleanUid = user.uid?.trim()
+          if (!cleanUid) {
+            return { ok: false, message: 'No se puede guardar el minero sin un UID de usuario válido' }
+          }
+          const nowIso = new Date().toISOString()
           const storedMiner: StoredMiner = {
             id: minerId,
-            uid: user.uid,
+            uid: cleanUid,
+            packageId: canonicalPackageId,
             name: input.name,
             powerTh: input.powerTh,
             efficiency: input.efficiency,
@@ -497,8 +508,20 @@ function AppContent() {
             status: 'active',
             txHash: `sim_${minerId}`,
             createdAt: null,
+            createdAtIso: nowIso,
             network: 'LOCAL_BALANCE',
             ownerWallet: demoInput.ownerWallet || 'INTERNAL',
+            purchaseMode: input.purchaseMode || 'once',
+            cadence: input.purchaseMode || 'once',
+            packageSnapshot: {
+              packageId: canonicalPackageId,
+              name: input.name,
+              powerTh: input.powerTh,
+              price: priceUsd,
+              currency: 'USD',
+              cadence: input.purchaseMode || 'once',
+              purchaseMode: input.purchaseMode || 'once',
+            },
             visualTraits: {
               wallColor: '#7c3aed',
               bodyColor: '#1e1b4b',
@@ -510,26 +533,43 @@ function AppContent() {
               stickers: 'gomining-classic',
             },
           }
-          await savePurchasedMiner(user.uid, storedMiner).catch(() => {})
+          try {
+            await savePurchasedMiner(cleanUid, storedMiner)
+          } catch (persistErr) {
+            console.error('Error persisting purchased miner to Firestore:', persistErr)
+            return {
+              ok: false,
+              message: persistErr instanceof Error ? persistErr.message : 'Error al guardar el minero en Firestore',
+            }
+          }
         }
-        await recordMinerPurchaseToAdmin({
-          minerId,
-          uid: user?.uid,
-          email: user?.email || '',
-          name: input.name,
-          powerTh: input.powerTh,
-          price: priceUsd,
-          txHash: `sim_${minerId}`,
-          network: 'LOCAL_BALANCE',
-          ownerWallet: demoInput.ownerWallet,
-          packageId: input.packageId,
-        }).catch(() => {})
+        try {
+          await recordMinerPurchaseToAdmin({
+            minerId,
+            uid: user?.uid?.trim(),
+            email: user?.email || '',
+            name: input.name,
+            powerTh: input.powerTh,
+            price: priceUsd,
+            txHash: `sim_${minerId}`,
+            network: 'LOCAL_BALANCE',
+            ownerWallet: demoInput.ownerWallet,
+            packageId: canonicalPackageId,
+          })
+        } catch (adminErr) {
+          console.warn('Error recording miner purchase to admin platform:', adminErr)
+        }
         setSessionEvents((items) => [`${input.name} · ${input.powerTh.toFixed(2)} TH añadidos a la granja`, ...items].slice(0, 5))
         setToast("Minero añadido a la granja local; saldo y comprobante actualizados")
         return { ok: true, receipt: result.receipt }
       }} onDefer={async (input) => {
+        const canonicalPackageId = input.packageId?.trim()
+        const lowerPkg = canonicalPackageId?.toLowerCase() || ''
+        if (user && (!canonicalPackageId || lowerPkg.startsWith('pkg-miner_') || lowerPkg.startsWith('pkg-miner-') || lowerPkg.startsWith('pkg-miner'))) {
+          return { ok: false, message: `No se puede registrar el pedido pendiente sin un packageId canónico válido: '${input.packageId}'` }
+        }
         const priceUsd = await convertCatalogPriceToUsd(input.price, input.currency)
-        const result = deferDemoMinerPurchase({ ...input, price: priceUsd })
+        const result = deferDemoMinerPurchase({ ...input, ...(canonicalPackageId ? { packageId: canonicalPackageId } : {}), price: priceUsd })
         if (!result.ok) return { ok: false, message: result.message }
         setSessionEvents((items) => [`Pedido pendiente · ${input.name} · ${input.powerTh.toFixed(2)} TH`, ...items].slice(0, 5))
         setToast("Pedido local registrado; el saldo se descuenta al pagarlo desde Mis mineros")
@@ -1287,6 +1327,7 @@ function MinerPanel({ openMinerBuilder, openTopUp }: { openMinerBuilder: () => v
             const result = await payPendingMinerOrderAndRecordToAdmin(order, {
               user,
               recordPurchaseToAdmin: recordMinerPurchaseToAdmin,
+              saveMinerToFirestore: savePurchasedMiner,
             })
             if (!result.ok) {
               setPendingFeedback(result.message ?? 'No se pudo completar el pago local.')

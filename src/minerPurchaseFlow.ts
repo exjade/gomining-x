@@ -158,6 +158,18 @@ export async function completeWalletMinerPurchase(
   const parsedTh = parseMinerPowerTh(productName, amount)
   const resolvedPackageId = typeof packageId === 'string' && packageId.trim() ? packageId.trim() : undefined
   const pricePaid = catalogUsd ?? amount
+  const resolvedPurchaseMode = purchaseMode ?? 'once'
+  const cleanUid = user?.uid?.trim()
+
+  if (user) {
+    if (!cleanUid) {
+      throw new Error('Canonical wallet miner purchase requires a valid user uid')
+    }
+    const lowerPkg = resolvedPackageId?.toLowerCase() || ''
+    if (!resolvedPackageId || lowerPkg.startsWith('pkg-miner_') || lowerPkg.startsWith('pkg-miner-') || lowerPkg.startsWith('pkg-miner')) {
+      throw new Error(`Canonical wallet miner purchase requires a valid packageId, received: '${packageId}'`)
+    }
+  }
 
   const miner = registerWalletMinerPurchase(
     {
@@ -165,7 +177,7 @@ export async function completeWalletMinerPurchase(
       powerTh: parsedTh,
       efficiency: 15,
       price: pricePaid,
-      purchaseMode: purchaseMode ?? 'once',
+      purchaseMode: resolvedPurchaseMode,
       ownerWallet: activeAddress,
       packageId: resolvedPackageId,
     },
@@ -180,9 +192,11 @@ export async function completeWalletMinerPurchase(
 
   // Persist to Firestore: /miners/{uid}/miner/{minerId}
   if (user && options?.saveMinerToFirestore) {
+    const nowIso = new Date().toISOString()
     const storedMiner: StoredMiner = {
       id: createdMinerId,
-      uid: user.uid,
+      uid: cleanUid!,
+      packageId: resolvedPackageId,
       name: productName,
       powerTh: parsedTh,
       efficiency: 15,
@@ -192,8 +206,20 @@ export async function completeWalletMinerPurchase(
       status: 'active',
       txHash,
       createdAt: null,
+      createdAtIso: nowIso,
       network: networkName || 'BNB Chain',
       ownerWallet: activeAddress || 'INTERNAL',
+      purchaseMode: resolvedPurchaseMode,
+      cadence: resolvedPurchaseMode,
+      packageSnapshot: {
+        packageId: resolvedPackageId!,
+        name: productName,
+        powerTh: parsedTh,
+        price: pricePaid,
+        currency: 'USD',
+        cadence: resolvedPurchaseMode,
+        purchaseMode: resolvedPurchaseMode,
+      },
       visualTraits: {
         wallColor: '#7c3aed',
         bodyColor: '#1e1b4b',
@@ -205,16 +231,17 @@ export async function completeWalletMinerPurchase(
         stickers: 'gomining-classic',
       },
     }
-    try {
-      await options.saveMinerToFirestore(user.uid, storedMiner)
-      if (options.creditReferral) {
-        await options.creditReferral(user.uid, user.email || '', pricePaid, createdMinerId, txHash)
-      }
-      if (activeAddress && options.linkActiveWallet) {
-        await options.linkActiveWallet(activeAddress)
-      }
-    } catch (persistErr) {
-      console.error('Error persisting miner or referral commission to Firestore:', persistErr)
+    // Fail-closed persistence: if saving to Firestore fails, throw so admin recorder is NOT called
+    await options.saveMinerToFirestore(cleanUid!, storedMiner)
+    if (options.creditReferral) {
+      await options.creditReferral(cleanUid!, user.email || '', pricePaid, createdMinerId, txHash).catch((err) => {
+        console.warn('Error crediting referral commission:', err)
+      })
+    }
+    if (activeAddress && options.linkActiveWallet) {
+      await options.linkActiveWallet(activeAddress).catch((err) => {
+        console.warn('Error linking active wallet:', err)
+      })
     }
   }
 
@@ -223,7 +250,7 @@ export async function completeWalletMinerPurchase(
     try {
       await options.recordPurchaseToAdmin({
         minerId: createdMinerId,
-        uid: user?.uid,
+        uid: cleanUid || user?.uid,
         email: user?.email || '',
         name: productName,
         powerTh: parsedTh,
@@ -249,9 +276,7 @@ export async function orchestrateWalletMinerPurchaseFlow(
     networkName?: string
     user?: { uid: string; email?: string | null } | null
   },
-  options?: {
-    recordPurchaseToAdmin?: PurchaseAdminRecorder
-  }
+  options?: CompleteWalletMinerPurchaseOptions
 ) {
   // 1. MinerBuilderDialog metadata and checkout payload derivation
   const checkoutPayload = buildMinerBuilderCheckoutPayload(builderInput)
@@ -277,9 +302,7 @@ export async function orchestrateWalletMinerPurchaseFlow(
       networkName: executionInput.networkName ?? 'BNB Chain',
       user: executionInput.user,
     },
-    {
-      recordPurchaseToAdmin: options?.recordPurchaseToAdmin,
-    }
+    options
   )
 
   return {
@@ -289,27 +312,105 @@ export async function orchestrateWalletMinerPurchaseFlow(
   }
 }
 
-export type PayPendingMinerOrderResult = ReturnType<typeof payPendingDemoMiner> & {
-  minerId?: string
+export type PayPendingMinerOrderResult =
+  | (ReturnType<typeof payPendingDemoMiner> & { minerId?: string })
+  | { ok: false; message: string; minerId?: string; required?: number; available?: number }
+
+export interface PayPendingMinerOrderOptions {
+  user?: { uid: string; email?: string | null } | null
+  recordPurchaseToAdmin?: PurchaseAdminRecorder
+  saveMinerToFirestore?: (uid: string, miner: StoredMiner) => Promise<void>
 }
 
 export async function payPendingMinerOrderAndRecordToAdmin(
   order: PendingDemoMinerOrder,
-  options?: {
-    user?: { uid: string; email?: string | null } | null
-    recordPurchaseToAdmin?: PurchaseAdminRecorder
-  }
+  options?: PayPendingMinerOrderOptions
 ): Promise<PayPendingMinerOrderResult> {
+  const canonicalPackageId = typeof order.packageId === 'string' && order.packageId.trim() ? order.packageId.trim() : undefined
+  const lowerPkg = canonicalPackageId?.toLowerCase() || ''
+  const cleanUid = options?.user?.uid?.trim()
+
+  if (options?.user && options?.saveMinerToFirestore) {
+    if (!cleanUid) {
+      return {
+        ok: false,
+        message: 'Cannot persist miner without a valid user uid',
+      }
+    }
+    if (!canonicalPackageId || lowerPkg.startsWith('pkg-miner_') || lowerPkg.startsWith('pkg-miner-') || lowerPkg.startsWith('pkg-miner')) {
+      return {
+        ok: false,
+        message: `No se puede completar el pedido pendiente sin un packageId canónico válido: '${order.packageId}'`,
+      }
+    }
+  }
+
   const result = payPendingDemoMiner(order.id)
   if (!result.ok) {
     return result
   }
   const minerId = result.miner.id
+
+  // Authenticated pending miner order persistence
+  if (options?.user && options?.saveMinerToFirestore) {
+    const nowIso = new Date().toISOString()
+    const purchaseMode = (order.purchaseMode as any) || 'once'
+    const storedMiner: StoredMiner = {
+      id: minerId,
+      uid: cleanUid!,
+      packageId: canonicalPackageId!,
+      name: order.name,
+      powerTh: order.powerTh,
+      efficiency: order.efficiency,
+      efficiencyWattsPerTh: order.efficiency,
+      price: order.price,
+      currency: 'USD',
+      status: 'active',
+      txHash: `sim_pending_${order.id}`,
+      createdAt: null,
+      createdAtIso: nowIso,
+      network: 'LOCAL_BALANCE',
+      ownerWallet: order.ownerWallet || 'INTERNAL',
+      purchaseMode,
+      cadence: purchaseMode,
+      packageSnapshot: {
+        packageId: canonicalPackageId!,
+        name: order.name,
+        powerTh: order.powerTh,
+        price: order.price,
+        currency: 'USD',
+        cadence: purchaseMode,
+        purchaseMode,
+      },
+      visualTraits: {
+        wallColor: '#7c3aed',
+        bodyColor: '#1e1b4b',
+        bottomColor: '#e2e8f0',
+        fansColor: '#1e293b',
+        screenColor: '#22c55e',
+        buttonsColor: '#64748b',
+        topColor: '#0f172a',
+        stickers: 'gomining-classic',
+      },
+    }
+
+    try {
+      await options.saveMinerToFirestore(cleanUid!, storedMiner)
+    } catch (persistErr) {
+      console.error('Error persisting pending miner to Firestore:', persistErr)
+      return {
+        ok: false,
+        minerId,
+        message: persistErr instanceof Error ? persistErr.message : 'Error al persistir el minero en Firestore',
+      }
+    }
+  }
+
   if (options?.recordPurchaseToAdmin) {
     try {
       await options.recordPurchaseToAdmin({
         minerId,
-        uid: options?.user?.uid,
+        uid: cleanUid || options?.user?.uid,
         email: options?.user?.email || '',
         name: order.name,
         powerTh: order.powerTh,
@@ -317,7 +418,7 @@ export async function payPendingMinerOrderAndRecordToAdmin(
         txHash: `sim_pending_${order.id}`,
         network: 'LOCAL_BALANCE',
         ownerWallet: order.ownerWallet || 'INTERNAL',
-        packageId: typeof order.packageId === 'string' && order.packageId.trim() ? order.packageId.trim() : undefined,
+        packageId: canonicalPackageId,
       })
     } catch (err) {
       console.warn('Error recording pending miner purchase to admin:', err)

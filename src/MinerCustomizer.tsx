@@ -148,13 +148,14 @@ export function MinerCustomizer() {
     if (notFound || !minerData || !minerData.id) return
 
     const targetId = minerData.id
-    updateDemoMinerCustomization(targetId, {
-      ...customization,
-      updatedAt: new Date().toISOString(),
-    })
     if (user && targetId) {
       await updateMinerInFirestore(user.uid, targetId, {
         visualTraits: customization,
+      })
+    } else {
+      updateDemoMinerCustomization(targetId, {
+        ...customization,
+        updatedAt: new Date().toISOString(),
       })
     }
     startMiningSimulation(targetId, minerData.name, minerData.powerTh)

@@ -170,6 +170,7 @@ export async function fetchStorefrontCatalog(
         signal: abortController.signal,
       })
 
+      // Approved PO override (Option B: docs/c2c/SCRUM-218_002.1_review.md & docs/c2c/SCRUM-218_003.3_review.md):
       // HTTP 4xx (client error / invalid route / bad request): Option B specifies empty catalog, NO fallback.
       if (res.status >= 400 && res.status < 500) {
         if (requestEpoch === currentEpoch && !abortController.signal.aborted) {
