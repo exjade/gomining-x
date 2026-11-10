@@ -13,6 +13,7 @@ import {
   updateUserProfile,
   getUserProfile,
   ensureUserProfile,
+  cleanupUserMinersSubscription,
   type UserProfile,
 } from './firebase'
 
@@ -85,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // ignore
         }
       } else {
+        cleanupUserMinersSubscription()
         setUser(null)
         setProfile(null)
       }

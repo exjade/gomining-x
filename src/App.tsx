@@ -16,6 +16,7 @@ import { AppRouteSkeleton, MetricValueSkeleton, PoolTableSkeleton, Skeleton, Wal
 import { convertCatalogPriceToUsd, formatAssetAmount, formatCatalogPrice, type PaymentCurrency } from './paymentQuote'
 import { customMinerPriceTiers, MINER_CATALOG_OBSERVED_AT, getSectionFallbackPlans, type MinerPlan } from './minerCatalog'
 import { fetchStorefrontCatalog, clearCatalogCache, TAB_TO_SECTION, SECTION_TO_TAB, type CatalogSection } from './catalogClient'
+import { useRealtimeUserMiners } from './userMinersStore'
 import { MinerCreationScreen } from './components/miner-builder/MinerCreationScreen'
 import { CreateMinerModal } from './components/miner-builder/CreateMinerModal'
 import { MinerOptionList } from './components/miner-builder/MinerOptionList'
@@ -730,10 +731,16 @@ function Page({
 }
 
 function HomeDashboard({ openMinerBuilder, openTopUp }: { openMinerBuilder: () => void; openTopUp: () => void }) {
+  const { user } = useAuth()
   const demo = useDemoSession()
   const { language } = usePersonalization()
-  const mining = getDemoMiningPower(demo)
+  const { miners: realMiners } = useRealtimeUserMiners(user?.uid)
   const isEn = language === 'en'
+  const isAuth = Boolean(user)
+  const totalMinersCount = isAuth ? realMiners.length : demo.miners.length
+  const totalFarmPowerTh = isAuth
+    ? realMiners.reduce((total, miner) => total + (miner.powerTh || 0), 0)
+    : getDemoMiningPower(demo).total
 
   return (
     <>
@@ -771,7 +778,7 @@ function HomeDashboard({ openMinerBuilder, openTopUp }: { openMinerBuilder: () =
       <div className="dashboard-grid">
         <DashboardCard tone="purple" kicker={isEn ? 'EARNINGS SUMMARY' : 'RESUMEN DE GANANCIAS'} title={isEn ? 'Check your activity' : 'Consulta tu actividad'} body={isEn ? 'Rewards will appear when a verified source exists.' : 'Las recompensas solo aparecerán cuando exista una fuente verificada.'} action={isEn ? 'Open summary' : 'Abrir resumen'} to="/finance/earn-summary" icon="▥" />
         <DashboardCard tone="teal" kicker={isEn ? 'MINING' : 'MINERÍA'} title={isEn ? 'Pool and operations' : 'Pool y operaciones'} body={isEn ? 'Check public readings and their source.' : 'Consulta las lecturas públicas y su fuente.'} action={isEn ? 'View traceability' : 'Ver trazabilidad'} to="/data-centers" icon="♧" />
-        <DashboardCard tone="blue" kicker={isEn ? 'FARM POWER' : 'POTENCIA EN GRANJA'} title={`${mining.total.toFixed(2)} TH`} body={isEn ? `${demo.miners.length} miners in local session.` : `${demo.miners.length} mineros en sesión local.`} action={isEn ? 'View miners' : 'Ver mineros'} to="/nft-miners" icon="▧" />
+        <DashboardCard tone="blue" kicker={isEn ? 'FARM POWER' : 'POTENCIA EN GRANJA'} title={`${totalFarmPowerTh.toFixed(2)} TH`} body={isAuth ? (isEn ? `${totalMinersCount} miners in farm.` : `${totalMinersCount} mineros en la granja.`) : (isEn ? `${demo.miners.length} miners in local session.` : `${demo.miners.length} mineros en sesión local.`)} action={isEn ? 'View miners' : 'Ver mineros'} to="/nft-miners" icon="▧" />
         <DashboardCard tone="gold" kicker={isEn ? 'VIP LEVEL · DEMO' : 'NIVEL VIP · DEMO'} title="Bronze II" body={isEn ? 'Explore subscription benefits.' : 'Explora los beneficios de suscripción.'} action={isEn ? 'View benefits' : 'Ver beneficios'} to="/subscriptions" icon="◈" />
         <DashboardCard tone="platinum" kicker="PLATINUM+" title={demo.subscription ? (isEn ? `Active · ${demo.subscription.cycle === 'monthly' ? 'monthly' : 'annual'}` : `Activo · ${demo.subscription.cycle === 'monthly' ? 'mensual' : 'anual'}`) : (isEn ? 'Subscription' : 'Suscripción')} body={demo.subscription ? (isEn ? '+1% active power boost during this session.' : '+1% sobre potencia activa durante esta sesión.') : (isEn ? 'Activate a local subscription to check the perk.' : 'Activa una suscripción local para consultar el beneficio.')} action={isEn ? 'View subscriptions' : 'Ver suscripciones'} to="/subscriptions" icon="✦" />
         <DashboardCard tone="green" kicker={isEn ? 'PROMOTIONS' : 'PROMOCIONES'} title={isEn ? 'Platform news' : 'Novedades de la plataforma'} body={isEn ? 'Check current MVP promotions.' : 'Consulta las promociones vigentes del MVP.'} action={isEn ? 'View promos' : 'Ver promos'} to="/promos" icon="✦" />
@@ -792,8 +799,8 @@ function HomeDashboard({ openMinerBuilder, openTopUp }: { openMinerBuilder: () =
         </div>
         <div className="mining-metrics-grid">
           <MiningMetric label={isEn ? 'Workers assigned to replica' : 'Workers asignados a la réplica'} value={`${demo.workers.length}`} detail={isEn ? 'LOCAL ENVIRONMENT' : 'ENTORNO LOCAL'} />
-          <MiningMetric label={isEn ? 'Local miners' : 'Mineros locales'} value={`${demo.miners.length}`} detail={isEn ? 'LOCAL BALANCE' : 'SALDO LOCAL'} />
-          <MiningMetric label={isEn ? 'Client power' : 'Potencia del cliente'} value={`${getDemoMiningPower(demo).total.toFixed(2)} TH`} detail={isEn ? 'LOCAL SESSION' : 'SESIÓN LOCAL'} />
+          <MiningMetric label={isAuth ? (isEn ? 'Active miners' : 'Mineros activos') : (isEn ? 'Local miners' : 'Mineros locales')} value={`${totalMinersCount}`} detail={isAuth ? (isEn ? 'REALTIME POOL' : 'EN TIEMPO REAL') : (isEn ? 'LOCAL BALANCE' : 'SALDO LOCAL')} />
+          <MiningMetric label={isEn ? 'Client power' : 'Potencia del cliente'} value={`${totalFarmPowerTh.toFixed(2)} TH`} detail={isAuth ? (isEn ? 'REALTIME POOL' : 'EN TIEMPO REAL') : (isEn ? 'LOCAL SESSION' : 'SESIÓN LOCAL')} />
         </div>
         <p className="mining-source-note"><span>i</span> {isEn ? 'Estimation uses public Kryptex API. On-chain history consulted on Pearl.' : 'La estimación usa la API pública de Kryptex. El historial on-chain se consulta en Pearl; no se fabrican shares ni pagos.'}</p>
       </section>
@@ -812,11 +819,14 @@ function HomeDashboard({ openMinerBuilder, openTopUp }: { openMinerBuilder: () =
 }
 
 function MiningQuestBoard() {
+  const { user } = useAuth()
   const demo = useDemoSession()
+  const { miners: realMiners } = useRealtimeUserMiners(user?.uid)
   const { language } = usePersonalization()
   const isEn = language === 'en'
   const minerGoal = 1
-  const minerProgress = Math.min(demo.miners.length, minerGoal)
+  const minerCount = user ? realMiners.length : demo.miners.length
+  const minerProgress = Math.min(minerCount, minerGoal)
   const subscriptionComplete = Boolean(demo.subscription)
   const completed = Number(minerProgress > 0) + Number(subscriptionComplete)
   const progress = Math.round((completed / 2) * 100)
@@ -1240,7 +1250,33 @@ function MinerPanel({ openMinerBuilder, openTopUp }: { openMinerBuilder: () => v
   const [applied, setApplied] = useState(false)
   const [pendingFeedback, setPendingFeedback] = useState('')
   const demo = useDemoSession()
-  const mining = getDemoMiningPower(demo)
+  const { miners: realMiners } = useRealtimeUserMiners(user?.uid)
+  const isAuth = Boolean(user)
+  const displayMiners = isAuth
+    ? realMiners.map((miner) => ({
+        id: miner.id,
+        name: miner.name,
+        powerTh: miner.powerTh,
+        efficiency: miner.efficiencyWattsPerTh || miner.efficiency || 15,
+        purchaseMode: miner.cadence || miner.purchaseMode || 'once',
+        acquiredAt: typeof miner.createdAt === 'string' ? miner.createdAt : (miner.createdAtIso || 'reciente'),
+        status: miner.status || 'active',
+        isReal: true,
+      }))
+    : demo.miners.map((miner) => ({
+        id: miner.id,
+        name: miner.name,
+        powerTh: miner.powerTh,
+        efficiency: miner.efficiency,
+        purchaseMode: miner.purchaseMode,
+        acquiredAt: miner.acquiredAt,
+        status: 'active',
+        isReal: false,
+      }))
+  const totalMinersCount = displayMiners.length
+  const totalPowerTh = isAuth
+    ? displayMiners.reduce((total, miner) => total + (miner.powerTh || 0), 0)
+    : getDemoMiningPower(demo).total
   return (
     <div className="miner-page-stack">
       {demo.pendingMinerOrders.length > 0 && <section className="content-panel pending-miner-orders">
@@ -1263,11 +1299,11 @@ function MinerPanel({ openMinerBuilder, openTopUp }: { openMinerBuilder: () => v
         {pendingFeedback && <p className="inline-feedback" role="status">{pendingFeedback}</p>}
       </section>}
       <section className="content-panel catalog-panel">
-        <div className="panel-toolbar"><div><h2>Mis mineros</h2><p>{demo.miners.length} minero(s) · {mining.total.toFixed(3)} TH en la granja de simulación.</p></div><button className="button button-primary button-small" onClick={openMinerBuilder}>Crear minero <span>↗</span></button></div>
-        <div className="filter-row"><button className="filter-chip" onClick={() => setFiltersOpen((open) => !open)}>☷ Filtros <span>{filtersOpen ? '⌃' : '⌄'}</span></button><span className="results-hint">Vista local</span></div>
+        <div className="panel-toolbar"><div><h2>Mis mineros</h2><p>{totalMinersCount} minero(s) · {totalPowerTh.toFixed(3)} TH en la granja{isAuth ? ' de minería' : ' de simulación'}.</p></div><button className="button button-primary button-small" onClick={openMinerBuilder}>Crear minero <span>↗</span></button></div>
+        <div className="filter-row"><button className="filter-chip" onClick={() => setFiltersOpen((open) => !open)}>☷ Filtros <span>{filtersOpen ? '⌃' : '⌄'}</span></button><span className="results-hint">{isAuth ? 'En tiempo real' : 'Vista local'}</span></div>
         {filtersOpen && <div className="miner-filter-panel"><label className="search-box"><span>⌕</span><input placeholder="Buscar mineros" /></label><button className="filter-chip">Estado <span>⌄</span></button><button className="filter-chip">Colección <span>⌄</span></button><button className="button button-primary button-small" onClick={() => setApplied(true)}>Aplicar</button><button className="button button-quiet button-small" onClick={() => { setApplied(false); setFiltersOpen(false) }}>Limpiar</button></div>}
-        {applied && <div className="filter-applied">Filtros aplicados en esta vista local.</div>}
-        {demo.miners.length === 0 ? <div className="asset-empty"><div className="miner-visual">▧</div><div><strong>Tu granja está lista</strong><p>Crea un minero y completa la compra de simulación para verlo aquí.</p><button className="button button-primary button-small" onClick={openMinerBuilder}>Crear minero <span>↗</span></button></div></div> : <div className="demo-miner-grid">{demo.miners.map((miner) => <article className="demo-miner-card" key={miner.id}><span className="miner-visual">▧</span><div><span className="card-kicker">MINERO · {miner.purchaseMode === 'monthly' ? 'MENSUAL' : 'UNA SOLA VEZ'}</span><strong>{miner.name}</strong><small>{miner.powerTh.toFixed(2)} TH · {miner.efficiency} W/TH</small><small>Compra local {miner.acquiredAt}</small></div><span className="table-demo-status">ACTIVO · LOCAL</span></article>)}</div>}
+        {applied && <div className="filter-applied">Filtros aplicados en esta vista.</div>}
+        {displayMiners.length === 0 ? <div className="asset-empty"><div className="miner-visual">▧</div><div><strong>Tu granja está lista</strong><p>{isAuth ? 'Crea un minero y completa la compra para verlo aquí.' : 'Crea un minero y completa la compra de simulación para verlo aquí.'}</p><button className="button button-primary button-small" onClick={openMinerBuilder}>Crear minero <span>↗</span></button></div></div> : <div className="demo-miner-grid">{displayMiners.map((miner) => <article className="demo-miner-card" key={miner.id}><span className="miner-visual">▧</span><div><span className="card-kicker">MINERO · {miner.purchaseMode === 'monthly' ? 'MENSUAL' : 'UNA SOLA VEZ'}</span><strong>{miner.name}</strong><small>{miner.powerTh.toFixed(2)} TH · {miner.efficiency} W/TH</small><small>Compra {miner.isReal ? '' : 'local '}{miner.acquiredAt}</small></div><span className="table-demo-status">{miner.isReal ? miner.status.toUpperCase() : 'ACTIVO · LOCAL'}</span></article>)}</div>}
       </section>
     </div>
   )

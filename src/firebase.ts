@@ -27,7 +27,7 @@ import {
   type FieldValue,
 } from 'firebase/firestore'
 
-import { detectUserGeo } from './geoIp'
+import { detectUserGeo } from './geoIp.ts'
 
 export type FirestoreTimestamp = Timestamp | FieldValue | string | null
 
@@ -38,18 +38,29 @@ export interface CountryRecord {
   ip: string
 }
 
+const env = (typeof import.meta !== 'undefined' && (import.meta as any).env)
+  ? (import.meta as any).env
+  : (process.env || {})
+
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY ?? '',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? '',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID ?? '',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET ?? '',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID ?? '',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID ?? '',
+  apiKey: env.VITE_FIREBASE_API_KEY ?? '',
+  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN ?? '',
+  projectId: env.VITE_FIREBASE_PROJECT_ID ?? '',
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET ?? '',
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID ?? '',
+  appId: env.VITE_FIREBASE_APP_ID ?? '',
 }
 
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const db = getFirestore(app)
+
+import {
+  cleanupUserMinersSubscription,
+  getUserMinersFromStore,
+  isUserMinersListenerActive,
+  subscribeToUserMiners,
+} from './userMinersStore.ts'
 
 export interface UserReferralData {
   referrerBy: string
@@ -185,9 +196,20 @@ export interface StoredMinerTraits {
   stickers: string
 }
 
+export interface StoredMinerPurchaseSnapshot {
+  packageId: string
+  name: string
+  powerTh: number
+  price: number
+  currency: string
+  cadence?: string
+  purchaseMode?: string
+}
+
 export interface StoredMiner {
   id: string
   uid: string
+  packageId?: string
   name: string
   powerTh: number
   efficiency: number
@@ -197,9 +219,13 @@ export interface StoredMiner {
   status: 'active' | 'mining' | 'customizing'
   txHash: string
   createdAt?: FirestoreTimestamp
+  createdAtIso?: string
   network: string
   ownerWallet: string
   visualTraits: StoredMinerTraits
+  purchaseMode?: string
+  cadence?: string
+  packageSnapshot?: StoredMinerPurchaseSnapshot
 }
 
 export interface ReferralCommission {
@@ -462,6 +488,7 @@ export async function loginWithEmail(email: string, password: string) {
 
 /** Log out current user */
 export async function logoutUser() {
+  cleanupUserMinersSubscription()
   await signOut(auth)
 }
 
@@ -1316,12 +1343,25 @@ export async function getMinerById(uid: string, minerId: string): Promise<Stored
   }
 }
 
-/** Fetch all miners for a given user from /miners/{uid}/miner */
+/** Fetch all miners for a given user from /miners/{uid}/miner, reusing an active realtime listener. */
 export async function getUserMiners(uid: string): Promise<StoredMiner[]> {
+  if (isUserMinersListenerActive(uid)) {
+    const cached = getUserMinersFromStore(uid)
+    if (cached !== null) {
+      return cached
+    }
+    return new Promise<StoredMiner[]>((resolve) => {
+      const unsubscribe = subscribeToUserMiners(uid, (miners) => {
+        unsubscribe()
+        resolve(miners)
+      })
+    })
+  }
+
   try {
     const colRef = collection(db, 'miners', uid, 'miner')
     const snap = await getDocs(colRef)
-    return snap.docs.map((d) => d.data() as StoredMiner)
+    return snap.docs.map((d) => ({ ...(d.data() as StoredMiner), id: d.id }))
   } catch (error) {
     console.error('Error fetching user miners from Firestore:', error)
     return []
@@ -1656,3 +1696,11 @@ export async function getMiningDailyProfits(minerUid: string): Promise<MiningDai
     return []
   }
 }
+
+export {
+  cleanupUserMinersSubscription,
+  getMinerFromSharedStore,
+  subscribeToSingleMinerDoc,
+  subscribeToUserMiners,
+  useRealtimeUserMiners,
+} from './userMinersStore.ts'

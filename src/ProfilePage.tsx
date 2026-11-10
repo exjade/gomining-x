@@ -2,11 +2,10 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from './AuthContext'
 import {
-  getUserMiners,
+  useRealtimeUserMiners,
   updateUserProfile,
   saveDetectedCountry,
   getUserCountryRecord,
-  type StoredMiner,
 } from './firebase'
 import { detectUserGeo } from './geoIp'
 import { usePersonalization } from './personalization'
@@ -40,8 +39,7 @@ export function ProfilePage({
   const { theme, language, setAppTheme, setAppLanguage, t } = usePersonalization()
 
   const [view, setView] = useState<'overview' | 'details' | 'settings'>('overview')
-  const [miners, setMiners] = useState<StoredMiner[]>([])
-  const [loadingMiners, setLoadingMiners] = useState(false)
+  const { miners, loading: loadingMiners } = useRealtimeUserMiners(user?.uid)
   const [copyFeedback, setCopyFeedback] = useState('')
 
   // Profile Edit Modal State - Username and Country are NOT editable by user
@@ -64,23 +62,10 @@ export function ProfilePage({
     ? `${activeWalletAddress.slice(0, 6)}...${activeWalletAddress.slice(-4)}`
     : ''
 
-  // Load miners and ensure country detection
+  // Automatic 100% background country detection (internal platform logic)
   useEffect(() => {
     if (!user) return
     let active = true
-    setLoadingMiners(true)
-
-    getUserMiners(user.uid)
-      .then((loadedMiners) => {
-        if (!active) return
-        setMiners(loadedMiners)
-      })
-      .catch((err) => console.warn('Error loading miners from Firestore:', err))
-      .finally(() => {
-        if (active) setLoadingMiners(false)
-      })
-
-    // Automatic 100% background country detection (internal platform logic)
     // Saves to dedicated collection /countries/{uid} and updates profile.country
     void getUserCountryRecord(user.uid).then(async (rec) => {
       if (!rec || !profile?.country) {

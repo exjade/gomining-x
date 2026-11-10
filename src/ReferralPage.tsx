@@ -9,13 +9,12 @@ import {
   getUnilevelDistributions,
   executeUnilevelDistribution,
   assignSponsorToUser,
-  getUserMiners,
+  useRealtimeUserMiners,
   type ReferralAccount,
   type ReferralTransaction,
   type ReferralCommission,
   type UnilevelAccount,
   type UnilevelDistributionDoc,
-  type StoredMiner,
 } from './firebase'
 import { usePersonalization } from './personalization'
 
@@ -30,7 +29,7 @@ export function ReferralPage({ pathname = '/nft-referral' }: { pathname?: string
   const [commissions, setCommissions] = useState<ReferralCommission[]>([])
   const [unilevelAccount, setUnilevelAccount] = useState<UnilevelAccount | null>(null)
   const [unilevelHistory, setUnilevelHistory] = useState<UnilevelDistributionDoc[]>([])
-  const [miners, setMiners] = useState<StoredMiner[]>([])
+  const { miners } = useRealtimeUserMiners(user?.uid)
 
   const [copyFeedback, setCopyFeedback] = useState('')
   const [sponsorInput, setSponsorInput] = useState('')
@@ -81,12 +80,6 @@ export function ReferralPage({ pathname = '/nft-referral' }: { pathname?: string
     getUnilevelDistributions(user.uid)
       .then((dists) => {
         if (active) setUnilevelHistory(dists)
-      })
-      .catch(() => {})
-
-    getUserMiners(user.uid)
-      .then((loadedMiners) => {
-        if (active) setMiners(loadedMiners)
       })
       .catch(() => {})
 

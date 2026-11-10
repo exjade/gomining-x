@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useDemoSession, updateDemoMinerCustomization, type MinerCustomization, type DemoMiner } from './demoStore'
+import { useDemoSession, updateDemoMinerCustomization, type MinerCustomization } from './demoStore'
 import { startMiningSimulation } from './miningSimulation'
 import { useAuth } from './AuthContext'
-import { updateMinerInFirestore, getMinerById } from './firebase'
+import { updateMinerInFirestore } from './firebase'
+import { subscribeToSingleMinerDoc } from './userMinersStore'
 
 type CustomizerTab = 'Wall' | 'Body' | 'Bottom' | 'Fans' | 'Screen' | 'Buttons' | 'Top' | 'Stickers'
 
@@ -40,11 +41,8 @@ export function MinerCustomizer() {
   const demo = useDemoSession()
   const { user } = useAuth()
 
-  // Fallback demo miner
-  const demoMiner: DemoMiner | undefined = minerId
-    ? demo.miners.find((m) => m.id === minerId)
-    : demo.miners[0]
-
+  const [loading, setLoading] = useState(true)
+  const [notFound, setNotFound] = useState(false)
   const [minerData, setMinerData] = useState<{
     id: string
     name: string
@@ -52,15 +50,10 @@ export function MinerCustomizer() {
     efficiency: number
     status?: string
     txHash?: string
-  }>(() => ({
-    id: minerId || demoMiner?.id || 'bonus-miner-default',
-    name: demoMiner?.name || (minerId ? `Minero ${minerId.slice(-6)}` : 'Bonus miner #5422372'),
-    powerTh: demoMiner?.powerTh || 5.83,
-    efficiency: 15,
-  }))
+  } | null>(null)
 
   const [activeTab, setActiveTab] = useState<CustomizerTab>('Wall')
-  const [customization, setCustomization] = useState<MinerCustomization>(() => demoMiner?.customization ?? {
+  const [customization, setCustomization] = useState<MinerCustomization>(() => ({
     wallColor: '#7c3aed',
     bodyColor: '#1e1b4b',
     bottomColor: '#e2e8f0',
@@ -70,16 +63,27 @@ export function MinerCustomizer() {
     topColor: '#0f172a',
     stickers: 'gomining-classic',
     updatedAt: new Date().toISOString(),
-  })
+  }))
 
-  // Load miner from Firestore if authenticated and minerId is present
+  // Reuse the shared listener when available; use a single-document listener for direct links.
   useEffect(() => {
-    if (!user || !minerId) return
-    let active = true
+    if (!minerId) {
+      setNotFound(true)
+      setMinerData(null)
+      setLoading(false)
+      return
+    }
 
-    getMinerById(user.uid, minerId)
-      .then((stored) => {
-        if (!active || !stored) return
+    if (user) {
+      setLoading(true)
+      const unsubscribe = subscribeToSingleMinerDoc(user.uid, minerId, (stored) => {
+        if (!stored) {
+          setNotFound(true)
+          setMinerData(null)
+          setLoading(false)
+          return
+        }
+
         setMinerData({
           id: stored.id,
           name: stored.name,
@@ -95,15 +99,32 @@ export function MinerCustomizer() {
             updatedAt: new Date().toISOString(),
           }))
         }
-      })
-      .catch((err) => {
-        console.warn('Error loading miner from Firestore:', err)
+        setNotFound(false)
+        setLoading(false)
       })
 
-    return () => {
-      active = false
+      return () => unsubscribe()
     }
-  }, [user, minerId])
+
+    const demoMiner = demo.miners.find((miner) => miner.id === minerId)
+    if (demoMiner) {
+      setMinerData({
+        id: demoMiner.id,
+        name: demoMiner.name,
+        powerTh: demoMiner.powerTh,
+        efficiency: demoMiner.efficiency,
+      })
+      if (demoMiner.customization) {
+        setCustomization(demoMiner.customization)
+      }
+      setNotFound(false)
+      setLoading(false)
+    } else {
+      setNotFound(true)
+      setMinerData(null)
+      setLoading(false)
+    }
+  }, [user, minerId, demo.miners])
 
   const [selectedScreenMode, setSelectedScreenMode] = useState('smile')
   const [savedSuccess, setSavedSuccess] = useState(false)
@@ -124,7 +145,9 @@ export function MinerCustomizer() {
   }
 
   const handleSave = async () => {
-    const targetId = minerId || minerData.id
+    if (notFound || !minerData || !minerData.id) return
+
+    const targetId = minerData.id
     updateDemoMinerCustomization(targetId, {
       ...customization,
       updatedAt: new Date().toISOString(),
@@ -153,6 +176,45 @@ export function MinerCustomizer() {
       default: return '#7c3aed'
     }
   })()
+
+  if (notFound) {
+    return (
+      <div className="miner-customizer-page">
+        <div className="customizer-topbar">
+          <button type="button" className="customizer-back-button" onClick={() => navigate('/nft-miners')}>
+            <span className="back-arrow">‹</span> Volver a Mis mineros
+          </button>
+        </div>
+        <div className="customizer-not-found" role="alert" style={{ textAlign: 'center', padding: '80px 20px', color: '#94a3b8' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+          <h2 style={{ color: '#fff', fontSize: 24, marginBottom: 12 }}>Minero no encontrado</h2>
+          <p style={{ maxWidth: 480, margin: '0 auto 24px', fontSize: 15, lineHeight: 1.5 }}>
+            El minero solicitado no existe o no pertenece a tu cuenta. No es posible personalizar ni iniciar minería sobre un minero inexistente.
+          </p>
+          <button type="button" className="button button-primary" onClick={() => navigate('/nft-miners')}>
+            Ir a Mis mineros <span>↗</span>
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (loading && !minerData) {
+    return (
+      <div className="miner-customizer-page">
+        <div className="customizer-topbar">
+          <button type="button" className="customizer-back-button" onClick={() => navigate('/nft-miners')}>
+            <span className="back-arrow">‹</span> Volver a Mis mineros
+          </button>
+        </div>
+        <div style={{ textAlign: 'center', padding: '100px 20px', color: '#94a3b8' }}>
+          <p>Cargando minero...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!minerData) return null
 
   return (
     <div className="miner-customizer-page">
