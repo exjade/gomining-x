@@ -949,6 +949,7 @@ export interface AdminContractRecord {
   txHash: string
   network: string
   source: string
+  ownerWallet?: string
 }
 
 export interface AdminOrderRecord {
@@ -1168,8 +1169,10 @@ export async function recordMinerPurchaseToAdmin(params: {
   }
 
   const now = new Date().toISOString()
-  const buyerUid = params.uid?.trim() || 'usr_client'
-  const buyerEmail = params.email?.trim() || (params.ownerWallet ? `wallet_${params.ownerWallet.slice(0, 6)}@crypto.com` : 'cliente@gomining.cloud')
+  const rawUid = params.uid?.trim()
+  const rawWallet = params.ownerWallet?.trim()
+  const buyerUid = rawUid || (rawWallet ? `guest_wallet_${rawWallet.toLowerCase()}` : `guest_${minerId}`)
+  const buyerEmail = params.email?.trim() || (rawWallet ? `wallet_${rawWallet.slice(0, 6)}@crypto.com` : `cliente_${minerId}@gomining.cloud`)
 
   const contractDoc: AdminContractRecord = {
     id: minerId,
@@ -1192,6 +1195,7 @@ export async function recordMinerPurchaseToAdmin(params: {
     txHash: params.txHash || `tx_${minerId}`,
     network: params.network || 'USDT',
     source: 'GoMining Client',
+    ...(rawWallet ? { ownerWallet: rawWallet } : {}),
   }
 
   const orderId = `ord_${minerId.replace(/[^a-zA-Z0-9_-]/g, '_')}`

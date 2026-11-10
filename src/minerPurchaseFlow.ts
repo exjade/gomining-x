@@ -12,13 +12,25 @@ import {
   lockPendingDemoMinerForSettlement,
   releasePendingDemoMinerLock,
   isPendingDemoMinerLocked,
+  reserveDemoBalance,
+  releaseDemoBalanceReservation,
+  commitDemoBalanceReservation,
+  getAvailableDemoBalance,
   type PendingDemoMinerOrder,
   type DemoMinerPurchaseInput,
   type DemoMinerPurchaseResult,
   type MinerCustomization,
 } from './demoStore.ts'
 
-export { isPendingDemoMinerLocked, lockPendingDemoMinerForSettlement, releasePendingDemoMinerLock }
+export {
+  isPendingDemoMinerLocked,
+  lockPendingDemoMinerForSettlement,
+  releasePendingDemoMinerLock,
+  reserveDemoBalance,
+  releaseDemoBalanceReservation,
+  commitDemoBalanceReservation,
+  getAvailableDemoBalance,
+}
 import type { MinerPlan } from './minerCatalog.ts'
 import type { PaymentCurrency } from './paymentQuote.ts'
 import type { PaymentNetworkId } from './paymentDestinations.ts'
@@ -105,6 +117,14 @@ export function validatePostTxRecovery(raw: unknown): PostTxPendingState | null 
   if (typeof snap.currency !== 'string' || !snap.currency.trim()) return null
   if (snap.cadence !== 'once' && snap.cadence !== 'monthly') return null
   if (snap.purchaseMode !== 'once' && snap.purchaseMode !== 'monthly') return null
+
+  // Blocker A: Strict consistency between top-level fields and authoritative packageSnapshot
+  if (data.packageId.trim() !== snap.packageId.trim()) return null
+  if (data.powerTh !== snap.powerTh) return null
+  if (data.price !== snap.price) return null
+  if (data.currency.trim() !== snap.currency.trim()) return null
+  if (data.cadence !== snap.cadence) return null
+  if (data.purchaseMode !== snap.purchaseMode) return null
 
   if (typeof data.createdAt !== 'number' || !Number.isFinite(data.createdAt) || data.createdAt <= 0) return null
 
@@ -256,6 +276,7 @@ export interface CompleteWalletMinerPurchaseParams {
   user?: { uid: string; email?: string | null } | null
   minerId?: string
   requireCanonicalPackageId?: boolean
+  packageSnapshot?: PackageSnapshot
 }
 
 export interface CompleteWalletMinerPurchaseOptions {
@@ -370,14 +391,20 @@ export async function completeWalletMinerPurchase(
   parsedTh: number
   resolvedPackageId?: string
 } | null> {
-  const { productName, amount, packageId, purchaseMode, activeAddress, txHash, networkName, catalogUsd, user, minerId: preallocatedMinerId } = params
+  const { productName, amount, packageId, purchaseMode, activeAddress, txHash, networkName, catalogUsd, user, minerId: preallocatedMinerId, packageSnapshot } = params
 
   if (!isMinerProduct(productName)) return null
 
-  const parsedTh = parseMinerPowerTh(productName, amount)
-  const resolvedPackageId = typeof packageId === 'string' && packageId.trim() ? packageId.trim() : undefined
-  const pricePaid = catalogUsd ?? amount
-  const resolvedPurchaseMode = purchaseMode ?? 'once'
+  // Blocker A: Recovery Snapshot Authority on Retry
+  const authoritativeSnapshot = packageSnapshot
+  const effectivePowerTh = authoritativeSnapshot ? authoritativeSnapshot.powerTh : parseMinerPowerTh(productName, amount)
+  const effectivePrice = authoritativeSnapshot ? authoritativeSnapshot.price : (catalogUsd ?? amount)
+  const effectivePackageId = (authoritativeSnapshot?.packageId ?? (typeof packageId === 'string' && packageId.trim() ? packageId.trim() : undefined))
+  const resolvedPackageId = effectivePackageId ? effectivePackageId.trim() : undefined
+  const effectiveName = authoritativeSnapshot ? authoritativeSnapshot.name.trim() : productName
+  const effectiveCurrency = authoritativeSnapshot ? authoritativeSnapshot.currency.trim() : 'USD'
+  const effectivePurchaseMode = authoritativeSnapshot ? authoritativeSnapshot.purchaseMode : (purchaseMode ?? 'once')
+  const effectiveCadence = authoritativeSnapshot ? authoritativeSnapshot.cadence : effectivePurchaseMode
   const cleanUid = user?.uid?.trim()
   const lowerPkg = resolvedPackageId?.toLowerCase() || ''
 
@@ -399,11 +426,11 @@ export async function completeWalletMinerPurchase(
   // Prepare miner object without mutating local store
   const miner = prepareWalletMinerPurchase(
     {
-      name: productName,
-      powerTh: parsedTh,
+      name: effectiveName,
+      powerTh: effectivePowerTh,
       efficiency: 15,
-      price: pricePaid,
-      purchaseMode: resolvedPurchaseMode,
+      price: effectivePrice,
+      purchaseMode: effectivePurchaseMode,
       ownerWallet: activeAddress,
       packageId: resolvedPackageId,
     },
@@ -418,29 +445,39 @@ export async function completeWalletMinerPurchase(
       id: createdMinerId,
       uid: cleanUid!,
       packageId: resolvedPackageId,
-      name: productName,
-      powerTh: parsedTh,
+      name: effectiveName,
+      powerTh: effectivePowerTh,
       efficiency: 15,
       efficiencyWattsPerTh: 15,
-      price: pricePaid,
-      currency: 'USD',
+      price: effectivePrice,
+      currency: effectiveCurrency,
       status: 'active',
       txHash,
       createdAt: null,
       createdAtIso: nowIso,
       network: networkName || 'BNB Chain',
       ownerWallet: activeAddress || 'INTERNAL',
-      purchaseMode: resolvedPurchaseMode,
-      cadence: resolvedPurchaseMode,
-      packageSnapshot: {
-        packageId: resolvedPackageId!,
-        name: productName,
-        powerTh: parsedTh,
-        price: pricePaid,
-        currency: 'USD',
-        cadence: resolvedPurchaseMode,
-        purchaseMode: resolvedPurchaseMode,
-      },
+      purchaseMode: effectivePurchaseMode,
+      cadence: effectiveCadence,
+      packageSnapshot: authoritativeSnapshot
+        ? {
+            packageId: authoritativeSnapshot.packageId.trim(),
+            name: authoritativeSnapshot.name.trim(),
+            powerTh: authoritativeSnapshot.powerTh,
+            price: authoritativeSnapshot.price,
+            currency: authoritativeSnapshot.currency.trim(),
+            cadence: authoritativeSnapshot.cadence,
+            purchaseMode: authoritativeSnapshot.purchaseMode,
+          }
+        : {
+            packageId: resolvedPackageId!,
+            name: effectiveName,
+            powerTh: effectivePowerTh,
+            price: effectivePrice,
+            currency: effectiveCurrency,
+            cadence: effectiveCadence,
+            purchaseMode: effectivePurchaseMode,
+          },
       visualTraits: {
         wallColor: '#7c3aed',
         bodyColor: '#1e1b4b',
@@ -455,7 +492,7 @@ export async function completeWalletMinerPurchase(
     // Fail-closed persistence: if saving to Firestore fails, throw so local state / simulation / admin recorder are NOT touched
     await options.saveMinerToFirestore(cleanUid!, storedMiner)
     if (options.creditReferral) {
-      await options.creditReferral(cleanUid!, user.email || '', pricePaid, createdMinerId, txHash).catch((err) => {
+      await options.creditReferral(cleanUid!, user.email || '', effectivePrice, createdMinerId, txHash).catch((err) => {
         console.warn('Error crediting referral commission:', err)
       })
     }
@@ -474,15 +511,16 @@ export async function completeWalletMinerPurchase(
   }
 
   // Record purchased miner to platform admin dashboard (/admin_contracts & /admin_orders)
-  // Blocker 9: Do not swallow Admin recorder errors; propagate so caller knows Admin sync state
+  // Blocker 9 & Blocker E: Deterministic guest wallet identity without generic usr_client
   if (options?.recordPurchaseToAdmin) {
+    const adminUid = cleanUid || user?.uid || (activeAddress ? `guest_wallet_${activeAddress.trim().toLowerCase()}` : undefined)
     await options.recordPurchaseToAdmin({
       minerId: createdMinerId,
-      uid: cleanUid || user?.uid,
+      uid: adminUid,
       email: user?.email || '',
-      name: productName,
-      powerTh: parsedTh,
-      price: pricePaid,
+      name: effectiveName,
+      powerTh: effectivePowerTh,
+      price: effectivePrice,
       txHash,
       network: networkName,
       ownerWallet: activeAddress,
@@ -490,7 +528,7 @@ export async function completeWalletMinerPurchase(
     })
   }
 
-  return { miner, createdMinerId, parsedTh, resolvedPackageId }
+  return { miner, createdMinerId, parsedTh: effectivePowerTh, resolvedPackageId }
 }
 
 export async function retryWalletMinerPurchase(
@@ -522,6 +560,7 @@ export async function retryWalletMinerPurchase(
       user: options?.user ?? (recovery.originUid ? { uid: recovery.originUid } : null),
       minerId: recovery.minerId,
       requireCanonicalPackageId: true,
+      packageSnapshot: recovery.packageSnapshot,
     },
     options
   )
@@ -616,6 +655,12 @@ export async function completeLocalMinerPurchase(
     const prep = prepareDemoMinerPurchase({ ...input, packageId: canonicalPackageId })
     if (!prep.ok) return prep
 
+    // Blocker C & D: Reserve balance atomically BEFORE Firestore
+    const reservation = reserveDemoBalance(prep.price)
+    if (!reservation.ok) {
+      return reservation
+    }
+
     const minerId = prep.miner.id
     const nowIso = new Date().toISOString()
     const purchaseMode = (input.purchaseMode as any) || 'once'
@@ -661,16 +706,17 @@ export async function completeLocalMinerPurchase(
     try {
       await options.saveMinerToFirestore(cleanUid, storedMiner)
     } catch (persistErr) {
+      releaseDemoBalanceReservation(reservation.reservationId)
       console.error('Error persisting purchased miner to Firestore:', persistErr)
       return {
         ok: false,
         required: prep.price,
-        available: 0,
+        available: getAvailableDemoBalance(),
         message: persistErr instanceof Error ? persistErr.message : 'Error al guardar el minero en Firestore',
       }
     }
 
-    const commitRes = commitDemoMinerPurchase(prep.miner, prep.price)
+    const commitRes = commitDemoMinerPurchase(prep.miner, prep.price, reservation.reservationId)
     // Blocker 2: R1 Local Commit Gates Admin
     if (!commitRes.ok) {
       return commitRes
@@ -773,6 +819,12 @@ export async function payPendingMinerOrderAndRecordToAdmin(
         return prep
       }
 
+      // Blocker C & D: Reserve balance across distinct orders BEFORE Firestore
+      const reservation = reserveDemoBalance(prep.price, `RES-ORDER-${order.id}`)
+      if (!reservation.ok) {
+        return reservation
+      }
+
       const minerId = prep.miner.id
       const nowIso = new Date().toISOString()
       const purchaseMode = (order.purchaseMode as any) || 'once'
@@ -818,15 +870,18 @@ export async function payPendingMinerOrderAndRecordToAdmin(
       try {
         await options.saveMinerToFirestore(cleanUid!, storedMiner)
       } catch (persistErr) {
+        releaseDemoBalanceReservation(reservation.reservationId)
         console.error('Error persisting pending miner to Firestore:', persistErr)
         return {
           ok: false,
           minerId,
+          required: order.price,
+          available: getAvailableDemoBalance(),
           message: persistErr instanceof Error ? persistErr.message : 'Error al persistir el minero en Firestore',
         }
       }
 
-      const result = commitPayPendingDemoMiner(order.id, prep.miner, prep.price)
+      const result = commitPayPendingDemoMiner(order.id, prep.miner, prep.price, reservation.reservationId)
       if (!result.ok) {
         return result
       }

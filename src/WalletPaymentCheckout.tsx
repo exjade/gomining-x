@@ -11,6 +11,7 @@ import { buildSolanaPaymentTransaction } from './solanaPayment'
 import { startMiningSimulation } from './miningSimulation'
 import { useAuth } from './AuthContext'
 import { savePurchasedMiner, creditDirectReferralCommission, recordMinerPurchaseToAdmin } from './firebase'
+import { buyDemoMiner } from './demoStore'
 import {
   completeWalletMinerPurchase,
   retryWalletMinerPurchase,
@@ -129,6 +130,7 @@ export function WalletPaymentCheckout({
   const [paying, setPaying] = useState(false)
   const [error, setError] = useState('')
   const [receipt, setReceipt] = useState<PaymentReceipt | null>(null)
+  const [simulatedMiner, setSimulatedMiner] = useState<{ id: string; name: string } | null>(null)
   const [postTxRecovery, setPostTxRecoveryState] = useState<PostTxPendingState | null>(() => getPostTxRecovery())
 
   const setPostTxRecovery = useCallback((val: PostTxPendingState | null) => {
@@ -635,7 +637,51 @@ export function WalletPaymentCheckout({
           </button>
         </div>
 
-        {receipt ? (
+        {simulatedMiner ? (
+          /* Pure Local Simulation View - Zero Blockchain / Zero Firestore / Zero Admin */
+          <div className="checkout-receipt-view" data-testid="simulated-purchase-view">
+            <div className="receipt-success-badge" style={{ background: '#3b82f6' }}>⚡</div>
+            <h3>¡Simulación completada en modo prueba!</h3>
+            <p className="receipt-desc">
+              El minero ha sido activado en tu entorno de demostración local. No se realizaron cargos reales ni transacciones blockchain.
+            </p>
+
+            <div className="receipt-details-box">
+              <div className="receipt-row">
+                <span>Producto:</span>
+                <strong>{simulatedMiner.name}</strong>
+              </div>
+              <div className="receipt-row">
+                <span>Modo:</span>
+                <strong style={{ color: '#3b82f6' }}>Simulación Local (Demo)</strong>
+              </div>
+              <div className="receipt-row">
+                <span>ID Local:</span>
+                <code>{simulatedMiner.id}</code>
+              </div>
+            </div>
+
+            <div className="receipt-actions">
+              <button
+                type="button"
+                className="button button-primary receipt-customize-btn"
+                onClick={() => {
+                  onClose(false)
+                  navigate(`/miners/${simulatedMiner.id}/customize`)
+                }}
+              >
+                Personalizar mi Minero Ahora ⚙
+              </button>
+              <button
+                type="button"
+                className="button button-secondary"
+                onClick={() => onClose(false)}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        ) : receipt ? (
           /* Payment Success & Receipt View */
           <div className="checkout-receipt-view">
             <div className="receipt-success-badge">✓</div>
@@ -986,7 +1032,24 @@ export function WalletPaymentCheckout({
                             setShowSimulateFallback(false)
                             setPaying(true)
                             try {
-                              await processPurchaseCompletion(`0x${'a'.repeat(64)}`)
+                              // Blocker B: Decoupled local simulation path - 0 Firestore, 0 Admin, 0 Referral, 0 Recovery, NO fake txHash
+                              const simResult = buyDemoMiner({
+                                name: productName,
+                                powerTh: parseMinerPowerTh(productName, amount),
+                                efficiency: 15,
+                                price: 0,
+                                purchaseMode,
+                                ownerWallet: activeAddress || 'DEMO_SIMULATION',
+                                packageId: canonicalPackageId,
+                              })
+                              if (simResult.ok) {
+                                if (startMiningSimulation && simResult.miner) {
+                                  startMiningSimulation(simResult.miner.id, simResult.miner.name, simResult.miner.powerTh)
+                                }
+                                setSimulatedMiner(simResult.miner ? { id: simResult.miner.id, name: simResult.miner.name } : null)
+                              } else {
+                                setError('No se pudo registrar la simulación local.')
+                              }
                             } catch (simErr) {
                               setError(simErr instanceof Error ? simErr.message : 'Error en simulación.')
                             } finally {

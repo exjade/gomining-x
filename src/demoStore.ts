@@ -111,6 +111,8 @@ let receiptSequence = 0
 let minerSequence = 0
 let sessionRevision = 0
 const lockedPendingOrders = new Set<string>()
+const activeBalanceReservations = new Map<string, number>()
+let reservationSequence = 0
 
 function notify() {
   sessionRevision += 1
@@ -267,6 +269,7 @@ export function restoreDemoSession(value: unknown): boolean {
   const maintenanceCredit = Number.isFinite(Number(data.maintenanceCredit)) ? Number(data.maintenanceCredit) : 0
 
   lockedPendingOrders.clear()
+  activeBalanceReservations.clear()
   state = { balance, maintenanceCredit, miners, workers, workerActivationMode: data.workerActivationMode === 'manual' ? 'manual' : 'automatic',
     pendingMinerOrders, subscription, receipts, presaleTokens }
   notify()
@@ -290,8 +293,51 @@ function makeReceipt(kind: DemoReceipt['kind'], label: string, amount: number, d
   }
 }
 
+export function getAvailableDemoBalance(): number {
+  let reserved = 0
+  for (const amt of activeBalanceReservations.values()) {
+    reserved += amt
+  }
+  return roundCurrency(Math.max(0, state.balance - reserved))
+}
+
+export function reserveDemoBalance(
+  amount: number,
+  reservationId?: string
+): { ok: true; reservationId: string } | InsufficientResult {
+  const roundedAmount = roundCurrency(amount)
+  if (!Number.isFinite(roundedAmount) || roundedAmount < 0) {
+    return { ok: false, required: amount, available: getAvailableDemoBalance(), message: 'Monto de reserva no válido.' }
+  }
+  const available = getAvailableDemoBalance()
+  if (available + 0.000001 < roundedAmount) {
+    return resultForInsufficient(roundedAmount)
+  }
+  const resId = reservationId?.trim() || `RES-${Date.now().toString(36).toUpperCase()}-${(++reservationSequence).toString().padStart(3, '0')}`
+  activeBalanceReservations.set(resId, roundedAmount)
+  return { ok: true, reservationId: resId }
+}
+
+export function releaseDemoBalanceReservation(reservationId: string): void {
+  activeBalanceReservations.delete(reservationId)
+}
+
+export function commitDemoBalanceReservation(reservationId: string): number {
+  const reservedAmount = activeBalanceReservations.get(reservationId)
+  if (reservedAmount === undefined) {
+    return state.balance
+  }
+  activeBalanceReservations.delete(reservationId)
+  state = {
+    ...state,
+    balance: roundCurrency(Math.max(0, state.balance - reservedAmount)),
+  }
+  notify()
+  return state.balance
+}
+
 function resultForInsufficient(required: number): InsufficientResult {
-  return { ok: false, required, available: state.balance, message: 'El saldo local no alcanza para completar esta simulación.' }
+  return { ok: false, required, available: getAvailableDemoBalance(), message: 'El saldo local no alcanza para completar esta simulación.' }
 }
 
 export function addDemoBalance(amount: number, detail = 'Crédito ficticio añadido en esta sesión'): DemoReceipt | null {
@@ -366,19 +412,29 @@ export function prepareDemoMinerPurchase(
   existingMinerId?: string
 ): PreparedDemoMinerPurchase | InsufficientResult {
   if (!isValidMinerPurchase(input)) {
-    return { ok: false, required: input.price, available: state.balance, message: 'Revisa la potencia, eficiencia y precio local.' }
+    return { ok: false, required: input.price, available: getAvailableDemoBalance(), message: 'Revisa la potencia, eficiencia y precio local.' }
   }
   const price = roundCurrency(input.price)
-  if (state.balance + 0.000001 < price) return resultForInsufficient(price)
+  const available = getAvailableDemoBalance()
+  if (available + 0.000001 < price) return resultForInsufficient(price)
   const miner = makeDemoMiner({ ...input, price }, existingMinerId)
   return { ok: true, miner, price }
 }
 
 export function commitDemoMinerPurchase(
   miner: DemoMiner,
-  price: number
+  price: number,
+  reservationId?: string
 ): { ok: true; receipt: DemoReceipt; miner: DemoMiner } | InsufficientResult {
   const roundedPrice = roundCurrency(price)
+  if (reservationId && activeBalanceReservations.has(reservationId)) {
+    activeBalanceReservations.delete(reservationId)
+    const balance = roundCurrency(Math.max(0, state.balance - roundedPrice))
+    const receipt = makeReceipt('miner', 'Compra local de minero', roundedPrice, `${miner.name} · ${miner.powerTh.toFixed(2)} TH · nuevo poder en granja`, balance)
+    state = { ...state, balance, miners: [miner, ...state.miners], workers: [makeDemoWorker(miner), ...state.workers], receipts: [receipt, ...state.receipts].slice(0, 50) }
+    notify()
+    return { ok: true, receipt, miner }
+  }
   if (state.balance + 0.000001 < roundedPrice) {
     return resultForInsufficient(roundedPrice)
   }
@@ -500,12 +556,13 @@ export function preparePayPendingDemoMiner(
   existingMinerId?: string
 ): PreparedPendingMinerPayment | InsufficientResult {
   const order = state.pendingMinerOrders.find((item) => item.id === orderId)
-  if (!order) return { ok: false, required: 0, available: state.balance, message: 'No se encontró ese pedido local pendiente.' }
+  if (!order) return { ok: false, required: 0, available: getAvailableDemoBalance(), message: 'No se encontró ese pedido local pendiente.' }
   if (!isValidMinerPurchase(order)) {
-    return { ok: false, required: order.price, available: state.balance, message: 'Revisa la potencia, eficiencia y precio local.' }
+    return { ok: false, required: order.price, available: getAvailableDemoBalance(), message: 'Revisa la potencia, eficiencia y precio local.' }
   }
   const price = roundCurrency(order.price)
-  if (state.balance + 0.000001 < price) return resultForInsufficient(price)
+  const available = getAvailableDemoBalance()
+  if (available + 0.000001 < price) return resultForInsufficient(price)
   const miner = makeDemoMiner({ ...order, price }, existingMinerId)
   return { ok: true, order, miner, price }
 }
@@ -532,12 +589,30 @@ export function isPendingDemoMinerLocked(orderId: string): boolean {
 export function commitPayPendingDemoMiner(
   orderId: string,
   miner: DemoMiner,
-  price: number
+  price: number,
+  reservationId?: string
 ): { ok: true; receipt: DemoReceipt; miner: DemoMiner } | InsufficientResult {
   if (!state.pendingMinerOrders.some((item) => item.id === orderId)) {
-    return { ok: false, required: 0, available: state.balance, message: 'No se encontró ese pedido local pendiente.' }
+    if (reservationId) releaseDemoBalanceReservation(reservationId)
+    return { ok: false, required: 0, available: getAvailableDemoBalance(), message: 'No se encontró ese pedido local pendiente.' }
   }
   const roundedPrice = roundCurrency(price)
+  if (reservationId && activeBalanceReservations.has(reservationId)) {
+    activeBalanceReservations.delete(reservationId)
+    const balance = roundCurrency(Math.max(0, state.balance - roundedPrice))
+    const receipt = makeReceipt('miner', 'Compra local de minero', roundedPrice, `${miner.name} · ${miner.powerTh.toFixed(2)} TH · nuevo poder en granja`, balance)
+    lockedPendingOrders.delete(orderId)
+    state = {
+      ...state,
+      balance,
+      miners: [miner, ...state.miners],
+      workers: [makeDemoWorker(miner), ...state.workers],
+      receipts: [receipt, ...state.receipts].slice(0, 50),
+      pendingMinerOrders: state.pendingMinerOrders.filter((item) => item.id !== orderId),
+    }
+    notify()
+    return { ok: true, receipt, miner }
+  }
   if (state.balance + 0.000001 < roundedPrice) {
     return resultForInsufficient(roundedPrice)
   }

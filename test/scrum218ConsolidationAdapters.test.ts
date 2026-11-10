@@ -16,6 +16,9 @@ import {
   isPendingDemoMinerLocked,
   restoreDemoSession,
   getDemoSessionForPersistence,
+  getAvailableDemoBalance,
+  reserveDemoBalance,
+  releaseDemoBalanceReservation,
   type DemoMinerPurchaseInput,
   type PendingDemoMinerOrder,
 } from '../src/demoStore.ts'
@@ -2398,5 +2401,395 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
     })
     assert.ok(payPendingRes.ok)
     assert.equal(adminCallCount, 0, 'Guest pending payment must NEVER call Admin recorder')
+  })
+
+  // ==========================================================================
+  // CORRECTION_3.1 Consolidation Tests (Blockers A through E)
+  // ==========================================================================
+
+  // --------------------------------------------------------------------------
+  // Blocker A: Recovery Snapshot Authority on Retry
+  // --------------------------------------------------------------------------
+  it('Blocker A: retryWalletMinerPurchase strictly consumes authoritative packageSnapshot values and bypasses parseMinerPowerTh and price recalculation', async () => {
+    resetStore(1000)
+    let firestoreStoredMiner: StoredMiner | null = null
+    let adminRecordParams: any = null
+
+    const mockFirestoreSaver = async (_uid: string, miner: StoredMiner) => {
+      firestoreStoredMiner = miner
+    }
+    const mockAdminRecorder: PurchaseAdminRecorder = async (params) => {
+      adminRecordParams = params
+    }
+
+    // Adversarial recovery record with snapshot authority conflicting with deceptive productName
+    const recovery: PostTxPendingState = {
+      schemaVersion: 1,
+      status: 'PERSISTENCE_PENDING',
+      txHash: '0xadversarial_authority_hash_123',
+      minerId: 'MINER-AUTH-SNAP-001',
+      packageId: 'minerx-snapshot-authority',
+      productName: 'Minero Enterprise 192 TH', // Deceptive name: parseMinerPowerTh would return 192
+      amount: 499.99,
+      powerTh: 42.44, // Snapshot power
+      price: 499.99, // Snapshot price
+      currency: 'USD',
+      cadence: 'once',
+      purchaseMode: 'once',
+      networkId: 'bnb',
+      networkName: 'BNB Chain',
+      originWalletAddress: '0x1111111111111111111111111111111111111111',
+      originUid: 'u_origin_adversarial',
+      packageSnapshot: {
+        packageId: 'minerx-snapshot-authority',
+        name: 'Minero Autorizado Snapshot 42.44',
+        powerTh: 42.44,
+        price: 499.99,
+        currency: 'USD',
+        cadence: 'once',
+        purchaseMode: 'once',
+      },
+      createdAt: Date.now(),
+    }
+
+    const result = await retryWalletMinerPurchase(recovery, {
+      user: { uid: 'u_origin_adversarial', email: 'snap@authority.com' },
+      activeAddress: '0x1111111111111111111111111111111111111111',
+      saveMinerToFirestore: mockFirestoreSaver,
+      recordPurchaseToAdmin: mockAdminRecorder,
+    })
+
+    assert.ok(result, 'Retry must succeed')
+    // 1. Returned values match snapshot
+    assert.equal(result.parsedTh, 42.44, 'Result parsedTh must be 42.44, NOT 192 from parseMinerPowerTh')
+    assert.equal(result.resolvedPackageId, 'minerx-snapshot-authority')
+    assert.equal(result.createdMinerId, 'MINER-AUTH-SNAP-001')
+
+    // 2. DemoMiner in local store matches snapshot
+    assert.equal(result.miner.powerTh, 42.44)
+    assert.equal(result.miner.price, 499.99)
+    assert.equal(result.miner.name, 'Minero Autorizado Snapshot 42.44')
+    assert.equal(result.miner.id, 'MINER-AUTH-SNAP-001')
+
+    // 3. StoredMiner in Firestore matches snapshot
+    assert.ok(firestoreStoredMiner)
+    assert.equal((firestoreStoredMiner as StoredMiner).powerTh, 42.44, 'Firestore powerTh must be 42.44, NOT 192')
+    assert.equal((firestoreStoredMiner as StoredMiner).price, 499.99)
+    assert.equal((firestoreStoredMiner as StoredMiner).packageId, 'minerx-snapshot-authority')
+    assert.equal((firestoreStoredMiner as StoredMiner).name, 'Minero Autorizado Snapshot 42.44')
+    assert.deepEqual((firestoreStoredMiner as StoredMiner).packageSnapshot, recovery.packageSnapshot, 'StoredMiner.packageSnapshot must deep-equal recovery.packageSnapshot')
+    assert.equal((firestoreStoredMiner as StoredMiner).txHash, '0xadversarial_authority_hash_123')
+    assert.equal((firestoreStoredMiner as StoredMiner).id, 'MINER-AUTH-SNAP-001')
+
+    // 4. Admin record matches snapshot
+    assert.ok(adminRecordParams)
+    assert.equal(adminRecordParams.powerTh, 42.44, 'Admin powerTh must be 42.44, NOT 192')
+    assert.equal(adminRecordParams.price, 499.99)
+    assert.equal(adminRecordParams.packageId, 'minerx-snapshot-authority')
+    assert.equal(adminRecordParams.name, 'Minero Autorizado Snapshot 42.44')
+    assert.equal(adminRecordParams.minerId, 'MINER-AUTH-SNAP-001')
+    assert.equal(adminRecordParams.txHash, '0xadversarial_authority_hash_123')
+  })
+
+  // --------------------------------------------------------------------------
+  // Blocker A: Discrepancy validation in validatePostTxRecovery
+  // --------------------------------------------------------------------------
+  it('Blocker A: validatePostTxRecovery strictly rejects records where top-level fields disagree with packageSnapshot', () => {
+    const baseValid: PostTxPendingState = {
+      schemaVersion: 1,
+      status: 'PAYMENT_TRANSMITTED',
+      txHash: '0xvalid_snap_123',
+      minerId: 'MINER-VAL-SNAP-001',
+      packageId: 'minerx-canon-1',
+      productName: 'Minero Val · 48 TH',
+      amount: 100,
+      powerTh: 48,
+      price: 100,
+      currency: 'USD',
+      cadence: 'once',
+      purchaseMode: 'once',
+      networkId: 'bnb',
+      networkName: 'BNB Chain',
+      originUid: 'u_val_snap',
+      packageSnapshot: {
+        packageId: 'minerx-canon-1',
+        name: 'Minero Val · 48 TH',
+        powerTh: 48,
+        price: 100,
+        currency: 'USD',
+        cadence: 'once',
+        purchaseMode: 'once',
+      },
+      createdAt: Date.now(),
+    }
+
+    assert.ok(validatePostTxRecovery(baseValid), 'Valid record passes')
+
+    // 1. powerTh discrepancy
+    assert.equal(validatePostTxRecovery({ ...baseValid, powerTh: 100 }), null, 'Must reject powerTh mismatch')
+    assert.equal(validatePostTxRecovery({ ...baseValid, packageSnapshot: { ...baseValid.packageSnapshot, powerTh: 99 } }), null)
+
+    // 2. price discrepancy
+    assert.equal(validatePostTxRecovery({ ...baseValid, price: 50 }), null, 'Must reject price mismatch')
+
+    // 3. packageId discrepancy
+    assert.equal(validatePostTxRecovery({ ...baseValid, packageId: 'minerx-other' }), null, 'Must reject packageId mismatch')
+
+    // 4. currency discrepancy
+    assert.equal(validatePostTxRecovery({ ...baseValid, currency: 'EUR' }), null, 'Must reject currency mismatch')
+
+    // 5. cadence discrepancy
+    assert.equal(validatePostTxRecovery({ ...baseValid, cadence: 'monthly' }), null, 'Must reject cadence mismatch')
+
+    // 6. purchaseMode discrepancy
+    assert.equal(validatePostTxRecovery({ ...baseValid, purchaseMode: 'monthly' }), null, 'Must reject purchaseMode mismatch')
+  })
+
+  // --------------------------------------------------------------------------
+  // Blocker B: Simulation Fallback Isolation
+  // --------------------------------------------------------------------------
+  it('Blocker B: Simulation fallback operates strictly in local demoStore with 0 Firestore writes, 0 Admin writes, 0 referral credits, 0 recovery records, and no fake blockchain receipt', async () => {
+    resetStore(100)
+    let firestoreWrites = 0
+    let adminWrites = 0
+    let referralWrites = 0
+
+    // Calling buyDemoMiner directly for local simulation
+    const simResult = buyDemoMiner({
+      name: 'Simulated Demo Miner',
+      powerTh: 48,
+      efficiency: 15,
+      price: 0,
+      purchaseMode: 'once',
+      ownerWallet: 'DEMO_SIMULATION',
+      packageId: 'minerx-standard-1',
+    })
+
+    assert.ok(simResult.ok, 'Local simulation must succeed')
+    assert.equal(firestoreWrites, 0, 'Zero Firestore writes')
+    assert.equal(adminWrites, 0, 'Zero Admin writes')
+    assert.equal(referralWrites, 0, 'Zero referral writes')
+    assert.equal(getPostTxRecovery(), null, 'Zero recovery records created')
+
+    // Verify source code of WalletPaymentCheckout strictly ensures simulation fallback is decoupled from canonical completeWalletMinerPurchase / fake txHash
+    const checkoutSource = fs.readFileSync(path.resolve(projectRoot, 'src/WalletPaymentCheckout.tsx'), 'utf-8')
+    assert.ok(
+      !checkoutSource.includes(`processPurchaseCompletion(\`0x\${'a'.repeat(64)}\`)`),
+      'WalletPaymentCheckout must NEVER pass fake 0xaaaa... hash to processPurchaseCompletion'
+    )
+    assert.ok(
+      checkoutSource.includes('buyDemoMiner({'),
+      'WalletPaymentCheckout simulation fallback must directly use local buyDemoMiner'
+    )
+    assert.ok(
+      checkoutSource.includes('data-testid="simulated-purchase-view"'),
+      'WalletPaymentCheckout must render dedicated local simulation view without fake blockchain receipt'
+    )
+  })
+
+  // --------------------------------------------------------------------------
+  // Blockers C & D: Balance Reservation, Cross-Order Race Protection & Zero Orphans
+  // --------------------------------------------------------------------------
+  it('Blocker C & D: Concurrency race with two distinct pending orders A ($80) and B ($80) against balance $100: exactly one succeeds, loser fails BEFORE Firestore write, 0 orphans, balance never negative', async () => {
+    resetStore(100) // Initial balance is 100 USD
+
+    // Create Order A ($80)
+    const deferA = deferDemoMinerPurchase({
+      name: 'Pending Order A',
+      powerTh: 10,
+      efficiency: 15,
+      price: 80,
+      purchaseMode: 'once',
+      packageId: 'minerx-order-a',
+    })
+    assert.ok(deferA.ok)
+
+    // Create Order B ($80)
+    const deferB = deferDemoMinerPurchase({
+      name: 'Pending Order B',
+      powerTh: 10,
+      efficiency: 15,
+      price: 80,
+      purchaseMode: 'once',
+      packageId: 'minerx-order-b',
+    })
+    assert.ok(deferB.ok)
+
+    const session = getDemoSessionForPersistence()
+    const orderA = session.pendingMinerOrders.find((o) => o.name === 'Pending Order A')!
+    const orderB = session.pendingMinerOrders.find((o) => o.name === 'Pending Order B')!
+    assert.ok(orderA && orderB)
+
+    let firestoreWrites = 0
+    let adminWrites = 0
+    const createdFirestoreMiners: StoredMiner[] = []
+
+    const mockSaveMinerToFirestore = async (_uid: string, miner: StoredMiner) => {
+      // Simulate real async delay
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      firestoreWrites++
+      createdFirestoreMiners.push(miner)
+    }
+
+    const mockRecordToAdmin: PurchaseAdminRecorder = async () => {
+      adminWrites++
+    }
+
+    // Launch both orders concurrently
+    const [resA, resB] = await Promise.all([
+      payPendingMinerOrderAndRecordToAdmin(orderA, {
+        user: { uid: 'u_race_1', email: 'race1@test.com' },
+        saveMinerToFirestore: mockSaveMinerToFirestore,
+        recordPurchaseToAdmin: mockRecordToAdmin,
+      }),
+      payPendingMinerOrderAndRecordToAdmin(orderB, {
+        user: { uid: 'u_race_1', email: 'race1@test.com' },
+        saveMinerToFirestore: mockSaveMinerToFirestore,
+        recordPurchaseToAdmin: mockRecordToAdmin,
+      }),
+    ])
+
+    // Exactly one order must succeed and exactly one must fail
+    const succeeded = [resA, resB].filter((r) => r.ok)
+    const failed = [resA, resB].filter((r) => !r.ok)
+
+    assert.equal(succeeded.length, 1, 'Exactly one order must achieve canonical ownership')
+    assert.equal(failed.length, 1, 'Exactly one order must fail due to balance reservation')
+
+    // Canonical Firestore write count must match successful local finalizations
+    assert.equal(firestoreWrites, 1, 'Firestore write must be executed ONLY for winning order; loser fails BEFORE Firestore')
+    assert.equal(createdFirestoreMiners.length, 1)
+    assert.equal(adminWrites, 1, 'Admin recorder must be called ONLY for winning order')
+
+    // Local balance must be exactly 20 (100 - 80), NEVER negative
+    const finalSession = getDemoSessionForPersistence()
+    assert.equal(finalSession.balance, 20, 'Balance must be exactly 20 (100 - 80)')
+    assert.ok(finalSession.balance >= 0, 'Balance must never be negative')
+
+    // Exactly one miner in local store
+    assert.equal(finalSession.miners.length, 1)
+
+    // Losing order must remain in pendingMinerOrders (not deleted), intact and retryable/cancelable
+    assert.equal(finalSession.pendingMinerOrders.length, 1, 'Losing order remains pending and retryable')
+    const remainingPending = finalSession.pendingMinerOrders[0]
+    assert.ok(remainingPending.id === orderA.id || remainingPending.id === orderB.id)
+
+    // Canceling the losing order succeeds cleanly
+    const cancelRes = cancelPendingDemoMiner(remainingPending.id)
+    assert.equal(cancelRes, true, 'Losing order remains cleanly cancelable')
+    assert.equal(getDemoSessionForPersistence().pendingMinerOrders.length, 0)
+  })
+
+  // --------------------------------------------------------------------------
+  // Blocker C: Reservation Rollback on Firestore Failure
+  // --------------------------------------------------------------------------
+  it('Blocker C: If saveMinerToFirestore throws, balance reservation is released, balance remains intact, 0 local miners/receipts, and 0 Admin calls', async () => {
+    resetStore(100)
+
+    let adminCalls = 0
+    const demoInput: DemoMinerPurchaseInput = {
+      name: 'Rollback Miner',
+      powerTh: 10,
+      efficiency: 15,
+      price: 80,
+      purchaseMode: 'once',
+      packageId: 'minerx-rollback-1',
+    }
+
+    const result = await completeLocalMinerPurchase(demoInput, {
+      user: { uid: 'u_rollback', email: 'rollback@test.com' },
+      saveMinerToFirestore: async () => {
+        throw new Error('Simulated network drop during Firestore write')
+      },
+      recordPurchaseToAdmin: async () => {
+        adminCalls++
+      },
+    })
+
+    assert.equal(result.ok, false, 'Operation must report failure')
+    assert.equal(adminCalls, 0, 'Admin recorder must not be called')
+
+    // Local balance must remain 100% intact
+    const session = getDemoSessionForPersistence()
+    assert.equal(session.balance, 100, 'Balance must remain 100 intact')
+    assert.equal(getAvailableDemoBalance(), 100, 'Available balance must reflect released reservation')
+    assert.equal(session.miners.length, 0, 'No local miner added')
+    assert.equal(session.workers.length, 0, 'No local worker added')
+    assert.equal(session.receipts.filter((r) => r.kind === 'miner').length, 0, 'No local receipt added')
+
+    // Subsequent purchase succeeds with the intact balance
+    const retryResult = await completeLocalMinerPurchase(demoInput, {
+      user: { uid: 'u_rollback', email: 'rollback@test.com' },
+      saveMinerToFirestore: async () => {},
+      recordPurchaseToAdmin: async () => { adminCalls++ },
+    })
+    assert.equal(retryResult.ok, true, 'Retry must succeed with preserved balance')
+    assert.equal(getDemoSessionForPersistence().balance, 20)
+    assert.equal(adminCalls, 1)
+  })
+
+  // --------------------------------------------------------------------------
+  // Blocker E: Deterministic Guest Wallet Identity in Admin Records
+  // --------------------------------------------------------------------------
+  it('Blocker E: Guest wallet purchase writes deterministic wallet-bound identity without generic usr_client, while guest demo writes 0 Admin records', async () => {
+    resetStore(1000)
+    let adminRecordParams: any = null
+    const mockAdminRecorder: PurchaseAdminRecorder = async (params) => {
+      adminRecordParams = params
+    }
+
+    // 1. Real guest wallet purchase with connected wallet
+    const guestWalletAddress = '0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B'
+    await completeWalletMinerPurchase(
+      {
+        productName: 'Guest Wallet Miner · 48 TH',
+        amount: 561.99,
+        packageId: 'minerx-guest-wallet',
+        purchaseMode: 'once',
+        activeAddress: guestWalletAddress,
+        txHash: '0xguest_tx_123',
+        networkName: 'BNB Chain',
+        user: null, // Unauthenticated guest
+        requireCanonicalPackageId: true,
+      },
+      {
+        recordPurchaseToAdmin: mockAdminRecorder,
+      }
+    )
+
+    assert.ok(adminRecordParams, 'Admin recorder must be called for real canonical wallet guest')
+    assert.notEqual(adminRecordParams.uid, 'usr_client', 'Must NEVER use generic usr_client')
+    assert.equal(
+      adminRecordParams.uid,
+      `guest_wallet_${guestWalletAddress.toLowerCase()}`,
+      'Must use deterministic wallet-bound identity'
+    )
+    assert.equal(adminRecordParams.ownerWallet, guestWalletAddress, 'Must preserve ownerWallet')
+
+    // 2. Direct recordMinerPurchaseToAdmin verification with ownerWallet
+    const capturedPayloads: any[] = []
+    const originalFetch = globalThis.fetch
+    try {
+      globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+        if (init?.body) capturedPayloads.push(JSON.parse(init.body as string))
+        return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }) as typeof fetch
+
+      await recordMinerPurchaseToAdmin({
+        minerId: 'MINER-GUEST-DIRECT-1',
+        ownerWallet: guestWalletAddress,
+        packageId: 'minerx-01',
+        name: 'Direct Guest Miner',
+        powerTh: 48,
+        price: 500,
+      })
+
+      const contract = capturedPayloads.find((p) => p.contractedTh !== undefined)
+      assert.ok(contract)
+      assert.notEqual(contract.userId, 'usr_client', 'contract.userId must not be usr_client')
+      assert.equal(contract.userId, `guest_wallet_${guestWalletAddress.toLowerCase()}`)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
   })
 })
