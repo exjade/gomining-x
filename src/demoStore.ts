@@ -108,7 +108,9 @@ let state: DemoSession = {
 
 const listeners = new Set<() => void>()
 let receiptSequence = 0
+let minerSequence = 0
 let sessionRevision = 0
+const lockedPendingOrders = new Set<string>()
 
 function notify() {
   sessionRevision += 1
@@ -264,6 +266,7 @@ export function restoreDemoSession(value: unknown): boolean {
 
   const maintenanceCredit = Number.isFinite(Number(data.maintenanceCredit)) ? Number(data.maintenanceCredit) : 0
 
+  lockedPendingOrders.clear()
   state = { balance, maintenanceCredit, miners, workers, workerActivationMode: data.workerActivationMode === 'manual' ? 'manual' : 'automatic',
     pendingMinerOrders, subscription, receipts, presaleTokens }
   notify()
@@ -321,8 +324,9 @@ function isValidMinerPurchase(input: DemoMinerPurchaseInput) {
     && input.powerTh > 0 && input.efficiency > 0 && input.price >= 0
 }
 
-function makeDemoMiner(input: DemoMinerPurchaseInput): DemoMiner {
-  const id = `MINER-${Date.now().toString(36).toUpperCase()}-${(receiptSequence + 1).toString().padStart(3, '0')}`
+function makeDemoMiner(input: DemoMinerPurchaseInput, existingId?: string): DemoMiner {
+  minerSequence += 1
+  const id = existingId ?? `MINER-${Date.now().toString(36).toUpperCase()}-${minerSequence.toString().padStart(3, '0')}`
   return {
     id,
     name: input.name,
@@ -351,30 +355,71 @@ function makeDemoWorker(miner: DemoMiner): DemoWorker {
   }
 }
 
-export function buyDemoMiner(input: DemoMinerPurchaseInput): DemoMinerPurchaseResult {
+export interface PreparedDemoMinerPurchase {
+  ok: true
+  miner: DemoMiner
+  price: number
+}
+
+export function prepareDemoMinerPurchase(
+  input: DemoMinerPurchaseInput,
+  existingMinerId?: string
+): PreparedDemoMinerPurchase | InsufficientResult {
   if (!isValidMinerPurchase(input)) {
     return { ok: false, required: input.price, available: state.balance, message: 'Revisa la potencia, eficiencia y precio local.' }
   }
   const price = roundCurrency(input.price)
   if (state.balance + 0.000001 < price) return resultForInsufficient(price)
-  const miner = makeDemoMiner({ ...input, price })
-  const balance = roundCurrency(Math.max(0, state.balance - price))
-  const receipt = makeReceipt('miner', 'Compra local de minero', price, `${input.name} · ${input.powerTh.toFixed(2)} TH · nuevo poder en granja`, balance)
+  const miner = makeDemoMiner({ ...input, price }, existingMinerId)
+  return { ok: true, miner, price }
+}
+
+export function commitDemoMinerPurchase(
+  miner: DemoMiner,
+  price: number
+): { ok: true; receipt: DemoReceipt; miner: DemoMiner } | InsufficientResult {
+  const roundedPrice = roundCurrency(price)
+  if (state.balance + 0.000001 < roundedPrice) {
+    return resultForInsufficient(roundedPrice)
+  }
+  const balance = roundCurrency(Math.max(0, state.balance - roundedPrice))
+  const receipt = makeReceipt('miner', 'Compra local de minero', roundedPrice, `${miner.name} · ${miner.powerTh.toFixed(2)} TH · nuevo poder en granja`, balance)
   state = { ...state, balance, miners: [miner, ...state.miners], workers: [makeDemoWorker(miner), ...state.workers], receipts: [receipt, ...state.receipts].slice(0, 50) }
   notify()
   return { ok: true, receipt, miner }
 }
 
-export function registerWalletMinerPurchase(input: DemoMinerPurchaseInput, txHash: string, networkName: string): DemoMiner {
+export function buyDemoMiner(input: DemoMinerPurchaseInput): DemoMinerPurchaseResult {
+  const prep = prepareDemoMinerPurchase(input)
+  if (!prep.ok) return prep
+  return commitDemoMinerPurchase(prep.miner, prep.price)
+}
+
+export function prepareWalletMinerPurchase(
+  input: DemoMinerPurchaseInput,
+  existingMinerId?: string
+): DemoMiner {
   const price = roundCurrency(input.price)
-  const miner = makeDemoMiner({ ...input, price })
+  const miner = makeDemoMiner({ ...input, price }, existingMinerId)
   miner.status = 'customizing'
+  return miner
+}
+
+export function commitWalletMinerPurchase(
+  miner: DemoMiner,
+  txHash: string,
+  networkName: string
+): DemoMiner {
+  const existing = state.miners.find((m) => m.id === miner.id)
+  if (existing) {
+    return existing
+  }
   const worker = makeDemoWorker(miner)
   const receipt = makeReceipt(
     'miner',
     `Compra on-chain (${networkName})`,
-    price,
-    `${input.name} · ${input.powerTh.toFixed(2)} TH · Tx: ${txHash.slice(0, 10)}...`,
+    miner.price,
+    `${miner.name} · ${miner.powerTh.toFixed(2)} TH · Tx: ${txHash.slice(0, 10)}...`,
     state.balance,
   )
   state = {
@@ -385,6 +430,16 @@ export function registerWalletMinerPurchase(input: DemoMinerPurchaseInput, txHas
   }
   notify()
   return miner
+}
+
+export function registerWalletMinerPurchase(
+  input: DemoMinerPurchaseInput,
+  txHash: string,
+  networkName: string,
+  existingMinerId?: string
+): DemoMiner {
+  const miner = prepareWalletMinerPurchase(input, existingMinerId)
+  return commitWalletMinerPurchase(miner, txHash, networkName)
 }
 
 export function updateDemoMinerCustomization(minerId: string, customization: MinerCustomization) {
@@ -433,21 +488,91 @@ export function deferDemoMinerPurchase(input: DemoMinerPurchaseInput): Operation
   return { ok: true, receipt }
 }
 
-export function payPendingDemoMiner(orderId: string): DemoMinerPurchaseResult {
-  const order = state.pendingMinerOrders.find((item) => item.id === orderId)
-  if (!order) return { ok: false, required: 0, available: state.balance, message: 'No se encontró ese pedido local pendiente.' }
-  const result = buyDemoMiner(order)
-  if (!result.ok) return result
-  state = { ...state, pendingMinerOrders: state.pendingMinerOrders.filter((item) => item.id !== orderId) }
-  notify()
-  return result
+export interface PreparedPendingMinerPayment {
+  ok: true
+  order: PendingDemoMinerOrder
+  miner: DemoMiner
+  price: number
 }
 
-export function cancelPendingDemoMiner(orderId: string) {
+export function preparePayPendingDemoMiner(
+  orderId: string,
+  existingMinerId?: string
+): PreparedPendingMinerPayment | InsufficientResult {
+  const order = state.pendingMinerOrders.find((item) => item.id === orderId)
+  if (!order) return { ok: false, required: 0, available: state.balance, message: 'No se encontró ese pedido local pendiente.' }
+  if (!isValidMinerPurchase(order)) {
+    return { ok: false, required: order.price, available: state.balance, message: 'Revisa la potencia, eficiencia y precio local.' }
+  }
+  const price = roundCurrency(order.price)
+  if (state.balance + 0.000001 < price) return resultForInsufficient(price)
+  const miner = makeDemoMiner({ ...order, price }, existingMinerId)
+  return { ok: true, order, miner, price }
+}
+
+export function lockPendingDemoMinerForSettlement(orderId: string): boolean {
+  if (!state.pendingMinerOrders.some((item) => item.id === orderId)) {
+    return false
+  }
+  if (lockedPendingOrders.has(orderId)) {
+    return false
+  }
+  lockedPendingOrders.add(orderId)
+  return true
+}
+
+export function releasePendingDemoMinerLock(orderId: string): void {
+  lockedPendingOrders.delete(orderId)
+}
+
+export function isPendingDemoMinerLocked(orderId: string): boolean {
+  return lockedPendingOrders.has(orderId)
+}
+
+export function commitPayPendingDemoMiner(
+  orderId: string,
+  miner: DemoMiner,
+  price: number
+): { ok: true; receipt: DemoReceipt; miner: DemoMiner } | InsufficientResult {
+  if (!state.pendingMinerOrders.some((item) => item.id === orderId)) {
+    return { ok: false, required: 0, available: state.balance, message: 'No se encontró ese pedido local pendiente.' }
+  }
+  const roundedPrice = roundCurrency(price)
+  if (state.balance + 0.000001 < roundedPrice) {
+    return resultForInsufficient(roundedPrice)
+  }
+  const balance = roundCurrency(Math.max(0, state.balance - roundedPrice))
+  const receipt = makeReceipt('miner', 'Compra local de minero', roundedPrice, `${miner.name} · ${miner.powerTh.toFixed(2)} TH · nuevo poder en granja`, balance)
+  lockedPendingOrders.delete(orderId)
+  state = {
+    ...state,
+    balance,
+    miners: [miner, ...state.miners],
+    workers: [makeDemoWorker(miner), ...state.workers],
+    receipts: [receipt, ...state.receipts].slice(0, 50),
+    pendingMinerOrders: state.pendingMinerOrders.filter((item) => item.id !== orderId),
+  }
+  notify()
+  return { ok: true, receipt, miner }
+}
+
+export function payPendingDemoMiner(orderId: string): DemoMinerPurchaseResult {
+  const prep = preparePayPendingDemoMiner(orderId)
+  if (!prep.ok) return prep
+  return commitPayPendingDemoMiner(orderId, prep.miner, prep.price)
+}
+
+export function cancelPendingDemoMiner(orderId: string): boolean {
+  if (lockedPendingOrders.has(orderId)) {
+    return false
+  }
   const pendingMinerOrders = state.pendingMinerOrders.filter((item) => item.id !== orderId)
-  if (pendingMinerOrders.length === state.pendingMinerOrders.length) return
+  if (pendingMinerOrders.length === state.pendingMinerOrders.length) {
+    return false
+  }
   state = { ...state, pendingMinerOrders }
   notify()
+  return true
 }
 
 export function buyDemoOrder(order: DemoOrder): OperationResult {

@@ -204,9 +204,11 @@ describe('EMPIRICAL CHALLENGER: Stress Harness for Bug 4 & Contract 6', () => {
     const orderB = initialPersisted.pendingMinerOrders.find((o) => o.name.includes('Order B'))!
     const orderC = initialPersisted.pendingMinerOrders.find((o) => o.name === 'Order C')!
 
-    // Pay Order C first (out of order payment)
+    // Pay Order C first (out of order payment, authenticated)
     let adminRecordC: any = null
     const payCResult = await payPendingMinerOrderAndRecordToAdmin(orderC, {
+      user: { uid: 'user_c', email: 'c@example.com' },
+      saveMinerToFirestore: async () => {},
       recordPurchaseToAdmin: async (p) => { adminRecordC = p },
     })
     assert.ok(payCResult.ok)
@@ -225,17 +227,19 @@ describe('EMPIRICAL CHALLENGER: Stress Harness for Bug 4 & Contract 6', () => {
     const remainingB = midSession.pendingMinerOrders.find((o) => o.id === orderB.id)!
     assert.equal(remainingB.packageId, undefined)
 
-    // Pay Order B (the order with no packageId)
+    // Pay Order B (guest order with no packageId: must NEVER call Admin)
     let adminRecordB: any = null
     const payBResult = await payPendingMinerOrderAndRecordToAdmin(orderB, {
       recordPurchaseToAdmin: async (p) => { adminRecordB = p },
     })
     assert.ok(payBResult.ok)
-    assert.equal(adminRecordB?.packageId, undefined, 'Admin record params must NOT synthesize pkg-miner-* when packageId was undefined')
+    assert.equal(adminRecordB, null, 'Guest demo order must NEVER call Admin recorder')
 
-    // Pay Order A
+    // Pay Order A (authenticated)
     let adminRecordA: any = null
     const payAResult = await payPendingMinerOrderAndRecordToAdmin(orderA, {
+      user: { uid: 'user_a', email: 'a@example.com' },
+      saveMinerToFirestore: async () => {},
       recordPurchaseToAdmin: async (p) => { adminRecordA = p },
     })
     assert.ok(payAResult.ok)
@@ -478,11 +482,9 @@ describe('EMPIRICAL CHALLENGER: Stress Harness for Bug 4 & Contract 6', () => {
       recordPurchaseToAdmin: async (p) => { wsAdminRecord = p },
     })
     assert.equal(wsResult.ok, true)
-    const wsSession = getDemoSessionForPersistence()
-    assert.equal(wsAdminRecord?.minerId, wsSession.miners[0].id, 'wsAdminRecord.minerId must equal actual created DemoMiner.id')
-    assert.equal(wsAdminRecord?.packageId, undefined, 'Whitespace packageId must normalize to undefined for admin recording')
+    assert.equal(wsAdminRecord, null, 'Guest pending order with whitespace packageId must NEVER call Admin')
 
-    // 9b. Malformed non-string packageId in pending order normalizes to undefined
+    // 9b. Malformed non-string packageId in pending order normalizes to undefined and guest never calls Admin
     restoreDemoSession({
       balance: 500,
       maintenanceCredit: 0,
@@ -516,9 +518,7 @@ describe('EMPIRICAL CHALLENGER: Stress Harness for Bug 4 & Contract 6', () => {
       recordPurchaseToAdmin: async (p) => { numAdminRecord = p },
     })
     assert.equal(numResult.ok, true)
-    const numSession = getDemoSessionForPersistence()
-    assert.equal(numAdminRecord?.minerId, numSession.miners[0].id, 'numAdminRecord.minerId must equal actual created DemoMiner.id')
-    assert.equal(numAdminRecord?.packageId, undefined, 'Malformed non-string packageId must normalize to undefined')
+    assert.equal(numAdminRecord, null, 'Guest pending order with malformed packageId must NEVER call Admin')
 
     // 9c. Untrimmed packageId in pending order normalizes to trimmed string
     restoreDemoSession({
@@ -551,6 +551,8 @@ describe('EMPIRICAL CHALLENGER: Stress Harness for Bug 4 & Contract 6', () => {
       purchaseMode: 'once',
       packageId: '  minerx-trimmed  ',
     }, {
+      user: { uid: 'u_trim', email: 'trim@example.com' },
+      saveMinerToFirestore: async () => {},
       recordPurchaseToAdmin: async (p) => { trimAdminRecord = p },
     })
     assert.equal(trimResult.ok, true)
@@ -558,20 +560,19 @@ describe('EMPIRICAL CHALLENGER: Stress Harness for Bug 4 & Contract 6', () => {
     assert.equal(trimAdminRecord?.minerId, trimSession.miners[0].id, 'trimAdminRecord.minerId must equal actual created DemoMiner.id')
     assert.equal(trimAdminRecord?.packageId, 'minerx-trimmed', 'Untrimmed packageId must be trimmed')
 
-    // 9d. Whitespace-only packageId in completeWalletMinerPurchase normalizes to undefined
-    let wsWalletAdminRecord: any = null
-    const wsWalletResult = await completeWalletMinerPurchase({
-      productName: 'Minero 10 TH · 10 TH',
-      amount: 100,
-      packageId: '   ',
-      txHash: '0xhash_ws_wallet',
-      networkName: 'BNB Chain',
-    }, {
-      recordPurchaseToAdmin: async (p) => { wsWalletAdminRecord = p },
-    })
-    assert.ok(wsWalletResult)
-    assert.equal(wsWalletResult.resolvedPackageId, undefined, 'Whitespace packageId in wallet purchase must normalize to undefined')
-    assert.equal(wsWalletAdminRecord?.packageId, undefined)
+    // 9d. Whitespace-only packageId in completeWalletMinerPurchase fails closed
+    await assert.rejects(
+      async () => {
+        await completeWalletMinerPurchase({
+          productName: 'Minero 10 TH · 10 TH',
+          amount: 100,
+          packageId: '   ',
+          txHash: '0xhash_ws_wallet',
+          networkName: 'BNB Chain',
+        })
+      },
+      /Canonical wallet miner purchase requires a valid packageId/
+    )
 
     // 9e. Untrimmed packageId in completeWalletMinerPurchase normalizes to trimmed string
     let trimWalletAdminRecord: any = null
@@ -991,6 +992,8 @@ describe('EMPIRICAL CHALLENGER: Stress Harness for Bug 4 & Contract 6', () => {
       purchaseMode: 'once',
       packageId: 'minerx-03',
     }, {
+      user: { uid: 'u_adv', email: 'adv@test.com' },
+      saveMinerToFirestore: async () => {},
       recordPurchaseToAdmin: async (p) => { spyParams = p },
     })
 

@@ -11,8 +11,20 @@ import { buildSolanaPaymentTransaction } from './solanaPayment'
 import { startMiningSimulation } from './miningSimulation'
 import { useAuth } from './AuthContext'
 import { savePurchasedMiner, creditDirectReferralCommission, recordMinerPurchaseToAdmin } from './firebase'
-import { completeWalletMinerPurchase, type PurchaseAdminRecorder } from './minerPurchaseFlow'
+import {
+  completeWalletMinerPurchase,
+  retryWalletMinerPurchase,
+  parseMinerPowerTh,
+  getPostTxRecovery,
+  savePostTxRecovery,
+  clearPostTxRecovery,
+  type PostTxPendingState,
+  type PackageSnapshot,
+  type PurchaseAdminRecorder,
+} from './minerPurchaseFlow'
 import type { WalletId, WalletSession } from './walletSession'
+
+export type { PostTxPendingState, PackageSnapshot }
 
 export type PaymentReceipt = {
   id: string
@@ -117,6 +129,19 @@ export function WalletPaymentCheckout({
   const [paying, setPaying] = useState(false)
   const [error, setError] = useState('')
   const [receipt, setReceipt] = useState<PaymentReceipt | null>(null)
+  const [postTxRecovery, setPostTxRecoveryState] = useState<PostTxPendingState | null>(() => getPostTxRecovery())
+
+  const setPostTxRecovery = useCallback((val: PostTxPendingState | null) => {
+    setPostTxRecoveryState(val)
+    if (val) {
+      savePostTxRecovery(val)
+    } else {
+      clearPostTxRecovery()
+    }
+  }, [])
+
+  const [retryingPersistence, setRetryingPersistence] = useState(false)
+  const minerIdRef = useRef<string>('')
   const [copyStatus, setCopyStatus] = useState('')
   const [showSimulateFallback, setShowSimulateFallback] = useState(false)
 
@@ -244,23 +269,40 @@ export function WalletPaymentCheckout({
     }
   }
 
-  const processPurchaseCompletion = async (txHash: string) => {
-    const explorerUrl = `${activeDestination.blockExplorer}/tx/${txHash}`
+  const processPurchaseCompletion = async (
+    txHash: string,
+    retryMinerId?: string,
+    activeRecovery?: PostTxPendingState | null
+  ) => {
+    const recoveryToUse = activeRecovery ?? postTxRecovery
+    const targetMinerId = retryMinerId || recoveryToUse?.minerId || minerIdRef.current || `MINER-${Date.now().toString(36).toUpperCase()}-001`
+    minerIdRef.current = targetMinerId
 
-    // Create synthetic on-chain miner if product is a miner
-    let createdMinerId = ''
+    const effectiveProductName = (retryMinerId && recoveryToUse ? recoveryToUse.productName : undefined) ?? productName
+    const effectiveAmount = (retryMinerId && recoveryToUse ? recoveryToUse.amount : undefined) ?? amount
+    const effectivePackageId = (retryMinerId && recoveryToUse ? recoveryToUse.packageId : undefined) ?? packageId
+    const effectivePurchaseMode = (retryMinerId && recoveryToUse ? recoveryToUse.purchaseMode : undefined) ?? purchaseMode
+    const effectivePriceUsd = (retryMinerId && recoveryToUse ? recoveryToUse.priceUsd : undefined) ?? quote?.catalogUsd
+    const effectiveActiveAddress = (retryMinerId && recoveryToUse ? recoveryToUse.originWalletAddress : undefined) ?? activeAddress
+    const effectiveNetworkName = (retryMinerId && recoveryToUse ? recoveryToUse.networkName : undefined) ?? activeDestination.name
+    const explorerDest = PAYMENT_DESTINATIONS.find((d) => d.id === (recoveryToUse?.networkId ?? networkId)) ?? activeDestination
+    const explorerUrl = `${explorerDest.blockExplorer}/tx/${txHash}`
+
+    let createdMinerId = targetMinerId
     try {
       const completionResult = await completeWalletMinerPurchase(
         {
-          productName,
-          amount,
-          packageId,
-          purchaseMode,
-          activeAddress,
+          productName: effectiveProductName,
+          amount: effectiveAmount,
+          packageId: effectivePackageId,
+          purchaseMode: effectivePurchaseMode,
+          activeAddress: effectiveActiveAddress,
           txHash,
-          networkName: activeDestination.name,
-          catalogUsd: quote?.catalogUsd,
+          networkName: effectiveNetworkName,
+          catalogUsd: effectivePriceUsd,
           user,
+          minerId: targetMinerId,
+          requireCanonicalPackageId: true,
         },
         {
           recordPurchaseToAdmin: customRecordPurchaseToAdmin ?? recordMinerPurchaseToAdmin,
@@ -274,27 +316,63 @@ export function WalletPaymentCheckout({
         createdMinerId = completionResult.createdMinerId
       }
     } catch (err) {
-      console.error('Error completing wallet miner purchase:', err)
-      setError(err instanceof Error ? err.message : 'Error completando la compra del minero')
+      console.error('Error completing wallet miner purchase persistence:', err)
+      const errMessage = err instanceof Error ? err.message : 'Error completando la persistencia del minero'
+      const updatedRecovery: PostTxPendingState = {
+        schemaVersion: 1,
+        status: 'PERSISTENCE_PENDING',
+        txHash,
+        minerId: targetMinerId,
+        packageId: effectivePackageId || 'unknown',
+        productName: effectiveProductName,
+        amount: effectiveAmount,
+        powerTh: recoveryToUse?.powerTh ?? parseMinerPowerTh(effectiveProductName, effectiveAmount),
+        price: recoveryToUse?.price ?? (effectivePriceUsd ?? effectiveAmount),
+        priceUsd: effectivePriceUsd ?? effectiveAmount,
+        currency: recoveryToUse?.currency ?? 'USD',
+        cadence: effectivePurchaseMode || 'once',
+        purchaseMode: effectivePurchaseMode || 'once',
+        networkId: recoveryToUse?.networkId ?? networkId,
+        networkName: effectiveNetworkName,
+        originWalletAddress: effectiveActiveAddress,
+        originUid: user?.uid ?? recoveryToUse?.originUid,
+        packageSnapshot: recoveryToUse?.packageSnapshot ?? {
+          packageId: effectivePackageId || 'unknown',
+          name: effectiveProductName,
+          powerTh: recoveryToUse?.powerTh ?? parseMinerPowerTh(effectiveProductName, effectiveAmount),
+          price: recoveryToUse?.price ?? (effectivePriceUsd ?? effectiveAmount),
+          currency: 'USD',
+          cadence: effectivePurchaseMode || 'once',
+          purchaseMode: effectivePurchaseMode || 'once',
+        },
+        createdAt: recoveryToUse?.createdAt ?? Date.now(),
+        errorMessage: errMessage,
+      }
+      setPostTxRecovery(updatedRecovery)
+      setError(errMessage)
       setPaying(false)
+      setRetryingPersistence(false)
       return
     }
 
+    setPostTxRecovery(null)
+    setRetryingPersistence(false)
+
     const currentQuote = quote ?? {
       networkId,
-      networkName: activeDestination.name,
+      networkName: effectiveNetworkName || activeDestination.name,
       asset: selectedAsset,
       recipient: activeDestination.address,
-      catalogValue: amount,
+      catalogValue: effectiveAmount,
       catalogCurrency: 'USD' as const,
-      catalogUsd: amount,
+      catalogUsd: effectivePriceUsd ?? effectiveAmount,
       fxDate: null,
       assetUsd: 1,
-      amount: String(amount),
+      amount: String(effectiveAmount),
       decimals: 18,
       estimatedBridgeFeeUsd: 0,
       bridgeFeeRate: 0.015,
-      expectedNetUsd: amount,
+      expectedNetUsd: effectiveAmount,
       quoteSource: 'Direct',
       updatedAt: Date.now(),
       expiresAt: Date.now() + 30000,
@@ -302,9 +380,9 @@ export function WalletPaymentCheckout({
 
     const paymentReceipt: PaymentReceipt = {
       id: `REC-${Date.now().toString(36).toUpperCase()}`,
-      productName,
+      productName: effectiveProductName,
       quote: currentQuote,
-      sender: activeAddress,
+      sender: effectiveActiveAddress || activeAddress,
       transactionHash: txHash,
       sourceStatus: 'submitted',
       bridgeStatus: 'not-applicable',
@@ -317,8 +395,101 @@ export function WalletPaymentCheckout({
     onPaid(paymentReceipt)
   }
 
+  const handleRetryPersistence = async () => {
+    if (!postTxRecovery || retryingPersistence) return
+    setError('')
+
+    // Blocker 7: Bound to original owner
+    if (postTxRecovery.originUid) {
+      if (!user || user.uid !== postTxRecovery.originUid) {
+        setError(`Esta recuperación pertenece a otra cuenta (${postTxRecovery.originUid}). Inicia sesión con la cuenta originaria.`)
+        return
+      }
+    }
+    if (postTxRecovery.originWalletAddress) {
+      if (!activeAddress || activeAddress.toLowerCase() !== postTxRecovery.originWalletAddress.toLowerCase()) {
+        setError(`Esta recuperación requiere conectar la billetera originaria (${postTxRecovery.originWalletAddress}).`)
+        return
+      }
+    }
+
+    setRetryingPersistence(true)
+    try {
+      // Blocker 8: Retry must prove zero re-payment via dedicated helper
+      const retryResult = await retryWalletMinerPurchase(postTxRecovery, {
+        user,
+        activeAddress,
+        recordPurchaseToAdmin: customRecordPurchaseToAdmin ?? recordMinerPurchaseToAdmin,
+        saveMinerToFirestore: savePurchasedMiner,
+        creditReferral: creditDirectReferralCommission,
+        linkActiveWallet: linkWallet,
+        onSimulationStart: startMiningSimulation,
+      })
+
+      clearPostTxRecovery()
+      setPostTxRecovery(null)
+      setRetryingPersistence(false)
+
+      const effectivePriceUsd = postTxRecovery.priceUsd ?? postTxRecovery.price
+      const retryDest = PAYMENT_DESTINATIONS.find((d) => d.id === postTxRecovery.networkId) ?? activeDestination
+      const explorerUrl = `${retryDest.blockExplorer}/tx/${postTxRecovery.txHash}`
+      const currentQuote = quote ?? {
+        networkId: postTxRecovery.networkId,
+        networkName: postTxRecovery.networkName || activeDestination.name,
+        asset: selectedAsset,
+        recipient: activeDestination.address,
+        catalogValue: postTxRecovery.amount,
+        catalogCurrency: 'USD' as const,
+        catalogUsd: effectivePriceUsd,
+        fxDate: null,
+        assetUsd: 1,
+        amount: String(postTxRecovery.amount),
+        decimals: 18,
+        estimatedBridgeFeeUsd: 0,
+        bridgeFeeRate: 0.015,
+        expectedNetUsd: postTxRecovery.amount,
+        quoteSource: 'Direct',
+        updatedAt: Date.now(),
+        expiresAt: Date.now() + 30000,
+      }
+
+      const paymentReceipt: PaymentReceipt = {
+        id: `REC-${Date.now().toString(36).toUpperCase()}`,
+        productName: postTxRecovery.productName,
+        quote: currentQuote,
+        sender: postTxRecovery.originWalletAddress || activeAddress,
+        transactionHash: postTxRecovery.txHash,
+        sourceStatus: 'submitted',
+        bridgeStatus: 'not-applicable',
+        sentAt: Date.now(),
+        explorerUrl,
+        minerId: retryResult?.createdMinerId || postTxRecovery.minerId,
+      }
+
+      setReceipt(paymentReceipt)
+      onPaid(paymentReceipt)
+    } catch (err) {
+      console.error('Error retrying wallet miner purchase persistence:', err)
+      const errMessage = err instanceof Error ? err.message : 'Error completando la persistencia del minero'
+      const updatedRecovery: PostTxPendingState = {
+        ...postTxRecovery,
+        status: 'PERSISTENCE_PENDING',
+        errorMessage: errMessage,
+      }
+      setPostTxRecovery(updatedRecovery)
+      setError(errMessage)
+      setRetryingPersistence(false)
+    }
+  }
+
   const handlePay = async () => {
     if (!quote) return
+    const canonicalPackageId = packageId?.trim()
+    const lowerPkg = canonicalPackageId?.toLowerCase() || ''
+    if (!canonicalPackageId || lowerPkg.startsWith('pkg-miner_') || lowerPkg.startsWith('pkg-miner-') || lowerPkg.startsWith('pkg-miner')) {
+      setError(`No se puede completar la compra sin un packageId canónico válido: '${packageId}'`)
+      return
+    }
     setError('')
     setShowSimulateFallback(false)
     setPaying(true)
@@ -393,7 +564,43 @@ export function WalletPaymentCheckout({
         throw new Error('La billetera no devolvió el hash de la transacción.')
       }
 
-      await processPurchaseCompletion(txHash)
+      const allocatedMinerId = minerIdRef.current || `MINER-${Date.now().toString(36).toUpperCase()}-001`
+      minerIdRef.current = allocatedMinerId
+
+      const initialRecovery: PostTxPendingState = {
+        schemaVersion: 1,
+        status: 'PAYMENT_TRANSMITTED',
+        txHash,
+        minerId: allocatedMinerId,
+        packageId: canonicalPackageId,
+        productName,
+        amount,
+        powerTh: parseMinerPowerTh(productName, amount),
+        price: quote?.catalogUsd ?? amount,
+        priceUsd: quote?.catalogUsd ?? amount,
+        currency: 'USD',
+        cadence: purchaseMode,
+        purchaseMode,
+        networkId,
+        networkName: activeDestination.name,
+        originWalletAddress: activeAddress || undefined,
+        originUid: user?.uid || undefined,
+        packageSnapshot: {
+          packageId: canonicalPackageId,
+          name: productName,
+          powerTh: parseMinerPowerTh(productName, amount),
+          price: quote?.catalogUsd ?? amount,
+          currency: 'USD',
+          cadence: purchaseMode,
+          purchaseMode,
+        },
+        createdAt: Date.now(),
+      }
+
+      // Blocker 3: Immediately persist PAYMENT_TRANSMITTED upon receiving txHash before attempting Firestore persistence
+      setPostTxRecovery(initialRecovery)
+
+      await processPurchaseCompletion(txHash, allocatedMinerId, initialRecovery)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err ?? '')
       const isRejection = /reject|cancel|denied|declin|4001/i.test(msg)
@@ -440,7 +647,7 @@ export function WalletPaymentCheckout({
             <div className="receipt-details-box">
               <div className="receipt-row">
                 <span>Producto:</span>
-                <strong>{productName}</strong>
+                <strong>{receipt.productName || productName}</strong>
               </div>
               <div className="receipt-row">
                 <span>Importe Pagado:</span>
@@ -485,6 +692,60 @@ export function WalletPaymentCheckout({
                   Finalizar
                 </button>
               )}
+            </div>
+          </div>
+        ) : postTxRecovery ? (
+          /* Post-Transaction Recovery View (PERSISTENCE_PENDING) */
+          <div className="checkout-receipt-view" data-testid="post-tx-recovery-view">
+            <div className="receipt-success-badge" style={{ background: '#f59e0b' }}>!</div>
+            <h3>Pago transmitido en blockchain · Persistencia pendiente</h3>
+            <p className="receipt-desc">
+              Tu transacción fue enviada a la red con éxito, pero ocurrió un error al registrar el minero en Firestore. No vuelvas a realizar el pago.
+            </p>
+
+            <div className="receipt-details-box">
+              <div className="receipt-row">
+                <span>Estado:</span>
+                <strong style={{ color: '#f59e0b' }}>{postTxRecovery.status}</strong>
+              </div>
+              <div className="receipt-row">
+                <span>Hash de transacción:</span>
+                <code className="receipt-hash">{postTxRecovery.txHash}</code>
+              </div>
+              <div className="receipt-row">
+                <span>ID de minero:</span>
+                <code>{postTxRecovery.minerId}</code>
+              </div>
+              {postTxRecovery.packageId && (
+                <div className="receipt-row">
+                  <span>Paquete canónico:</span>
+                  <code>{postTxRecovery.packageId}</code>
+                </div>
+              )}
+              <div className="receipt-row">
+                <span>Detalle del error:</span>
+                <span style={{ color: '#ef4444', fontSize: '0.9em' }}>{postTxRecovery.errorMessage}</span>
+              </div>
+            </div>
+
+            <div className="receipt-actions">
+              <a
+                href={`${(PAYMENT_DESTINATIONS.find((d) => d.id === postTxRecovery.networkId) ?? activeDestination).blockExplorer}/tx/${postTxRecovery.txHash}`}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="button button-secondary explorer-link-button"
+              >
+                Ver Tx en Explorador ↗
+              </a>
+              <button
+                type="button"
+                className="button button-primary"
+                data-testid="retry-persistence-btn"
+                disabled={retryingPersistence}
+                onClick={handleRetryPersistence}
+              >
+                {retryingPersistence ? 'Reintentando registro...' : 'Reintentar persistencia'}
+              </button>
             </div>
           </div>
         ) : (
@@ -715,6 +976,12 @@ export function WalletPaymentCheckout({
                           className="button button-secondary checkout-action-btn"
                           style={{ marginTop: 8 }}
                           onClick={async () => {
+                            const canonicalPackageId = packageId?.trim()
+                            const lowerPkg = canonicalPackageId?.toLowerCase() || ''
+                            if (!canonicalPackageId || lowerPkg.startsWith('pkg-miner_') || lowerPkg.startsWith('pkg-miner-') || lowerPkg.startsWith('pkg-miner')) {
+                              setError(`No se puede completar la compra sin un packageId canónico válido: '${packageId}'`)
+                              return
+                            }
                             setError('')
                             setShowSimulateFallback(false)
                             setPaying(true)

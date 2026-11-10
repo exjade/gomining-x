@@ -992,93 +992,30 @@ export interface PublishedCommercialPackage {
   updatedAt?: string
 }
 
-export const DEFAULT_COMMERCIAL_PACKAGES: PublishedCommercialPackage[] = [
-  {
-    id: 'pkg-miner-1',
-    name: 'Minero 1 Entry',
-    powerTh: 48,
-    priceUsdt: 561.99,
-    durationDays: 365,
-    status: 'ACTIVE',
-    isPublished: true,
-    variablePct: 0.0,
-    commissionPct: 2.0,
-    version: 1,
-    description: 'Paquete de entrada optimizado para minería continua de PearlHash.',
-  },
-  {
-    id: 'pkg-miner-2',
-    name: 'Minero 2 Standard',
-    powerTh: 64,
-    priceUsdt: 744.99,
-    durationDays: 365,
-    status: 'ACTIVE',
-    isPublished: true,
-    variablePct: 2.5,
-    commissionPct: 2.0,
-    version: 1,
-    description: 'Rendimiento equilibrado con multiplicador variable del +2.5%.',
-  },
-  {
-    id: 'pkg-miner-3',
-    name: 'Minero 3 Pro',
-    powerTh: 96,
-    priceUsdt: 1111.99,
-    durationDays: 365,
-    status: 'ACTIVE',
-    isPublished: true,
-    variablePct: 5.0,
-    commissionPct: 1.8,
-    version: 1,
-    description: 'Alta potencia para operadores profesionales con +5.0% de variable.',
-  },
-  {
-    id: 'pkg-miner-4',
-    name: 'Minero 4 Master',
-    powerTh: 128,
-    priceUsdt: 1474.99,
-    durationDays: 365,
-    status: 'ACTIVE',
-    isPublished: true,
-    variablePct: 7.5,
-    commissionPct: 1.5,
-    version: 1,
-    description: 'Potencia industrial con tasa preferencial de comisión reducida.',
-  },
-  {
-    id: 'pkg-miner-5',
-    name: 'Minero 5 Enterprise',
-    powerTh: 192,
-    priceUsdt: 2201.99,
-    durationDays: 365,
-    status: 'ACTIVE',
-    isPublished: true,
-    variablePct: 10.0,
-    commissionPct: 1.0,
-    version: 1,
-    description: 'Máxima capacidad computacional con variable premium del +10.0%.',
-  },
-]
+/**
+ * @deprecated Legacy export. DIRECT FIRESTORE READS ON commercial_packages ARE STRICTLY FORBIDDEN.
+ * Canonical client catalog uses GET /api/catalog/storefront.
+ * Deprecated fail-safe without exposing a fake static catalog.
+ */
+export const DEFAULT_COMMERCIAL_PACKAGES: PublishedCommercialPackage[] = []
 
 /**
- * Subscribes to published commercial packages.
- * DIRECT FIRESTORE READS ON commercial_packages ARE STRICTLY FORBIDDEN.
+ * @deprecated Legacy commercial packages subscription.
  * Canonical client catalog uses GET /api/catalog/storefront.
  */
 export function subscribeToPublishedCommercialPackages(
   callback: (packages: PublishedCommercialPackage[]) => void
 ): () => void {
-  callback(DEFAULT_COMMERCIAL_PACKAGES)
+  callback([])
   return () => {}
 }
 
 /**
- * Fetches published commercial packages.
- * DIRECT FIRESTORE READS ON commercial_packages ARE STRICTLY FORBIDDEN.
+ * @deprecated Legacy commercial packages fetch.
  * Canonical client catalog uses GET /api/catalog/storefront.
  */
 export async function fetchPublishedCommercialPackages(): Promise<PublishedCommercialPackage[]> {
-  return DEFAULT_COMMERCIAL_PACKAGES
+  return []
 }
 
 // ============================================================================
@@ -1283,14 +1220,10 @@ export async function recordMinerPurchaseToAdmin(params: {
     settledAt: now,
   }
 
-  try {
-    await Promise.all([
-      setDoc(doc(db, 'admin_contracts', minerId), contractDoc, { merge: true }),
-      setDoc(doc(db, 'admin_orders', orderId), orderDoc, { merge: true }),
-    ])
-  } catch (err) {
-    console.warn('[GoMining] Notice syncing purchase to admin platform:', err)
-  }
+  await Promise.all([
+    setDoc(doc(db, 'admin_contracts', minerId), contractDoc, { merge: true }),
+    setDoc(doc(db, 'admin_orders', orderId), orderDoc, { merge: true }),
+  ])
 
   // Dual sync: also post to Express REST API if available
   try {
@@ -1354,6 +1287,7 @@ export async function updateMinerInFirestore(uid: string, minerId: string, updat
     await updateDoc(minerRef, updates as any)
   } catch (error) {
     console.error('Error updating miner in Firestore:', error)
+    throw error
   }
 }
 

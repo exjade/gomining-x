@@ -423,6 +423,8 @@ describe('EMPIRICAL CHALLENGER: Finding 1 Custom Purchase Derivation Stress Suit
     // Pay pending order with injected admin recorder spy
     let adminRecordPending: any = null
     const payResult = await payPendingMinerOrderAndRecordToAdmin(pendingOrder, {
+      user: { uid: 'user_custom', email: 'custom@test.com' },
+      saveMinerToFirestore: async () => {},
       recordPurchaseToAdmin: async (p) => { adminRecordPending = p },
     })
 

@@ -5,6 +5,9 @@ import { startMiningSimulation } from './miningSimulation'
 import { useAuth } from './AuthContext'
 import { updateMinerInFirestore } from './firebase'
 import { subscribeToSingleMinerDoc } from './userMinersStore'
+import { saveMinerCustomization } from './minerPurchaseFlow'
+
+export { saveMinerCustomization }
 
 type CustomizerTab = 'Wall' | 'Body' | 'Bottom' | 'Fans' | 'Screen' | 'Buttons' | 'Top' | 'Stickers'
 
@@ -128,6 +131,8 @@ export function MinerCustomizer() {
 
   const [selectedScreenMode, setSelectedScreenMode] = useState('smile')
   const [savedSuccess, setSavedSuccess] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
 
   const handleColorChange = (hex: string) => {
     setCustomization((prev) => {
@@ -145,24 +150,49 @@ export function MinerCustomizer() {
   }
 
   const handleSave = async () => {
-    if (notFound || !minerData || !minerData.id) return
+    if (notFound || !minerData || !minerData.id || isSaving) return
 
+    setIsSaving(true)
+    setSaveError('')
     const targetId = minerData.id
-    if (user && targetId) {
-      await updateMinerInFirestore(user.uid, targetId, {
-        visualTraits: customization,
-      })
-    } else {
-      updateDemoMinerCustomization(targetId, {
-        ...customization,
-        updatedAt: new Date().toISOString(),
-      })
+
+    try {
+      if (user && targetId) {
+        await saveMinerCustomization({
+          minerId: targetId,
+          user,
+          customization,
+          updateFirestore: async () => {
+            await updateMinerInFirestore(user.uid, targetId, {
+              visualTraits: customization,
+            })
+          },
+        })
+      } else {
+        await saveMinerCustomization({
+          minerId: targetId,
+          user: null,
+          customization,
+          updateDemo: () => {
+            updateDemoMinerCustomization(targetId, {
+              ...customization,
+              updatedAt: new Date().toISOString(),
+            })
+          },
+        })
+      }
+      startMiningSimulation(targetId, minerData.name, minerData.powerTh)
+      setSavedSuccess(true)
+      setTimeout(() => {
+        navigate('/profile')
+      }, 1200)
+    } catch (err) {
+      console.error('Error saving customization:', err)
+      setSavedSuccess(false)
+      setSaveError(err instanceof Error ? err.message : 'Error al guardar la personalización en cuenta')
+    } finally {
+      setIsSaving(false)
     }
-    startMiningSimulation(targetId, minerData.name, minerData.powerTh)
-    setSavedSuccess(true)
-    setTimeout(() => {
-      navigate('/profile')
-    }, 1200)
   }
 
   const activeColor = (() => {
@@ -231,10 +261,17 @@ export function MinerCustomizer() {
             <span className="pill-badge pill-efficiency">🔌 {minerData.efficiency} W/TH</span>
           </div>
         </div>
-        <button type="button" className="button button-primary customizer-save-button" onClick={handleSave}>
-          {savedSuccess ? '¡Guardado en cuenta! ✓' : 'Guardar personalización'}
+        <button type="button" className="button button-primary customizer-save-button" onClick={handleSave} disabled={isSaving}>
+          {isSaving ? 'Guardando...' : savedSuccess ? '¡Guardado en cuenta! ✓' : 'Guardar personalización'}
         </button>
       </div>
+
+      {saveError && (
+        <div className="customizer-error-banner" style={{ margin: '12px 20px', padding: '10px 16px', background: '#451a1a', border: '1px solid #ef4444', borderRadius: '8px', color: '#fca5a5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>{saveError}</span>
+          <button type="button" className="button button-small" onClick={handleSave}>Reintentar</button>
+        </div>
+      )}
 
       {/* Main 3D / Illustration Stage */}
       <div className="customizer-stage">

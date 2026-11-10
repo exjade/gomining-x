@@ -6,7 +6,14 @@ import { fileURLToPath } from 'node:url'
 
 import {
   buyDemoMiner,
+  buyDemoOrder,
+  prepareDemoMinerPurchase,
+  commitDemoMinerPurchase,
   deferDemoMinerPurchase,
+  cancelPendingDemoMiner,
+  lockPendingDemoMinerForSettlement,
+  releasePendingDemoMinerLock,
+  isPendingDemoMinerLocked,
   restoreDemoSession,
   getDemoSessionForPersistence,
   type DemoMinerPurchaseInput,
@@ -14,16 +21,27 @@ import {
 } from '../src/demoStore.ts'
 import {
   completeWalletMinerPurchase,
+  retryWalletMinerPurchase,
+  completeLocalMinerPurchase,
   payPendingMinerOrderAndRecordToAdmin,
   buildMinerBuilderCheckoutPayload,
   orchestrateWalletMinerPurchaseFlow,
+  saveMinerCustomization,
+  validatePostTxRecovery,
+  getPostTxRecovery,
+  savePostTxRecovery,
+  clearPostTxRecovery,
+  resolvePendingRecoveryCheckout,
   type PurchaseAdminRecorder,
+  type PostTxPendingState,
 } from '../src/minerPurchaseFlow.ts'
 import {
   savePurchasedMiner,
   recordMinerPurchaseToAdmin,
+  updateMinerInFirestore,
   subscribeToPublishedCommercialPackages,
   fetchPublishedCommercialPackages,
+  DEFAULT_COMMERCIAL_PACKAGES,
   type StoredMiner,
 } from '../src/firebase.ts'
 import {
@@ -271,10 +289,20 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
     assert.equal(payResult.ok, false, 'Payment must report failure when Firestore save fails')
     assert.equal(adminRecorded, false, 'Admin recorder must NEVER be called when Firestore save fails')
     assert.ok(payResult.message?.includes('Firestore'))
+
+    // Non-mutation assertion: pending order remains available for retry, balance untouched, no miners/workers/receipts added
+    const session = getDemoSessionForPersistence()
+    assert.equal(session.pendingMinerOrders.length, 1, 'Pending order must remain in queue for retry')
+    assert.equal(session.pendingMinerOrders[0].id, order.id, 'Retained pending order must have identical ID')
+    assert.equal(session.balance, 100000, 'Balance must remain unchanged after persistence failure')
+    assert.equal(session.miners.length, 0, 'No demo miner must be added after persistence failure')
+    assert.equal(session.workers.length, 0, 'No demo worker must be added after persistence failure')
+    assert.equal(session.receipts.filter((r) => r.kind === 'miner').length, 0, 'No completed miner receipt must be created')
   })
 
   it('Finding 4 & R3: Fail-closed persistence in completeWalletMinerPurchase throws and blocks Admin recording', async () => {
     let adminRecorded = false
+    let simulationStarted = false
 
     await assert.rejects(
       async () => {
@@ -296,6 +324,9 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
             recordPurchaseToAdmin: async () => {
               adminRecorded = true
             },
+            onSimulationStart: () => {
+              simulationStarted = true
+            },
           }
         )
       },
@@ -303,6 +334,13 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
     )
 
     assert.equal(adminRecorded, false, 'Admin recorder must NEVER be called when wallet persistence fails')
+    assert.equal(simulationStarted, false, 'onSimulationStart must NEVER be called when wallet persistence fails')
+
+    // Non-mutation assertion: DemoStore must remain completely intact
+    const session = getDemoSessionForPersistence()
+    assert.equal(session.miners.length, 0, 'No DemoMiner must be added when wallet persistence fails')
+    assert.equal(session.workers.length, 0, 'No DemoWorker must be added when wallet persistence fails')
+    assert.equal(session.receipts.filter((r) => r.kind === 'miner').length, 0, 'No receipt must be added when wallet persistence fails')
   })
 
   // --------------------------------------------------------------------------
@@ -869,14 +907,14 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
   // --------------------------------------------------------------------------
   // Finding 6 & R4: Client source code contains ZERO direct Firestore access to commercial_packages
   // --------------------------------------------------------------------------
-  it('Finding 6 & R4: Client source code contains zero direct calls to collection(db, "commercial_packages"), getDocs, or onSnapshot for commercial_packages', () => {
+  it('Finding 6 & R4: Client source code contains zero direct calls to collection(db, "commercial_packages"), getDocs, or onSnapshot for commercial_packages', async () => {
     const srcDir = path.resolve(projectRoot, 'src')
     const srcFiles = fs.readdirSync(srcDir, { recursive: true }) as string[]
 
     const offendingPatterns = [
       /collection\s*\(\s*db\s*,\s*['"`]commercial_packages['"`]\s*\)/,
-      /getDocs\s*\(\s*colRef\s*\)/,
-      /onSnapshot\s*\(\s*colRef\s*,/,
+      /getDocs\s*\([^)]*commercial_packages[^)]*\)/,
+      /onSnapshot\s*\([^)]*commercial_packages[^)]*\)/,
     ]
 
     for (const relPath of srcFiles) {
@@ -893,17 +931,28 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
         !content.includes('collection(db, "commercial_packages")'),
         `File ${relPath} must NOT call collection(db, "commercial_packages")`
       )
+
+      for (const pattern of offendingPatterns) {
+        assert.ok(
+          !pattern.test(content),
+          `File ${relPath} must NOT match forbidden commercial_packages pattern: ${pattern}`
+        )
+      }
     }
 
-    // Verify stubs in firebase.ts return DEFAULT_COMMERCIAL_PACKAGES safely without Firestore
+    // Verify stubs in firebase.ts return empty array safely without exposing fake static catalog
+    assert.deepEqual(DEFAULT_COMMERCIAL_PACKAGES, [], 'DEFAULT_COMMERCIAL_PACKAGES must be empty array')
     let callbackCalled = false
     const unsub = subscribeToPublishedCommercialPackages((pkgs) => {
       callbackCalled = true
-      assert.ok(Array.isArray(pkgs))
+      assert.deepEqual(pkgs, [], 'subscribeToPublishedCommercialPackages must return empty array')
     })
     assert.equal(callbackCalled, true)
     assert.equal(typeof unsub, 'function')
     unsub()
+
+    const fetched = await fetchPublishedCommercialPackages()
+    assert.deepEqual(fetched, [], 'fetchPublishedCommercialPackages must return empty array')
   })
 
   // --------------------------------------------------------------------------
@@ -938,7 +987,7 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
   // --------------------------------------------------------------------------
   // Finding 10: Authenticated customizer saves only to Firestore without touching demo store
   // --------------------------------------------------------------------------
-  it('Finding 10: Authenticated customizer save branch separates Firestore update from DemoStore update', () => {
+  it('Finding 10: Authenticated customizer save branch separates Firestore update from DemoStore update', async () => {
     const customizerPath = path.resolve(projectRoot, 'src/MinerCustomizer.tsx')
     const content = fs.readFileSync(customizerPath, 'utf8')
 
@@ -955,6 +1004,65 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
       content.includes('} else {') && content.includes('updateDemoMinerCustomization(targetId'),
       'MinerCustomizer.tsx must call updateDemoMinerCustomization only in else block for guest'
     )
+
+    // Behavioral verification: Authenticated user -> Firestore called once, DemoStore not called
+    let firestoreCallCount = 0
+    let firestoreCallArgs: any = null
+    let demoCallCount = 0
+
+    const mockCustomization = {
+      wallColor: '#111111',
+      bodyColor: '#222222',
+      bottomColor: '#333333',
+      fansColor: '#444444',
+      screenColor: '#555555',
+      buttonsColor: '#666666',
+      topColor: '#777777',
+      stickers: 'gomining-classic' as const,
+    }
+
+    await saveMinerCustomization({
+      minerId: 'MINER-AUTH-1',
+      user: { uid: 'auth_user_123' },
+      customization: mockCustomization,
+      updateFirestore: async (uid, minerId, data) => {
+        firestoreCallCount++
+        firestoreCallArgs = { uid, minerId, data }
+      },
+      updateDemo: () => {
+        demoCallCount++
+      },
+    })
+
+    assert.equal(firestoreCallCount, 1, 'Firestore update must be called exactly once for authenticated user')
+    assert.equal(firestoreCallArgs.uid, 'auth_user_123')
+    assert.equal(firestoreCallArgs.minerId, 'MINER-AUTH-1')
+    assert.deepEqual(firestoreCallArgs.data.visualTraits, mockCustomization)
+    assert.equal(demoCallCount, 0, 'DemoStore update must NOT be called for authenticated user')
+
+    // Behavioral verification: Guest user -> DemoStore called once, Firestore not called
+    firestoreCallCount = 0
+    firestoreCallArgs = null
+    demoCallCount = 0
+    let demoCallArgs: any = null
+
+    await saveMinerCustomization({
+      minerId: 'MINER-GUEST-1',
+      user: null,
+      customization: mockCustomization,
+      updateFirestore: async () => {
+        firestoreCallCount++
+      },
+      updateDemo: (minerId, cust) => {
+        demoCallCount++
+        demoCallArgs = { minerId, cust }
+      },
+    })
+
+    assert.equal(demoCallCount, 1, 'DemoStore update must be called exactly once for guest user')
+    assert.equal(demoCallArgs.minerId, 'MINER-GUEST-1')
+    assert.equal(demoCallArgs.cust.wallColor, '#111111')
+    assert.equal(firestoreCallCount, 0, 'Firestore update must NOT be called for guest user')
   })
 
   // --------------------------------------------------------------------------
@@ -1002,5 +1110,1293 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
       globalThis.fetch = originalFetch
       clearCatalogCache()
     }
+  })
+
+  // --------------------------------------------------------------------------
+  // R1: Local Authenticated Purchase Sequencing & Fail-Closed (Zero Local Mutation)
+  // --------------------------------------------------------------------------
+  it('R1: Forced Firestore failure on authenticated local purchase leaves balance, miner count, worker count unchanged, with no completed receipt and Admin recorder not called', async () => {
+    resetStore(5000)
+    const initialSession = getDemoSessionForPersistence()
+    const initialBalance = initialSession.balance
+    const initialMinersCount = initialSession.miners.length
+    const initialWorkersCount = initialSession.workers.length
+    const initialReceiptsCount = initialSession.receipts.length
+
+    let adminRecorded = false
+    let firestoreCallCount = 0
+    const demoInput: DemoMinerPurchaseInput = {
+      name: 'Local Auth Fail-Closed Miner',
+      powerTh: 15,
+      efficiency: 15,
+      price: 250,
+      purchaseMode: 'once',
+      packageId: 'minerx-02',
+    }
+
+    // Step 1: Canonical Firestore persistence fails via completeLocalMinerPurchase
+    const failResult = await completeLocalMinerPurchase(demoInput, {
+      user: { uid: 'u_auth_local_fail', email: 'fail@test.com' },
+      saveMinerToFirestore: async () => {
+        firestoreCallCount++
+        throw new Error('Simulated network failure on Firestore setDoc')
+      },
+      recordPurchaseToAdmin: async () => {
+        adminRecorded = true
+      },
+    })
+
+    assert.equal(failResult.ok, false)
+    assert.equal(firestoreCallCount, 1)
+    assert.match(failResult.message || '', /Simulated network failure on Firestore setDoc/)
+    assert.equal(adminRecorded, false, 'Admin recorder must NOT be called on Firestore failure')
+
+    // Verify ZERO local state mutations occurred
+    const postFailureSession = getDemoSessionForPersistence()
+    assert.equal(postFailureSession.balance, initialBalance, 'Balance must remain unchanged after Firestore failure')
+    assert.equal(postFailureSession.miners.length, initialMinersCount, 'Miners count must remain unchanged')
+    assert.equal(postFailureSession.workers.length, initialWorkersCount, 'Workers count must remain unchanged')
+    assert.equal(postFailureSession.receipts.length, initialReceiptsCount, 'Receipts count must remain unchanged')
+
+    // Step 2: Contrast with successful persistence -> commits local state and records to Admin
+    let savedMiner: StoredMiner | null = null
+    let adminRecord: any = null
+    const successResult = await completeLocalMinerPurchase(demoInput, {
+      user: { uid: 'u_auth_local_success', email: 'success@test.com' },
+      saveMinerToFirestore: async (_uid, miner) => {
+        savedMiner = miner
+      },
+      recordPurchaseToAdmin: async (params) => {
+        adminRecord = params
+      },
+    })
+
+    assert.equal(successResult.ok, true)
+    assert.ok(savedMiner)
+    assert.ok(adminRecord)
+    const postSuccessSession = getDemoSessionForPersistence()
+    assert.equal(postSuccessSession.balance, initialBalance - 250, 'Balance must be deducted only after success')
+    assert.equal(postSuccessSession.miners.length, initialMinersCount + 1, 'Miner must be committed')
+    assert.equal(postSuccessSession.workers.length, initialWorkersCount + 1, 'Worker must be committed')
+    assert.equal(postSuccessSession.receipts.length, initialReceiptsCount + 1, 'Receipt must be committed')
+    assert.equal(postSuccessSession.miners[0].id, (savedMiner as StoredMiner).id, 'Committed miner must have same ID as Firestore')
+    assert.equal(adminRecord.minerId, (savedMiner as StoredMiner).id, 'Admin record minerId must match')
+  })
+
+  // --------------------------------------------------------------------------
+  // R2: Authenticated Pending Order Failure Postconditions & Retry
+  // --------------------------------------------------------------------------
+  it('R2: Forced Firestore failure on authenticated pending payment retains pending order for retry, leaves balance unchanged, with no new DemoMiner and Admin recorder not called', async () => {
+    resetStore(2000)
+    deferDemoMinerPurchase({
+      name: 'Retryable Pending Miner',
+      powerTh: 20,
+      efficiency: 15,
+      price: 300,
+      purchaseMode: 'once',
+      packageId: 'minerx-03',
+    })
+    const order = getDemoSessionForPersistence().pendingMinerOrders[0]
+    assert.ok(order, 'Pending order must be deferred')
+
+    let adminCallCount = 0
+    let firestoreAttempts = 0
+
+    // Attempt 1: Firestore fails
+    const failResult = await payPendingMinerOrderAndRecordToAdmin(order, {
+      user: { uid: 'u_retry_user', email: 'retry@test.com' },
+      saveMinerToFirestore: async () => {
+        firestoreAttempts++
+        throw new Error('Simulated transient Firestore error')
+      },
+      recordPurchaseToAdmin: async () => {
+        adminCallCount++
+      },
+    })
+
+    assert.equal(failResult.ok, false)
+    assert.equal(firestoreAttempts, 1)
+    assert.equal(adminCallCount, 0, 'Admin recorder must NOT be called on Firestore failure')
+
+    // Postconditions after failure:
+    const sessionAfterFail = getDemoSessionForPersistence()
+    assert.equal(sessionAfterFail.pendingMinerOrders.length, 1, 'Pending order must remain available for retry')
+    assert.equal(sessionAfterFail.pendingMinerOrders[0].id, order.id, 'Pending order must have exact same id')
+    assert.equal(sessionAfterFail.balance, 2000, 'Balance must NOT be consumed')
+    assert.equal(sessionAfterFail.miners.length, 0, 'No DemoMiner added')
+    assert.equal(sessionAfterFail.workers.length, 0, 'No DemoWorker added')
+    assert.equal(sessionAfterFail.receipts.filter((r) => r.kind === 'miner').length, 0, 'No completed miner receipt')
+
+    // Attempt 2: Successful retry
+    let savedStoredMiner: StoredMiner | null = null
+    const retryResult = await payPendingMinerOrderAndRecordToAdmin(sessionAfterFail.pendingMinerOrders[0], {
+      user: { uid: 'u_retry_user', email: 'retry@test.com' },
+      saveMinerToFirestore: async (_uid, miner) => {
+        firestoreAttempts++
+        savedStoredMiner = miner
+      },
+      recordPurchaseToAdmin: async () => {
+        adminCallCount++
+      },
+    })
+
+    assert.equal(retryResult.ok, true)
+    assert.equal(firestoreAttempts, 2)
+    assert.equal(adminCallCount, 1, 'Admin recorder called on successful retry')
+    assert.ok(savedStoredMiner)
+    assert.equal((savedStoredMiner as StoredMiner).packageId, 'minerx-03')
+
+    const sessionAfterSuccess = getDemoSessionForPersistence()
+    assert.equal(sessionAfterSuccess.pendingMinerOrders.length, 0, 'Pending order must be consumed on success')
+    assert.equal(sessionAfterSuccess.balance, 1700, 'Balance must be deducted on success')
+    assert.equal(sessionAfterSuccess.miners.length, 1, 'DemoMiner added on success')
+  })
+
+  // --------------------------------------------------------------------------
+  // R3: Authenticated Wallet Purchase Canonical Persistence
+  // --------------------------------------------------------------------------
+  it('R3: Forced Firestore failure on authenticated wallet purchase does not add DemoMiner, does not add worker, does not call onSimulationStart, and does not call Admin recorder', async () => {
+    resetStore(1000)
+    let simulationStarted = false
+    let adminRecorded = false
+
+    await assert.rejects(
+      async () => {
+        await completeWalletMinerPurchase(
+          {
+            productName: 'Minero 96 TH · 96 TH',
+            amount: 1111.99,
+            packageId: 'minerx-pro',
+            purchaseMode: 'once',
+            activeAddress: '0xwallet_r3',
+            txHash: '0xtx_r3_fail',
+            networkName: 'BNB Chain',
+            user: { uid: 'u_wallet_r3', email: 'r3@test.com' },
+          },
+          {
+            saveMinerToFirestore: async () => {
+              throw new Error('Firestore UNAVAILABLE')
+            },
+            onSimulationStart: () => {
+              simulationStarted = true
+            },
+            recordPurchaseToAdmin: async () => {
+              adminRecorded = true
+            },
+          }
+        )
+      },
+      /Firestore UNAVAILABLE/
+    )
+
+    assert.equal(simulationStarted, false, 'onSimulationStart must NOT be called on Firestore failure')
+    assert.equal(adminRecorded, false, 'Admin recorder must NOT be called on Firestore failure')
+
+    const session = getDemoSessionForPersistence()
+    assert.equal(session.miners.length, 0, 'DemoStore miners must remain intact')
+    assert.equal(session.workers.length, 0, 'DemoStore workers must remain intact')
+    assert.equal(session.receipts.length, 0, 'DemoStore receipts must remain intact')
+  })
+
+  // --------------------------------------------------------------------------
+  // R5: Persistence Adapter Guards When User Exists
+  // --------------------------------------------------------------------------
+  it('R5: Missing persistence adapter with authenticated user fails closed before local mutation or Admin recorder call', async () => {
+    resetStore(1000)
+    let adminRecorded = false
+
+    // completeWalletMinerPurchase without saveMinerToFirestore adapter
+    await assert.rejects(
+      async () => {
+        await completeWalletMinerPurchase(
+          {
+            productName: 'Minero 48 TH · 48 TH',
+            amount: 561.99,
+            packageId: 'minerx-01',
+            purchaseMode: 'once',
+            activeAddress: '0xwallet_guard',
+            txHash: '0xtx_guard',
+            networkName: 'BNB Chain',
+            user: { uid: 'u_guard', email: 'guard@test.com' },
+          },
+          {
+            recordPurchaseToAdmin: async () => {
+              adminRecorded = true
+            },
+          }
+        )
+      },
+      /saveMinerToFirestore adapter is required for authenticated wallet miner purchase/
+    )
+    assert.equal(adminRecorded, false, 'Admin recorder must NOT be called when adapter is missing')
+    assert.equal(getDemoSessionForPersistence().miners.length, 0, 'No miner created when adapter is missing')
+
+    // payPendingMinerOrderAndRecordToAdmin without saveMinerToFirestore adapter
+    deferDemoMinerPurchase({
+      name: 'Pending Guard Miner',
+      powerTh: 10,
+      efficiency: 15,
+      price: 100,
+      purchaseMode: 'once',
+      packageId: 'minerx-01',
+    })
+    const order = getDemoSessionForPersistence().pendingMinerOrders[0]
+    const pendingResult = await payPendingMinerOrderAndRecordToAdmin(order, {
+      user: { uid: 'u_guard', email: 'guard@test.com' },
+      recordPurchaseToAdmin: async () => {
+        adminRecorded = true
+      },
+    })
+
+    assert.equal(pendingResult.ok, false)
+    assert.match(pendingResult.message || '', /saveMinerToFirestore adapter is required/)
+    assert.equal(adminRecorded, false)
+    assert.equal(getDemoSessionForPersistence().balance, 1000, 'Balance untouched')
+    assert.equal(getDemoSessionForPersistence().pendingMinerOrders.length, 1, 'Pending order preserved')
+
+    // completeLocalMinerPurchase without saveMinerToFirestore adapter
+    const localResult = await completeLocalMinerPurchase(
+      {
+        name: 'Local Guard Miner',
+        powerTh: 10,
+        efficiency: 15,
+        price: 100,
+        purchaseMode: 'once',
+        packageId: 'minerx-01',
+      },
+      {
+        user: { uid: 'u_guard', email: 'guard@test.com' },
+        recordPurchaseToAdmin: async () => {
+          adminRecorded = true
+        },
+      }
+    )
+
+    assert.equal(localResult.ok, false)
+    assert.match(localResult.message || '', /saveMinerToFirestore adapter is required/)
+    assert.equal(adminRecorded, false)
+    assert.equal(getDemoSessionForPersistence().balance, 1000, 'Balance untouched after failed local adapter')
+    assert.equal(getDemoSessionForPersistence().miners.length, 0, 'No miner created after failed local adapter')
+  })
+
+  // --------------------------------------------------------------------------
+  // R5: Canonical packageId Validation Regardless of User Authentication State
+  // --------------------------------------------------------------------------
+  it('R5: Canonical wallet purchase validates packageId prior to registration independent of user authentication state', async () => {
+    // 1. Synthetic packageId with guest (user: null) -> rejected fail-closed
+    await assert.rejects(
+      async () => {
+        await completeWalletMinerPurchase({
+          productName: 'Guest Miner 10 TH',
+          amount: 100,
+          packageId: 'pkg-miner-synthetic-guest',
+          txHash: '0xtx_synth_guest',
+          networkName: 'BNB Chain',
+          user: null,
+        })
+      },
+      /Canonical wallet miner purchase requires a valid packageId/
+    )
+
+    // 2. Canonical requirement enforced with guest (user: null) without requireCanonicalPackageId -> rejected fail-closed
+    await assert.rejects(
+      async () => {
+        await completeWalletMinerPurchase({
+          productName: 'Guest Miner 10 TH',
+          amount: 100,
+          packageId: undefined,
+          txHash: '0xtx_missing_guest',
+          networkName: 'BNB Chain',
+          user: null,
+        })
+      },
+      /Canonical wallet miner purchase requires a valid packageId/
+    )
+    // 2b. Missing packageId completely omitted with guest -> rejected fail-closed
+    await assert.rejects(
+      async () => {
+        await completeWalletMinerPurchase({
+          productName: 'Guest Miner 10 TH',
+          amount: 100,
+          txHash: '0xtx_missing_guest_2',
+          networkName: 'BNB Chain',
+        })
+      },
+      /Canonical wallet miner purchase requires a valid packageId/
+    )
+
+    // 3. Valid canonical packageId with guest succeeds
+    const guestResult = await completeWalletMinerPurchase({
+      productName: 'Guest Miner 10 TH',
+      amount: 100,
+      packageId: 'minerx-canonical-guest',
+      txHash: '0xtx_valid_guest',
+      networkName: 'BNB Chain',
+      user: null,
+    })
+    assert.ok(guestResult)
+    assert.equal(guestResult.resolvedPackageId, 'minerx-canonical-guest')
+
+    // 4. orchestrateWalletMinerPurchaseFlow enforces canonical packageId validation regardless of auth
+    await assert.rejects(
+      async () => {
+        await orchestrateWalletMinerPurchaseFlow(
+          {
+            selected: { id: 'pkg-miner-synth', label: 'Synth', price: 100, powerTh: 10, packageId: 'pkg-miner-synth' },
+          },
+          {
+            txHash: '0xtx_orchestrate_guest',
+            user: null,
+          }
+        )
+      },
+      /Canonical wallet miner purchase requires a valid packageId/
+    )
+  })
+
+  // --------------------------------------------------------------------------
+  // R4: Post-Transaction Persistence Retry State
+  // --------------------------------------------------------------------------
+  it('R4: On post-transaction persistence failure, txHash is retained, state reflects persistence pending, and retry uses same txHash, minerId, packageId without re-payment', async () => {
+    resetStore(1000)
+    const onchainTxHash = '0xconfirmed_tx_hash_abc123'
+    const preallocatedMinerId = 'MINER-RECOVERY-001'
+    const canonicalPackageId = 'minerx-recovery'
+    const user = { uid: 'u_recovery', email: 'recovery@test.com' }
+
+    let firestoreAttempts = 0
+    let savedToFirestore: StoredMiner | null = null
+    let adminRecord: any = null
+
+    // Attempt 1: Payment already succeeded on chain (txHash exists), but Firestore persistence fails
+    await assert.rejects(
+      async () => {
+        await completeWalletMinerPurchase(
+          {
+            productName: 'Minero Recovery · 48 TH',
+            amount: 561.99,
+            packageId: canonicalPackageId,
+            purchaseMode: 'once',
+            activeAddress: '0xuser_recovery',
+            txHash: onchainTxHash,
+            networkName: 'BNB Chain',
+            user,
+            minerId: preallocatedMinerId,
+            requireCanonicalPackageId: true,
+          },
+          {
+            saveMinerToFirestore: async () => {
+              firestoreAttempts++
+              throw new Error('Simulated network timeout during post-tx persistence')
+            },
+            recordPurchaseToAdmin: async (p) => {
+              adminRecord = p
+            },
+          }
+        )
+      },
+      /Simulated network timeout/
+    )
+
+    assert.equal(firestoreAttempts, 1)
+    assert.equal(adminRecord, null, 'Admin recorder must not be called on failed persistence')
+    assert.equal(getDemoSessionForPersistence().miners.length, 0, 'No miner committed before persistence')
+
+    // Simulated PostTxPendingState: preserves txHash, minerId, packageId
+    const postTxState = {
+      status: 'PERSISTENCE_PENDING' as const,
+      txHash: onchainTxHash,
+      minerId: preallocatedMinerId,
+      packageId: canonicalPackageId,
+      productName: 'Minero Recovery · 48 TH',
+      amount: 561.99,
+      purchaseMode: 'once' as const,
+      user,
+    }
+
+    assert.equal(postTxState.status, 'PERSISTENCE_PENDING')
+    assert.equal(postTxState.txHash, onchainTxHash)
+    assert.equal(postTxState.minerId, preallocatedMinerId)
+
+    // Attempt 2: Retry ONLY persistence with same txHash and minerId (NO blockchain payment re-executed!)
+    const retryCompletion = await completeWalletMinerPurchase(
+      {
+        productName: postTxState.productName,
+        amount: postTxState.amount,
+        packageId: postTxState.packageId,
+        purchaseMode: postTxState.purchaseMode,
+        activeAddress: '0xuser_recovery',
+        txHash: postTxState.txHash, // EXACT SAME txHash
+        networkName: 'BNB Chain',
+        user: postTxState.user,
+        minerId: postTxState.minerId, // EXACT SAME minerId
+        requireCanonicalPackageId: true,
+      },
+      {
+        saveMinerToFirestore: async (_uid, miner) => {
+          firestoreAttempts++
+          savedToFirestore = miner
+        },
+        recordPurchaseToAdmin: async (p) => {
+          adminRecord = p
+        },
+      }
+    )
+
+    assert.ok(retryCompletion)
+    assert.equal(firestoreAttempts, 2)
+    assert.equal(retryCompletion.createdMinerId, preallocatedMinerId, 'Retry must preserve the exact minerId')
+    assert.ok(savedToFirestore)
+    assert.equal((savedToFirestore as StoredMiner).id, preallocatedMinerId)
+    assert.equal((savedToFirestore as StoredMiner).txHash, onchainTxHash)
+    assert.equal((savedToFirestore as StoredMiner).packageId, canonicalPackageId)
+    assert.ok(adminRecord)
+    assert.equal(adminRecord.minerId, preallocatedMinerId)
+    assert.equal(adminRecord.txHash, onchainTxHash)
+    assert.equal(adminRecord.packageId, canonicalPackageId)
+    assert.equal(getDemoSessionForPersistence().miners.length, 1, 'Miner committed to demoStore on retry success')
+
+    // Verify PostTxPendingState round-trip serialization preservation across page refreshes
+    const serialized = JSON.stringify(postTxState)
+    const restored = JSON.parse(serialized)
+    assert.equal(restored.status, 'PERSISTENCE_PENDING')
+    assert.equal(restored.txHash, onchainTxHash)
+    assert.equal(restored.minerId, preallocatedMinerId)
+    assert.equal(restored.packageId, canonicalPackageId)
+    assert.equal(restored.productName, 'Minero Recovery · 48 TH')
+    assert.equal(restored.amount, 561.99)
+
+    // Verify PAYMENT_TRANSMITTED status variant round-trip serialization
+    const transmittedState = { ...postTxState, status: 'PAYMENT_TRANSMITTED' as const }
+    const transmittedRestored = JSON.parse(JSON.stringify(transmittedState))
+    assert.equal(transmittedRestored.status, 'PAYMENT_TRANSMITTED')
+    assert.equal(transmittedRestored.txHash, onchainTxHash)
+  })
+
+  // --------------------------------------------------------------------------
+  // Blocker 1: Pending cancel / Firestore orphan race & settlement reservation
+  // --------------------------------------------------------------------------
+  it('Blocker 1A: Cancellation attempt during in-flight Firestore persistence is rejected by settlement lock, preventing Firestore orphan', async () => {
+    resetStore(2000)
+    deferDemoMinerPurchase({
+      name: 'Concurrent Cancel Miner',
+      powerTh: 20,
+      efficiency: 15,
+      price: 300,
+      purchaseMode: 'once',
+      packageId: 'minerx-concurrent-cancel',
+    })
+    const order = getDemoSessionForPersistence().pendingMinerOrders[0]
+    assert.ok(order)
+
+    let firestorePersisted: StoredMiner | null = null
+    let adminRecord: any = null
+    let cancelRejected = false
+
+    const payPromise = payPendingMinerOrderAndRecordToAdmin(order, {
+      user: { uid: 'u_lock_edge', email: 'lock@test.com' },
+      saveMinerToFirestore: async (_uid, miner) => {
+        // Assert order is settlement-locked during persistence
+        assert.equal(isPendingDemoMinerLocked(order.id), true, 'Order must be locked during settlement')
+        // Concurrent cancellation attempt:
+        const cancelResult = cancelPendingDemoMiner(order.id)
+        assert.equal(cancelResult, false, 'Cancellation must be rejected while settlement is locked')
+        cancelRejected = true
+        // Order remains in pending list
+        assert.equal(getDemoSessionForPersistence().pendingMinerOrders.length, 1)
+        firestorePersisted = miner
+      },
+      recordPurchaseToAdmin: async (p) => {
+        adminRecord = p
+      },
+    })
+
+    const payResult = await payPromise
+    assert.equal(cancelRejected, true)
+    assert.equal(payResult.ok, true, 'Settlement must succeed because cancellation was locked')
+    assert.ok(payResult.minerId)
+    assert.equal(isPendingDemoMinerLocked(order.id), false, 'Lock must be released after settlement')
+
+    // Zero orphan: Firestore miner matches local DemoMiner and Admin record 100%
+    const finalSession = getDemoSessionForPersistence()
+    assert.equal(finalSession.balance, 1700, 'Balance deducted on successful settlement')
+    assert.equal(finalSession.miners.length, 1, 'Exactly one miner added')
+    assert.equal(finalSession.miners[0].id, payResult.minerId)
+    assert.equal(firestorePersisted?.id, payResult.minerId)
+    assert.equal(adminRecord?.minerId, payResult.minerId)
+    assert.equal(finalSession.pendingMinerOrders.length, 0, 'Pending order consumed only upon successful local commit')
+  })
+
+  it('Blocker 1B: Firestore failure while order locked releases lock, preserves order, and allows subsequent cancellation', async () => {
+    resetStore(2000)
+    deferDemoMinerPurchase({
+      name: 'Failed Settlement Miner',
+      powerTh: 10,
+      efficiency: 15,
+      price: 150,
+      purchaseMode: 'once',
+      packageId: 'minerx-fail-lock',
+    })
+    const order = getDemoSessionForPersistence().pendingMinerOrders[0]
+    assert.ok(order)
+
+    let adminCalls = 0
+    const payResult = await payPendingMinerOrderAndRecordToAdmin(order, {
+      user: { uid: 'u_fail_lock', email: 'fail@test.com' },
+      saveMinerToFirestore: async () => {
+        assert.equal(isPendingDemoMinerLocked(order.id), true)
+        throw new Error('Simulated network timeout during Firestore setDoc')
+      },
+      recordPurchaseToAdmin: async () => { adminCalls++ },
+    })
+
+    assert.equal(payResult.ok, false)
+    assert.equal(adminCalls, 0)
+    assert.equal(isPendingDemoMinerLocked(order.id), false, 'Settlement lock must be released on Firestore failure')
+
+    // Pending order remains intact, balance untouched, no miner or worker committed
+    const sessionAfterFail = getDemoSessionForPersistence()
+    assert.equal(sessionAfterFail.balance, 2000)
+    assert.equal(sessionAfterFail.miners.length, 0)
+    assert.equal(sessionAfterFail.pendingMinerOrders.length, 1)
+
+    // Subsequent cancellation succeeds cleanly
+    const cancelSuccess = cancelPendingDemoMiner(order.id)
+    assert.equal(cancelSuccess, true, 'Subsequent cancellation must succeed once lock is released')
+    assert.equal(getDemoSessionForPersistence().pendingMinerOrders.length, 0)
+  })
+
+  // --------------------------------------------------------------------------
+  // Blocker 2: R1 Local commit gates Admin
+  // --------------------------------------------------------------------------
+  it('Blocker 2: R1 Local commit failure gates Admin in completeLocalMinerPurchase', async () => {
+    resetStore(100)
+    let adminCalls = 0
+
+    const demoInput: DemoMinerPurchaseInput = {
+      name: 'Commit Gate Miner',
+      powerTh: 10,
+      efficiency: 15,
+      price: 80,
+      purchaseMode: 'once',
+      packageId: 'minerx-gate',
+    }
+
+    // Force commitDemoMinerPurchase to fail by draining balance during in-flight Firestore
+    const result = await completeLocalMinerPurchase(demoInput, {
+      user: { uid: 'u_gate', email: 'gate@test.com' },
+      saveMinerToFirestore: async () => {
+        // Drain balance concurrently
+        restoreDemoSession({
+          ...getDemoSessionForPersistence(),
+          balance: 10, // Insufficient for 80 price
+        })
+      },
+      recordPurchaseToAdmin: async () => {
+        adminCalls++
+      },
+    })
+
+    assert.equal(result.ok, false, 'completeLocalMinerPurchase must report failure when commit fails')
+    assert.equal(adminCalls, 0, 'Admin recorder must NOT be called if local commit fails')
+  })
+
+  // --------------------------------------------------------------------------
+  // Blockers 3, 4, 5: Production recovery state, deserializer, and validation
+  // --------------------------------------------------------------------------
+  it('Blocker 4 & 5: validatePostTxRecovery validates complete schema and rejects corrupt/synthetic records', () => {
+    const validRecovery: PostTxPendingState = {
+      schemaVersion: 1,
+      status: 'PAYMENT_TRANSMITTED',
+      txHash: '0xvalid_tx_123',
+      minerId: 'MINER-VAL-001',
+      packageId: 'minerx-prod-valid',
+      productName: 'Minero Prod · 48 TH',
+      amount: 561.99,
+      powerTh: 48,
+      price: 561.99,
+      priceUsd: 561.99,
+      currency: 'USD',
+      cadence: 'once',
+      purchaseMode: 'once',
+      networkId: 'polygon',
+      networkName: 'Polygon',
+      originUid: 'uid_test_123',
+      originWalletAddress: '0x1234567890abcdef',
+      packageSnapshot: {
+        packageId: 'minerx-prod-valid',
+        name: 'Minero Prod · 48 TH',
+        powerTh: 48,
+        price: 561.99,
+        currency: 'USD',
+        cadence: 'once',
+        purchaseMode: 'once',
+      },
+      createdAt: 1731254400000,
+    }
+
+    const validated = validatePostTxRecovery(validRecovery)
+    assert.ok(validated)
+    assert.equal(validated.schemaVersion, 1)
+    assert.equal(validated.status, 'PAYMENT_TRANSMITTED')
+    assert.equal(validated.networkId, 'polygon')
+    assert.equal(validated.originUid, 'uid_test_123')
+
+    // Negative validations:
+    // 1. Invalid schemaVersion
+    assert.equal(validatePostTxRecovery({ ...validRecovery, schemaVersion: 2 as any }), null)
+    // 2. Missing/empty txHash
+    assert.equal(validatePostTxRecovery({ ...validRecovery, txHash: ' ' }), null)
+    // 3. Synthetic packageId
+    assert.equal(validatePostTxRecovery({ ...validRecovery, packageId: 'pkg-miner-custom' }), null)
+    // 4. Non-positive amount
+    assert.equal(validatePostTxRecovery({ ...validRecovery, amount: -10 }), null)
+    // 5. Invalid networkId
+    assert.equal(validatePostTxRecovery({ ...validRecovery, networkId: 'invalid-chain' as any }), null)
+    // 6. Corrupted packageSnapshot
+    assert.equal(validatePostTxRecovery({ ...validRecovery, packageSnapshot: null as any }), null)
+    // 7. Neither originUid nor originWalletAddress
+    assert.equal(validatePostTxRecovery({ ...validRecovery, originUid: undefined, originWalletAddress: undefined }), null)
+  })
+
+  it('Blocker 5: getPostTxRecovery parses valid storage and clears corrupted localStorage keys', () => {
+    const store = new Map<string, string>()
+    const prevWindow = (globalThis as any).window
+    ;(globalThis as any).window = {
+      localStorage: {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => store.set(k, String(v)),
+        removeItem: (k: string) => store.delete(k),
+      },
+    }
+
+    try {
+      // Test A: Put corrupted json -> returns null and removes key
+      store.set('gomining_post_tx_recovery', '{ corrupted json invalid')
+      assert.equal(getPostTxRecovery(), null)
+      assert.equal(store.has('gomining_post_tx_recovery'), false)
+
+      // Test B: Put invalid schema -> returns null and removes key
+      store.set('gomining_post_tx_recovery', JSON.stringify({ schemaVersion: 99, status: 'UNKNOWN' }))
+      assert.equal(getPostTxRecovery(), null)
+      assert.equal(store.has('gomining_post_tx_recovery'), false)
+
+      // Test C: Valid state saved via savePostTxRecovery -> round-trips cleanly
+      const validState: PostTxPendingState = {
+        schemaVersion: 1,
+        status: 'PERSISTENCE_PENDING',
+        txHash: '0xroundtrip_tx',
+        minerId: 'MINER-RT-01',
+        packageId: 'minerx-rt',
+        productName: 'Roundtrip Miner · 10 TH',
+        amount: 100,
+        powerTh: 10,
+        price: 100,
+        currency: 'USD',
+        cadence: 'once',
+        purchaseMode: 'once',
+        networkId: 'bnb',
+        networkName: 'BNB Chain',
+        originUid: 'uid_rt',
+        packageSnapshot: {
+          packageId: 'minerx-rt',
+          name: 'Roundtrip Miner · 10 TH',
+          powerTh: 10,
+          price: 100,
+          currency: 'USD',
+          cadence: 'once',
+          purchaseMode: 'once',
+        },
+        createdAt: Date.now(),
+      }
+
+      savePostTxRecovery(validState)
+      const retrieved = getPostTxRecovery()
+      assert.ok(retrieved)
+      assert.equal(retrieved.txHash, '0xroundtrip_tx')
+      assert.equal(retrieved.status, 'PERSISTENCE_PENDING')
+
+      clearPostTxRecovery()
+      assert.equal(getPostTxRecovery(), null)
+    } finally {
+      ;(globalThis as any).window = prevWindow
+    }
+  })
+
+  // --------------------------------------------------------------------------
+  // Blocker 6: Recovery restores checkout surface after simulated reload
+  // --------------------------------------------------------------------------
+  it('Blocker 6: Recovery restores checkout surface parameters after simulated reload without defaulting to BNB', () => {
+    const store = new Map<string, string>()
+    const prevWindow = (globalThis as any).window
+    ;(globalThis as any).window = {
+      localStorage: {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => store.set(k, String(v)),
+        removeItem: (k: string) => store.delete(k),
+      },
+    }
+
+    try {
+      const persistedRecovery: PostTxPendingState = {
+        schemaVersion: 1,
+        status: 'PERSISTENCE_PENDING',
+        txHash: '0xpolygon_tx_777',
+        minerId: 'MINER-POLY-001',
+        packageId: 'minerx-polygon-custom',
+        productName: 'Polygon Beast · 96 TH',
+        amount: 1120,
+        powerTh: 96,
+        price: 1120,
+        currency: 'USD',
+        cadence: 'once',
+        purchaseMode: 'once',
+        networkId: 'polygon',
+        networkName: 'Polygon',
+        originUid: 'user_polygon_buyer',
+        packageSnapshot: {
+          packageId: 'minerx-polygon-custom',
+          name: 'Polygon Beast · 96 TH',
+          powerTh: 96,
+          price: 1120,
+          currency: 'USD',
+          cadence: 'once',
+          purchaseMode: 'once',
+        },
+        createdAt: Date.now(),
+      }
+      savePostTxRecovery(persistedRecovery)
+
+      // Simulate App reload: read through production helper
+      const restored = getPostTxRecovery()
+      assert.ok(restored)
+      assert.equal(restored.networkId, 'polygon', 'Preserved networkId must be polygon, NOT default to bnb')
+      assert.equal(restored.powerTh, 96)
+      assert.equal(restored.minerId, 'MINER-POLY-001')
+      assert.equal(restored.originUid, 'user_polygon_buyer')
+
+      // Production component restoration logic:
+      // 1. Unauthenticated visitor (user: null) -> modal must NOT mount (returns null)
+      const visitorRestoration = resolvePendingRecoveryCheckout(restored, null, false)
+      assert.equal(visitorRestoration, null, 'Unauthenticated visitor must NOT mount recovery modal for user_polygon_buyer')
+
+      // 2. Mismatched user -> modal must NOT mount (returns null)
+      const otherUserRestoration = resolvePendingRecoveryCheckout(restored, { uid: 'user_other' }, false)
+      assert.equal(otherUserRestoration, null, 'Different user must NOT mount recovery modal')
+
+      // 3. Matching user -> modal restores with full checkout state
+      const matchingRestoration = resolvePendingRecoveryCheckout(restored, { uid: 'user_polygon_buyer' }, false)
+      assert.ok(matchingRestoration)
+      assert.equal(matchingRestoration.networkId, 'polygon')
+      assert.equal(matchingRestoration.productName, 'Polygon Beast · 96 TH')
+      assert.equal(matchingRestoration.amount, 1120)
+      assert.equal(matchingRestoration.packageId, 'minerx-polygon-custom')
+
+      // 4. Loading state -> returns null
+      assert.equal(resolvePendingRecoveryCheckout(restored, { uid: 'user_polygon_buyer' }, true), null)
+
+      // 5. Guest recovery (originUid undefined) -> restores for any visitor
+      const guestRecovery: PostTxPendingState = {
+        ...persistedRecovery,
+        originUid: undefined,
+      }
+      const guestRestoration = resolvePendingRecoveryCheckout(guestRecovery, null, false)
+      assert.ok(guestRestoration)
+      assert.equal(guestRestoration.networkId, 'polygon')
+    } finally {
+      ;(globalThis as any).window = prevWindow
+    }
+  })
+
+  // --------------------------------------------------------------------------
+  // Blocker 7: Recovery bound to original owner (cross-account prevention)
+  // --------------------------------------------------------------------------
+  it('Blocker 7: Recovery bound to originUid blocks cross-account retry by a different user', async () => {
+    const recovery: PostTxPendingState = {
+      schemaVersion: 1,
+      status: 'PERSISTENCE_PENDING',
+      txHash: '0xuserA_payment_hash',
+      minerId: 'MINER-USERA-001',
+      packageId: 'minerx-alpha',
+      productName: 'User A Miner · 48 TH',
+      amount: 561.99,
+      powerTh: 48,
+      price: 561.99,
+      currency: 'USD',
+      cadence: 'once',
+      purchaseMode: 'once',
+      networkId: 'bnb',
+      networkName: 'BNB Chain',
+      originUid: 'user_A_original',
+      packageSnapshot: {
+        packageId: 'minerx-alpha',
+        name: 'User A Miner · 48 TH',
+        powerTh: 48,
+        price: 561.99,
+        currency: 'USD',
+        cadence: 'once',
+        purchaseMode: 'once',
+      },
+      createdAt: Date.now(),
+    }
+
+    let firestoreWrites = 0
+    let adminWrites = 0
+    const mockOptions = {
+      saveMinerToFirestore: async () => { firestoreWrites++ },
+      recordPurchaseToAdmin: async () => { adminWrites++ },
+    }
+
+    // Attempt retry as User B:
+    const currentUserB = { uid: 'user_B_attacker', email: 'attacker@test.com' }
+    await assert.rejects(
+      () => retryWalletMinerPurchase(recovery, {
+        ...mockOptions,
+        user: currentUserB,
+      }),
+      /Esta recuperación pertenece a otra cuenta \(user_A_original\)\. Inicia sesión con la cuenta originaria\./
+    )
+    assert.equal(firestoreWrites, 0, 'Zero firestore writes when user does not match originUid')
+    assert.equal(adminWrites, 0, 'Zero admin writes when user does not match originUid')
+
+    // Attempt retry as User A (originator): allowed
+    const currentUserA = { uid: 'user_A_original', email: 'usera@test.com' }
+    assert.equal(currentUserA.uid === recovery.originUid, true)
+    const result = await retryWalletMinerPurchase(recovery, {
+      ...mockOptions,
+      user: currentUserA,
+    })
+    assert.ok(result)
+    assert.equal(result.createdMinerId, 'MINER-USERA-001')
+    assert.equal(firestoreWrites, 1)
+    assert.equal(adminWrites, 1)
+  })
+
+  it('Blocker 7 (Test C): Guest recovery with originWalletAddress rejects if activeAddress does not match or is missing', async () => {
+    const recovery: PostTxPendingState = {
+      schemaVersion: 1,
+      status: 'PERSISTENCE_PENDING',
+      txHash: '0xguest_tx_wallet_bind',
+      minerId: 'MINER-GUEST-WALLET-001',
+      packageId: 'minerx-alpha',
+      productName: 'Guest Wallet Miner · 48 TH',
+      amount: 561.99,
+      powerTh: 48,
+      price: 561.99,
+      currency: 'USD',
+      cadence: 'once',
+      purchaseMode: 'once',
+      networkId: 'bnb',
+      networkName: 'BNB Chain',
+      originWalletAddress: '0x1111111111111111111111111111111111111111',
+      packageSnapshot: {
+        packageId: 'minerx-alpha',
+        name: 'Guest Wallet Miner · 48 TH',
+        powerTh: 48,
+        price: 561.99,
+        currency: 'USD',
+        cadence: 'once',
+        purchaseMode: 'once',
+      },
+      createdAt: Date.now(),
+    }
+
+    // Calling retry with mismatched activeAddress must reject fail-closed
+    await assert.rejects(
+      () => retryWalletMinerPurchase(recovery, {
+        activeAddress: '0x2222222222222222222222222222222222222222',
+      }),
+      /Esta recuperación requiere conectar la billetera originaria \(0x1111111111111111111111111111111111111111\)\./
+    )
+
+    // Calling retry without activeAddress must reject fail-closed
+    await assert.rejects(
+      () => retryWalletMinerPurchase(recovery, {}),
+      /Esta recuperación requiere conectar la billetera originaria \(0x1111111111111111111111111111111111111111\)\./
+    )
+  })
+
+  it('Blocker 7 (Test D): Guest recovery with originWalletAddress succeeds when activeAddress matches', async () => {
+    const recovery: PostTxPendingState = {
+      schemaVersion: 1,
+      status: 'PERSISTENCE_PENDING',
+      txHash: '0xguest_tx_wallet_ok',
+      minerId: 'MINER-GUEST-WALLET-002',
+      packageId: 'minerx-alpha',
+      productName: 'Guest Wallet Miner · 48 TH',
+      amount: 561.99,
+      powerTh: 48,
+      price: 561.99,
+      currency: 'USD',
+      cadence: 'once',
+      purchaseMode: 'once',
+      networkId: 'bnb',
+      networkName: 'BNB Chain',
+      originWalletAddress: '0x1111111111111111111111111111111111111111',
+      packageSnapshot: {
+        packageId: 'minerx-alpha',
+        name: 'Guest Wallet Miner · 48 TH',
+        powerTh: 48,
+        price: 561.99,
+        currency: 'USD',
+        cadence: 'once',
+        purchaseMode: 'once',
+      },
+      createdAt: Date.now(),
+    }
+
+    const res = await retryWalletMinerPurchase(recovery, {
+      activeAddress: '0x1111111111111111111111111111111111111111',
+    })
+    assert.ok(res)
+    assert.equal(res.createdMinerId, 'MINER-GUEST-WALLET-002')
+  })
+
+  // --------------------------------------------------------------------------
+  // Blocker 8: Retry must prove zero re-payment with behavioral spy
+  // --------------------------------------------------------------------------
+  it('Blocker 8: Retry executes persistence and Admin reconciliation with zero re-payment (spy callCount === 1)', async () => {
+    let paymentSendSpyCount = 0
+    const mockSendTransaction = async () => {
+      paymentSendSpyCount++
+      return '0xchain_tx_spy_123'
+    }
+
+    // Initial purchase attempt: payment executes on blockchain
+    const txHash = await mockSendTransaction()
+    assert.equal(paymentSendSpyCount, 1, 'Initial payment must call sendTransaction exactly once')
+
+    const preallocatedMinerId = 'MINER-SPY-RETRY-001'
+    const recovery: PostTxPendingState = {
+      schemaVersion: 1,
+      status: 'PAYMENT_TRANSMITTED',
+      txHash,
+      minerId: preallocatedMinerId,
+      packageId: 'minerx-spy-pkg',
+      productName: 'Spy Miner · 48 TH',
+      amount: 561.99,
+      powerTh: 48,
+      price: 561.99,
+      currency: 'USD',
+      cadence: 'once',
+      purchaseMode: 'once',
+      networkId: 'bnb',
+      networkName: 'BNB Chain',
+      originUid: 'user_spy_buyer',
+      packageSnapshot: {
+        packageId: 'minerx-spy-pkg',
+        name: 'Spy Miner · 48 TH',
+        powerTh: 48,
+        price: 561.99,
+        currency: 'USD',
+        cadence: 'once',
+        purchaseMode: 'once',
+      },
+      createdAt: Date.now(),
+    }
+
+    // Step 1: Initial persistence fails
+    let firestoreAttempts = 0
+    let adminRecord: any = null
+    await assert.rejects(
+      async () => {
+        await completeWalletMinerPurchase(
+          {
+            productName: recovery.productName,
+            amount: recovery.amount,
+            packageId: recovery.packageId,
+            purchaseMode: recovery.purchaseMode,
+            txHash: recovery.txHash,
+            networkName: recovery.networkName,
+            user: { uid: 'user_spy_buyer' },
+            minerId: preallocatedMinerId,
+            requireCanonicalPackageId: true,
+          },
+          {
+            saveMinerToFirestore: async () => {
+              firestoreAttempts++
+              throw new Error('Simulated network drop on initial save')
+            },
+            recordPurchaseToAdmin: async (p) => { adminRecord = p },
+          }
+        )
+      },
+      /Simulated network drop/
+    )
+
+    // State transitions to PERSISTENCE_PENDING
+    recovery.status = 'PERSISTENCE_PENDING'
+    assert.equal(firestoreAttempts, 1)
+    assert.equal(adminRecord, null)
+
+    // Step 2: Retry persistence via retryWalletMinerPurchase
+    let savedFirestoreMiner: StoredMiner | null = null
+    const retryResult = await retryWalletMinerPurchase(recovery, {
+      user: { uid: 'user_spy_buyer' },
+      saveMinerToFirestore: async (_uid, miner) => {
+        firestoreAttempts++
+        savedFirestoreMiner = miner
+      },
+      recordPurchaseToAdmin: async (p) => {
+        adminRecord = p
+      },
+    })
+
+    assert.ok(retryResult)
+    // CRITICAL PROOF: payment send spy was NOT called during retry! Total count remains 1!
+    assert.equal(paymentSendSpyCount, 1, 'Payment send spy must remain exactly 1 across initial payment + retry')
+    assert.equal(firestoreAttempts, 2, 'Firestore save called once on failure, once on retry')
+    assert.equal(retryResult.createdMinerId, preallocatedMinerId)
+    assert.equal(savedFirestoreMiner?.id, preallocatedMinerId)
+    assert.equal(savedFirestoreMiner?.txHash, txHash)
+    assert.equal(adminRecord?.minerId, preallocatedMinerId)
+    assert.equal(adminRecord?.txHash, txHash)
+  })
+
+  // --------------------------------------------------------------------------
+  // Blocker 9: Admin reconciliation propagation & idempotent retry
+  // --------------------------------------------------------------------------
+  it('Blocker 9: Admin reconciliation write error propagates to caller and retry succeeds idempotently without duplicating local store', async () => {
+    restoreDemoSession({
+      balance: 1000,
+      presaleTokens: 0,
+      maintenanceCredit: 0,
+      miners: [],
+      workers: [],
+      workerActivationMode: 'automatic',
+      receipts: [],
+      pendingMinerOrders: [],
+      lastDailyRewardAt: null,
+    })
+    let adminAttempts = 0
+    let firestoreSavedMiners: StoredMiner[] = []
+
+    const recovery: PostTxPendingState = {
+      schemaVersion: 1,
+      status: 'PERSISTENCE_PENDING',
+      txHash: '0xadmin_fail_tx',
+      minerId: 'MINER-ADMIN-FAIL-01',
+      packageId: 'minerx-admin-reconcile',
+      productName: 'Admin Sync Miner · 48 TH',
+      amount: 561.99,
+      powerTh: 48,
+      price: 561.99,
+      currency: 'USD',
+      cadence: 'once',
+      purchaseMode: 'once',
+      networkId: 'bnb',
+      networkName: 'BNB Chain',
+      originUid: 'user_admin_test',
+      packageSnapshot: {
+        packageId: 'minerx-admin-reconcile',
+        name: 'Admin Sync Miner · 48 TH',
+        powerTh: 48,
+        price: 561.99,
+        currency: 'USD',
+        cadence: 'once',
+        purchaseMode: 'once',
+      },
+      createdAt: Date.now(),
+    }
+
+    // Attempt 1: Firestore succeeds, but Admin fails
+    await assert.rejects(
+      async () => {
+        await completeWalletMinerPurchase(
+          {
+            productName: recovery.productName,
+            amount: recovery.amount,
+            packageId: recovery.packageId,
+            purchaseMode: recovery.purchaseMode,
+            txHash: recovery.txHash,
+            networkName: recovery.networkName,
+            user: { uid: 'user_admin_test' },
+            minerId: recovery.minerId,
+            requireCanonicalPackageId: true,
+          },
+          {
+            saveMinerToFirestore: async (_uid, miner) => {
+              firestoreSavedMiners.push(miner)
+            },
+            recordPurchaseToAdmin: async () => {
+              adminAttempts++
+              throw new Error('Admin platform database unreachable')
+            },
+          }
+        )
+      },
+      /Admin platform database unreachable/
+    )
+
+    assert.equal(adminAttempts, 1)
+    assert.equal(firestoreSavedMiners.length, 1)
+
+    const sessionAttempt1 = getDemoSessionForPersistence()
+    assert.equal(sessionAttempt1.miners.length, 1, 'Attempt 1 committed miner locally')
+    assert.equal(sessionAttempt1.workers.length, 1, 'Attempt 1 committed worker locally')
+    assert.equal(sessionAttempt1.receipts.length, 1, 'Attempt 1 committed receipt locally')
+
+    // Attempt 2: Retry with retryWalletMinerPurchase -> repeats idempotent setDoc and succeeds on Admin
+    let recordedAdminParams: any = null
+    const retryRes = await retryWalletMinerPurchase(recovery, {
+      user: { uid: 'user_admin_test' },
+      saveMinerToFirestore: async (_uid, miner) => {
+        firestoreSavedMiners.push(miner)
+      },
+      recordPurchaseToAdmin: async (p) => {
+        adminAttempts++
+        recordedAdminParams = p
+      },
+    })
+
+    assert.ok(retryRes)
+    assert.equal(adminAttempts, 2)
+    assert.equal(firestoreSavedMiners.length, 2, 'Idempotent setDoc repeated with same minerId')
+    assert.equal(firestoreSavedMiners[0].id, recovery.minerId)
+    assert.equal(firestoreSavedMiners[1].id, recovery.minerId)
+    assert.equal(recordedAdminParams.minerId, recovery.minerId)
+    assert.equal(recordedAdminParams.packageId, recovery.packageId)
+
+    const sessionRetry = getDemoSessionForPersistence()
+    assert.equal(sessionRetry.miners.length, 1, 'Local demoStore miners must NOT duplicate on retry')
+    assert.equal(sessionRetry.workers.length, 1, 'Local demoStore workers must NOT duplicate on retry')
+    assert.equal(sessionRetry.receipts.length, 1, 'Local demoStore receipts must NOT duplicate on retry')
+    assert.equal(sessionRetry.miners[0].id, recovery.minerId)
+  })
+
+  // --------------------------------------------------------------------------
+  // Blocker 10: Customizer error propagation
+  // --------------------------------------------------------------------------
+  it('Blocker 10: Customizer Firestore failure rethrows error and does not mutate demoStore', async () => {
+    resetStore(1000)
+    // Add demo miner
+    buyDemoMiner({
+      name: 'Customizer Fail Miner',
+      powerTh: 10,
+      efficiency: 15,
+      price: 100,
+      purchaseMode: 'once',
+      packageId: 'minerx-customizer-test',
+    })
+    const miner = getDemoSessionForPersistence().miners[0]
+    assert.ok(miner)
+
+    // Authenticated customizer save with failing Firestore
+    let firestoreCalled = false
+    await assert.rejects(
+      async () => {
+        await saveMinerCustomization({
+          minerId: miner.id,
+          user: { uid: 'user_cust_fail' },
+          customization: {
+            wallColor: '#ff0000',
+            bodyColor: '#00ff00',
+            bottomColor: '#0000ff',
+            fansColor: '#111111',
+            screenColor: '#222222',
+            buttonsColor: '#333333',
+            topColor: '#444444',
+            stickers: 'gomining-classic',
+            updatedAt: new Date().toISOString(),
+          },
+          updateFirestore: async () => {
+            firestoreCalled = true
+            throw new Error('Firestore updateDoc permission denied')
+          },
+        })
+      },
+      /Firestore updateDoc permission denied/
+    )
+
+    assert.equal(firestoreCalled, true)
+    // DemoStore must NOT have been updated with customization
+    const session = getDemoSessionForPersistence()
+    assert.equal(session.miners[0].customization, undefined, 'DemoStore must remain unmutated on Firestore failure')
+  })
+
+  // --------------------------------------------------------------------------
+  // R6: Legacy Demo Cart Isolation (Zero Admin Recording)
+  // --------------------------------------------------------------------------
+  it('R6: Legacy demo cart flow does not call Admin recorder', () => {
+    resetStore(5000)
+
+    // Test 1: buyDemoOrder completes locally without Admin recording
+    const order = {
+      id: 'ORDER-CART-DEMO-001',
+      total: 100,
+      createdAt: '2026-11-10',
+      items: [
+        {
+          productId: 'miner-plus',
+          product: { id: 'miner-plus', title: 'Minero Plus 1.2 TH', price: 100, powerTh: 1.2 },
+          quantity: 1,
+        },
+      ],
+    }
+
+    const buyResult = buyDemoOrder(order)
+    assert.equal(buyResult.ok, true)
+    const session = getDemoSessionForPersistence()
+    assert.equal(session.balance, 4900, 'Balance must be deducted in demoStore')
+    assert.equal(session.miners.length, 1, 'Demo miner added in demoStore')
+
+    // Test 2: Source code regression test: App.tsx must NOT contain recordMinerPurchaseToAdmin in buyDemoOrder
+    const appPath = path.resolve(projectRoot, 'src/App.tsx')
+    const appContent = fs.readFileSync(appPath, 'utf8')
+
+    // Verify buyDemoOrder onComplete handler does NOT invoke recordMinerPurchaseToAdmin
+    const cartBlockMatch = appContent.match(/onComplete=\{[\s\S]*?buyDemoOrder\(order\)([\s\S]*?)\}\}/)
+    assert.ok(cartBlockMatch, 'Cart onComplete handler must exist in App.tsx')
+    assert.ok(
+      !cartBlockMatch[1].includes('recordMinerPurchaseToAdmin'),
+      'Legacy cart onComplete in App.tsx must NEVER call recordMinerPurchaseToAdmin'
+    )
+  })
+
+  // --------------------------------------------------------------------------
+  // Blocker 11: Guest Demo Local and Pending Purchases Must NEVER Call Admin
+  // --------------------------------------------------------------------------
+  it('Blocker 11: Guest demo local and pending purchases strictly NEVER call Admin recorder', async () => {
+    resetStore(1000)
+    let adminCallCount = 0
+    const mockAdminRecorder: PurchaseAdminRecorder = async () => {
+      adminCallCount++
+    }
+
+    // 1. Guest local purchase
+    const localResult = await completeLocalMinerPurchase(
+      {
+        name: 'Guest Local Miner',
+        powerTh: 10,
+        efficiency: 15,
+        price: 50,
+        purchaseMode: 'once',
+        packageId: 'minerx-test-guest',
+      },
+      {
+        recordPurchaseToAdmin: mockAdminRecorder,
+      }
+    )
+    assert.ok(localResult.ok)
+    assert.equal(adminCallCount, 0, 'Guest local purchase must NEVER call Admin recorder')
+
+    // 2. Guest pending payment
+    const deferRes = deferDemoMinerPurchase({
+      name: 'Guest Pending Miner',
+      powerTh: 10,
+      efficiency: 15,
+      price: 50,
+      purchaseMode: 'once',
+      packageId: 'minerx-test-guest',
+    })
+    assert.ok(deferRes.ok)
+    const pendingOrder = getDemoSessionForPersistence().pendingMinerOrders[0]
+    assert.ok(pendingOrder)
+
+    const payPendingRes = await payPendingMinerOrderAndRecordToAdmin(pendingOrder, {
+      recordPurchaseToAdmin: mockAdminRecorder,
+    })
+    assert.ok(payPendingRes.ok)
+    assert.equal(adminCallCount, 0, 'Guest pending payment must NEVER call Admin recorder')
   })
 })

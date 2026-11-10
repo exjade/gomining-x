@@ -37,10 +37,9 @@ describe('EMPIRICAL CHALLENGER: Stress & Adversarial Suite for Finding 2 (Author
 
     // 1. Defer 100 pending orders with varied canonical packageIds and parameters
     for (let i = 0; i < orderCount; i++) {
-      const packageId = i % 4 === 0 ? 'minerx-01'
-        : i % 4 === 1 ? 'minerx-02'
-        : i % 4 === 2 ? 'minerx-custom'
-        : undefined
+      const packageId = i % 3 === 0 ? 'minerx-01'
+        : i % 3 === 1 ? 'minerx-02'
+        : 'minerx-custom'
 
       const input: DemoMinerPurchaseInput = {
         name: `Sequential Miner #${i}`,
@@ -77,6 +76,7 @@ describe('EMPIRICAL CHALLENGER: Stress & Adversarial Suite for Finding 2 (Author
 
       const payResult = await payPendingMinerOrderAndRecordToAdmin(pendingOrder, {
         user: { uid: `user_${i}`, email: `user_${i}@example.com` },
+        saveMinerToFirestore: async () => {},
         recordPurchaseToAdmin: recorderSpy,
       })
 
@@ -135,7 +135,7 @@ describe('EMPIRICAL CHALLENGER: Stress & Adversarial Suite for Finding 2 (Author
 
     const concurrencyCount = 50
     for (let i = 0; i < concurrencyCount; i++) {
-      const packageId = i % 2 === 0 ? `minerx-pkg-${i}` : undefined
+      const packageId = `minerx-pkg-${i}`
       deferDemoMinerPurchase({
         name: `Concurrent Order #${i}`,
         powerTh: 5 + i,
@@ -154,6 +154,8 @@ describe('EMPIRICAL CHALLENGER: Stress & Adversarial Suite for Finding 2 (Author
     const recordedAdminMap = new Map<string, any>()
     const payPromises = ordersToPay.map(async (order) => {
       return payPendingMinerOrderAndRecordToAdmin(order, {
+        user: { uid: `user_c_${order.id}`, email: `c@example.com` },
+        saveMinerToFirestore: async () => {},
         recordPurchaseToAdmin: async (params) => {
           recordedAdminMap.set(params.minerId, params)
         },
@@ -217,6 +219,8 @@ describe('EMPIRICAL CHALLENGER: Stress & Adversarial Suite for Finding 2 (Author
     const adminCalls: any[] = []
     const settleAttempts = Array.from({ length: 30 }, () =>
       payPendingMinerOrderAndRecordToAdmin(targetOrder, {
+        user: { uid: 'user_target', email: 'target@test.com' },
+        saveMinerToFirestore: async () => {},
         recordPurchaseToAdmin: async (params) => {
           adminCalls.push(params)
         },
@@ -274,23 +278,28 @@ describe('EMPIRICAL CHALLENGER: Stress & Adversarial Suite for Finding 2 (Author
 
     const adminRecords: any[] = []
     const spy = async (p: any) => { adminRecords.push(p) }
+    const authOptions = {
+      user: { uid: 'user_exhaust', email: 'exhaust@example.com' },
+      saveMinerToFirestore: async () => {},
+      recordPurchaseToAdmin: spy,
+    }
 
     // Pay order 1 ($100, balance was 250 -> becomes 150)
-    const res1 = await payPendingMinerOrderAndRecordToAdmin(order1, { recordPurchaseToAdmin: spy })
+    const res1 = await payPendingMinerOrderAndRecordToAdmin(order1, authOptions)
     assert.equal(res1.ok, true)
     assert.equal(adminRecords.length, 1)
     assert.equal(adminRecords[0].minerId, res1.minerId)
     assert.ok(res1.minerId?.startsWith('MINER-'))
 
     // Pay order 2 ($100, balance was 150 -> becomes 50)
-    const res2 = await payPendingMinerOrderAndRecordToAdmin(order2, { recordPurchaseToAdmin: spy })
+    const res2 = await payPendingMinerOrderAndRecordToAdmin(order2, authOptions)
     assert.equal(res2.ok, true)
     assert.equal(adminRecords.length, 2)
     assert.equal(adminRecords[1].minerId, res2.minerId)
     assert.ok(res2.minerId?.startsWith('MINER-'))
 
     // Pay order 3 ($100, balance is 50 -> must fail with insufficient balance)
-    const res3 = await payPendingMinerOrderAndRecordToAdmin(order3, { recordPurchaseToAdmin: spy })
+    const res3 = await payPendingMinerOrderAndRecordToAdmin(order3, authOptions)
     assert.equal(res3.ok, false)
     assert.equal(res3.required, 100)
     assert.equal(res3.available, 50)
@@ -298,7 +307,7 @@ describe('EMPIRICAL CHALLENGER: Stress & Adversarial Suite for Finding 2 (Author
     assert.equal(adminRecords.length, 2, 'Admin recorder must NOT be called when balance is insufficient')
 
     // Pay order 4 ($100 -> fails)
-    const res4 = await payPendingMinerOrderAndRecordToAdmin(order4, { recordPurchaseToAdmin: spy })
+    const res4 = await payPendingMinerOrderAndRecordToAdmin(order4, authOptions)
     assert.equal(res4.ok, false)
     assert.equal(adminRecords.length, 2, 'Admin recorder must NOT be called for order 4')
 
@@ -314,7 +323,7 @@ describe('EMPIRICAL CHALLENGER: Stress & Adversarial Suite for Finding 2 (Author
     })
 
     // Now retry paying order 3 -> must succeed with genuine MINER- id and record to admin
-    const res3Retry = await payPendingMinerOrderAndRecordToAdmin(order3, { recordPurchaseToAdmin: spy })
+    const res3Retry = await payPendingMinerOrderAndRecordToAdmin(order3, authOptions)
     assert.equal(res3Retry.ok, true)
     assert.equal(adminRecords.length, 3)
     assert.equal(adminRecords[2].minerId, res3Retry.minerId)
@@ -403,11 +412,13 @@ describe('EMPIRICAL CHALLENGER: Stress & Adversarial Suite for Finding 2 (Author
       efficiency: 15,
       price: 80,
       purchaseMode: 'once',
+      packageId: 'minerx-user-only',
     })
 
     const orderUserOnly = getDemoSessionForPersistence().pendingMinerOrders[0]
     const resUserOnly = await payPendingMinerOrderAndRecordToAdmin(orderUserOnly, {
       user: { uid: 'u123', email: 'test@example.com' },
+      saveMinerToFirestore: async () => {},
     })
 
     assert.equal(resUserOnly.ok, true, 'Payment must succeed when recordPurchaseToAdmin is undefined')
@@ -490,27 +501,34 @@ describe('EMPIRICAL CHALLENGER: Stress & Adversarial Suite for Finding 2 (Author
 
       const order = getDemoSessionForPersistence().pendingMinerOrders[0]
       let adminParams: any = null
+      const isAuth = Boolean(tc.expectedAdminPkg)
 
       const res = await payPendingMinerOrderAndRecordToAdmin(order, {
+        user: isAuth ? { uid: `u_${i}`, email: `u_${i}@test.com` } : undefined,
+        saveMinerToFirestore: isAuth ? async () => {} : undefined,
         recordPurchaseToAdmin: async (p) => { adminParams = p },
       })
 
       assert.equal(res.ok, true, `Case #${i} payment must succeed`)
-      assert.ok(adminParams, `Case #${i} admin recorder must be invoked`)
+      if (isAuth) {
+        assert.ok(adminParams, `Case #${i} admin recorder must be invoked`)
 
-      // Strict minerId alignment
-      const actualMinerId = res.minerId!
-      assert.ok(actualMinerId.startsWith('MINER-'), `Case #${i} minerId must have MINER- prefix`)
-      assert.ok(!actualMinerId.startsWith('miner_'), `Case #${i} minerId must NOT have miner_ prefix`)
-      assert.equal(adminParams.minerId, actualMinerId, `Case #${i} adminParams.minerId must strictly match actual minerId`)
-      assert.equal(adminParams.minerId, res.miner?.id, `Case #${i} adminParams.minerId must match res.miner.id`)
+        // Strict minerId alignment
+        const actualMinerId = res.minerId!
+        assert.ok(actualMinerId.startsWith('MINER-'), `Case #${i} minerId must have MINER- prefix`)
+        assert.ok(!actualMinerId.startsWith('miner_'), `Case #${i} minerId must NOT have miner_ prefix`)
+        assert.equal(adminParams.minerId, actualMinerId, `Case #${i} adminParams.minerId must strictly match actual minerId`)
+        assert.equal(adminParams.minerId, res.miner?.id, `Case #${i} adminParams.minerId must match res.miner.id`)
 
-      // PackageId normalization
-      assert.equal(
-        adminParams.packageId,
-        tc.expectedAdminPkg,
-        `Case #${i} packageId "${tc.inputPkg}" must normalize to "${tc.expectedAdminPkg}"`
-      )
+        // PackageId normalization
+        assert.equal(
+          adminParams.packageId,
+          tc.expectedAdminPkg,
+          `Case #${i} packageId "${tc.inputPkg}" must normalize to "${tc.expectedAdminPkg}"`
+        )
+      } else {
+        assert.equal(adminParams, null, `Case #${i} guest order without canonical packageId must NEVER call Admin recorder`)
+      }
     }
   })
 
@@ -529,9 +547,12 @@ describe('EMPIRICAL CHALLENGER: Stress & Adversarial Suite for Finding 2 (Author
     }
 
     const orders = [...getDemoSessionForPersistence().pendingMinerOrders]
-    for (const order of orders) {
+    for (let i = 0; i < orders.length; i++) {
+      const order = orders[i]
       let recorderParams: any = null
       const res = await payPendingMinerOrderAndRecordToAdmin(order, {
+        user: { uid: `u_neg_${i}`, email: 'neg@test.com' },
+        saveMinerToFirestore: async () => {},
         recordPurchaseToAdmin: async (p) => { recorderParams = p },
       })
 
@@ -579,6 +600,8 @@ describe('EMPIRICAL CHALLENGER: Stress & Adversarial Suite for Finding 2 (Author
     let adminRecord: any = null
 
     const res = await payPendingMinerOrderAndRecordToAdmin(order, {
+      user: { uid: 'u_farm', email: 'farm@test.com' },
+      saveMinerToFirestore: async () => {},
       recordPurchaseToAdmin: async (p) => { adminRecord = p },
     })
 

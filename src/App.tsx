@@ -40,7 +40,10 @@ import { usePersonalization } from './personalization'
 import {
   buildMinerBuilderCheckoutPayload,
   createWalletCheckoutState,
+  completeLocalMinerPurchase,
   payPendingMinerOrderAndRecordToAdmin,
+  getPostTxRecovery,
+  resolvePendingRecoveryCheckout,
 } from './minerPurchaseFlow'
 import {
   subscribeToStorefrontSections,
@@ -48,14 +51,12 @@ import {
   savePurchasedMiner,
   type StorefrontSectionsConfig,
   DEFAULT_STOREFRONT_SECTIONS,
-  type StoredMiner,
 } from './firebase'
 import {
   activateDemoSubscription,
   addDemoBalance,
   activateDemoWorker,
   buyDemoOrder,
-  buyDemoMiner,
   cancelPendingDemoMiner,
   cancelDemoSubscription,
   deferDemoMinerPurchase,
@@ -85,6 +86,21 @@ function AppContent() {
   const [topUpOpen, setTopUpOpen] = useState(false)
   const [minerBuilderOpen, setMinerBuilderOpen] = useState(false)
   const [walletCheckout, setWalletCheckout] = useState<{ productName: string; amount: number; currency: PaymentCurrency; packageId?: string; purchaseMode?: 'once' | 'monthly'; networkId?: PaymentNetworkId; walletId?: WalletId } | null>(null)
+
+  // Blocker 6: Restore pending post-tx recovery modal after application reload
+  useEffect(() => {
+    if (loading) return
+    const recovery = getPostTxRecovery()
+    if (!recovery) return
+    if (recovery.originUid) {
+      if (!user || user.uid !== recovery.originUid) {
+        return
+      }
+    }
+    const target = resolvePendingRecoveryCheckout(recovery, user, loading)
+    if (!target) return
+    setWalletCheckout((current) => current ?? target)
+  }, [loading, user])
   const [paymentReceipts, setPaymentReceipts] = useState<PaymentReceipt[]>([])
   const { theme, language, toggleTheme, setAppLanguage, t } = usePersonalization()
   const walletSession = useWalletSession()
@@ -449,25 +465,6 @@ function AppContent() {
             setToast(result.message)
             return
           }
-          // Record any miners purchased in cart order to admin platform
-          order.items.forEach(({ product, quantity }) => {
-            if (product.id.startsWith('miner-')) {
-              const powerTh = product.powerTh ?? (product.id === 'miner-plus' ? 1.2 : 0.6)
-              for (let i = 1; i <= quantity; i++) {
-                const minerId = `${order.id}-${product.id}-${i}`
-                recordMinerPurchaseToAdmin({
-                  minerId,
-                  uid: user?.uid,
-                  email: user?.email || '',
-                  name: product.title,
-                  powerTh,
-                  price: product.price,
-                  txHash: `sim_order_${order.id}`,
-                  network: 'LOCAL_BALANCE',
-                }).catch(() => {})
-              }
-            }
-          })
           setCart([])
           setSessionEvents((items) => [`Pedido ${order.id} · simulación local`, ...items].slice(0, 5))
           setToast("Compra simulada completa; inventario y saldo actualizados")
@@ -486,82 +483,17 @@ function AppContent() {
         }
         const priceUsd = await convertCatalogPriceToUsd(input.price, input.currency)
         const demoInput = { ...input, packageId: canonicalPackageId, price: priceUsd, ownerWallet: activeWalletAddress || effectiveWalletSession.connection?.address }
-        const result = buyDemoMiner(demoInput)
-        if (!result.ok) return { ok: false, message: result.message }
-        const minerId = result.miner.id
-        if (user) {
-          const cleanUid = user.uid?.trim()
-          if (!cleanUid) {
-            return { ok: false, message: 'No se puede guardar el minero sin un UID de usuario válido' }
-          }
-          const nowIso = new Date().toISOString()
-          const storedMiner: StoredMiner = {
-            id: minerId,
-            uid: cleanUid,
-            packageId: canonicalPackageId,
-            name: input.name,
-            powerTh: input.powerTh,
-            efficiency: input.efficiency,
-            efficiencyWattsPerTh: input.efficiency,
-            price: priceUsd,
-            currency: 'USD',
-            status: 'active',
-            txHash: `sim_${minerId}`,
-            createdAt: null,
-            createdAtIso: nowIso,
-            network: 'LOCAL_BALANCE',
-            ownerWallet: demoInput.ownerWallet || 'INTERNAL',
-            purchaseMode: input.purchaseMode || 'once',
-            cadence: input.purchaseMode || 'once',
-            packageSnapshot: {
-              packageId: canonicalPackageId,
-              name: input.name,
-              powerTh: input.powerTh,
-              price: priceUsd,
-              currency: 'USD',
-              cadence: input.purchaseMode || 'once',
-              purchaseMode: input.purchaseMode || 'once',
-            },
-            visualTraits: {
-              wallColor: '#7c3aed',
-              bodyColor: '#1e1b4b',
-              bottomColor: '#e2e8f0',
-              fansColor: '#1e293b',
-              screenColor: '#22c55e',
-              buttonsColor: '#64748b',
-              topColor: '#0f172a',
-              stickers: 'gomining-classic',
-            },
-          }
-          try {
-            await savePurchasedMiner(cleanUid, storedMiner)
-          } catch (persistErr) {
-            console.error('Error persisting purchased miner to Firestore:', persistErr)
-            return {
-              ok: false,
-              message: persistErr instanceof Error ? persistErr.message : 'Error al guardar el minero en Firestore',
-            }
-          }
+
+        const result = await completeLocalMinerPurchase(demoInput, {
+          user,
+          saveMinerToFirestore: user ? savePurchasedMiner : undefined,
+          recordPurchaseToAdmin: user ? recordMinerPurchaseToAdmin : undefined,
+        })
+        if (result.ok) {
+          setSessionEvents((items) => [`${input.name} · ${input.powerTh.toFixed(2)} TH añadidos a la granja`, ...items].slice(0, 5))
+          setToast("Minero añadido a la granja local; saldo y comprobante actualizados")
         }
-        try {
-          await recordMinerPurchaseToAdmin({
-            minerId,
-            uid: user?.uid?.trim(),
-            email: user?.email || '',
-            name: input.name,
-            powerTh: input.powerTh,
-            price: priceUsd,
-            txHash: `sim_${minerId}`,
-            network: 'LOCAL_BALANCE',
-            ownerWallet: demoInput.ownerWallet,
-            packageId: canonicalPackageId,
-          })
-        } catch (adminErr) {
-          console.warn('Error recording miner purchase to admin platform:', adminErr)
-        }
-        setSessionEvents((items) => [`${input.name} · ${input.powerTh.toFixed(2)} TH añadidos a la granja`, ...items].slice(0, 5))
-        setToast("Minero añadido a la granja local; saldo y comprobante actualizados")
-        return { ok: true, receipt: result.receipt }
+        return result
       }} onDefer={async (input) => {
         const canonicalPackageId = input.packageId?.trim()
         const lowerPkg = canonicalPackageId?.toLowerCase() || ''
@@ -1326,8 +1258,8 @@ function MinerPanel({ openMinerBuilder, openTopUp }: { openMinerBuilder: () => v
           <div className="pending-miner-actions"><button className="button button-primary button-small" type="button" onClick={async () => {
             const result = await payPendingMinerOrderAndRecordToAdmin(order, {
               user,
-              recordPurchaseToAdmin: recordMinerPurchaseToAdmin,
-              saveMinerToFirestore: savePurchasedMiner,
+              recordPurchaseToAdmin: user ? recordMinerPurchaseToAdmin : undefined,
+              saveMinerToFirestore: user ? savePurchasedMiner : undefined,
             })
             if (!result.ok) {
               setPendingFeedback(result.message ?? 'No se pudo completar el pago local.')
@@ -1335,7 +1267,10 @@ function MinerPanel({ openMinerBuilder, openTopUp }: { openMinerBuilder: () => v
               return
             }
             setPendingFeedback(`Pedido local completado · ${result.receipt?.id}`)
-          }}>Pagar con saldo local</button><button className="button button-quiet button-small" type="button" onClick={() => { cancelPendingDemoMiner(order.id); setPendingFeedback('Pedido local cancelado.') }}>Cancelar</button></div>
+          }}>Pagar con saldo local</button><button className="button button-quiet button-small" type="button" onClick={() => {
+            const cancelled = cancelPendingDemoMiner(order.id)
+            setPendingFeedback(cancelled ? 'Pedido local cancelado.' : 'No se pudo cancelar: el pedido está en proceso de liquidación.')
+          }}>Cancelar</button></div>
         </article>)}</div>
         {pendingFeedback && <p className="inline-feedback" role="status">{pendingFeedback}</p>}
       </section>}

@@ -786,29 +786,24 @@ describe('SCRUM-218 Corrective Catalog Integration & UI/UX Parity', () => {
     assert.equal(recordedAdminPurchase.network, 'BNB Chain')
     assert.equal(recordedAdminPurchase.ownerWallet, activeAddress)
 
-    // 4. Negative control through shared production flow: Unspecified packageId does NOT synthesize legacy pkg-miner-*
-    let legacyRecordedAdmin: any = null
-    const legacyResult = await completeWalletMinerPurchase(
-      {
-        productName: 'Minero 1 Entry · 48.00 TH',
-        amount: 561.99,
-        packageId: undefined,
-        purchaseMode: 'once',
-        activeAddress,
-        txHash: '0xtx_legacy',
-        networkName,
-      },
-      {
-        recordPurchaseToAdmin: async (params) => {
-          legacyRecordedAdmin = params
+    // 4. Negative control through shared production flow: Unspecified packageId rejects fail-closed and does NOT synthesize legacy pkg-miner-*
+    await assert.rejects(
+      () => completeWalletMinerPurchase(
+        {
+          productName: 'Minero 1 Entry · 48.00 TH',
+          amount: 561.99,
+          packageId: undefined,
+          purchaseMode: 'once',
+          activeAddress,
+          txHash: '0xtx_legacy',
+          networkName,
         },
-      }
+        {
+          recordPurchaseToAdmin: async () => {},
+        }
+      ),
+      /Canonical wallet miner purchase requires a valid packageId/
     )
-
-    assert.ok(legacyResult)
-    assert.equal(legacyResult.miner.packageId, undefined, 'Must NOT synthesize legacy pkg-miner-1 on miner')
-    assert.equal(legacyRecordedAdmin.packageId, undefined, 'Admin record params must NOT synthesize legacy pkg-miner-*')
-    assert.ok(legacyResult.miner.id.startsWith('MINER-'))
   })
 
   it('30. pendingMinerOrders preserves canonical packageId across defer -> persist -> restore -> pay round-trip and reaches production admin recording', async () => {
@@ -871,6 +866,8 @@ describe('SCRUM-218 Corrective Catalog Integration & UI/UX Parity', () => {
     }
 
     const payResult = await payPendingMinerOrderAndRecordToAdmin(pendingOrder, {
+      user: { uid: 'user_catalog_test', email: 'catalog@test.com' },
+      saveMinerToFirestore: async () => {},
       recordPurchaseToAdmin: spyRecordToAdmin,
     })
     assert.ok(payResult.ok)
