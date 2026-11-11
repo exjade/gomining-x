@@ -10,6 +10,7 @@ import {
   prepareDemoMinerPurchase,
   commitDemoMinerPurchase,
   deferDemoMinerPurchase,
+  payPendingDemoMiner,
   cancelPendingDemoMiner,
   lockPendingDemoMinerForSettlement,
   releasePendingDemoMinerLock,
@@ -469,6 +470,50 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
       /Invalid packageId for miner purchase/
     )
 
+    // 7.1 Missing uid (undefined)
+    await assert.rejects(
+      async () => {
+        await recordMinerPurchaseToAdmin({
+          minerId: 'MINER-TEST-UID-1',
+          packageId: 'minerx-01',
+          name: 'Test Miner',
+          powerTh: 10,
+          price: 100,
+        })
+      },
+      /Cannot record miner purchase without a valid user uid/
+    )
+
+    // 7.2 Empty string uid
+    await assert.rejects(
+      async () => {
+        await recordMinerPurchaseToAdmin({
+          minerId: 'MINER-TEST-UID-2',
+          uid: '',
+          packageId: 'minerx-01',
+          name: 'Test Miner',
+          powerTh: 10,
+          price: 100,
+        })
+      },
+      /Cannot record miner purchase without a valid user uid/
+    )
+
+    // 7.3 Whitespace uid
+    await assert.rejects(
+      async () => {
+        await recordMinerPurchaseToAdmin({
+          minerId: 'MINER-TEST-UID-3',
+          uid: '   ',
+          packageId: 'minerx-01',
+          name: 'Test Miner',
+          powerTh: 10,
+          price: 100,
+        })
+      },
+      /Cannot record miner purchase without a valid user uid/
+    )
+
     // 8. Untrimmed minerId is trimmed and canonicalized across contracts and orders
     const capturedPayloads: any[] = []
     const originalFetch = globalThis.fetch
@@ -482,6 +527,7 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
 
       await recordMinerPurchaseToAdmin({
         minerId: '  MINER-UNTRIMMED-123  ',
+        uid: 'usr_untrimmed_test',
         packageId: 'minerx-01',
         name: 'Trim Miner',
         powerTh: 10,
@@ -834,8 +880,12 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
       },
     })
 
-    assert.equal(guestPay.ok, true, 'Guest payment without packageId must succeed in local demo store')
+    assert.equal(guestPay.ok, false, 'Guest payment in canonical pending flow must fail closed')
     assert.equal(firestoreCalled, false, 'Guest payment must NEVER persist to Firestore')
+
+    // Guest offline demo order completes via payPendingDemoMiner in demoStore
+    const demoPay = payPendingDemoMiner(guestOrder.id)
+    assert.equal(demoPay.ok, true, 'Guest offline demo order completes via payPendingDemoMiner')
 
     // 2. Authenticated user defers order without packageId -> payment is rejected fail-closed
     resetStore(100000)
@@ -1428,17 +1478,20 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
       /Canonical wallet miner purchase requires a valid packageId/
     )
 
-    // 3. Valid canonical packageId with guest succeeds
-    const guestResult = await completeWalletMinerPurchase({
-      productName: 'Guest Miner 10 TH',
-      amount: 100,
-      packageId: 'minerx-canonical-guest',
-      txHash: '0xtx_valid_guest',
-      networkName: 'BNB Chain',
-      user: null,
-    })
-    assert.ok(guestResult)
-    assert.equal(guestResult.resolvedPackageId, 'minerx-canonical-guest')
+    // 3. Guest canonical purchase without authenticated account is rejected fail-closed (SCRUM-220 R1)
+    await assert.rejects(
+      async () => {
+        await completeWalletMinerPurchase({
+          productName: 'Guest Miner 10 TH',
+          amount: 100,
+          packageId: 'minerx-canonical-guest',
+          txHash: '0xtx_valid_guest',
+          networkName: 'BNB Chain',
+          user: null,
+        })
+      },
+      /Canonical wallet miner purchase requires an authenticated, non-anonymous user account/
+    )
 
     // 4. orchestrateWalletMinerPurchaseFlow enforces canonical packageId validation regardless of auth
     await assert.rejects(
@@ -1898,14 +1951,13 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
       // 4. Loading state -> returns null
       assert.equal(resolvePendingRecoveryCheckout(restored, { uid: 'user_polygon_buyer' }, true), null)
 
-      // 5. Guest recovery (originUid undefined) -> restores for any visitor
+      // 5. Guest recovery (originUid undefined) -> returns null under SCRUM-220 (no guest canonical recovery)
       const guestRecovery: PostTxPendingState = {
         ...persistedRecovery,
         originUid: undefined,
       }
       const guestRestoration = resolvePendingRecoveryCheckout(guestRecovery, null, false)
-      assert.ok(guestRestoration)
-      assert.equal(guestRestoration.networkId, 'polygon')
+      assert.equal(guestRestoration, null, 'Guest recovery must return null under SCRUM-220')
     } finally {
       ;(globalThis as any).window = prevWindow
     }
@@ -1975,14 +2027,14 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
     assert.equal(adminWrites, 1)
   })
 
-  it('Blocker 7 (Test C): Guest recovery with originWalletAddress rejects if activeAddress does not match or is missing', async () => {
+  it('Blocker 7 (Test C): Recovery with originWalletAddress rejects if activeAddress does not match or is missing', async () => {
     const recovery: PostTxPendingState = {
       schemaVersion: 1,
       status: 'PERSISTENCE_PENDING',
-      txHash: '0xguest_tx_wallet_bind',
-      minerId: 'MINER-GUEST-WALLET-001',
+      txHash: '0xuser_tx_wallet_bind',
+      minerId: 'MINER-USER-WALLET-001',
       packageId: 'minerx-alpha',
-      productName: 'Guest Wallet Miner · 48 TH',
+      productName: 'Wallet Miner · 48 TH',
       amount: 561.99,
       powerTh: 48,
       price: 561.99,
@@ -1991,10 +2043,11 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
       purchaseMode: 'once',
       networkId: 'bnb',
       networkName: 'BNB Chain',
+      originUid: 'u_origin_1',
       originWalletAddress: '0x1111111111111111111111111111111111111111',
       packageSnapshot: {
         packageId: 'minerx-alpha',
-        name: 'Guest Wallet Miner · 48 TH',
+        name: 'Wallet Miner · 48 TH',
         powerTh: 48,
         price: 561.99,
         currency: 'USD',
@@ -2007,6 +2060,7 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
     // Calling retry with mismatched activeAddress must reject fail-closed
     await assert.rejects(
       () => retryWalletMinerPurchase(recovery, {
+        user: { uid: 'u_origin_1' },
         activeAddress: '0x2222222222222222222222222222222222222222',
       }),
       /Esta recuperación requiere conectar la billetera originaria \(0x1111111111111111111111111111111111111111\)\./
@@ -2014,19 +2068,21 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
 
     // Calling retry without activeAddress must reject fail-closed
     await assert.rejects(
-      () => retryWalletMinerPurchase(recovery, {}),
+      () => retryWalletMinerPurchase(recovery, {
+        user: { uid: 'u_origin_1' },
+      }),
       /Esta recuperación requiere conectar la billetera originaria \(0x1111111111111111111111111111111111111111\)\./
     )
   })
 
-  it('Blocker 7 (Test D): Guest recovery with originWalletAddress succeeds when activeAddress matches', async () => {
+  it('Blocker 7 (Test D): Recovery with originWalletAddress succeeds when activeAddress and originUid match', async () => {
     const recovery: PostTxPendingState = {
       schemaVersion: 1,
       status: 'PERSISTENCE_PENDING',
-      txHash: '0xguest_tx_wallet_ok',
-      minerId: 'MINER-GUEST-WALLET-002',
+      txHash: '0xuser_tx_wallet_ok',
+      minerId: 'MINER-USER-WALLET-002',
       packageId: 'minerx-alpha',
-      productName: 'Guest Wallet Miner · 48 TH',
+      productName: 'User Wallet Miner · 48 TH',
       amount: 561.99,
       powerTh: 48,
       price: 561.99,
@@ -2035,10 +2091,11 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
       purchaseMode: 'once',
       networkId: 'bnb',
       networkName: 'BNB Chain',
+      originUid: 'u_origin_2',
       originWalletAddress: '0x1111111111111111111111111111111111111111',
       packageSnapshot: {
         packageId: 'minerx-alpha',
-        name: 'Guest Wallet Miner · 48 TH',
+        name: 'User Wallet Miner · 48 TH',
         powerTh: 48,
         price: 561.99,
         currency: 'USD',
@@ -2049,10 +2106,12 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
     }
 
     const res = await retryWalletMinerPurchase(recovery, {
+      user: { uid: 'u_origin_2' },
       activeAddress: '0x1111111111111111111111111111111111111111',
+      saveMinerToFirestore: async () => {},
     })
     assert.ok(res)
-    assert.equal(res.createdMinerId, 'MINER-GUEST-WALLET-002')
+    assert.equal(res.createdMinerId, 'MINER-USER-WALLET-002')
   })
 
   // --------------------------------------------------------------------------
@@ -2366,7 +2425,7 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
       adminCallCount++
     }
 
-    // 1. Guest local purchase
+    // 1. Guest local purchase fails closed in canonical flow with 0 Admin calls
     const localResult = await completeLocalMinerPurchase(
       {
         name: 'Guest Local Miner',
@@ -2380,10 +2439,10 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
         recordPurchaseToAdmin: mockAdminRecorder,
       }
     )
-    assert.ok(localResult.ok)
+    assert.equal(localResult.ok, false, 'Guest canonical local purchase must fail closed')
     assert.equal(adminCallCount, 0, 'Guest local purchase must NEVER call Admin recorder')
 
-    // 2. Guest pending payment
+    // 2. Guest pending payment fails closed in canonical flow with 0 Admin calls
     const deferRes = deferDemoMinerPurchase({
       name: 'Guest Pending Miner',
       powerTh: 10,
@@ -2399,8 +2458,13 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
     const payPendingRes = await payPendingMinerOrderAndRecordToAdmin(pendingOrder, {
       recordPurchaseToAdmin: mockAdminRecorder,
     })
-    assert.ok(payPendingRes.ok)
+    assert.equal(payPendingRes.ok, false, 'Guest pending payment in canonical flow must fail closed')
     assert.equal(adminCallCount, 0, 'Guest pending payment must NEVER call Admin recorder')
+
+    // 3. Offline demo purchase succeeds locally without calling Admin recorder
+    const demoMinerRes = buyDemoMiner({ name: 'Guest Demo Miner', powerTh: 10, efficiency: 15, price: 0 })
+    assert.ok(demoMinerRes.ok)
+    assert.equal(adminCallCount, 0, 'Demo purchase must NEVER call Admin recorder')
   })
 
   // ==========================================================================
@@ -2738,35 +2802,32 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
       adminRecordParams = params
     }
 
-    // 1. Real guest wallet purchase with connected wallet
+    // 1. Canonical wallet purchase with guest rejects fail-closed with 0 Admin records (SCRUM-220 R1)
     const guestWalletAddress = '0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B'
-    await completeWalletMinerPurchase(
-      {
-        productName: 'Guest Wallet Miner · 48 TH',
-        amount: 561.99,
-        packageId: 'minerx-guest-wallet',
-        purchaseMode: 'once',
-        activeAddress: guestWalletAddress,
-        txHash: '0xguest_tx_123',
-        networkName: 'BNB Chain',
-        user: null, // Unauthenticated guest
-        requireCanonicalPackageId: true,
+    await assert.rejects(
+      async () => {
+        await completeWalletMinerPurchase(
+          {
+            productName: 'Guest Wallet Miner · 48 TH',
+            amount: 561.99,
+            packageId: 'minerx-guest-wallet',
+            purchaseMode: 'once',
+            activeAddress: guestWalletAddress,
+            txHash: '0xguest_tx_123',
+            networkName: 'BNB Chain',
+            user: null, // Unauthenticated guest
+            requireCanonicalPackageId: true,
+          },
+          {
+            recordPurchaseToAdmin: mockAdminRecorder,
+          }
+        )
       },
-      {
-        recordPurchaseToAdmin: mockAdminRecorder,
-      }
+      /Canonical wallet miner purchase requires an authenticated, non-anonymous user account/
     )
+    assert.equal(adminRecordParams, null, 'Admin recorder must NEVER be called for unauthenticated guest')
 
-    assert.ok(adminRecordParams, 'Admin recorder must be called for real canonical wallet guest')
-    assert.notEqual(adminRecordParams.uid, 'usr_client', 'Must NEVER use generic usr_client')
-    assert.equal(
-      adminRecordParams.uid,
-      `guest_wallet_${guestWalletAddress.toLowerCase()}`,
-      'Must use deterministic wallet-bound identity'
-    )
-    assert.equal(adminRecordParams.ownerWallet, guestWalletAddress, 'Must preserve ownerWallet')
-
-    // 2. Direct recordMinerPurchaseToAdmin verification with ownerWallet
+    // 2. Direct recordMinerPurchaseToAdmin rejection when uid is missing (even if ownerWallet is provided)
     const capturedPayloads: any[] = []
     const originalFetch = globalThis.fetch
     try {
@@ -2775,19 +2836,20 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
         return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       }) as typeof fetch
 
-      await recordMinerPurchaseToAdmin({
-        minerId: 'MINER-GUEST-DIRECT-1',
-        ownerWallet: guestWalletAddress,
-        packageId: 'minerx-01',
-        name: 'Direct Guest Miner',
-        powerTh: 48,
-        price: 500,
-      })
-
-      const contract = capturedPayloads.find((p) => p.contractedTh !== undefined)
-      assert.ok(contract)
-      assert.notEqual(contract.userId, 'usr_client', 'contract.userId must not be usr_client')
-      assert.equal(contract.userId, `guest_wallet_${guestWalletAddress.toLowerCase()}`)
+      await assert.rejects(
+        async () => {
+          await recordMinerPurchaseToAdmin({
+            minerId: 'MINER-GUEST-DIRECT-1',
+            ownerWallet: guestWalletAddress,
+            packageId: 'minerx-01',
+            name: 'Direct Guest Miner',
+            powerTh: 48,
+            price: 500,
+          })
+        },
+        /Cannot record miner purchase without a valid user uid/
+      )
+      assert.equal(capturedPayloads.length, 0, 'No HTTP calls must be made when uid is missing')
     } finally {
       globalThis.fetch = originalFetch
     }

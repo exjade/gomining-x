@@ -16,6 +16,8 @@ import {
   completeWalletMinerPurchase,
   retryWalletMinerPurchase,
   parseMinerPowerTh,
+  prepareWalletMinerPurchase,
+  isMinerProduct,
   getPostTxRecovery,
   savePostTxRecovery,
   clearPostTxRecovery,
@@ -97,6 +99,7 @@ export function WalletPaymentCheckout({
   purchaseMode = 'once',
   initialNetworkId = 'bnb',
   session,
+  minerId: propMinerId,
   onClose,
   onPaid,
   recordPurchaseToAdmin: customRecordPurchaseToAdmin,
@@ -106,6 +109,7 @@ export function WalletPaymentCheckout({
   currency: PaymentCurrency
   packageId?: string
   purchaseMode?: 'once' | 'monthly'
+  minerId?: string
   initialNetworkId?: PaymentNetworkId
   initialWalletId?: string
   session?: WalletSession
@@ -143,7 +147,23 @@ export function WalletPaymentCheckout({
   }, [])
 
   const [retryingPersistence, setRetryingPersistence] = useState(false)
-  const minerIdRef = useRef<string>('')
+  const minerIdRef = useRef<string>(propMinerId || '')
+
+  useEffect(() => {
+    if (propMinerId) {
+      minerIdRef.current = propMinerId
+    } else if (!minerIdRef.current && isMinerProduct(productName)) {
+      const prep = prepareWalletMinerPurchase({
+        name: productName,
+        powerTh: parseMinerPowerTh(productName, amount),
+        efficiency: 15,
+        price: amount,
+        purchaseMode,
+        packageId,
+      })
+      minerIdRef.current = prep.id
+    }
+  }, [propMinerId, productName, amount, purchaseMode, packageId])
   const [copyStatus, setCopyStatus] = useState('')
   const [showSimulateFallback, setShowSimulateFallback] = useState(false)
 
@@ -277,7 +297,13 @@ export function WalletPaymentCheckout({
     activeRecovery?: PostTxPendingState | null
   ) => {
     const recoveryToUse = activeRecovery ?? postTxRecovery
-    const targetMinerId = retryMinerId || recoveryToUse?.minerId || minerIdRef.current || `MINER-${Date.now().toString(36).toUpperCase()}-001`
+    const targetMinerId = retryMinerId || recoveryToUse?.minerId || minerIdRef.current || propMinerId
+    if (!targetMinerId || !targetMinerId.trim()) {
+      setError('No se pudo determinar el identificador canónico del minero.')
+      setPaying(false)
+      setRetryingPersistence(false)
+      return
+    }
     minerIdRef.current = targetMinerId
 
     const effectiveProductName = (retryMinerId && recoveryToUse ? recoveryToUse.productName : undefined) ?? productName
@@ -320,12 +346,19 @@ export function WalletPaymentCheckout({
     } catch (err) {
       console.error('Error completing wallet miner purchase persistence:', err)
       const errMessage = err instanceof Error ? err.message : 'Error completando la persistencia del minero'
+      if (!effectivePackageId || !effectivePackageId.trim()) {
+        setError(errMessage)
+        setPaying(false)
+        setRetryingPersistence(false)
+        return
+      }
+      const cleanPkgId = effectivePackageId.trim()
       const updatedRecovery: PostTxPendingState = {
         schemaVersion: 1,
         status: 'PERSISTENCE_PENDING',
         txHash,
         minerId: targetMinerId,
-        packageId: effectivePackageId || 'unknown',
+        packageId: cleanPkgId,
         productName: effectiveProductName,
         amount: effectiveAmount,
         powerTh: recoveryToUse?.powerTh ?? parseMinerPowerTh(effectiveProductName, effectiveAmount),
@@ -339,7 +372,7 @@ export function WalletPaymentCheckout({
         originWalletAddress: effectiveActiveAddress,
         originUid: user?.uid ?? recoveryToUse?.originUid,
         packageSnapshot: recoveryToUse?.packageSnapshot ?? {
-          packageId: effectivePackageId || 'unknown',
+          packageId: cleanPkgId,
           name: effectiveProductName,
           powerTh: recoveryToUse?.powerTh ?? parseMinerPowerTh(effectiveProductName, effectiveAmount),
           price: recoveryToUse?.price ?? (effectivePriceUsd ?? effectiveAmount),
@@ -401,12 +434,15 @@ export function WalletPaymentCheckout({
     if (!postTxRecovery || retryingPersistence) return
     setError('')
 
-    // Blocker 7: Bound to original owner
-    if (postTxRecovery.originUid) {
-      if (!user || user.uid !== postTxRecovery.originUid) {
-        setError(`Esta recuperación pertenece a otra cuenta (${postTxRecovery.originUid}). Inicia sesión con la cuenta originaria.`)
-        return
-      }
+    // R1 & Blocker 7: Bound to original authenticated owner
+    if (!user || user.isAnonymous) {
+      setError('Debes iniciar sesión con la cuenta originaria para reintentar la persistencia.')
+      openAuthModal('login')
+      return
+    }
+    if (!postTxRecovery.originUid || user.uid !== postTxRecovery.originUid) {
+      setError(`Esta recuperación pertenece a otra cuenta (${postTxRecovery.originUid || 'desconocida'}). Inicia sesión con la cuenta originaria.`)
+      return
     }
     if (postTxRecovery.originWalletAddress) {
       if (!activeAddress || activeAddress.toLowerCase() !== postTxRecovery.originWalletAddress.toLowerCase()) {
@@ -486,12 +522,25 @@ export function WalletPaymentCheckout({
 
   const handlePay = async () => {
     if (!quote) return
+    if (!user || user.isAnonymous) {
+      setError('Debes iniciar sesión con una cuenta registrada para completar la compra.')
+      openAuthModal('register')
+      return
+    }
     const canonicalPackageId = packageId?.trim()
     const lowerPkg = canonicalPackageId?.toLowerCase() || ''
     if (!canonicalPackageId || lowerPkg.startsWith('pkg-miner_') || lowerPkg.startsWith('pkg-miner-') || lowerPkg.startsWith('pkg-miner')) {
       setError(`No se puede completar la compra sin un packageId canónico válido: '${packageId}'`)
       return
     }
+
+    const targetMinerId = minerIdRef.current || propMinerId
+    if (!targetMinerId || !targetMinerId.trim()) {
+      setError('No se pudo determinar el identificador canónico del minero.')
+      return
+    }
+    minerIdRef.current = targetMinerId
+
     setError('')
     setShowSimulateFallback(false)
     setPaying(true)
@@ -566,7 +615,7 @@ export function WalletPaymentCheckout({
         throw new Error('La billetera no devolvió el hash de la transacción.')
       }
 
-      const allocatedMinerId = minerIdRef.current || `MINER-${Date.now().toString(36).toUpperCase()}-001`
+      const allocatedMinerId = targetMinerId
       minerIdRef.current = allocatedMinerId
 
       const initialRecovery: PostTxPendingState = {
@@ -637,7 +686,36 @@ export function WalletPaymentCheckout({
           </button>
         </div>
 
-        {simulatedMiner ? (
+        {(!user || user.isAnonymous) ? (
+          /* Authentication Gate: Guest & Anonymous Users Blocked From Canonical Checkout */
+          <div className="checkout-auth-gate" data-testid="checkout-auth-gate" style={{ textAlign: 'center', padding: '36px 16px' }}>
+            <div style={{ fontSize: 44, marginBottom: 16 }}>🔒</div>
+            <h3 style={{ fontSize: 18, fontWeight: 600, color: '#f1f5f9', margin: '0 0 8px 0' }}>
+              Inicia sesión para continuar
+            </h3>
+            <p style={{ fontSize: 13, color: '#94a3b8', margin: '0 auto 24px auto', maxWidth: 360, lineHeight: 1.5 }}>
+              Para adquirir mineros y vincularlos a tu cuenta de forma segura, necesitas una cuenta registrada.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 300, margin: '0 auto' }}>
+              <button
+                type="button"
+                className="button button-primary"
+                data-testid="checkout-signup-btn"
+                onClick={() => openAuthModal('register')}
+              >
+                Crear cuenta (Sign up)
+              </button>
+              <button
+                type="button"
+                className="button button-secondary"
+                data-testid="checkout-signin-btn"
+                onClick={() => openAuthModal('login')}
+              >
+                Ya tengo cuenta (Sign in)
+              </button>
+            </div>
+          </div>
+        ) : simulatedMiner ? (
           /* Pure Local Simulation View - Zero Blockchain / Zero Firestore / Zero Admin */
           <div className="checkout-receipt-view" data-testid="simulated-purchase-view">
             <div className="receipt-success-badge" style={{ background: '#3b82f6' }}>⚡</div>
@@ -993,11 +1071,6 @@ export function WalletPaymentCheckout({
 
                 {/* Step 4: Pay CTA */}
                 <div className="checkout-cta-box">
-                  {!user && (
-                    <div style={{ marginBottom: 12, padding: '8px 12px', background: 'rgba(124, 58, 237, 0.1)', border: '1px solid rgba(124, 58, 237, 0.25)', borderRadius: 8, fontSize: 11, color: '#c4b5fd' }}>
-                      👛 Comprando directamente con tu wallet on-chain. Opcional: <button type="button" onClick={() => openAuthModal('register')} style={{ background: 'transparent', border: 0, color: '#a78bfa', textDecoration: 'underline', cursor: 'pointer', padding: 0, fontWeight: 600 }}>Crea una cuenta</button> si deseas guardar tu perfil en la nube.
-                    </div>
-                  )}
                   {isWrongEvmChain ? (
                     <button
                       type="button"

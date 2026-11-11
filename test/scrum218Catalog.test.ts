@@ -275,7 +275,8 @@ describe('SCRUM-218 Corrective Catalog Integration & UI/UX Parity', () => {
       packageId: 'presale-2',
     }
 
-    const miner = registerWalletMinerPurchase(inputWithPackageId, '0xabc123txhash', 'BNB Chain')
+    const mockAuthUser = { uid: 'usr_catalog_test', isAnonymous: false }
+    const miner = registerWalletMinerPurchase(inputWithPackageId, '0xabc123txhash', 'BNB Chain', undefined, mockAuthUser)
 
     // Exactly one miner is generated
     assert.ok(miner.id)
@@ -295,7 +296,7 @@ describe('SCRUM-218 Corrective Catalog Integration & UI/UX Parity', () => {
       ownerWallet: '0x1234567890abcdef1234567890abcdef12345678',
     }
 
-    const miner2 = registerWalletMinerPurchase(inputWithoutPackageId, '0xdef456txhash', 'BNB Chain')
+    const miner2 = registerWalletMinerPurchase(inputWithoutPackageId, '0xdef456txhash', 'BNB Chain', undefined, mockAuthUser)
     assert.ok(miner2.id)
     assert.ok(miner2.id.startsWith('MINER-'))
   })
@@ -753,8 +754,10 @@ describe('SCRUM-218 Corrective Catalog Integration & UI/UX Parity', () => {
         txHash,
         activeAddress,
         networkName,
+        user: { uid: 'u_catalog_user', email: 'catalog@test.com' },
       },
       {
+        saveMinerToFirestore: async () => {},
         recordPurchaseToAdmin: spyRecordToAdmin,
       }
     )

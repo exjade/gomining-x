@@ -1168,10 +1168,14 @@ export async function recordMinerPurchaseToAdmin(params: {
     throw new Error(`Invalid packageId for miner purchase: '${params.packageId}'. Canonical purchase requires a valid packageId.`)
   }
 
+  const uid = params.uid?.trim()
+  if (!uid) {
+    throw new Error('Cannot record miner purchase without a valid user uid')
+  }
+
   const now = new Date().toISOString()
-  const rawUid = params.uid?.trim()
   const rawWallet = params.ownerWallet?.trim()
-  const buyerUid = rawUid || (rawWallet ? `guest_wallet_${rawWallet.toLowerCase()}` : `guest_${minerId}`)
+  const buyerUid = uid
   const buyerEmail = params.email?.trim() || (rawWallet ? `wallet_${rawWallet.slice(0, 6)}@crypto.com` : `cliente_${minerId}@gomining.cloud`)
 
   const contractDoc: AdminContractRecord = {

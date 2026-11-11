@@ -376,7 +376,9 @@ describe('EMPIRICAL CHALLENGER: Finding 1 Custom Purchase Derivation Stress Suit
       activeAddress: '0x1111222233334444555566667777888899990000',
       txHash: '0xhash_custom_direct',
       networkName: 'BNB Chain',
+      user: { uid: 'user_custom_direct', email: 'custom_direct@test.com' },
     }, {
+      saveMinerToFirestore: async () => {},
       recordPurchaseToAdmin: async (p) => { adminRecordDirect = p },
     })
 

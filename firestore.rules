@@ -5,6 +5,10 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isNonAnonymous() {
+      return request.auth != null && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
     function isOwner(uid) {
       return request.auth != null && request.auth.uid == uid;
     }
@@ -90,12 +94,12 @@ service cloud.firestore {
 
     // Dedicated unilevel network collection per user (tree node & upline chain)
     match /unilevel/{uid} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated();
+      allow read: if isNonAnonymous();
+      allow create, update: if isNonAnonymous();
       allow delete: if false;
 
       match /{subcol=**} {
-        allow read, write: if isAuthenticated();
+        allow read, write: if isNonAnonymous();
       }
     }
 
@@ -119,36 +123,36 @@ service cloud.firestore {
     // Dedicated isolated collections for platform administration (MinerX)
     // Completely separated from client-facing GoMining collections
     match /admin_users/{userId} {
-      allow read, write: if true;
+      allow read, write: if isNonAnonymous();
       match /{allSubcollections=**} {
-        allow read, write: if true;
+        allow read, write: if isNonAnonymous();
       }
     }
 
     match /admin_workers/{workerId} {
-      allow read, write: if true;
+      allow read, write: if isNonAnonymous();
     }
 
     match /admin_contracts/{contractId} {
-      allow read, write: if true;
+      allow read, write: if isNonAnonymous();
     }
 
     match /admin_audit_logs/{logId} {
-      allow read, write: if true;
+      allow read, write: if isNonAnonymous();
     }
 
     match /admin_settings/{settingId} {
-      allow read, write: if true;
+      allow read, write: if isNonAnonymous();
     }
 
     // Commercial packages created by platform admins for client purchase
     match /commercial_packages/{packageId} {
-      allow read, write: if true;
+      allow read, write: if isNonAnonymous();
     }
 
     // Client package orders and payments recorded for administration
     match /admin_orders/{orderId} {
-      allow read, write: if true;
+      allow read, write: if isNonAnonymous();
     }
 
     // Default deny all other paths

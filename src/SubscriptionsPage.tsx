@@ -47,6 +47,15 @@ export function SubscriptionsPage({
   const currentPlan = planOptions[selectedCycle]
 
   const handleActivateWithBalance = () => {
+    if (!user || user.isAnonymous) {
+      openAuthModal('register')
+      return
+    }
+    if (!isEmailVerified) {
+      openAuthModal('verify-email')
+      return
+    }
+
     const cycleMap: Record<PlanCycle, 'monthly' | 'annual'> = {
       monthly: 'monthly',
       semiannual: 'monthly',
@@ -70,7 +79,7 @@ export function SubscriptionsPage({
   }
 
   const handlePayWithWallet = () => {
-    if (!user) {
+    if (!user || user.isAnonymous) {
       openAuthModal('register')
       return
     }

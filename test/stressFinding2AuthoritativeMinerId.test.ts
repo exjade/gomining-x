@@ -5,6 +5,7 @@ import {
   getDemoSessionForPersistence,
   deferDemoMinerPurchase,
   cancelPendingDemoMiner,
+  payPendingDemoMiner,
   type DemoMinerPurchaseInput,
   type PendingDemoMinerOrder,
 } from '../src/demoStore.ts'
@@ -350,6 +351,8 @@ describe('EMPIRICAL CHALLENGER: Stress & Adversarial Suite for Finding 2 (Author
 
     const orderAsync = getDemoSessionForPersistence().pendingMinerOrders[0]
     const resAsync = await payPendingMinerOrderAndRecordToAdmin(orderAsync, {
+      user: { uid: 'u_async', email: 'async@example.com' },
+      saveMinerToFirestore: async () => {},
       recordPurchaseToAdmin: async () => {
         throw new Error('EHOSTUNREACH: Simulated cloud connection drop')
       },
@@ -379,6 +382,8 @@ describe('EMPIRICAL CHALLENGER: Stress & Adversarial Suite for Finding 2 (Author
 
     const orderObj = getDemoSessionForPersistence().pendingMinerOrders[0]
     const resObj = await payPendingMinerOrderAndRecordToAdmin(orderObj, {
+      user: { uid: 'u_obj', email: 'obj@example.com' },
+      saveMinerToFirestore: async () => {},
       recordPurchaseToAdmin: async () => {
         throw { code: 'PERMISSION_DENIED', status: 403 }
       },
@@ -388,7 +393,7 @@ describe('EMPIRICAL CHALLENGER: Stress & Adversarial Suite for Finding 2 (Author
     assert.equal(resObj.minerId, resObj.miner?.id)
     assert.ok(resObj.minerId?.startsWith('MINER-'))
 
-    // Mode C: Omitted options (options is undefined)
+    // Mode C: Omitted options (fails closed in canonical, succeeds in offline demo)
     deferDemoMinerPurchase({
       name: 'Omitted Options Miner',
       powerTh: 4,
@@ -400,10 +405,11 @@ describe('EMPIRICAL CHALLENGER: Stress & Adversarial Suite for Finding 2 (Author
 
     const orderNoOpt = getDemoSessionForPersistence().pendingMinerOrders[0]
     const resNoOpt = await payPendingMinerOrderAndRecordToAdmin(orderNoOpt)
+    assert.equal(resNoOpt.ok, false, 'Canonical pending payment without options/auth must fail closed')
 
-    assert.equal(resNoOpt.ok, true, 'Payment must succeed when options is completely omitted')
-    assert.equal(resNoOpt.minerId, resNoOpt.miner?.id)
-    assert.ok(resNoOpt.minerId?.startsWith('MINER-'))
+    const demoResNoOpt = payPendingDemoMiner(orderNoOpt.id)
+    assert.equal(demoResNoOpt.ok, true, 'Offline demo payment succeeds when options is omitted')
+    assert.equal(demoResNoOpt.miner?.id, getDemoSessionForPersistence().miners.find(m => m.name === 'Omitted Options Miner')?.id)
 
     // Mode D: Options with user but no recorder
     deferDemoMinerPurchase({
@@ -509,7 +515,7 @@ describe('EMPIRICAL CHALLENGER: Stress & Adversarial Suite for Finding 2 (Author
         recordPurchaseToAdmin: async (p) => { adminParams = p },
       })
 
-      assert.equal(res.ok, true, `Case #${i} payment must succeed`)
+      assert.equal(res.ok, isAuth, `Case #${i} payment must ${isAuth ? 'succeed' : 'fail closed'}`)
       if (isAuth) {
         assert.ok(adminParams, `Case #${i} admin recorder must be invoked`)
 

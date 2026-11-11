@@ -2,7 +2,6 @@ import {
   registerWalletMinerPurchase,
   prepareWalletMinerPurchase,
   commitWalletMinerPurchase,
-  buyDemoMiner,
   prepareDemoMinerPurchase,
   commitDemoMinerPurchase,
   payPendingDemoMiner,
@@ -30,6 +29,7 @@ export {
   releaseDemoBalanceReservation,
   commitDemoBalanceReservation,
   getAvailableDemoBalance,
+  prepareWalletMinerPurchase,
 }
 import type { MinerPlan } from './minerCatalog.ts'
 import type { PaymentCurrency } from './paymentQuote.ts'
@@ -273,7 +273,7 @@ export interface CompleteWalletMinerPurchaseParams {
   txHash: string
   networkName: string
   catalogUsd?: number
-  user?: { uid: string; email?: string | null } | null
+  user?: { uid: string; email?: string | null; isAnonymous?: boolean } | null
   minerId?: string
   requireCanonicalPackageId?: boolean
   packageSnapshot?: PackageSnapshot
@@ -285,8 +285,9 @@ export interface CompleteWalletMinerPurchaseOptions {
   creditReferral?: (uid: string, email: string, amount: number, minerId: string, txHash: string) => Promise<any>
   linkActiveWallet?: (address: string) => Promise<void>
   onSimulationStart?: (id: string, name: string, powerTh: number) => void
-  user?: { uid: string; email?: string | null } | null
+  user?: { uid: string; email?: string | null; isAnonymous?: boolean } | null
   activeAddress?: string
+  commitWalletMinerPurchase?: typeof commitWalletMinerPurchase
 }
 
 export function isMinerProduct(productName: string): boolean {
@@ -363,14 +364,12 @@ export function createWalletCheckoutState(
 
 export function resolvePendingRecoveryCheckout(
   recovery: PostTxPendingState | null,
-  user: { uid: string } | null | undefined,
+  user: { uid: string; isAnonymous?: boolean } | null | undefined,
   loading: boolean = false
 ): WalletCheckoutState | null {
   if (loading || !recovery) return null
-  if (recovery.originUid) {
-    if (!user || user.uid !== recovery.originUid) {
-      return null
-    }
+  if (!user || user.isAnonymous || !user.uid?.trim() || !recovery.originUid || user.uid.trim() !== recovery.originUid.trim()) {
+    return null
   }
   return {
     productName: recovery.productName,
@@ -408,19 +407,21 @@ export async function completeWalletMinerPurchase(
   const cleanUid = user?.uid?.trim()
   const lowerPkg = resolvedPackageId?.toLowerCase() || ''
 
-  // Blocker 11: Canonical wallet miner purchase unconditionally requires a valid canonical packageId for all callers (authenticated and guest)
+  // Blocker 11: Canonical wallet miner purchase unconditionally requires a valid canonical packageId
   if (!resolvedPackageId || lowerPkg.startsWith('pkg-miner_') || lowerPkg.startsWith('pkg-miner-') || lowerPkg.startsWith('pkg-miner')) {
     throw new Error(`Canonical wallet miner purchase requires a valid packageId, received: '${packageId}'`)
   }
 
-  // R5: Adapter guard when user exists
-  if (user) {
-    if (!cleanUid) {
-      throw new Error('Canonical wallet miner purchase requires a valid user uid')
-    }
-    if (!options?.saveMinerToFirestore) {
-      throw new Error('saveMinerToFirestore adapter is required for authenticated wallet miner purchase')
-    }
+  // R1: Require authenticated, non-anonymous user account with valid uid
+  if (!user || user.isAnonymous) {
+    throw new Error('Canonical wallet miner purchase requires an authenticated, non-anonymous user account')
+  }
+  if (!cleanUid) {
+    throw new Error('Canonical wallet miner purchase requires a valid user uid')
+  }
+
+  if (!options?.saveMinerToFirestore) {
+    throw new Error('saveMinerToFirestore adapter is required for authenticated wallet miner purchase')
   }
 
   // Prepare miner object without mutating local store
@@ -439,85 +440,91 @@ export async function completeWalletMinerPurchase(
   const createdMinerId = miner.id
 
   // Persist to Firestore: /miners/{uid}/miner/{minerId}
-  if (user && options?.saveMinerToFirestore) {
-    const nowIso = new Date().toISOString()
-    const storedMiner: StoredMiner = {
-      id: createdMinerId,
-      uid: cleanUid!,
-      packageId: resolvedPackageId,
-      name: effectiveName,
-      powerTh: effectivePowerTh,
-      efficiency: 15,
-      efficiencyWattsPerTh: 15,
-      price: effectivePrice,
-      currency: effectiveCurrency,
-      status: 'active',
-      txHash,
-      createdAt: null,
-      createdAtIso: nowIso,
-      network: networkName || 'BNB Chain',
-      ownerWallet: activeAddress || 'INTERNAL',
-      purchaseMode: effectivePurchaseMode,
-      cadence: effectiveCadence,
-      packageSnapshot: authoritativeSnapshot
-        ? {
-            packageId: authoritativeSnapshot.packageId.trim(),
-            name: authoritativeSnapshot.name.trim(),
-            powerTh: authoritativeSnapshot.powerTh,
-            price: authoritativeSnapshot.price,
-            currency: authoritativeSnapshot.currency.trim(),
-            cadence: authoritativeSnapshot.cadence,
-            purchaseMode: authoritativeSnapshot.purchaseMode,
-          }
-        : {
-            packageId: resolvedPackageId!,
-            name: effectiveName,
-            powerTh: effectivePowerTh,
-            price: effectivePrice,
-            currency: effectiveCurrency,
-            cadence: effectiveCadence,
-            purchaseMode: effectivePurchaseMode,
-          },
-      visualTraits: {
-        wallColor: '#7c3aed',
-        bodyColor: '#1e1b4b',
-        bottomColor: '#e2e8f0',
-        fansColor: '#1e293b',
-        screenColor: '#22c55e',
-        buttonsColor: '#64748b',
-        topColor: '#0f172a',
-        stickers: 'gomining-classic',
-      },
-    }
-    // Fail-closed persistence: if saving to Firestore fails, throw so local state / simulation / admin recorder are NOT touched
-    await options.saveMinerToFirestore(cleanUid!, storedMiner)
-    if (options.creditReferral) {
-      await options.creditReferral(cleanUid!, user.email || '', effectivePrice, createdMinerId, txHash).catch((err) => {
-        console.warn('Error crediting referral commission:', err)
-      })
-    }
-    if (activeAddress && options.linkActiveWallet) {
-      await options.linkActiveWallet(activeAddress).catch((err) => {
-        console.warn('Error linking active wallet:', err)
-      })
-    }
+  const nowIso = new Date().toISOString()
+  const storedMiner: StoredMiner = {
+    id: createdMinerId,
+    uid: cleanUid,
+    packageId: resolvedPackageId,
+    name: effectiveName,
+    powerTh: effectivePowerTh,
+    efficiency: 15,
+    efficiencyWattsPerTh: 15,
+    price: effectivePrice,
+    currency: effectiveCurrency,
+    status: 'active',
+    txHash,
+    createdAt: null,
+    createdAtIso: nowIso,
+    network: networkName || 'BNB Chain',
+    ownerWallet: activeAddress || 'INTERNAL',
+    purchaseMode: effectivePurchaseMode,
+    cadence: effectiveCadence,
+    packageSnapshot: authoritativeSnapshot
+      ? {
+          packageId: authoritativeSnapshot.packageId.trim(),
+          name: authoritativeSnapshot.name.trim(),
+          powerTh: authoritativeSnapshot.powerTh,
+          price: authoritativeSnapshot.price,
+          currency: authoritativeSnapshot.currency.trim(),
+          cadence: authoritativeSnapshot.cadence,
+          purchaseMode: authoritativeSnapshot.purchaseMode,
+        }
+      : {
+          packageId: resolvedPackageId!,
+          name: effectiveName,
+          powerTh: effectivePowerTh,
+          price: effectivePrice,
+          currency: effectiveCurrency,
+          cadence: effectiveCadence,
+          purchaseMode: effectivePurchaseMode,
+        },
+    visualTraits: {
+      wallColor: '#7c3aed',
+      bodyColor: '#1e1b4b',
+      bottomColor: '#e2e8f0',
+      fansColor: '#1e293b',
+      screenColor: '#22c55e',
+      buttonsColor: '#64748b',
+      topColor: '#0f172a',
+      stickers: 'gomining-classic',
+    },
+  }
+  // Fail-closed persistence: if saving to Firestore fails, throw so local state / simulation / admin recorder are NOT touched
+  await options.saveMinerToFirestore(cleanUid, storedMiner)
+  if (options.creditReferral) {
+    await options.creditReferral(cleanUid, user.email || '', effectivePrice, createdMinerId, txHash).catch((err) => {
+      console.warn('Error crediting referral commission:', err)
+    })
+  }
+  if (activeAddress && options.linkActiveWallet) {
+    await options.linkActiveWallet(activeAddress).catch((err) => {
+      console.warn('Error linking active wallet:', err)
+    })
   }
 
-  // Only commit local state AFTER Firestore persistence succeeded (or if guest)
-  commitWalletMinerPurchase(miner, txHash, networkName)
+  // R2: Wallet local finalization gate - if local commit fails/throws, gate simulation & admin recording
+  const commitFn = options?.commitWalletMinerPurchase ?? commitWalletMinerPurchase
+  let committedMiner: ReturnType<typeof commitWalletMinerPurchase>
+  try {
+    committedMiner = commitFn(miner, txHash, networkName)
+  } catch (commitErr) {
+    console.error('Error committing wallet miner purchase locally:', commitErr)
+    throw commitErr
+  }
+  if (!committedMiner) {
+    throw new Error('Local wallet finalization failed')
+  }
 
   if (options?.onSimulationStart) {
     options.onSimulationStart(miner.id, miner.name, miner.powerTh)
   }
 
   // Record purchased miner to platform admin dashboard (/admin_contracts & /admin_orders)
-  // Blocker 9 & Blocker E: Deterministic guest wallet identity without generic usr_client
   if (options?.recordPurchaseToAdmin) {
-    const adminUid = cleanUid || user?.uid || (activeAddress ? `guest_wallet_${activeAddress.trim().toLowerCase()}` : undefined)
     await options.recordPurchaseToAdmin({
       minerId: createdMinerId,
-      uid: adminUid,
-      email: user?.email || '',
+      uid: cleanUid,
+      email: user.email || '',
       name: effectiveName,
       powerTh: effectivePowerTh,
       price: effectivePrice,
@@ -528,18 +535,17 @@ export async function completeWalletMinerPurchase(
     })
   }
 
-  return { miner, createdMinerId, parsedTh: effectivePowerTh, resolvedPackageId }
+  return { miner: committedMiner, createdMinerId, parsedTh: effectivePowerTh, resolvedPackageId }
 }
 
 export async function retryWalletMinerPurchase(
   recovery: PostTxPendingState,
   options?: CompleteWalletMinerPurchaseOptions
 ) {
-  // Blocker 7: Enforce identity binding to original account and wallet
-  if (recovery.originUid) {
-    if (!options?.user || options.user.uid !== recovery.originUid) {
-      throw new Error(`Esta recuperación pertenece a otra cuenta (${recovery.originUid}). Inicia sesión con la cuenta originaria.`)
-    }
+  // R1 & Blocker 7: Enforce identity binding to original non-anonymous account and wallet
+  const currentUser = options?.user
+  if (!currentUser || currentUser.isAnonymous || !currentUser.uid?.trim() || !recovery.originUid || currentUser.uid.trim() !== recovery.originUid.trim()) {
+    throw new Error(`Esta recuperación pertenece a otra cuenta (${recovery.originUid || 'desconocida'}). Inicia sesión con la cuenta originaria.`)
   }
   if (recovery.originWalletAddress) {
     if (!options?.activeAddress || options.activeAddress.toLowerCase() !== recovery.originWalletAddress.toLowerCase()) {
@@ -557,7 +563,7 @@ export async function retryWalletMinerPurchase(
       txHash: recovery.txHash,
       networkName: recovery.networkName,
       catalogUsd: recovery.priceUsd ?? recovery.price,
-      user: options?.user ?? (recovery.originUid ? { uid: recovery.originUid } : null),
+      user: currentUser,
       minerId: recovery.minerId,
       requireCanonicalPackageId: true,
       packageSnapshot: recovery.packageSnapshot,
@@ -572,7 +578,7 @@ export async function orchestrateWalletMinerPurchaseFlow(
     txHash: string
     activeAddress?: string
     networkName?: string
-    user?: { uid: string; email?: string | null } | null
+    user?: { uid: string; email?: string | null; isAnonymous?: boolean } | null
   },
   options?: CompleteWalletMinerPurchaseOptions
 ) {
@@ -612,7 +618,7 @@ export async function orchestrateWalletMinerPurchaseFlow(
 }
 
 export interface CompleteLocalMinerPurchaseOptions {
-  user?: { uid: string; email?: string | null } | null
+  user?: { uid: string; email?: string | null; isAnonymous?: boolean } | null
   saveMinerToFirestore?: (uid: string, miner: StoredMiner) => Promise<void>
   recordPurchaseToAdmin?: PurchaseAdminRecorder
 }
@@ -633,128 +639,110 @@ export async function completeLocalMinerPurchase(
   }
 
   const cleanUid = options?.user?.uid?.trim()
-
-  if (options?.user) {
-    if (!cleanUid) {
-      return {
-        ok: false,
-        required: input.price,
-        available: 0,
-        message: 'No se puede guardar el minero sin un UID de usuario válido',
-      }
+  if (!options?.user || options.user.isAnonymous) {
+    return {
+      ok: false,
+      required: input.price,
+      available: getAvailableDemoBalance(),
+      message: 'Canonical local miner purchase requires an authenticated, non-anonymous user account',
     }
-    if (!options?.saveMinerToFirestore) {
-      return {
-        ok: false,
-        required: input.price,
-        available: 0,
-        message: 'saveMinerToFirestore adapter is required for authenticated local miner purchase',
-      }
+  }
+  if (!cleanUid) {
+    return {
+      ok: false,
+      required: input.price,
+      available: getAvailableDemoBalance(),
+      message: 'Cannot persist miner without a valid user uid',
     }
-
-    const prep = prepareDemoMinerPurchase({ ...input, packageId: canonicalPackageId })
-    if (!prep.ok) return prep
-
-    // Blocker C & D: Reserve balance atomically BEFORE Firestore
-    const reservation = reserveDemoBalance(prep.price)
-    if (!reservation.ok) {
-      return reservation
+  }
+  if (!options?.saveMinerToFirestore) {
+    return {
+      ok: false,
+      required: input.price,
+      available: 0,
+      message: 'saveMinerToFirestore adapter is required for authenticated local miner purchase',
     }
+  }
 
-    const minerId = prep.miner.id
-    const nowIso = new Date().toISOString()
-    const purchaseMode = (input.purchaseMode as any) || 'once'
-    const storedMiner: StoredMiner = {
-      id: minerId,
-      uid: cleanUid,
+  const prep = prepareDemoMinerPurchase({ ...input, packageId: canonicalPackageId })
+  if (!prep.ok) return prep
+
+  // Blocker C & D: Reserve balance atomically BEFORE Firestore
+  const reservation = reserveDemoBalance(prep.price)
+  if (!reservation.ok) {
+    return reservation
+  }
+
+  const minerId = prep.miner.id
+  const nowIso = new Date().toISOString()
+  const purchaseMode = (input.purchaseMode as any) || 'once'
+  const storedMiner: StoredMiner = {
+    id: minerId,
+    uid: cleanUid,
+    packageId: canonicalPackageId,
+    name: input.name,
+    powerTh: input.powerTh,
+    efficiency: input.efficiency,
+    efficiencyWattsPerTh: input.efficiency,
+    price: prep.price,
+    currency: 'USD',
+    status: 'active',
+    txHash: `sim_${minerId}`,
+    createdAt: null,
+    createdAtIso: nowIso,
+    network: 'LOCAL_BALANCE',
+    ownerWallet: input.ownerWallet || 'INTERNAL',
+    purchaseMode,
+    cadence: purchaseMode,
+    packageSnapshot: {
       packageId: canonicalPackageId,
       name: input.name,
       powerTh: input.powerTh,
-      efficiency: input.efficiency,
-      efficiencyWattsPerTh: input.efficiency,
       price: prep.price,
       currency: 'USD',
-      status: 'active',
-      txHash: `sim_${minerId}`,
-      createdAt: null,
-      createdAtIso: nowIso,
-      network: 'LOCAL_BALANCE',
-      ownerWallet: input.ownerWallet || 'INTERNAL',
-      purchaseMode,
       cadence: purchaseMode,
-      packageSnapshot: {
-        packageId: canonicalPackageId,
-        name: input.name,
-        powerTh: input.powerTh,
-        price: prep.price,
-        currency: 'USD',
-        cadence: purchaseMode,
-        purchaseMode,
-      },
-      visualTraits: {
-        wallColor: '#7c3aed',
-        bodyColor: '#1e1b4b',
-        bottomColor: '#e2e8f0',
-        fansColor: '#1e293b',
-        screenColor: '#22c55e',
-        buttonsColor: '#64748b',
-        topColor: '#0f172a',
-        stickers: 'gomining-classic',
-      },
-    }
+      purchaseMode,
+    },
+    visualTraits: {
+      wallColor: '#7c3aed',
+      bodyColor: '#1e1b4b',
+      bottomColor: '#e2e8f0',
+      fansColor: '#1e293b',
+      screenColor: '#22c55e',
+      buttonsColor: '#64748b',
+      topColor: '#0f172a',
+      stickers: 'gomining-classic',
+    },
+  }
 
-    try {
-      await options.saveMinerToFirestore(cleanUid, storedMiner)
-    } catch (persistErr) {
-      releaseDemoBalanceReservation(reservation.reservationId)
-      console.error('Error persisting purchased miner to Firestore:', persistErr)
-      return {
-        ok: false,
-        required: prep.price,
-        available: getAvailableDemoBalance(),
-        message: persistErr instanceof Error ? persistErr.message : 'Error al guardar el minero en Firestore',
-      }
+  try {
+    await options.saveMinerToFirestore(cleanUid, storedMiner)
+  } catch (persistErr) {
+    releaseDemoBalanceReservation(reservation.reservationId)
+    console.error('Error persisting purchased miner to Firestore:', persistErr)
+    return {
+      ok: false,
+      required: prep.price,
+      available: getAvailableDemoBalance(),
+      message: persistErr instanceof Error ? persistErr.message : 'Error al guardar el minero en Firestore',
     }
+  }
 
-    const commitRes = commitDemoMinerPurchase(prep.miner, prep.price, reservation.reservationId)
-    // Blocker 2: R1 Local Commit Gates Admin
-    if (!commitRes.ok) {
-      return commitRes
-    }
-
-    if (options.recordPurchaseToAdmin) {
-      try {
-        await options.recordPurchaseToAdmin({
-          minerId,
-          uid: cleanUid,
-          email: options.user.email || '',
-          name: input.name,
-          powerTh: input.powerTh,
-          price: prep.price,
-          txHash: `sim_${minerId}`,
-          network: 'LOCAL_BALANCE',
-          ownerWallet: input.ownerWallet,
-          packageId: canonicalPackageId,
-        })
-      } catch (adminErr) {
-        console.warn('Error recording miner purchase to admin platform:', adminErr)
-      }
-    }
+  const commitRes = commitDemoMinerPurchase(prep.miner, prep.price, reservation.reservationId)
+  // Blocker 2: R1 Local Commit Gates Admin
+  if (!commitRes.ok) {
     return commitRes
   }
 
-  const result = buyDemoMiner({ ...input, packageId: canonicalPackageId })
-  if (!result.ok) return result
-  const minerId = result.miner.id
-  if (options?.user && options?.recordPurchaseToAdmin) {
+  if (options.recordPurchaseToAdmin) {
     try {
       await options.recordPurchaseToAdmin({
         minerId,
-        uid: options.user.uid,
+        uid: cleanUid,
         email: options.user.email || '',
         name: input.name,
         powerTh: input.powerTh,
-        price: input.price,
+        price: prep.price,
         txHash: `sim_${minerId}`,
         network: 'LOCAL_BALANCE',
         ownerWallet: input.ownerWallet,
@@ -764,7 +752,7 @@ export async function completeLocalMinerPurchase(
       console.warn('Error recording miner purchase to admin platform:', adminErr)
     }
   }
-  return result
+  return commitRes
 }
 
 export type PayPendingMinerOrderResult =
@@ -772,7 +760,7 @@ export type PayPendingMinerOrderResult =
   | { ok: false; message: string; minerId?: string; required?: number; available?: number }
 
 export interface PayPendingMinerOrderOptions {
-  user?: { uid: string; email?: string | null } | null
+  user?: { uid: string; email?: string | null; isAnonymous?: boolean } | null
   recordPurchaseToAdmin?: PurchaseAdminRecorder
   saveMinerToFirestore?: (uid: string, miner: StoredMiner) => Promise<void>
 }
@@ -794,124 +782,121 @@ export async function payPendingMinerOrderAndRecordToAdmin(
   }
 
   try {
-    if (options?.user) {
-      if (!cleanUid) {
-        return {
-          ok: false,
-          message: 'Cannot persist miner without a valid user uid',
-        }
+    if (!options?.user || options.user.isAnonymous) {
+      return {
+        ok: false,
+        message: 'Canonical pending miner purchase requires an authenticated, non-anonymous user account',
       }
-      if (!options?.saveMinerToFirestore) {
-        return {
-          ok: false,
-          message: 'saveMinerToFirestore adapter is required for authenticated pending miner order',
-        }
+    }
+    if (!cleanUid) {
+      return {
+        ok: false,
+        message: 'Cannot persist miner without a valid user uid',
       }
-      if (!canonicalPackageId || lowerPkg.startsWith('pkg-miner_') || lowerPkg.startsWith('pkg-miner-') || lowerPkg.startsWith('pkg-miner')) {
-        return {
-          ok: false,
-          message: `No se puede completar el pedido pendiente sin un packageId canónico válido: '${order.packageId}'`,
-        }
+    }
+    if (!options?.saveMinerToFirestore) {
+      return {
+        ok: false,
+        message: 'saveMinerToFirestore adapter is required for authenticated pending miner order',
       }
-
-      const prep = preparePayPendingDemoMiner(order.id)
-      if (!prep.ok) {
-        return prep
+    }
+    if (!canonicalPackageId || lowerPkg.startsWith('pkg-miner_') || lowerPkg.startsWith('pkg-miner-') || lowerPkg.startsWith('pkg-miner')) {
+      return {
+        ok: false,
+        message: `No se puede completar el pedido pendiente sin un packageId canónico válido: '${order.packageId}'`,
       }
-
-      // Blocker C & D: Reserve balance across distinct orders BEFORE Firestore
-      const reservation = reserveDemoBalance(prep.price, `RES-ORDER-${order.id}`)
-      if (!reservation.ok) {
-        return reservation
-      }
-
-      const minerId = prep.miner.id
-      const nowIso = new Date().toISOString()
-      const purchaseMode = (order.purchaseMode as any) || 'once'
-      const storedMiner: StoredMiner = {
-        id: minerId,
-        uid: cleanUid!,
-        packageId: canonicalPackageId!,
-        name: order.name,
-        powerTh: order.powerTh,
-        efficiency: order.efficiency,
-        efficiencyWattsPerTh: order.efficiency,
-        price: order.price,
-        currency: 'USD',
-        status: 'active',
-        txHash: `sim_pending_${order.id}`,
-        createdAt: null,
-        createdAtIso: nowIso,
-        network: 'LOCAL_BALANCE',
-        ownerWallet: order.ownerWallet || 'INTERNAL',
-        purchaseMode,
-        cadence: purchaseMode,
-        packageSnapshot: {
-          packageId: canonicalPackageId!,
-          name: order.name,
-          powerTh: order.powerTh,
-          price: order.price,
-          currency: 'USD',
-          cadence: purchaseMode,
-          purchaseMode,
-        },
-        visualTraits: {
-          wallColor: '#7c3aed',
-          bodyColor: '#1e1b4b',
-          bottomColor: '#e2e8f0',
-          fansColor: '#1e293b',
-          screenColor: '#22c55e',
-          buttonsColor: '#64748b',
-          topColor: '#0f172a',
-          stickers: 'gomining-classic',
-        },
-      }
-
-      try {
-        await options.saveMinerToFirestore(cleanUid!, storedMiner)
-      } catch (persistErr) {
-        releaseDemoBalanceReservation(reservation.reservationId)
-        console.error('Error persisting pending miner to Firestore:', persistErr)
-        return {
-          ok: false,
-          minerId,
-          required: order.price,
-          available: getAvailableDemoBalance(),
-          message: persistErr instanceof Error ? persistErr.message : 'Error al persistir el minero en Firestore',
-        }
-      }
-
-      const result = commitPayPendingDemoMiner(order.id, prep.miner, prep.price, reservation.reservationId)
-      if (!result.ok) {
-        return result
-      }
-
-      if (options.recordPurchaseToAdmin) {
-        try {
-          await options.recordPurchaseToAdmin({
-            minerId,
-            uid: cleanUid,
-            email: options.user.email || '',
-            name: order.name,
-            powerTh: order.powerTh,
-            price: order.price,
-            txHash: `sim_pending_${order.id}`,
-            network: 'LOCAL_BALANCE',
-            ownerWallet: order.ownerWallet || 'INTERNAL',
-            packageId: canonicalPackageId,
-          })
-        } catch (err) {
-          console.warn('Error recording pending miner purchase to admin:', err)
-        }
-      }
-      return { ...result, minerId }
     }
 
-    const result = payPendingDemoMiner(order.id)
+    const prep = preparePayPendingDemoMiner(order.id)
+    if (!prep.ok) {
+      return prep
+    }
+
+    // Blocker C & D: Reserve balance across distinct orders BEFORE Firestore
+    const reservation = reserveDemoBalance(prep.price, `RES-ORDER-${order.id}`)
+    if (!reservation.ok) {
+      return reservation
+    }
+
+    const minerId = prep.miner.id
+    const nowIso = new Date().toISOString()
+    const purchaseMode = (order.purchaseMode as any) || 'once'
+    const storedMiner: StoredMiner = {
+      id: minerId,
+      uid: cleanUid,
+      packageId: canonicalPackageId,
+      name: order.name,
+      powerTh: order.powerTh,
+      efficiency: order.efficiency,
+      efficiencyWattsPerTh: order.efficiency,
+      price: order.price,
+      currency: 'USD',
+      status: 'active',
+      txHash: `sim_pending_${order.id}`,
+      createdAt: null,
+      createdAtIso: nowIso,
+      network: 'LOCAL_BALANCE',
+      ownerWallet: order.ownerWallet || 'INTERNAL',
+      purchaseMode,
+      cadence: purchaseMode,
+      packageSnapshot: {
+        packageId: canonicalPackageId,
+        name: order.name,
+        powerTh: order.powerTh,
+        price: order.price,
+        currency: 'USD',
+        cadence: purchaseMode,
+        purchaseMode,
+      },
+      visualTraits: {
+        wallColor: '#7c3aed',
+        bodyColor: '#1e1b4b',
+        bottomColor: '#e2e8f0',
+        fansColor: '#1e293b',
+        screenColor: '#22c55e',
+        buttonsColor: '#64748b',
+        topColor: '#0f172a',
+        stickers: 'gomining-classic',
+      },
+    }
+
+    try {
+      await options.saveMinerToFirestore(cleanUid, storedMiner)
+    } catch (persistErr) {
+      releaseDemoBalanceReservation(reservation.reservationId)
+      console.error('Error persisting pending miner to Firestore:', persistErr)
+      return {
+        ok: false,
+        minerId,
+        required: order.price,
+        available: getAvailableDemoBalance(),
+        message: persistErr instanceof Error ? persistErr.message : 'Error al persistir el minero en Firestore',
+      }
+    }
+
+    const result = commitPayPendingDemoMiner(order.id, prep.miner, prep.price, reservation.reservationId)
     if (!result.ok) {
       return result
     }
-    const minerId = result.miner.id
+
+    if (options.recordPurchaseToAdmin) {
+      try {
+        await options.recordPurchaseToAdmin({
+          minerId,
+          uid: cleanUid,
+          email: options.user.email || '',
+          name: order.name,
+          powerTh: order.powerTh,
+          price: order.price,
+          txHash: `sim_pending_${order.id}`,
+          network: 'LOCAL_BALANCE',
+          ownerWallet: order.ownerWallet || 'INTERNAL',
+          packageId: canonicalPackageId,
+        })
+      } catch (err) {
+        console.warn('Error recording pending miner purchase to admin:', err)
+      }
+    }
     return { ...result, minerId }
   } finally {
     releasePendingDemoMinerLock(order.id)

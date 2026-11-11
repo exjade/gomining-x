@@ -492,8 +492,12 @@ export function registerWalletMinerPurchase(
   input: DemoMinerPurchaseInput,
   txHash: string,
   networkName: string,
-  existingMinerId?: string
+  existingMinerId?: string,
+  user?: { uid: string; isAnonymous?: boolean } | null
 ): DemoMiner {
+  if (!user || user.isAnonymous || !user.uid?.trim()) {
+    throw new Error('registerWalletMinerPurchase requires an authenticated, non-anonymous user account')
+  }
   const miner = prepareWalletMinerPurchase(input, existingMinerId)
   return commitWalletMinerPurchase(miner, txHash, networkName)
 }

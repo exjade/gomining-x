@@ -227,13 +227,17 @@ describe('EMPIRICAL CHALLENGER: Stress Harness for Bug 4 & Contract 6', () => {
     const remainingB = midSession.pendingMinerOrders.find((o) => o.id === orderB.id)!
     assert.equal(remainingB.packageId, undefined)
 
-    // Pay Order B (guest order with no packageId: must NEVER call Admin)
+    // Pay Order B (guest order with no packageId: rejected fail-closed in canonical flow, completed via offline demoStore)
     let adminRecordB: any = null
-    const payBResult = await payPendingMinerOrderAndRecordToAdmin(orderB, {
+    const payBAttempt = await payPendingMinerOrderAndRecordToAdmin(orderB, {
       recordPurchaseToAdmin: async (p) => { adminRecordB = p },
     })
-    assert.ok(payBResult.ok)
+    assert.equal(payBAttempt.ok, false, 'Canonical pending flow rejects unauthenticated guest order fail-closed')
     assert.equal(adminRecordB, null, 'Guest demo order must NEVER call Admin recorder')
+
+    // Settle Order B via offline demoStore
+    const payBResult = payPendingDemoMiner(orderB.id)
+    assert.ok(payBResult.ok)
 
     // Pay Order A (authenticated)
     let adminRecordA: any = null
@@ -342,6 +346,8 @@ describe('EMPIRICAL CHALLENGER: Stress Harness for Bug 4 & Contract 6', () => {
       purchaseMode: 'once',
       packageId: 'minerx-throw',
     }, {
+      user: { uid: 'user_throw', email: 'throw@test.com' },
+      saveMinerToFirestore: async () => {},
       recordPurchaseToAdmin: async () => { throw new Error('Simulated network failure') },
     })
     assert.equal(throwResult.ok, true, 'Payment must succeed even if admin sync fails')
@@ -349,7 +355,7 @@ describe('EMPIRICAL CHALLENGER: Stress Harness for Bug 4 & Contract 6', () => {
     assert.equal(throwResult.minerId, throwSession.miners[0].id, 'minerId must match actual created DemoMiner.id even if admin sync fails')
     assert.ok(throwResult.minerId?.startsWith('MINER-'), 'minerId must have MINER- prefix')
 
-    // 4. Default execution without options parameter
+    // 4. Canonical pending payment without authenticated user fails closed; offline demo succeeds
     restoreDemoSession({
       balance: 500,
       maintenanceCredit: 0,
@@ -377,10 +383,12 @@ describe('EMPIRICAL CHALLENGER: Stress Harness for Bug 4 & Contract 6', () => {
       createdAt: '2026-11-09',
       purchaseMode: 'once',
     })
-    assert.equal(noOptResult.ok, true, 'Payment must succeed when options is omitted')
+    assert.equal(noOptResult.ok, false, 'Canonical payment must fail closed when unauthenticated')
+    const demoNoOptResult = payPendingDemoMiner('order_noop')
+    assert.equal(demoNoOptResult.ok, true, 'Offline demo payment must succeed without options')
     const noOptSession = getDemoSessionForPersistence()
-    assert.equal(noOptResult.minerId, noOptSession.miners[0].id, 'noOptResult.minerId must equal actual created DemoMiner.id')
-    assert.ok(noOptResult.minerId?.startsWith('MINER-'), 'noOptResult.minerId must follow MINER- format')
+    assert.equal(demoNoOptResult.miner?.id, noOptSession.miners[0].id, 'demoNoOptResult.miner.id must equal actual created DemoMiner.id')
+    assert.ok(demoNoOptResult.miner?.id?.startsWith('MINER-'), 'miner ID must follow MINER- format')
 
     // 5. completeWalletMinerPurchase: Non-miner product returns null
     let adminParams: any = null
@@ -398,13 +406,16 @@ describe('EMPIRICAL CHALLENGER: Stress Harness for Bug 4 & Contract 6', () => {
     assert.equal(nonMiner, null, 'Non-miner products must return null')
     assert.equal(adminParams, null, 'Non-miner products must not trigger admin recording')
 
-    // 6. completeWalletMinerPurchase without options executes safely
+    // 6. completeWalletMinerPurchase requires authenticated user; succeeds with user and save adapter
     const minerNoOpt = await completeWalletMinerPurchase({
       productName: 'Minero 8.33 TH · 8.33 TH',
       amount: 99.99,
       packageId: 'minerx-02',
       txHash: '0xhash_solo',
       networkName: 'BNB Chain',
+      user: { uid: 'user_solo', email: 'solo@test.com' },
+    }, {
+      saveMinerToFirestore: async () => {},
     })
     assert.ok(minerNoOpt)
     assert.equal(minerNoOpt.resolvedPackageId, 'minerx-02')
@@ -435,8 +446,10 @@ describe('EMPIRICAL CHALLENGER: Stress Harness for Bug 4 & Contract 6', () => {
         txHash: '0xmonthly_tx',
         activeAddress: '0xmonthly_owner',
         networkName: 'BNB Chain',
+        user: { uid: 'user_monthly', email: 'monthly@test.com' },
       },
       {
+        saveMinerToFirestore: async () => {},
         recordPurchaseToAdmin: async (p) => { monthlyAdminRecord = p },
       }
     )
@@ -481,10 +494,10 @@ describe('EMPIRICAL CHALLENGER: Stress Harness for Bug 4 & Contract 6', () => {
     }, {
       recordPurchaseToAdmin: async (p) => { wsAdminRecord = p },
     })
-    assert.equal(wsResult.ok, true)
+    assert.equal(wsResult.ok, false, 'Guest pending order with whitespace packageId fails closed')
     assert.equal(wsAdminRecord, null, 'Guest pending order with whitespace packageId must NEVER call Admin')
 
-    // 9b. Malformed non-string packageId in pending order normalizes to undefined and guest never calls Admin
+    // 9b. Malformed non-string packageId in pending order normalizes to undefined and guest fails closed
     restoreDemoSession({
       balance: 500,
       maintenanceCredit: 0,
@@ -517,7 +530,7 @@ describe('EMPIRICAL CHALLENGER: Stress Harness for Bug 4 & Contract 6', () => {
     }, {
       recordPurchaseToAdmin: async (p) => { numAdminRecord = p },
     })
-    assert.equal(numResult.ok, true)
+    assert.equal(numResult.ok, false, 'Guest pending order with malformed packageId fails closed')
     assert.equal(numAdminRecord, null, 'Guest pending order with malformed packageId must NEVER call Admin')
 
     // 9c. Untrimmed packageId in pending order normalizes to trimmed string
@@ -574,7 +587,7 @@ describe('EMPIRICAL CHALLENGER: Stress Harness for Bug 4 & Contract 6', () => {
       /Canonical wallet miner purchase requires a valid packageId/
     )
 
-    // 9e. Untrimmed packageId in completeWalletMinerPurchase normalizes to trimmed string
+    // 9e. Untrimmed packageId in completeWalletMinerPurchase normalizes to trimmed string for authenticated user
     let trimWalletAdminRecord: any = null
     const trimWalletResult = await completeWalletMinerPurchase({
       productName: 'Minero 10 TH · 10 TH',
@@ -582,7 +595,9 @@ describe('EMPIRICAL CHALLENGER: Stress Harness for Bug 4 & Contract 6', () => {
       packageId: '  minerx-wallet-trim  ',
       txHash: '0xhash_trim_wallet',
       networkName: 'BNB Chain',
+      user: { uid: 'u_trim_wallet', email: 'trim_wallet@example.com' },
     }, {
+      saveMinerToFirestore: async () => {},
       recordPurchaseToAdmin: async (p) => { trimWalletAdminRecord = p },
     })
     assert.ok(trimWalletResult)

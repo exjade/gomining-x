@@ -42,6 +42,7 @@ import {
   createWalletCheckoutState,
   completeLocalMinerPurchase,
   payPendingMinerOrderAndRecordToAdmin,
+  parseMinerPowerTh,
   getPostTxRecovery,
   resolvePendingRecoveryCheckout,
 } from './minerPurchaseFlow'
@@ -60,6 +61,7 @@ import {
   cancelPendingDemoMiner,
   cancelDemoSubscription,
   deferDemoMinerPurchase,
+  prepareWalletMinerPurchase,
   depositMaintenanceToken,
   formatDemoCurrency,
   formatWalletBalance,
@@ -85,17 +87,15 @@ function AppContent() {
   const [purchaseOpen, setPurchaseOpen] = useState(false)
   const [topUpOpen, setTopUpOpen] = useState(false)
   const [minerBuilderOpen, setMinerBuilderOpen] = useState(false)
-  const [walletCheckout, setWalletCheckout] = useState<{ productName: string; amount: number; currency: PaymentCurrency; packageId?: string; purchaseMode?: 'once' | 'monthly'; networkId?: PaymentNetworkId; walletId?: WalletId } | null>(null)
+  const [walletCheckout, setWalletCheckout] = useState<{ productName: string; amount: number; currency: PaymentCurrency; packageId?: string; purchaseMode?: 'once' | 'monthly'; networkId?: PaymentNetworkId; walletId?: WalletId; minerId?: string } | null>(null)
 
   // Blocker 6: Restore pending post-tx recovery modal after application reload
   useEffect(() => {
     if (loading) return
     const recovery = getPostTxRecovery()
     if (!recovery) return
-    if (recovery.originUid) {
-      if (!user || user.uid !== recovery.originUid) {
-        return
-      }
+    if (!user || user.isAnonymous || !recovery.originUid || user.uid !== recovery.originUid) {
+      return
     }
     const target = resolvePendingRecoveryCheckout(recovery, user, loading)
     if (!target) return
@@ -167,6 +167,7 @@ function AppContent() {
     const mobileCheckout = params.get('gmPay') === '1'
     setMinerBuilderOpen(location.pathname === '/home' && params.get('modal') === 'paywall-create' && !mobileCheckout)
     if (!mobileCheckout) return
+    if (loading) return
     const amount = Number(params.get('gmPayAmount'))
     const productName = params.get('gmPayProduct')
     const currency = params.get('gmPayCurrency')
@@ -177,9 +178,30 @@ function AppContent() {
     const purchaseMode = params.get('purchaseMode') === 'monthly' ? 'monthly' : 'once'
     const walletIds: WalletId[] = ['solflare', 'phantom', 'metamask', 'coinbase', 'trustwallet', 'tronlink', 'unisat']
     if (productName && Number.isFinite(amount) && amount > 0 && currency === 'USD') {
-      setWalletCheckout({ productName: productName.slice(0, 120), amount, currency: 'USD', packageId, purchaseMode, networkId: networkId ?? undefined, walletId: walletIds.find((id) => id === requestedWallet) })
+      if (!user || user.isAnonymous) {
+        openAuthModal('register')
+        return
+      }
+      const prep = prepareWalletMinerPurchase({
+        name: productName,
+        powerTh: parseMinerPowerTh(productName, amount),
+        efficiency: 15,
+        price: amount,
+        purchaseMode,
+        packageId,
+      })
+      setWalletCheckout({
+        productName: productName.slice(0, 120),
+        amount,
+        currency: 'USD',
+        packageId,
+        purchaseMode,
+        networkId: networkId ?? undefined,
+        walletId: walletIds.find((id) => id === requestedWallet),
+        minerId: prep.id,
+      })
     }
-  }, [location.pathname, location.search])
+  }, [location.pathname, location.search, user, loading])
 
   if (loading) {
     return <AppRouteSkeleton pathname={location.pathname} search={location.search} />
@@ -438,7 +460,18 @@ function AppContent() {
             <MinerCustomizer />
           ) : screen ? (
           <Page screen={screen} pathname={location.pathname} openAction={openAction} addProduct={addProduct} openMinerBuilder={openMinerBuilder} openTopUp={() => setTopUpOpen(true)} onPayWithWallet={(productName, amount, currency = 'USD') => {
-            setWalletCheckout({ productName, amount, currency })
+            if (!user || user.isAnonymous) {
+              openAuthModal('register')
+              return
+            }
+            const prep = prepareWalletMinerPurchase({
+              name: productName,
+              powerTh: parseMinerPowerTh(productName, amount),
+              efficiency: 15,
+              price: amount,
+              purchaseMode: 'once',
+            })
+            setWalletCheckout({ productName, amount, currency, minerId: prep.id })
           }} sessionEvents={sessionEvents} walletSession={effectiveWalletSession} paymentReceipts={paymentReceipts} />
           ) : (
             <UnknownRoute pathname={location.pathname} />
@@ -470,11 +503,26 @@ function AppContent() {
           setToast("Compra simulada completa; inventario y saldo actualizados")
         }}
       />}
-      {topUpOpen && <DemoTopUpDialog walletSession={effectiveWalletSession} onClose={() => setTopUpOpen(false)} onPayWithWallet={(amount, networkId, walletId) => { setTopUpOpen(false); setWalletCheckout({ productName: 'Recarga de saldo', amount, currency: 'USD', networkId, walletId }) }} onConfirm={(amount) => { addDemoFunds(amount); setTopUpOpen(false) }} />}
+      {topUpOpen && <DemoTopUpDialog walletSession={effectiveWalletSession} onClose={() => setTopUpOpen(false)} onPayWithWallet={(amount, networkId, walletId) => {
+        if (!user || user.isAnonymous) {
+          setTopUpOpen(false)
+          openAuthModal('register')
+          return
+        }
+        setTopUpOpen(false)
+        setWalletCheckout({ productName: 'Recarga de saldo', amount, currency: 'USD', networkId, walletId })
+      }} onConfirm={(amount) => { addDemoFunds(amount); setTopUpOpen(false) }} />}
       {minerBuilderOpen && <MinerBuilderDialog balance={demo.balance} walletSession={effectiveWalletSession} onClose={closeMinerBuilder} onPayWithWallet={(productName, amount, currency, packageId, purchaseMode) => {
+        if (!user || user.isAnonymous) {
+          closeMinerBuilder()
+          setMinerBuilderOpen(false)
+          openAuthModal('register')
+          return
+        }
         closeMinerBuilder()
         setMinerBuilderOpen(false)
-        setWalletCheckout(createWalletCheckoutState(productName, amount, currency, packageId, purchaseMode))
+        const prep = prepareWalletMinerPurchase({ name: productName, powerTh: parseMinerPowerTh(productName, amount), efficiency: 15, price: amount, purchaseMode: purchaseMode ?? 'once', packageId })
+        setWalletCheckout({ ...createWalletCheckoutState(productName, amount, currency, packageId, purchaseMode), minerId: prep.id })
       }} onComplete={async (input) => {
         const canonicalPackageId = input.packageId?.trim()
         const lowerPkg = canonicalPackageId?.toLowerCase() || ''
@@ -495,9 +543,13 @@ function AppContent() {
         }
         return result
       }} onDefer={async (input) => {
+        if (!user || user.isAnonymous) {
+          openAuthModal('register')
+          return { ok: false, message: 'Se requiere una cuenta registrada para guardar pedidos pendientes.' }
+        }
         const canonicalPackageId = input.packageId?.trim()
         const lowerPkg = canonicalPackageId?.toLowerCase() || ''
-        if (user && (!canonicalPackageId || lowerPkg.startsWith('pkg-miner_') || lowerPkg.startsWith('pkg-miner-') || lowerPkg.startsWith('pkg-miner'))) {
+        if (!canonicalPackageId || lowerPkg.startsWith('pkg-miner_') || lowerPkg.startsWith('pkg-miner-') || lowerPkg.startsWith('pkg-miner')) {
           return { ok: false, message: `No se puede registrar el pedido pendiente sin un packageId canónico válido: '${input.packageId}'` }
         }
         const priceUsd = await convertCatalogPriceToUsd(input.price, input.currency)
@@ -507,7 +559,7 @@ function AppContent() {
         setToast("Pedido local registrado; el saldo se descuenta al pagarlo desde Mis mineros")
         return { ok: true, receipt: result.receipt }
       }} />}
-      {walletCheckout && <WalletPaymentCheckout productName={walletCheckout.productName} amount={walletCheckout.amount} currency={walletCheckout.currency} packageId={walletCheckout.packageId} purchaseMode={walletCheckout.purchaseMode} initialNetworkId={walletCheckout.networkId} initialWalletId={walletCheckout.walletId} session={effectiveWalletSession} onClose={closeWalletCheckout} onResumeWalletConnect={(url) => {
+      {walletCheckout && <WalletPaymentCheckout productName={walletCheckout.productName} amount={walletCheckout.amount} currency={walletCheckout.currency} packageId={walletCheckout.packageId} purchaseMode={walletCheckout.purchaseMode} minerId={walletCheckout.minerId} initialNetworkId={walletCheckout.networkId} initialWalletId={walletCheckout.walletId} session={effectiveWalletSession} onClose={closeWalletCheckout} onResumeWalletConnect={(url) => {
         const resume = new URL(url, window.location.origin)
         navigate({ pathname: resume.pathname, search: resume.search, hash: resume.hash }, { replace: true })
       }} onPaid={(receipt: PaymentReceipt) => {
