@@ -1,0 +1,141 @@
+=== SCRUM-222 RUNTIME ADMIN 5174 VERIFICATION (FIREBASE AUTH CONVERGENCE) ===
+[1/7] Initializing in-memory mock catalog store...
+[1b/7] Starting official Firebase Auth Emulator for authentic ID token generation...
+  -> Authentic Firebase ID token issued via Firebase Client Auth & Official Emulator: eyJhbGciOiJub25lIiwidHlwIjoiSldU...
+  -> Firebase Admin Auth verified real ID token successfully for UID: sXuOBmwqCRRo66lXr1ii6hPjLCzL
+[2/7] Starting safe local Express backend on port 3001...
+  -> Express server listening on http://localhost:3001
+[3/7] Starting Admin Vite server on port 5174...
+  -> Vite ready on http://127.0.0.1:5174 (attempt 3)
+[4/7] Launching Headless Chrome with CDP on port 9222...
+  -> Chrome CDP ready on port 9222
+[5/7] Injecting auth credentials and loading Admin Catalog at http://127.0.0.1:5174/?tab=admin_packages...
+  [Poll 1] DOM text: ["Constructor de Paquetes y Máquinas Mineras","MinerX Titan Pro","Preventa Early Alpha","Lanzamiento Especial","Mensual Plus","Archived Legacy Miner","Catálogo Legacy Preservado (Pre-SCRUM-210)"] | URL: http://127.0.0.1:5174/?tab=admin_packages
+  -> Admin Catalog loaded successfully in browser DOM (attempt 1)
+
+[6/7] Running 7 Browser/DOM Acceptance Checks...
+
+--- CHECK 1: Catálogo Admin Carga ---
+Result: {
+  "titles": [
+    "MinerX Titan Pro",
+    "Preventa Early Alpha",
+    "Lanzamiento Especial",
+    "Mensual Plus",
+    "Archived Legacy Miner",
+    "Catálogo Legacy Preservado (Pre-SCRUM-210)"
+  ],
+  "cardCount": 6,
+  "hasMinerX": true,
+  "hasPreventa": true,
+  "hasLanzamiento": true,
+  "hasMensual": true,
+  "hasArchived": true
+}
+
+--- CHECK 2: Filtros (MinerX, Preventa, Lanzamiento, Mensual) ---
+Result: {
+  "hasPreventaBtn": true,
+  "hasLanzamientoBtn": true,
+  "hasMensualBtn": true,
+  "hasMinerxBtn": true,
+  "hasAllBtn": true,
+  "afterPreventaClick": [
+    "Preventa Early Alpha"
+  ],
+  "afterLanzamientoClick": [
+    "Lanzamiento Especial"
+  ],
+  "afterMensualClick": [
+    "Mensual Plus"
+  ],
+  "afterMinerXClick": [
+    "MinerX Titan Pro",
+    "Archived Legacy Miner"
+  ],
+  "afterAllClick": [
+    "MinerX Titan Pro",
+    "Preventa Early Alpha",
+    "Lanzamiento Especial",
+    "Mensual Plus",
+    "Archived Legacy Miner"
+  ]
+}
+
+--- CHECK 3: Legacy Aparece Read-Only ---
+Result: {
+  "hasLegacySection": true,
+  "hasLegacyBadge": true,
+  "hasLegacyCardTitle": true,
+  "hasImmutableNotice": true,
+  "hasNoEditableNotice": true,
+  "hasEditButtonOnLegacy": false
+}
+
+--- CHECK 4: Modal CREATE Abre con Campos Limpios ---
+Result: {
+  "modalOpen": true,
+  "sectionValue": "",
+  "packageTypeValue": "",
+  "sortOrderValue": "",
+  "statusValue": "",
+  "isPublishedValue": ""
+}
+
+--- CHECK 5: Precio Canónico Comunicado como USD ---
+Result: {
+  "priceLabelText": "Precio Comercial (USD) *",
+  "isUsdInLabel": true,
+  "isNotUsdtInLabel": true,
+  "simPreviewText": "sobre $1200 USD",
+  "isUsdInSimPreview": true,
+  "isNotUsdtInSimPreview": true,
+  "cardPrices": [
+    "$1200 USD",
+    "$1800 USD",
+    "$2500 USD",
+    "$800 USD",
+    "$450 USD"
+  ],
+  "cardPriceCount": 5,
+  "allCardsUseUsd": true
+}
+Validation Error Check 5b: {
+  "errorText": "El precio (USD) debe ser un número positivo.",
+  "isUsdInValidationError": true
+}
+
+--- CHECK 6: ARCHIVED Tiene Publish Disabled ---
+Result: {
+  "cardFound": true,
+  "buttonText": "Oculto",
+  "isDisabled": true,
+  "title": "Un paquete archivado no puede ser publicado",
+  "className": "px-2.5 py-1.5 rounded-xl border text-[11px] font-mono font-bold transition-all flex items-center gap-1 opacity-40 cursor-not-allowed border-slate-700 text-slate-500",
+  "hasCursorNotAllowed": true,
+  "hasOpacity40": true
+}
+
+--- CHECK 7: Error Backend Se Muestra y NO Simula Éxito/Cierre ---
+Result: {
+  "modalStillOpen": true,
+  "hasErrorAlert": true,
+  "errorMessage": "Canonical package mutation rejected by backend (400): Validación de paquete fallida: Simulated database integrity constraint violation (backend rejection test)",
+  "containsBackendError": true
+}
+
+--- CHECK 8: 401 Fail-Closed & Session Teardown ---
+  Direct /api/auth/me response status with invalid token: 401
+  Direct /api/catalog/admin response status with invalid token: 401
+  Teardown DOM evaluation: {
+  "interceptedStatus": 401,
+  "tokenCleaned": true,
+  "userCleaned": true,
+  "authUserCleaned": true,
+  "avatarRemoved": true,
+  "isAuthScreen": true
+}
+  -> Check 8 Passed: 401 cleanly purges storage and resets UI to AuthScreen with zero avatar lingering.
+
+[7/7] ALL ACCEPTANCE CHECKS PASSED PERFECTLY (INCLUDING 401 FAIL-CLOSED TEARDOWN)!
+Teardown complete: Chrome, Vite, Express stopped. server/data/users.json remained completely untouched.

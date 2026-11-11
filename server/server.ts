@@ -9,6 +9,7 @@ import { VastInstanceService } from './services/vastInstanceService.js';
 import { StrategyEngine } from './services/strategyEngine.js';
 import { CatalogService, VALID_SECTIONS, VALID_STATUSES, type CatalogSection } from '../src/services/catalogService.js';
 import { FirebaseAdminCatalogStoreAdapter } from './services/firebaseAdminCatalogAdapter.js';
+import { firebaseAdminAuthAdapter } from './services/firebaseAdminAuthAdapter.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -220,6 +221,7 @@ export interface UserAccount {
   email: string;
   passwordHash: string;
   fullName: string;
+  role?: string;
   createdAt: string;
   sessionToken?: string;
   isStoredInFirebaseAuth?: boolean;
@@ -325,21 +327,86 @@ export function getUserIdFromReq(req: express.Request): string {
 }
 
 /**
- * Authoritative session verification for catalog management (SCRUM-212).
- * Strictly requires a valid session token present in users.json.
- * NEVER falls back to default identities such as 'usr_default_admin'.
- * Returns null if token is missing, invalid, or expired.
+ * Determines whether legacy sessionToken authentication or issuance is permitted.
+ * Strict policy (SCRUM-222):
+ * - In NODE_ENV === 'production', reject (fail-closed, evaluated FIRST, regardless of overrides).
+ * - If ALLOW_DEV_LOCAL_SESSION_TOKEN is explicitly 'false', reject.
+ * - If ALLOW_DEV_LOCAL_SESSION_TOKEN is explicitly 'true', allow.
+ * - Only allowed in explicit local dev / test / emulator contexts.
  */
-export function getAuthenticatedUser(req: express.Request): UserAccount | null {
+export function isLocalDevSessionAllowed(): boolean {
+  if (process.env.NODE_ENV === 'production') {
+    return false;
+  }
+  if (process.env.ALLOW_DEV_LOCAL_SESSION_TOKEN === 'false') {
+    return false;
+  }
+  if (process.env.ALLOW_DEV_LOCAL_SESSION_TOKEN === 'true') {
+    return true;
+  }
+  return Boolean(
+    process.env.NODE_ENV === 'test' ||
+    process.env.NODE_ENV === 'development' ||
+    Boolean(process.env.NODE_TEST_CONTEXT) ||
+    process.execArgv.includes('--test') ||
+    process.argv.some((a) => a.includes('test') || a.includes('--test') || a.includes('node:test')) ||
+    Boolean(process.env.FIREBASE_AUTH_EMULATOR_HOST)
+  );
+}
+
+/**
+ * Authoritative session verification for MinerX Admin & catalog management (SCRUM-212 / SCRUM-222).
+ * Verifies Firebase ID token when Firebase Admin Auth is configured and enforces server-side admin allowlist in users.json.
+ * Falls back to local users.json sessionToken ONLY for authorized dev/test environments and approved admin records.
+ * NEVER falls back to default identities such as 'usr_default_admin'.
+ * Returns null if token is missing, invalid, expired, or non-admin (fail-closed).
+ */
+export async function getAuthenticatedUser(req: express.Request): Promise<UserAccount | null> {
   const authHeader = (req.headers && req.headers.authorization) || '';
   let token = authHeader.replace(/^Bearer\s+/i, '').trim();
   if (!token && req.query && typeof req.query.token === 'string') {
     token = req.query.token.trim();
   }
   if (!token) return null;
-  const db = readUsers();
-  const user = db.users.find((u) => Boolean(u.sessionToken) && u.sessionToken === token);
-  return user || null;
+
+  // 1. Verify via Firebase Admin Auth if initialized
+  if (firebaseAdminAuthAdapter.isInitialized()) {
+    try {
+      const decoded = await firebaseAdminAuthAdapter.verifyIdToken(token);
+      if (decoded && decoded.uid) {
+        const db = readUsers();
+        const existing = db.users.find(
+          (u) =>
+            ((u.firebaseAuthUid && u.firebaseAuthUid === decoded.uid) ||
+             (decoded.email && u.email && u.email.toLowerCase() === decoded.email.toLowerCase())) &&
+            u.role?.toLowerCase() === 'admin'
+        );
+        if (existing) {
+          return {
+            ...existing,
+            id: existing.id || decoded.uid,
+            firebaseAuthUid: decoded.uid,
+            email: decoded.email || existing.email,
+          };
+        }
+        // Fail closed: valid Firebase token, but user is NOT on server-side admin allowlist (privilege escalation protection)
+        return null;
+      }
+    } catch {
+      // Verification failed
+    }
+  }
+
+  // 2. Dev / test fallback: exact sessionToken match in users.json for approved admin (strictly gated)
+  if (isLocalDevSessionAllowed()) {
+    const db = readUsers();
+    const localUser = db.users.find(
+      (u) => Boolean(u.sessionToken) && u.sessionToken === token && u.role?.toLowerCase() === 'admin'
+    );
+    return localUser || null;
+  }
+
+  return null;
 }
 
 function getUserDataDir(userId: string): string {
@@ -530,7 +597,7 @@ app.get('/api/catalog/storefront', async (req, res) => {
 // Requires a valid authenticated session. Backing store is commercial_packages via CatalogService.
 // Exposes new canonical catalog (ACTIVE, DRAFT, ARCHIVED) and physically preserved legacy separated.
 app.get('/api/catalog/admin', async (req, res) => {
-  const user = getAuthenticatedUser(req);
+  const user = await getAuthenticatedUser(req);
   if (!user) {
     return res.status(401).json({
       error: 'Unauthorized: valid authenticated session required'
@@ -569,7 +636,7 @@ app.get('/api/catalog/admin', async (req, res) => {
 // Canonical CREATE explicitly requires status and isPublished (no default publishing).
 // Strictly delegates to CatalogService. Backing store is commercial_packages.
 app.post('/api/catalog/packages', async (req, res) => {
-  const user = getAuthenticatedUser(req);
+  const user = await getAuthenticatedUser(req);
   if (!user) {
     return res.status(401).json({
       error: 'Unauthorized: valid authenticated session required for catalog mutations'
@@ -597,7 +664,7 @@ app.post('/api/catalog/packages', async (req, res) => {
 // Strictly delegates to CatalogService. Backing store is commercial_packages.
 // Sets status = ARCHIVED, isPublished = false, preserves document physically.
 app.post('/api/catalog/packages/:id/archive', async (req, res) => {
-  const user = getAuthenticatedUser(req);
+  const user = await getAuthenticatedUser(req);
   if (!user) {
     return res.status(401).json({
       error: 'Unauthorized: valid authenticated session required for catalog archive'
@@ -2175,7 +2242,8 @@ app.post('/api/auth/register', (req, res) => {
     return res.status(409).json({ success: false, message: 'El nombre de usuario o correo electrónico ya está registrado.' });
   }
 
-  const token = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  const allowDevSession = isLocalDevSessionAllowed();
+  const token = allowDevSession ? `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}` : undefined;
   const newUser: UserAccount = {
     id: `usr_${Date.now()}`,
     firebaseAuthUid: `fb_auth_${Date.now()}`,
@@ -2184,7 +2252,7 @@ app.post('/api/auth/register', (req, res) => {
     passwordHash: password, // Store password
     fullName: cleanFullName,
     createdAt: new Date().toISOString(),
-    sessionToken: token,
+    ...(token ? { sessionToken: token } : {}),
     isStoredInFirebaseAuth: true,
     isPublishedToFirestore: true
   };
@@ -2207,7 +2275,7 @@ app.post('/api/auth/register', (req, res) => {
   res.json({
     success: true,
     message: 'Usuario registrado exitosamente y validado con Firebase Authenticator & Firestore',
-    token,
+    ...(token ? { token } : {}),
     user: {
       id: newUser.id,
       firebaseAuthUid: newUser.firebaseAuthUid,
@@ -2223,6 +2291,13 @@ app.post('/api/auth/register', (req, res) => {
 
 // Login
 app.post('/api/auth/login', (req, res) => {
+  if (!isLocalDevSessionAllowed()) {
+    return res.status(403).json({
+      success: false,
+      message: 'Local sessionToken login is disabled in this environment. Use Firebase Authentication.',
+    });
+  }
+
   const { usernameOrEmail, password } = req.body;
   if (!usernameOrEmail || !password) {
     return res.status(400).json({ success: false, message: 'Ingresa tu usuario/correo y contraseña.' });
@@ -2351,18 +2426,9 @@ app.post('/api/auth/audit-repair', (req, res) => {
   });
 });
 
-// Current User Session verification
-app.get('/api/auth/me', (req, res) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.replace('Bearer ', '').trim() || (req.query.token as string);
-
-  if (!token) {
-    return res.status(401).json({ success: false, message: 'No hay token de sesión proporcionado.' });
-  }
-
-  const db = readUsers();
-  const user = db.users.find((u) => u.sessionToken === token);
-
+// Current User Session verification (SCRUM-222)
+app.get('/api/auth/me', async (req, res) => {
+  const user = await getAuthenticatedUser(req);
   if (!user) {
     return res.status(401).json({ success: false, message: 'Sesión expirada o inválida.' });
   }
@@ -2374,6 +2440,7 @@ app.get('/api/auth/me', (req, res) => {
       username: user.username,
       email: user.email,
       fullName: user.fullName,
+      role: user.role || 'admin',
       createdAt: user.createdAt
     }
   });

@@ -1,0 +1,1601 @@
+
+> minerx@1.2.2 test
+> node --import tsx --test --test-concurrency=1 test/unit/profitabilityService.test.ts test/unit/vastOffersService.test.ts test/unit/strategyEngine.test.ts test/unit/miningVisualizationService.test.ts test/unit/commercialPackagesSync.test.ts test/unit/userManagementSync.test.ts test/unit/scrum210SchemaRules.test.ts test/unit/scrum211SafeSeed.test.ts test/unit/scrum212CatalogService.test.ts test/unit/scrum217FirebaseAdminAdapter.test.ts test/unit/scrum217PackageBuilderCanonicalCrud.test.ts test/unit/scrum222FirebaseAuthConvergence.test.ts
+
+TAP version 13
+# Subtest: Commercial Packages & Admin Synchronization Unit Tests
+    # Subtest: exports correct Firestore collection names matching client app expectations
+    ok 1 - exports correct Firestore collection names matching client app expectations
+      ---
+      duration_ms: 1.6356
+      type: 'test'
+      ...
+    # Subtest: provides valid INITIAL_PACKAGES with power, price, and publication fields
+    ok 2 - provides valid INITIAL_PACKAGES with power, price, and publication fields
+      ---
+      duration_ms: 0.3653
+      type: 'test'
+      ...
+    # Subtest: allows saving and updating packages with version increments
+    ok 3 - allows saving and updating packages with version increments
+      ---
+      duration_ms: 7.738
+      type: 'test'
+      ...
+    # Subtest: allows toggling publication status of a package
+    ok 4 - allows toggling publication status of a package
+      ---
+      duration_ms: 1.4702
+      type: 'test'
+      ...
+    # Subtest: allows updating variable commission percentages
+    ok 5 - allows updating variable commission percentages
+      ---
+      duration_ms: 1.1016
+      type: 'test'
+      ...
+    # Subtest: validates and registers mining contracts from client acquisitions
+    ok 6 - validates and registers mining contracts from client acquisitions
+      ---
+      duration_ms: 1.2074
+      type: 'test'
+      ...
+    # Subtest: validates initial package orders and payment structure
+    ok 7 - validates initial package orders and payment structure
+      ---
+      duration_ms: 0.3684
+      type: 'test'
+      ...
+    # Subtest: maps navigation tab URL query parameters and paths correctly using resolveTabFromUrl
+    ok 8 - maps navigation tab URL query parameters and paths correctly using resolveTabFromUrl
+      ---
+      duration_ms: 0.7256
+      type: 'test'
+      ...
+    # Subtest: guarantees VirtualWorkerService generates workers for newly registered client contracts
+    ok 9 - guarantees VirtualWorkerService generates workers for newly registered client contracts
+      ---
+      duration_ms: 2.8988
+      type: 'test'
+      ...
+    # Subtest: provides real-time subscription methods that return clean unsubscribe functions
+    ok 10 - provides real-time subscription methods that return clean unsubscribe functions
+      ---
+      duration_ms: 0.8401
+      type: 'test'
+      ...
+    1..10
+ok 1 - Commercial Packages & Admin Synchronization Unit Tests
+  ---
+  duration_ms: 20.7652
+  type: 'suite'
+  ...
+# Subtest: Mining Visualization Service & Fintech 3D Data Pipeline
+    # Subtest: correctly maps client contract node with unified mathematical formula
+    ok 1 - correctly maps client contract node with unified mathematical formula
+      ---
+      duration_ms: 54.7506
+      type: 'test'
+      ...
+    # Subtest: correctly structures admin infrastructure racks with real worker telemetry
+    ok 2 - correctly structures admin infrastructure racks with real worker telemetry
+      ---
+      duration_ms: 1.1184
+      type: 'test'
+      ...
+    # Subtest: guarantees stable string identifiers and zero arbitrary index binding
+    ok 3 - guarantees stable string identifiers and zero arbitrary index binding
+      ---
+      duration_ms: 2.1045
+      type: 'test'
+      ...
+    1..3
+ok 2 - Mining Visualization Service & Fintech 3D Data Pipeline
+  ---
+  duration_ms: 59.8994
+  type: 'suite'
+  ...
+# Subtest: Profitability Domain Service Tests
+    # Subtest: correctly converts hashrate units to TH/s
+    ok 1 - correctly converts hashrate units to TH/s
+      ---
+      duration_ms: 1.4793
+      type: 'test'
+      ...
+    # Subtest: includes verified benchmarks with proper trust metadata and source URLs
+    ok 2 - includes verified benchmarks with proper trust metadata and source URLs
+      ---
+      duration_ms: 0.3492
+      type: 'test'
+      ...
+    # Subtest: calculates gross revenue, costs, net profit and margin accurately for a single GPU
+    ok 3 - calculates gross revenue, costs, net profit and margin accurately for a single GPU
+      ---
+      duration_ms: 2.321
+      type: 'test'
+      ...
+    # Subtest: includes storage cost once per instance and compute cost per GPU count
+    ok 4 - includes storage cost once per instance and compute cost per GPU count
+      ---
+      duration_ms: 0.5089
+      type: 'test'
+      ...
+    # Subtest: does not apply double penalty when calculating effective hashrate with uptime and rejected shares
+    ok 5 - does not apply double penalty when calculating effective hashrate with uptime and rejected shares
+      ---
+      duration_ms: 0.4717
+      type: 'test'
+      ...
+    # Subtest: handles zero or missing reward rate gracefully without throwing and marks break-even as Infinity
+    ok 6 - handles zero or missing reward rate gracefully without throwing and marks break-even as Infinity
+      ---
+      duration_ms: 0.3456
+      type: 'test'
+      ...
+    # Subtest: generates three stress scenarios (conservative, base, optimistic)
+    ok 7 - generates three stress scenarios (conservative, base, optimistic)
+      ---
+      duration_ms: 0.4069
+      type: 'test'
+      ...
+    1..7
+ok 3 - Profitability Domain Service Tests
+  ---
+  duration_ms: 7.7492
+  type: 'suite'
+  ...
+# Subtest: SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Tests (Iteration 2)
+    # Subtest: exports correct canonical collection name and excludes campaigns from scope
+    ok 1 - exports correct canonical collection name and excludes campaigns from scope
+      ---
+      duration_ms: 1.8232
+      type: 'test'
+      ...
+    # Subtest: deserializes raw Firestore document strictly with SCRUM-210 authorized fields
+    ok 2 - deserializes raw Firestore document strictly with SCRUM-210 authorized fields
+      ---
+      duration_ms: 0.6776
+      type: 'test'
+      ...
+    # Subtest: verifies cadence normalization and packageId alias
+    ok 3 - verifies cadence normalization and packageId alias
+      ---
+      duration_ms: 1.9362
+      type: 'test'
+      ...
+    # Subtest: maintains backwards compatibility with legacy documents lacking additive fields
+    ok 4 - maintains backwards compatibility with legacy documents lacking additive fields
+      ---
+      duration_ms: 0.3111
+      type: 'test'
+      ...
+    # Subtest: validates money integrity: exact integer cents with no floating point double precision loss
+    ok 5 - validates money integrity: exact integer cents with no floating point double precision loss
+      ---
+      duration_ms: 0.7396
+      type: 'test'
+      ...
+    # Subtest: validates package schema rules via validatePackageSchema
+    ok 6 - validates package schema rules via validatePackageSchema
+      ---
+      duration_ms: 0.6979
+      type: 'test'
+      ...
+    # Subtest: guarantees purchase traceability: snapshot decouples purchased instance from future catalog edits (minerId != packageId)
+    ok 7 - guarantees purchase traceability: snapshot decouples purchased instance from future catalog edits (minerId != packageId)
+      ---
+      duration_ms: 0.4434
+      type: 'test'
+      ...
+    # Subtest: verifies safe archiving contract: status ARCHIVED and isPublished false preserves package document
+    ok 8 - verifies safe archiving contract: status ARCHIVED and isPublished false preserves package document
+      ---
+      duration_ms: 7.8607
+      type: 'test'
+      ...
+    # Subtest: verifies firestore.indexes.json includes composite indexes for commercial_packages and NO campaigns/storefront duplicates
+    ok 9 - verifies firestore.indexes.json includes composite indexes for commercial_packages and NO campaigns/storefront duplicates
+      ---
+      duration_ms: 1.858
+      type: 'test'
+      ...
+    # Subtest: verifies firestore.rules source-contract: strictly forbids write on miners, requires explicit read/create/update and delete:false
+    ok 10 - verifies firestore.rules source-contract: strictly forbids write on miners, requires explicit read/create/update and delete:false
+      ---
+      duration_ms: 2.0842
+      type: 'test'
+      ...
+    # Subtest: verifies that the rule-contract validator correctly flags and rejects the Iteration 1 bug pattern
+    ok 11 - verifies that the rule-contract validator correctly flags and rejects the Iteration 1 bug pattern
+      ---
+      duration_ms: 0.2468
+      type: 'test'
+      ...
+    # Subtest: handles null/undefined inputs and enforces integer cents on boundary functions
+    ok 12 - handles null/undefined inputs and enforces integer cents on boundary functions
+      ---
+      duration_ms: 0.378
+      type: 'test'
+      ...
+    # Subtest: verifies PurchasedMinerInstance supports client StoredMiner interoperability
+    ok 13 - verifies PurchasedMinerInstance supports client StoredMiner interoperability
+      ---
+      duration_ms: 0.2374
+      type: 'test'
+      ...
+    1..13
+ok 4 - SCRUM-210: Firestore Schema, Indexes, Security Rules & Traceability Tests (Iteration 2)
+  ---
+  duration_ms: 22.2127
+  type: 'suite'
+  ...
+# ======================================================================
+#   POUW-1.4 / SCRUM-211 — SCRIPT DE SIEMBRA SEGURO DE PAQUETES
+#   Modo: ⚠️  APPLY (ESCRITURA REAL EN EMULADOR)
+# ======================================================================
+# ❌ ERROR DE SEGURIDAD OBLIGATORIO (SCRUM-211):
+#    El PO y las reglas de seguridad prohíben estrictamente escrituras remotas en SCRUM-211.
+#    No se detectó la variable de entorno FIRESTORE_EMULATOR_HOST.
+#    --apply SOLO puede funcionar cuando existe FIRESTORE_EMULATOR_HOST.
+#    Abortando ANTES de cualquier intento de escritura.
+# ❌ ERROR DE SEGURIDAD (SCRUM-211):
+#    --allow-remote-staging y ALLOW_REMOTE_SEED han sido deshabilitados por decisión del PO.
+#    En SCRUM-211 las escrituras remotas están estrictamente bloqueadas.
+#    --apply opera ÚNICAMENTE cuando FIRESTORE_EMULATOR_HOST está configurado.
+# ❌ ERROR DE SEGURIDAD (SCRUM-211):
+#    --allow-remote-staging y ALLOW_REMOTE_SEED han sido deshabilitados por decisión del PO.
+#    En SCRUM-211 las escrituras remotas están estrictamente bloqueadas.
+#    --apply opera ÚNICAMENTE cuando FIRESTORE_EMULATOR_HOST está configurado.
+# ❌ ERROR DE SEGURIDAD (SCRUM-211):
+#    --allow-remote-staging y ALLOW_REMOTE_SEED han sido deshabilitados por decisión del PO.
+#    En SCRUM-211 las escrituras remotas están estrictamente bloqueadas.
+#    --apply opera ÚNICAMENTE cuando FIRESTORE_EMULATOR_HOST está configurado.
+# [CommercialPackageService] seedInitialPackagesToFirestore is deprecated and neutralized per SCRUM-211. Seeding is only authorized via safeSeedPackages CLI with explicit --apply.
+# Subtest: SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Iteration 3)
+    # Subtest: verifies seed-manifest.json matches exact 30-package structure with provenance metadata
+    ok 1 - verifies seed-manifest.json matches exact 30-package structure with provenance metadata
+      ---
+      duration_ms: 3.4671
+      type: 'test'
+      ...
+    # Subtest: verifies MinerX matches exact baseline Client plans from main@99e0461 and excludes unauthorized docs
+    ok 2 - verifies MinerX matches exact baseline Client plans from main@99e0461 and excludes unauthorized docs
+      ---
+      duration_ms: 0.5048
+      type: 'test'
+      ...
+    # Subtest: guarantees Custom row is strictly labeled "Custom" (not "Personalizado") in name and displayName
+    ok 3 - guarantees Custom row is strictly labeled "Custom" (not "Personalizado") in name and displayName
+      ---
+      duration_ms: 1.5375
+      type: 'test'
+      ...
+    # Subtest: guarantees displayName and name match exact Client constants with zero invented prefixes or marketing descriptions
+    ok 4 - guarantees displayName and name match exact Client constants with zero invented prefixes or marketing descriptions
+      ---
+      duration_ms: 2.0379
+      type: 'test'
+      ...
+    # Subtest: guarantees visible currency is USD for all 30 catalog packages including MinerX 1–5
+    ok 5 - guarantees visible currency is USD for all 30 catalog packages including MinerX 1–5
+      ---
+      duration_ms: 0.339
+      type: 'test'
+      ...
+    # Subtest: guarantees safeSeedPackages CLI strictly blocks remote apply and exits with code != 0 without emulator
+    ok 6 - guarantees safeSeedPackages CLI strictly blocks remote apply and exits with code != 0 without emulator
+      ---
+      duration_ms: 4.8095
+      type: 'test'
+      ...
+    # Subtest: guarantees DefaultFirestorePackageStore rejects setPackageDoc without FIRESTORE_EMULATOR_HOST
+    ok 7 - guarantees DefaultFirestorePackageStore rejects setPackageDoc without FIRESTORE_EMULATOR_HOST
+      ---
+      duration_ms: 7.3034
+      type: 'test'
+      ...
+    # Subtest: guarantees SafeSeedService rejects apply=true without storeAdapter when emulator is missing
+    ok 8 - guarantees SafeSeedService rejects apply=true without storeAdapter when emulator is missing
+      ---
+      duration_ms: 1.141
+      type: 'test'
+      ...
+    # Subtest: validates every manifest package against SCRUM-210 schema contract
+    ok 9 - validates every manifest package against SCRUM-210 schema contract
+      ---
+      duration_ms: 1.2034
+      type: 'test'
+      ...
+    # Subtest: executes safe seed in dry-run mode by default, writing 0 documents to Firestore
+    ok 10 - executes safe seed in dry-run mode by default, writing 0 documents to Firestore
+      ---
+      duration_ms: 1.2316
+      type: 'test'
+      ...
+    # Subtest: executes safe seed with apply=true, creating 29 documents without materializing priceUsdCents
+    ok 11 - executes safe seed with apply=true, creating 29 documents without materializing priceUsdCents
+      ---
+      duration_ms: 1.6441
+      type: 'test'
+      ...
+    # Subtest: guarantees idempotency: second apply run creates 0 documents and skips all existing documents
+    ok 12 - guarantees idempotency: second apply run creates 0 documents and skips all existing documents
+      ---
+      duration_ms: 1.1202
+      type: 'test'
+      ...
+    # Subtest: preserves legacy documents (pkg-miner-2 / "Minero 2 Standard") intact with zero overwrites or deletes
+    ok 13 - preserves legacy documents (pkg-miner-2 / "Minero 2 Standard") intact with zero overwrites or deletes
+      ---
+      duration_ms: 1.0063
+      type: 'test'
+      ...
+    # Subtest: guarantees fetchFirestorePackages() on empty Firestore does NOT write or call auto-seed
+    ok 14 - guarantees fetchFirestorePackages() on empty Firestore does NOT write or call auto-seed
+      ---
+      duration_ms: 6.0509
+      type: 'test'
+      ...
+    # Subtest: guarantees seedInitialPackagesToFirestore() is neutralized and returns 0 without writing
+    ok 15 - guarantees seedInitialPackagesToFirestore() is neutralized and returns 0 without writing
+      ---
+      duration_ms: 1.2901
+      type: 'test'
+      ...
+    # Subtest: blocks packages with invalid schema and safely skips frontendKey collisions
+    ok 16 - blocks packages with invalid schema and safely skips frontendKey collisions
+      ---
+      duration_ms: 0.5453
+      type: 'test'
+      ...
+    # Subtest: instantiates DefaultFirestorePackageStore safely with on-demand fallback initialization
+    ok 17 - instantiates DefaultFirestorePackageStore safely with on-demand fallback initialization
+      ---
+      duration_ms: 0.4673
+      type: 'test'
+      ...
+    # Subtest: DefaultFirestorePackageStore rejects setPackageDoc with explicit error when firestore is null
+    ok 18 - DefaultFirestorePackageStore rejects setPackageDoc with explicit error when firestore is null
+      ---
+      duration_ms: 1.8307
+      type: 'test'
+      ...
+    # Subtest: guarantees description is completely omitted when null/empty and NEVER materialized as empty string ""
+    ok 19 - guarantees description is completely omitted when null/empty and NEVER materialized as empty string ""
+      ---
+      duration_ms: 1.6544
+      type: 'test'
+      ...
+    # Subtest: guarantees variablePct, commissionPct, and durationDays are strictly omitted without authorized evidence
+    ok 20 - guarantees variablePct, commissionPct, and durationDays are strictly omitted without authorized evidence
+      ---
+      duration_ms: 1.584
+      type: 'test'
+      ...
+    1..20
+ok 5 - SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Iteration 3)
+  ---
+  duration_ms: 44.3548
+  type: 'suite'
+  ...
+# Subtest: SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests
+    # Subtest: 1. lectura minerx solo devuelve minerx
+    ok 1 - 1. lectura minerx solo devuelve minerx
+      ---
+      duration_ms: 2.733
+      type: 'test'
+      ...
+    # Subtest: 2. lectura preventa solo devuelve preventa
+    ok 2 - 2. lectura preventa solo devuelve preventa
+      ---
+      duration_ms: 0.3956
+      type: 'test'
+      ...
+    # Subtest: 3. lectura lanzamiento ordenada por sortOrder
+    ok 3 - 3. lectura lanzamiento ordenada por sortOrder
+      ---
+      duration_ms: 0.3434
+      type: 'test'
+      ...
+    # Subtest: 4. lectura mensual solo publicada/ACTIVE
+    ok 4 - 4. lectura mensual solo publicada/ACTIVE
+      ---
+      duration_ms: 0.3438
+      type: 'test'
+      ...
+    # Subtest: 5. legacy sin section queda fuera del storefront
+    ok 5 - 5. legacy sin section queda fuera del storefront
+      ---
+      duration_ms: 0.4503
+      type: 'test'
+      ...
+    # Subtest: 6. ARCHIVED queda fuera del storefront
+    ok 6 - 6. ARCHIVED queda fuera del storefront
+      ---
+      duration_ms: 0.3051
+      type: 'test'
+      ...
+    # Subtest: 7. isPublished=false queda fuera del storefront
+    ok 7 - 7. isPublished=false queda fuera del storefront
+      ---
+      duration_ms: 0.489
+      type: 'test'
+      ...
+    # Subtest: 8. DRAFT queda fuera del storefront
+    ok 8 - 8. DRAFT queda fuera del storefront
+      ---
+      duration_ms: 0.4875
+      type: 'test'
+      ...
+    # Subtest: 9. Admin sí puede listar catálogo canónico no publicado (DRAFT, ARCHIVED, isPublished=false)
+    ok 9 - 9. Admin sí puede listar catálogo canónico no publicado (DRAFT, ARCHIVED, isPublished=false)
+      ---
+      duration_ms: 0.7925
+      type: 'test'
+      ...
+    # Subtest: 10. legacy queda identificado por separado en lectura administrativa
+    ok 10 - 10. legacy queda identificado por separado en lectura administrativa
+      ---
+      duration_ms: 0.7865
+      type: 'test'
+      ...
+    # Subtest: 11. lectura no hace writes
+    ok 11 - 11. lectura no hace writes
+      ---
+      duration_ms: 0.4402
+      type: 'test'
+      ...
+    # Subtest: 12. no auto-seed on empty catalog read
+    ok 12 - 12. no auto-seed on empty catalog read
+      ---
+      duration_ms: 1.3077
+      type: 'test'
+      ...
+    # Subtest: 13. validación rechaza powerTh <= 0
+    ok 13 - 13. validación rechaza powerTh <= 0
+      ---
+      duration_ms: 0.7153
+      type: 'test'
+      ...
+    # Subtest: 14. validación rechaza precio <= 0
+    ok 14 - 14. validación rechaza precio <= 0
+      ---
+      duration_ms: 0.3088
+      type: 'test'
+      ...
+    # Subtest: 15. soldUnits > limitedUnits rechazado
+    ok 15 - 15. soldUnits > limitedUnits rechazado
+      ---
+      duration_ms: 0.5206
+      type: 'test'
+      ...
+    # Subtest: 16. update incrementa version y actualiza updatedAt
+    ok 16 - 16. update incrementa version y actualiza updatedAt
+      ---
+      duration_ms: 2.4062
+      type: 'test'
+      ...
+    # Subtest: 17. archive no elimina documento físicamente, preserva packageId y marca ARCHIVED / isPublished=false
+    ok 17 - 17. archive no elimina documento físicamente, preserva packageId y marca ARCHIVED / isPublished=false
+      ---
+      duration_ms: 0.4721
+      type: 'test'
+      ...
+    # Subtest: 18. no finalPriceUsdCents: rejected by validation as out of scope for SCRUM-212 (belongs to SCRUM-213)
+    ok 18 - 18. no finalPriceUsdCents: rejected by validation as out of scope for SCRUM-212 (belongs to SCRUM-213)
+      ---
+      duration_ms: 0.632
+      type: 'test'
+      ...
+    # Subtest: 19. no campaigns/discounts: rejected by validation as out of scope for SCRUM-212 (belongs to SCRUM-213)
+    ok 19 - 19. no campaigns/discounts: rejected by validation as out of scope for SCRUM-212 (belongs to SCRUM-213)
+      ---
+      duration_ms: 0.6663
+      type: 'test'
+      ...
+    # Subtest: 20. no Client changes and no synthetic credentials invented when updatedBy is not supplied
+    ok 20 - 20. no Client changes and no synthetic credentials invented when updatedBy is not supplied
+      ---
+      duration_ms: 0.3514
+      type: 'test'
+      ...
+    # Subtest: protects physically preserved legacy packages from being overwritten or mutated
+    ok 21 - protects physically preserved legacy packages from being overwritten or mutated
+      ---
+      duration_ms: 1.0413
+      type: 'test'
+      ...
+    # Subtest: enforces packageId != minerId (rejects minerId on commercial package mutations)
+    ok 22 - enforces packageId != minerId (rejects minerId on commercial package mutations)
+      ---
+      duration_ms: 0.2643
+      type: 'test'
+      ...
+    # Subtest: enforces that id and packageId must match if both are supplied
+    ok 23 - enforces that id and packageId must match if both are supplied
+      ---
+      duration_ms: 0.2339
+      type: 'test'
+      ...
+    # Subtest: enforces visible catalog currency strictly USD
+    ok 24 - enforces visible catalog currency strictly USD
+      ---
+      duration_ms: 0.2448
+      type: 'test'
+      ...
+    # Subtest: rejects synthetic credentials admin_sys and admin@minerx.cloud as authoritative identities
+    ok 25 - rejects synthetic credentials admin_sys and admin@minerx.cloud as authoritative identities
+      ---
+      duration_ms: 0.2771
+      type: 'test'
+      ...
+    # Subtest: CommercialPackageService validates mutations, rejects creates without explicit status/isPublished, and injects zero defaults
+    ok 26 - CommercialPackageService validates mutations, rejects creates without explicit status/isPublished, and injects zero defaults
+      ---
+      duration_ms: 9.5713
+      type: 'test'
+      ...
+    # Subtest: FirestoreCatalogStoreAdapter handles null firestore gracefully and supports constructor injection
+    ok 27 - FirestoreCatalogStoreAdapter handles null firestore gracefully and supports constructor injection
+      ---
+      duration_ms: 52.5625
+      type: 'test'
+      ...
+    # Subtest: CommercialPackageService provides clean getStorefrontPackages filtering without legacy fallback
+    ok 28 - CommercialPackageService provides clean getStorefrontPackages filtering without legacy fallback
+      ---
+      duration_ms: 0.4836
+      type: 'test'
+      ...
+    # Subtest: enforces packageId stability on mutations
+    ok 29 - enforces packageId stability on mutations
+      ---
+      duration_ms: 0.2193
+      type: 'test'
+      ...
+    # Subtest: Blocker 3: No Default Publishing on CREATE
+        # Subtest: validatePackageMutation rejects CREATE when status is missing
+        ok 1 - validatePackageMutation rejects CREATE when status is missing
+          ---
+          duration_ms: 0.3745
+          type: 'test'
+          ...
+        # Subtest: validatePackageMutation rejects CREATE when isPublished is missing
+        ok 2 - validatePackageMutation rejects CREATE when isPublished is missing
+          ---
+          duration_ms: 0.2275
+          type: 'test'
+          ...
+        # Subtest: validatePackageMutation rejects CREATE when status is invalid
+        ok 3 - validatePackageMutation rejects CREATE when status is invalid
+          ---
+          duration_ms: 0.241
+          type: 'test'
+          ...
+        # Subtest: validatePackageMutation rejects CREATE when isPublished is non-boolean
+        ok 4 - validatePackageMutation rejects CREATE when isPublished is non-boolean
+          ---
+          duration_ms: 0.2081
+          type: 'test'
+          ...
+        # Subtest: savePackage throws on CREATE when status or isPublished are missing (never defaults to ACTIVE or true)
+        ok 5 - savePackage throws on CREATE when status or isPublished are missing (never defaults to ACTIVE or true)
+          ---
+          duration_ms: 0.5236
+          type: 'test'
+          ...
+        # Subtest: savePackage creates new package with explicit status=DRAFT and isPublished=false without injecting ACTIVE or true
+        ok 6 - savePackage creates new package with explicit status=DRAFT and isPublished=false without injecting ACTIVE or true
+          ---
+          duration_ms: 0.3366
+          type: 'test'
+          ...
+        # Subtest: savePackage on UPDATE preserves existing status and isPublished when omitted in update payload
+        ok 7 - savePackage on UPDATE preserves existing status and isPublished when omitted in update payload
+          ---
+          duration_ms: 0.2678
+          type: 'test'
+          ...
+        1..7
+    ok 30 - Blocker 3: No Default Publishing on CREATE
+      ---
+      duration_ms: 2.6954
+      type: 'suite'
+      ...
+    # Subtest: Blocker 2: Mutations Require Real Authenticated Identity
+        # Subtest: savePackage strictly derives updatedBy from options and ignores payload updatedBy
+        ok 1 - savePackage strictly derives updatedBy from options and ignores payload updatedBy
+          ---
+          duration_ms: 0.5015
+          type: 'test'
+          ...
+        # Subtest: savePackage strips updatedBy if no authoritative session identity is supplied
+        ok 2 - savePackage strips updatedBy if no authoritative session identity is supplied
+          ---
+          duration_ms: 0.333
+          type: 'test'
+          ...
+        # Subtest: archivePackage strictly sets updatedBy from options and rejects synthetic admin credentials
+        ok 3 - archivePackage strictly sets updatedBy from options and rejects synthetic admin credentials
+          ---
+          duration_ms: 0.2785
+          type: 'test'
+          ...
+        1..3
+    ok 31 - Blocker 2: Mutations Require Real Authenticated Identity
+      ---
+      duration_ms: 1.3456
+      type: 'suite'
+      ...
+    # Subtest: Blocker 1 & Endpoints: Backing Store Isolation & Express Integration
+        # Subtest: verifies getAuthenticatedUser strictly requires real session token and rejects usr_default_admin fallback
+        ok 1 - verifies getAuthenticatedUser strictly requires real session token and rejects usr_default_admin fallback
+          ---
+          duration_ms: 3057.7701
+          type: 'test'
+          ...
+        # Subtest: end-to-end HTTP tests verify /api/catalog/* routes delegate to CatalogService and enforce session auth
+        ok 2 - end-to-end HTTP tests verify /api/catalog/* routes delegate to CatalogService and enforce session auth
+          ---
+          duration_ms: 262.9102
+          type: 'test'
+          ...
+        1..2
+    ok 32 - Blocker 1 & Endpoints: Backing Store Isolation & Express Integration
+      ---
+      duration_ms: 3321.1174
+      type: 'suite'
+      ...
+    # Subtest: Iteration 3 Architectural Blockers & Cloud Classification
+        # Subtest: verifies INITIAL_PACKAGES are explicitly tagged and isolated as LEGACY
+        ok 1 - verifies INITIAL_PACKAGES are explicitly tagged and isolated as LEGACY
+          ---
+          duration_ms: 0.491
+          type: 'test'
+          ...
+        # Subtest: verifies CommercialPackageService.saveCanonicalPackage requires valid canonical contract
+        ok 2 - verifies CommercialPackageService.saveCanonicalPackage requires valid canonical contract
+          ---
+          duration_ms: 2.0487
+          type: 'test'
+          ...
+        # Subtest: verifies validatePackageMutation error message specifies VALID_STATUSES on create with invalid status
+        ok 3 - verifies validatePackageMutation error message specifies VALID_STATUSES on create with invalid status
+          ---
+          duration_ms: 0.2567
+          type: 'test'
+          ...
+        # Subtest: verifies saveCanonicalPackage strictly rejects on NETWORK_ERROR without writing to localStorage
+        ok 4 - verifies saveCanonicalPackage strictly rejects on NETWORK_ERROR without writing to localStorage
+          ---
+          duration_ms: 1.0115
+          type: 'test'
+          ...
+        # Subtest: verifies saveCanonicalPackage strictly rejects on BACKEND_NOT_FOUND_OR_BLAZE_REQUIRED without writing to localStorage
+        ok 5 - verifies saveCanonicalPackage strictly rejects on BACKEND_NOT_FOUND_OR_BLAZE_REQUIRED without writing to localStorage
+          ---
+          duration_ms: 1.031
+          type: 'test'
+          ...
+        # Subtest: verifies saveCanonicalPackage strictly rejects on backend HTTP 401 without bypassing to localStorage
+        ok 6 - verifies saveCanonicalPackage strictly rejects on backend HTTP 401 without bypassing to localStorage
+          ---
+          duration_ms: 0.8004
+          type: 'test'
+          ...
+        # Subtest: verifies saveCanonicalPackage strictly rejects on backend HTTP 400 without writing to localStorage
+        ok 7 - verifies saveCanonicalPackage strictly rejects on backend HTTP 400 without writing to localStorage
+          ---
+          duration_ms: 0.9208
+          type: 'test'
+          ...
+        # Subtest: verifies saveCanonicalPackage updates localStorage ONLY after backend confirms HTTP 2xx
+        ok 8 - verifies saveCanonicalPackage updates localStorage ONLY after backend confirms HTTP 2xx
+          ---
+          duration_ms: 1.7792
+          type: 'test'
+          ...
+        # Subtest: verifies saveCanonicalPackage strictly rejects on backend HTTP 500 without writing to localStorage
+        ok 9 - verifies saveCanonicalPackage strictly rejects on backend HTTP 500 without writing to localStorage
+          ---
+          duration_ms: 0.9268
+          type: 'test'
+          ...
+        # Subtest: verifies saveCanonicalPackage strictly rejects when backend returns HTTP 200 with success: false
+        ok 10 - verifies saveCanonicalPackage strictly rejects when backend returns HTTP 200 with success: false
+          ---
+          duration_ms: 0.9263
+          type: 'test'
+          ...
+        # Subtest: verifies saveCanonicalPackage update matches existing package by packageId without duplicating in localStorage
+        ok 11 - verifies saveCanonicalPackage update matches existing package by packageId without duplicating in localStorage
+          ---
+          duration_ms: 1.055
+          type: 'test'
+          ...
+        # Subtest: verifies FirestoreCatalogStoreAdapter strictly enforces emulator guard for remote Node writes
+        ok 12 - verifies FirestoreCatalogStoreAdapter strictly enforces emulator guard for remote Node writes
+          ---
+          duration_ms: 18.8187
+          type: 'test'
+          ...
+        1..12
+    ok 33 - Iteration 3 Architectural Blockers & Cloud Classification
+      ---
+      duration_ms: 31.0297
+      type: 'suite'
+      ...
+    1..33
+ok 6 - SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests
+  ---
+  duration_ms: 3440.5696
+  type: 'suite'
+  ...
+# Subtest: SCRUM-217 / POUW-1.7: Firebase Admin SDK Backend Auth Prerequisite
+    # Subtest: 1. Service Account Protection & Git Rules
+        # Subtest: service account file is NOT copied into the task worktree
+        ok 1 - service account file is NOT copied into the task worktree
+          ---
+          duration_ms: 1.4071
+          type: 'test'
+          ...
+        # Subtest: service account file is NOT tracked by Git anywhere in the repository
+        ok 2 - service account file is NOT tracked by Git anywhere in the repository
+          ---
+          duration_ms: 60.8697
+          type: 'test'
+          ...
+        # Subtest: .gitignore in worktree includes persistent protection for firebase admin credentials
+        ok 3 - .gitignore in worktree includes persistent protection for firebase admin credentials
+          ---
+          duration_ms: 1.5523
+          type: 'test'
+          ...
+        # Subtest: root .git/info/exclude protects the service account JSON pattern
+        ok 4 - root .git/info/exclude protects the service account JSON pattern
+          ---
+          duration_ms: 1.1628
+          type: 'test'
+          ...
+        1..4
+    ok 1 - 1. Service Account Protection & Git Rules
+      ---
+      duration_ms: 66.4745
+      type: 'suite'
+      ...
+    # Subtest: 2. FirebaseAdminCatalogStoreAdapter Initialization & Runtime Boundaries
+        # Subtest: fails safely and cleanly when GOOGLE_APPLICATION_CREDENTIALS is not configured and no emulator
+        ok 1 - fails safely and cleanly when GOOGLE_APPLICATION_CREDENTIALS is not configured and no emulator
+          ---
+          duration_ms: 2.3703
+          type: 'test'
+          ...
+        # Subtest: fails safely when GOOGLE_APPLICATION_CREDENTIALS points to a non-existent file
+        ok 2 - fails safely when GOOGLE_APPLICATION_CREDENTIALS points to a non-existent file
+          ---
+          duration_ms: 0.4817
+          type: 'test'
+          ...
+        # Subtest: fails safely and cleanly when initialized with explicit { firestore: null }
+        ok 3 - fails safely and cleanly when initialized with explicit { firestore: null }
+          ---
+          duration_ms: 0.3829
+          type: 'test'
+          ...
+        # Subtest: initializes when FIRESTORE_EMULATOR_HOST is configured
+        ok 4 - initializes when FIRESTORE_EMULATOR_HOST is configured
+          ---
+          duration_ms: 5.1233
+          type: 'test'
+          ...
+        # Subtest: Vite / Client build does not bundle or expose Firebase Admin SDK
+        ok 5 - Vite / Client build does not bundle or expose Firebase Admin SDK
+          ---
+          duration_ms: 13.4705
+          type: 'test'
+          ...
+        1..5
+    ok 2 - 2. FirebaseAdminCatalogStoreAdapter Initialization & Runtime Boundaries
+      ---
+      duration_ms: 22.7153
+      type: 'suite'
+      ...
+    # Subtest: 3. Mocked Read & Catalog Operations (Zero Production Dependency)
+        # Subtest: getPackages returns empty array when firestore collection is empty
+        ok 1 - getPackages returns empty array when firestore collection is empty
+          ---
+          duration_ms: 0.7791
+          type: 'test'
+          ...
+        # Subtest: getPackages maps documents correctly from firestore collection
+        ok 2 - getPackages maps documents correctly from firestore collection
+          ---
+          duration_ms: 2.424
+          type: 'test'
+          ...
+        # Subtest: getPackageById fetches specific document or returns null if not found
+        ok 3 - getPackageById fetches specific document or returns null if not found
+          ---
+          duration_ms: 0.7548
+          type: 'test'
+          ...
+        # Subtest: getPackageById returns null safely for empty string, whitespace, null, or undefined without throwing
+        ok 4 - getPackageById returns null safely for empty string, whitespace, null, or undefined without throwing
+          ---
+          duration_ms: 0.2829
+          type: 'test'
+          ...
+        # Subtest: CatalogService with FirebaseAdminCatalogStoreAdapter executes admin and storefront reads correctly
+        ok 5 - CatalogService with FirebaseAdminCatalogStoreAdapter executes admin and storefront reads correctly
+          ---
+          duration_ms: 1.5358
+          type: 'test'
+          ...
+        1..5
+    ok 3 - 3. Mocked Read & Catalog Operations (Zero Production Dependency)
+      ---
+      duration_ms: 6.2057
+      type: 'suite'
+      ...
+    # Subtest: 4. Mocked Mutation Verification (Zero Production Mutation)
+        # Subtest: FirebaseAdminCatalogStoreAdapter.savePackage correctly calls Firestore doc().set({ merge: true }) on mock
+        ok 1 - FirebaseAdminCatalogStoreAdapter.savePackage correctly calls Firestore doc().set({ merge: true }) on mock
+          ---
+          duration_ms: 0.8458
+          type: 'test'
+          ...
+        # Subtest: savePackage sanitizes and strips undefined fields preventing Firestore serialization rejection
+        ok 2 - savePackage sanitizes and strips undefined fields preventing Firestore serialization rejection
+          ---
+          duration_ms: 0.7454
+          type: 'test'
+          ...
+        # Subtest: savePackage throws descriptive error when id is missing or empty
+        ok 3 - savePackage throws descriptive error when id is missing or empty
+          ---
+          duration_ms: 0.5186
+          type: 'test'
+          ...
+        # Subtest: CatalogService handles CREATE, UPDATE, and ARCHIVE via FirebaseAdminCatalogStoreAdapter without hitting production
+        ok 4 - CatalogService handles CREATE, UPDATE, and ARCHIVE via FirebaseAdminCatalogStoreAdapter without hitting production
+          ---
+          duration_ms: 1.9569
+          type: 'test'
+          ...
+        1..4
+    ok 4 - 4. Mocked Mutation Verification (Zero Production Mutation)
+      ---
+      duration_ms: 4.3648
+      type: 'suite'
+      ...
+    # Subtest: 5. Preservation of Existing Security Guards and Architecture
+        # Subtest: preserves FirestoreCatalogStoreAdapter fail-closed guard for client SDK writes from Node
+        ok 1 - preserves FirestoreCatalogStoreAdapter fail-closed guard for client SDK writes from Node
+          ---
+          duration_ms: 4.2426
+          type: 'test'
+          ...
+        # Subtest: MemoryCatalogStoreAdapter unit tests continue to function with zero external dependencies
+        ok 2 - MemoryCatalogStoreAdapter unit tests continue to function with zero external dependencies
+          ---
+          duration_ms: 0.4499
+          type: 'test'
+          ...
+        1..2
+    ok 5 - 5. Preservation of Existing Security Guards and Architecture
+      ---
+      duration_ms: 4.8802
+      type: 'suite'
+      ...
+    1..5
+ok 7 - SCRUM-217 / POUW-1.7: Firebase Admin SDK Backend Auth Prerequisite
+  ---
+  duration_ms: 105.9367
+  type: 'suite'
+  ...
+# Subtest: SCRUM-217: PackageBuilder Canonical CRUD & Backend-First Integration Tests
+    # Subtest: 1. Static Code Inspection & Separation Rules
+        # Subtest: 2. PackageBuilder does NOT call fetchFirestorePackages or subscribeToFirestorePackages for commercial packages
+        ok 1 - 2. PackageBuilder does NOT call fetchFirestorePackages or subscribeToFirestorePackages for commercial packages
+          ---
+          duration_ms: 1.265
+          type: 'test'
+          ...
+        # Subtest: 14. PackageBuilder does NOT use legacy mutation methods (savePackage, toggleArchive, togglePublish, updatePackageVariables)
+        ok 2 - 14. PackageBuilder does NOT use legacy mutation methods (savePackage, toggleArchive, togglePublish, updatePackageVariables)
+          ---
+          duration_ms: 0.2744
+          type: 'test'
+          ...
+        # Subtest: 15. PackageBuilder form does NOT inject invented defaults (durationDays=365, variablePct=0, commissionPct=2)
+        ok 3 - 15. PackageBuilder form does NOT inject invented defaults (durationDays=365, variablePct=0, commissionPct=2)
+          ---
+          duration_ms: 0.406
+          type: 'test'
+          ...
+        # Subtest: 16. Client build bundle contains zero service account, private key, or firebase-admin code
+        ok 4 - 16. Client build bundle contains zero service account, private key, or firebase-admin code
+          ---
+          duration_ms: 13.9217
+          type: 'test'
+          ...
+        1..4
+    ok 1 - 1. Static Code Inspection & Separation Rules
+      ---
+      duration_ms: 17.5254
+      type: 'suite'
+      ...
+    # Subtest: 2. Canonical Admin Catalog Reading & Filtering (GET /api/catalog/admin)
+        # Subtest: 1. Admin loads canonical catalog via CommercialPackageService.fetchAdminCatalog
+        ok 1 - 1. Admin loads canonical catalog via CommercialPackageService.fetchAdminCatalog
+          ---
+          duration_ms: 7.0881
+          type: 'test'
+          ...
+        # Subtest: 3. Legacy catalog is separated and protected as non-editable
+        ok 2 - 3. Legacy catalog is separated and protected as non-editable
+          ---
+          duration_ms: 0.6097
+          type: 'test'
+          ...
+        # Subtest: 4. Filters canonical catalog by all 4 sections correctly
+        ok 3 - 4. Filters canonical catalog by all 4 sections correctly
+          ---
+          duration_ms: 3.0688
+          type: 'test'
+          ...
+        # Subtest: 5. Canonical catalog sortOrder ordering is preserved
+        ok 4 - 5. Canonical catalog sortOrder ordering is preserved
+          ---
+          duration_ms: 0.5742
+          type: 'test'
+          ...
+        1..4
+    ok 2 - 2. Canonical Admin Catalog Reading & Filtering (GET /api/catalog/admin)
+      ---
+      duration_ms: 11.9958
+      type: 'suite'
+      ...
+    # Subtest: 3. Canonical Mutations (CREATE, UPDATE, ARCHIVE, PUBLISH, REACTIVATE)
+        # Subtest: 6. Canonical CREATE requires all mandatory fields and updates cache on 2xx
+        ok 1 - 6. Canonical CREATE requires all mandatory fields and updates cache on 2xx
+          ---
+          duration_ms: 3.5302
+          type: 'test'
+          ...
+        # Subtest: 7. Canonical UPDATE preserves packageId and increments version
+        ok 2 - 7. Canonical UPDATE preserves packageId and increments version
+          ---
+          duration_ms: 1.3692
+          type: 'test'
+          ...
+        # Subtest: 8. Canonical PUBLISH sets isPublished=true via saveCanonicalPackage
+        ok 3 - 8. Canonical PUBLISH sets isPublished=true via saveCanonicalPackage
+          ---
+          duration_ms: 0.9194
+          type: 'test'
+          ...
+        # Subtest: 9. Canonical UNPUBLISH sets isPublished=false via saveCanonicalPackage
+        ok 4 - 9. Canonical UNPUBLISH sets isPublished=false via saveCanonicalPackage
+          ---
+          duration_ms: 1.8
+          type: 'test'
+          ...
+        # Subtest: 10 & 11. Canonical ARCHIVE calls /api/catalog/packages/:id/archive, sets status=ARCHIVED, isPublished=false, without deletion
+        ok 5 - 10 & 11. Canonical ARCHIVE calls /api/catalog/packages/:id/archive, sets status=ARCHIVED, isPublished=false, without deletion
+          ---
+          duration_ms: 1.4667
+          type: 'test'
+          ...
+        # Subtest: 12. Canonical REACTIVATE sets status=ACTIVE and isPublished=false (no auto-publish)
+        ok 6 - 12. Canonical REACTIVATE sets status=ACTIVE and isPublished=false (no auto-publish)
+          ---
+          duration_ms: 0.8391
+          type: 'test'
+          ...
+        # Subtest: 13. Network errors and HTTP 400/401/404/500 strictly fail closed without false success
+        ok 7 - 13. Network errors and HTTP 400/401/404/500 strictly fail closed without false success
+          ---
+          duration_ms: 3.3958
+          type: 'test'
+          ...
+        1..7
+    ok 3 - 3. Canonical Mutations (CREATE, UPDATE, ARCHIVE, PUBLISH, REACTIVATE)
+      ---
+      duration_ms: 13.8958
+      type: 'suite'
+      ...
+    # Subtest: 4. Review Blocker Verification Suite (SCRUM-217 Iteration 2)
+        # Subtest: Blocker 1: Backend & Service CREATE requires packageType and sortOrder
+            # Subtest: validatePackageMutation rejects CREATE when packageType is missing
+            ok 1 - validatePackageMutation rejects CREATE when packageType is missing
+              ---
+              duration_ms: 0.4106
+              type: 'test'
+              ...
+            # Subtest: validatePackageMutation rejects CREATE when packageType is invalid
+            ok 2 - validatePackageMutation rejects CREATE when packageType is invalid
+              ---
+              duration_ms: 0.2791
+              type: 'test'
+              ...
+            # Subtest: validatePackageMutation rejects CREATE when sortOrder is missing
+            ok 3 - validatePackageMutation rejects CREATE when sortOrder is missing
+              ---
+              duration_ms: 0.3177
+              type: 'test'
+              ...
+            # Subtest: validatePackageMutation rejects CREATE when sortOrder is negative or NaN
+            ok 4 - validatePackageMutation rejects CREATE when sortOrder is negative or NaN
+              ---
+              duration_ms: 0.389
+              type: 'test'
+              ...
+            # Subtest: savePackage on UPDATE preserves existing packageType and sortOrder when omitted or undefined
+            ok 5 - savePackage on UPDATE preserves existing packageType and sortOrder when omitted or undefined
+              ---
+              duration_ms: 26.2733
+              type: 'test'
+              ...
+            # Subtest: savePackage on UPDATE validates packageType and sortOrder if provided
+            ok 6 - savePackage on UPDATE validates packageType and sortOrder if provided
+              ---
+              duration_ms: 2.4767
+              type: 'test'
+              ...
+            1..6
+        ok 1 - Blocker 1: Backend & Service CREATE requires packageType and sortOrder
+          ---
+          duration_ms: 30.8372
+          type: 'suite'
+          ...
+        # Subtest: Blocker 2: Form does not inject invented defaults or auto-copy displayName
+            # Subtest: does NOT initialize sortOrder with "1" in CREATE state
+            ok 1 - does NOT initialize sortOrder with "1" in CREATE state
+              ---
+              duration_ms: 0.2928
+              type: 'test'
+              ...
+            # Subtest: does NOT auto-copy name to displayName when displayName is empty
+            ok 2 - does NOT auto-copy name to displayName when displayName is empty
+              ---
+              duration_ms: 0.2293
+              type: 'test'
+              ...
+            # Subtest: does NOT use fallbacks in handleOpenEdit (section, packageType, sortOrder, status, isPublished)
+            ok 3 - does NOT use fallbacks in handleOpenEdit (section, packageType, sortOrder, status, isPublished)
+              ---
+              duration_ms: 0.3096
+              type: 'test'
+              ...
+            1..3
+        ok 2 - Blocker 2: Form does not inject invented defaults or auto-copy displayName
+          ---
+          duration_ms: 1.0865
+          type: 'suite'
+          ...
+        # Subtest: Blocker 3: ARCHIVED invariant isPublished=false strictly enforced in both layers
+            # Subtest: validatePackageMutation rejects CREATE when status=ARCHIVED and isPublished=true
+            ok 1 - validatePackageMutation rejects CREATE when status=ARCHIVED and isPublished=true
+              ---
+              duration_ms: 0.3207
+              type: 'test'
+              ...
+            # Subtest: validatePackageMutation rejects UPDATE when status=ARCHIVED and isPublished=true
+            ok 2 - validatePackageMutation rejects UPDATE when status=ARCHIVED and isPublished=true
+              ---
+              duration_ms: 0.2299
+              type: 'test'
+              ...
+            # Subtest: savePackage throws when trying to save status=ARCHIVED and isPublished=true
+            ok 3 - savePackage throws when trying to save status=ARCHIVED and isPublished=true
+              ---
+              duration_ms: 7.7301
+              type: 'test'
+              ...
+            # Subtest: saveCanonicalPackage rejects client-side when attempting to publish a cached ARCHIVED package
+            ok 4 - saveCanonicalPackage rejects client-side when attempting to publish a cached ARCHIVED package
+              ---
+              duration_ms: 1.2029
+              type: 'test'
+              ...
+            # Subtest: PackageBuilderView disables Publish button for ARCHIVED packages in UI and returns early in handleTogglePublish
+            ok 5 - PackageBuilderView disables Publish button for ARCHIVED packages in UI and returns early in handleTogglePublish
+              ---
+              duration_ms: 2.246
+              type: 'test'
+              ...
+            1..5
+        ok 3 - Blocker 3: ARCHIVED invariant isPublished=false strictly enforced in both layers
+          ---
+          duration_ms: 12.2283
+          type: 'suite'
+          ...
+        # Subtest: Blocker 4: fetchAdminCatalog fail-closed on corrupt or invalid HTTP 200 responses
+            # Subtest: throws when HTTP 200 returns HTML / invalid non-JSON body
+            ok 1 - throws when HTTP 200 returns HTML / invalid non-JSON body
+              ---
+              duration_ms: 1.3526
+              type: 'test'
+              ...
+            # Subtest: throws when HTTP 200 returns malformed non-JSON string
+            ok 2 - throws when HTTP 200 returns malformed non-JSON string
+              ---
+              duration_ms: 0.7677
+              type: 'test'
+              ...
+            # Subtest: throws when HTTP 200 returns empty object {} without canonical or legacy
+            ok 3 - throws when HTTP 200 returns empty object {} without canonical or legacy
+              ---
+              duration_ms: 0.6566
+              type: 'test'
+              ...
+            # Subtest: throws when HTTP 200 returns canonical as non-array
+            ok 4 - throws when HTTP 200 returns canonical as non-array
+              ---
+              duration_ms: 0.536
+              type: 'test'
+              ...
+            # Subtest: throws when HTTP 200 returns legacy as non-array
+            ok 5 - throws when HTTP 200 returns legacy as non-array
+              ---
+              duration_ms: 0.5028
+              type: 'test'
+              ...
+            # Subtest: does NOT update local cache when response fails closed
+            ok 6 - does NOT update local cache when response fails closed
+              ---
+              duration_ms: 0.5584
+              type: 'test'
+              ...
+            1..6
+        ok 4 - Blocker 4: fetchAdminCatalog fail-closed on corrupt or invalid HTTP 200 responses
+          ---
+          duration_ms: 4.9735
+          type: 'suite'
+          ...
+        1..4
+    ok 4 - 4. Review Blocker Verification Suite (SCRUM-217 Iteration 2)
+      ---
+      duration_ms: 49.6333
+      type: 'suite'
+      ...
+    # Subtest: 5. Iteration 3: Canonical Display Currency USD & Materialization
+        # Subtest: 1. PackageBuilder form label presents Precio Comercial (USD) * (not USDT)
+        ok 1 - 1. PackageBuilder form label presents Precio Comercial (USD) * (not USDT)
+          ---
+          duration_ms: 0.3991
+          type: 'test'
+          ...
+        # Subtest: 2. PackageBuilder validation message states price in USD
+        ok 2 - 2. PackageBuilder validation message states price in USD
+          ---
+          duration_ms: 0.2237
+          type: 'test'
+          ...
+        # Subtest: 3. Canonical package cards display price as USD
+        ok 3 - 3. Canonical package cards display price as USD
+          ---
+          duration_ms: 0.1681
+          type: 'test'
+          ...
+        # Subtest: 4. Modal live simulation preview states price in USD
+        ok 4 - 4. Modal live simulation preview states price in USD
+          ---
+          duration_ms: 0.1884
+          type: 'test'
+          ...
+        # Subtest: 5. PackageBuilder CREATE payload explicitly materializes currency: "USD"
+        ok 5 - 5. PackageBuilder CREATE payload explicitly materializes currency: "USD"
+          ---
+          duration_ms: 0.136
+          type: 'test'
+          ...
+        # Subtest: 6. Technical field priceUsdt is preserved (not renamed)
+        ok 6 - 6. Technical field priceUsdt is preserved (not renamed)
+          ---
+          duration_ms: 0.137
+          type: 'test'
+          ...
+        # Subtest: 7. CatalogService.validatePackageMutation rejects currency: "USDT" for catalog packages
+        ok 7 - 7. CatalogService.validatePackageMutation rejects currency: "USDT" for catalog packages
+          ---
+          duration_ms: 0.2351
+          type: 'test'
+          ...
+        # Subtest: 8. CatalogService.savePackage materializes currency: "USD" on CREATE when omitted
+        ok 8 - 8. CatalogService.savePackage materializes currency: "USD" on CREATE when omitted
+          ---
+          duration_ms: 0.4251
+          type: 'test'
+          ...
+        # Subtest: 9. CatalogService.savePackage preserves currency: "USD" on UPDATE
+        ok 9 - 9. CatalogService.savePackage preserves currency: "USD" on UPDATE
+          ---
+          duration_ms: 0.7977
+          type: 'test'
+          ...
+        1..9
+    ok 5 - 5. Iteration 3: Canonical Display Currency USD & Materialization
+      ---
+      duration_ms: 3.1696
+      type: 'suite'
+      ...
+    1..5
+ok 8 - SCRUM-217: PackageBuilder Canonical CRUD & Backend-First Integration Tests
+  ---
+  duration_ms: 97.6537
+  type: 'suite'
+  ...
+# Subtest: SCRUM-222: Firebase Auth & Backend Session Convergence Tests (AC 1 - AC 12)
+    # Subtest: 1. FirebaseAdminAuthAdapter Fail-Closed & Verification Unit Tests
+        # Subtest: fails closed when Google credentials and emulator host are absent
+        ok 1 - fails closed when Google credentials and emulator host are absent
+          ---
+          duration_ms: 4.2578
+          type: 'test'
+          ...
+        # Subtest: returns null from verifyIdToken when uninitialized or when token is empty
+        ok 2 - returns null from verifyIdToken when uninitialized or when token is empty
+          ---
+          duration_ms: 2.0197
+          type: 'test'
+          ...
+        # Subtest: verifies valid ID token and returns decoded payload when mock auth succeeds
+        ok 3 - verifies valid ID token and returns decoded payload when mock auth succeeds
+          ---
+          duration_ms: 2.7292
+          type: 'test'
+          ...
+        1..3
+    ok 1 - 1. FirebaseAdminAuthAdapter Fail-Closed & Verification Unit Tests
+      ---
+      duration_ms: 10.7123
+      type: 'suite'
+      ...
+    # Subtest: 2. getAuthenticatedUser Session Convergence & Derivation Logic
+        # Subtest: derives identity server-side from verified Firebase ID token and approved users.json admin (AC 1, AC 6)
+        ok 1 - derives identity server-side from verified Firebase ID token and approved users.json admin (AC 1, AC 6)
+          ---
+          duration_ms: 4.6904
+          type: 'test'
+          ...
+        # Subtest: merges existing users.json record when Firebase user matches email or firebaseAuthUid
+        ok 2 - merges existing users.json record when Firebase user matches email or firebaseAuthUid
+          ---
+          duration_ms: 4.1354
+          type: 'test'
+          ...
+        # Subtest: fails closed when valid Firebase token is NOT approved on server-side admin allowlist in users.json (Blocker 4)
+        ok 3 - fails closed when valid Firebase token is NOT approved on server-side admin allowlist in users.json (Blocker 4)
+          ---
+          duration_ms: 2.7221
+          type: 'test'
+          ...
+        # Subtest: strictly fails closed on invalid/expired/missing token and NEVER returns usr_default_admin (AC 3)
+        ok 4 - strictly fails closed on invalid/expired/missing token and NEVER returns usr_default_admin (AC 3)
+          ---
+          duration_ms: 2.9847
+          type: 'test'
+          ...
+        # Subtest: supports authorized local dev sessionToken in users.json as fallback (MUST_PRESERVE)
+        ok 5 - supports authorized local dev sessionToken in users.json as fallback (MUST_PRESERVE)
+          ---
+          duration_ms: 4.6019
+          type: 'test'
+          ...
+        # Subtest: rejects sessionToken of non-admin user in dev fallback mode (fail-closed)
+        ok 6 - rejects sessionToken of non-admin user in dev fallback mode (fail-closed)
+          ---
+          duration_ms: 4.1835
+          type: 'test'
+          ...
+        1..6
+    ok 2 - 2. getAuthenticatedUser Session Convergence & Derivation Logic
+      ---
+      duration_ms: 24.3848
+      type: 'suite'
+      ...
+    # Subtest: 3. Unified HTTP Endpoints Authentication & Derivation (AC 1, AC 2, AC 6, AC 7)
+        # Subtest: AC 1: GET /api/auth/me returns 200 with server-derived identity for valid Firebase ID token
+        ok 1 - AC 1: GET /api/auth/me returns 200 with server-derived identity for valid Firebase ID token
+          ---
+          duration_ms: 79.1149
+          type: 'test'
+          ...
+        # Subtest: AC 2: GET /api/catalog/admin returns 200 with catalog data using the exact same Firebase ID token
+        ok 2 - AC 2: GET /api/catalog/admin returns 200 with catalog data using the exact same Firebase ID token
+          ---
+          duration_ms: 17.7907
+          type: 'test'
+          ...
+        # Subtest: AC 3: GET /api/auth/me and GET /api/catalog/admin return 401 fail-closed on invalid token
+        ok 3 - AC 3: GET /api/auth/me and GET /api/catalog/admin return 401 fail-closed on invalid token
+          ---
+          duration_ms: 22.7605
+          type: 'test'
+          ...
+        # Subtest: AC 3: GET /api/auth/me and GET /api/catalog/admin return 401 when no token is provided
+        ok 4 - AC 3: GET /api/auth/me and GET /api/catalog/admin return 401 when no token is provided
+          ---
+          duration_ms: 18.4792
+          type: 'test'
+          ...
+        # Subtest: AC 6 & AC 7: POST /api/catalog/packages derives updatedBy server-side from authenticated token
+        ok 5 - AC 6 & AC 7: POST /api/catalog/packages derives updatedBy server-side from authenticated token
+          ---
+          duration_ms: 47.3798
+          type: 'test'
+          ...
+        # Subtest: AC 7: POST /api/catalog/packages/:id/archive derives updatedBy server-side
+        ok 6 - AC 7: POST /api/catalog/packages/:id/archive derives updatedBy server-side
+          ---
+          duration_ms: 16.7053
+          type: 'test'
+          ...
+        # Subtest: AC 3: POST /api/catalog/packages and archive return 401 on missing or invalid session
+        ok 7 - AC 3: POST /api/catalog/packages and archive return 401 on missing or invalid session
+          ---
+          duration_ms: 23.8748
+          type: 'test'
+          ...
+        # Subtest: valid Firebase token for non-admin client returns 401 on catalog endpoints (Blocker 4 privilege escalation prevention)
+        ok 8 - valid Firebase token for non-admin client returns 401 on catalog endpoints (Blocker 4 privilege escalation prevention)
+          ---
+          duration_ms: 19.9242
+          type: 'test'
+          ...
+        # Subtest: rejects legacy sessionToken and login when ALLOW_DEV_LOCAL_SESSION_TOKEN is false (Blocker 1)
+        ok 9 - rejects legacy sessionToken and login when ALLOW_DEV_LOCAL_SESSION_TOKEN is false (Blocker 1)
+          ---
+          duration_ms: 13.5236
+          type: 'test'
+          ...
+        # Subtest: sessionToken of non-admin user in dev returns 401 on /api/auth/me and /api/catalog/admin
+        ok 10 - sessionToken of non-admin user in dev returns 401 on /api/auth/me and /api/catalog/admin
+          ---
+          duration_ms: 17.6247
+          type: 'test'
+          ...
+        # Subtest: strictly fails closed in NODE_ENV=production even with ALLOW_DEV_LOCAL_SESSION_TOKEN=true: fallback rejected, login -> 403, register does not emit sess_*
+        ok 11 - strictly fails closed in NODE_ENV=production even with ALLOW_DEV_LOCAL_SESSION_TOKEN=true: fallback rejected, login -> 403, register does not emit sess_*
+          ---
+          duration_ms: 21.9165
+          type: 'test'
+          ...
+        1..11
+    ok 3 - 3. Unified HTTP Endpoints Authentication & Derivation (AC 1, AC 2, AC 6, AC 7)
+      ---
+      duration_ms: 300.4133
+      type: 'suite'
+      ...
+    # Subtest: 4. Client Session Teardown & 401 Fail-Closed Handling (AC 4, AC 5, AC 8)
+        # Subtest: AC 4 & AC 5: apiFetch clears minerx_auth_token, minerx_user, and minerx_auth_user and dispatches minerx:unauthorized on 401
+        ok 1 - AC 4 & AC 5: apiFetch clears minerx_auth_token, minerx_user, and minerx_auth_user and dispatches minerx:unauthorized on 401
+          ---
+          duration_ms: 10.6128
+          type: 'test'
+          ...
+        # Subtest: does not dispatch minerx:unauthorized or clear storage on /api/auth/login 401
+        ok 2 - does not dispatch minerx:unauthorized or clear storage on /api/auth/login 401
+          ---
+          duration_ms: 9.8993
+          type: 'test'
+          ...
+        # Subtest: AC 8: canonical catalog CRUD rejects on 401 and does NOT fall back to Firestore Client or localStorage
+        ok 3 - AC 8: canonical catalog CRUD rejects on 401 and does NOT fall back to Firestore Client or localStorage
+          ---
+          duration_ms: 20.9766
+          type: 'test'
+          ...
+        # Subtest: Capacitor native without backend does NOT return synthetic local_user on /api/auth/me (Blocker 2)
+        ok 4 - Capacitor native without backend does NOT return synthetic local_user on /api/auth/me (Blocker 2)
+          ---
+          duration_ms: 5.7422
+          type: 'test'
+          ...
+        # Subtest: pre-dashboard authorization: unapproved Firebase user rejected by /api/auth/me purges storage (Review Finding 2)
+        ok 5 - pre-dashboard authorization: unapproved Firebase user rejected by /api/auth/me purges storage (Review Finding 2)
+          ---
+          duration_ms: 7.931
+          type: 'test'
+          ...
+        # Subtest: pre-dashboard authorization: offline/local token rejected by /api/auth/me purges storage and fails closed (Review Finding 2)
+        ok 6 - pre-dashboard authorization: offline/local token rejected by /api/auth/me purges storage and fails closed (Review Finding 2)
+          ---
+          duration_ms: 7.328
+          type: 'test'
+          ...
+        1..6
+    ok 4 - 4. Client Session Teardown & 401 Fail-Closed Handling (AC 4, AC 5, AC 8)
+      ---
+      duration_ms: 63.1905
+      type: 'suite'
+      ...
+    # Subtest: 5. Zero Production Writes & Environment Isolation (AC 9 & AC 12)
+        # Subtest: verifies test environment never attempts live network writes to production Google Auth or Firestore
+        ok 1 - verifies test environment never attempts live network writes to production Google Auth or Firestore
+          ---
+          duration_ms: 1.5819
+          type: 'test'
+          ...
+        1..1
+    ok 5 - 5. Zero Production Writes & Environment Isolation (AC 9 & AC 12)
+      ---
+      duration_ms: 1.7121
+      type: 'suite'
+      ...
+    1..5
+ok 9 - SCRUM-222: Firebase Auth & Backend Session Convergence Tests (AC 1 - AC 12)
+  ---
+  duration_ms: 401.688
+  type: 'suite'
+  ...
+# Subtest: Vast.ai Strategy Engine & Performance Supervisor Tests
+    # Subtest: defaults new strategies to SIMULATION mode and disabled
+    ok 1 - defaults new strategies to SIMULATION mode and disabled
+      ---
+      duration_ms: 13.6021
+      type: 'test'
+      ...
+    # Subtest: does NOT provision instances when strategy is in SIMULATION mode
+    ok 2 - does NOT provision instances when strategy is in SIMULATION mode
+      ---
+      duration_ms: 18.3965
+      type: 'test'
+      ...
+    # Subtest: respects warmup period and does not fail instances during warmup
+    ok 3 - respects warmup period and does not fail instances during warmup
+      ---
+      duration_ms: 2.3202
+      type: 'test'
+      ...
+    # Subtest: triggers STOP_AND_DISABLE and alerts when instance underperforms for consecutive windows
+    ok 4 - triggers STOP_AND_DISABLE and alerts when instance underperforms for consecutive windows
+      ---
+      duration_ms: 17.1188
+      type: 'test'
+      ...
+    1..4
+ok 10 - Vast.ai Strategy Engine & Performance Supervisor Tests
+  ---
+  duration_ms: 53.3663
+  type: 'suite'
+  ...
+# Subtest: User Management & Firestore Collections (/admin_users and /users) Unit Tests
+    # Subtest: exports correct Firestore collection identifiers matching Firestore rules and backend
+    ok 1 - exports correct Firestore collection identifiers matching Firestore rules and backend
+      ---
+      duration_ms: 1.7676
+      type: 'test'
+      ...
+    # Subtest: provides initial admin and client users with required structure
+    ok 2 - provides initial admin and client users with required structure
+      ---
+      duration_ms: 0.3457
+      type: 'test'
+      ...
+    # Subtest: safely parses numeric values with commas, currency symbols, and decimals via parseNumericValue
+    ok 3 - safely parses numeric values with commas, currency symbols, and decimals via parseNumericValue
+      ---
+      duration_ms: 0.7315
+      type: 'test'
+      ...
+    # Subtest: correctly normalizes /admin_users documents from Cloud Firestore
+    ok 4 - correctly normalizes /admin_users documents from Cloud Firestore
+      ---
+      duration_ms: 1.9165
+      type: 'test'
+      ...
+    # Subtest: correctly normalizes /users documents from Cloud Firestore with alternative field names
+    ok 5 - correctly normalizes /users documents from Cloud Firestore with alternative field names
+      ---
+      duration_ms: 0.3096
+      type: 'test'
+      ...
+    # Subtest: allows fetching users filtered by collection (admin_users vs users vs all)
+    ok 6 - allows fetching users filtered by collection (admin_users vs users vs all)
+      ---
+      duration_ms: 0.5122
+      type: 'test'
+      ...
+    # Subtest: allows saving and modifying all editable user fields: Name, Email, Role/Rank, Contracts, Power, Balance, Status, Collection
+    ok 7 - allows saving and modifying all editable user fields: Name, Email, Role/Rank, Contracts, Power, Balance, Status, Collection
+      ---
+      duration_ms: 0.993
+      type: 'test'
+      ...
+    # Subtest: allows migrating a user between collections (/users -> /admin_users)
+    ok 8 - allows migrating a user between collections (/users -> /admin_users)
+      ---
+      duration_ms: 1.0591
+      type: 'test'
+      ...
+    # Subtest: allows partial updating of user fields via updateUser
+    ok 9 - allows partial updating of user fields via updateUser
+      ---
+      duration_ms: 0.6479
+      type: 'test'
+      ...
+    # Subtest: allows deleting a user via deleteUser
+    ok 10 - allows deleting a user via deleteUser
+      ---
+      duration_ms: 1.2102
+      type: 'test'
+      ...
+    # Subtest: allows toggling user status (ACTIVE <-> SUSPENDED)
+    ok 11 - allows toggling user status (ACTIVE <-> SUSPENDED)
+      ---
+      duration_ms: 0.7038
+      type: 'test'
+      ...
+    # Subtest: provides real-time subscription method returning clean unsubscribe function
+    ok 12 - provides real-time subscription method returning clean unsubscribe function
+      ---
+      duration_ms: 0.4855
+      type: 'test'
+      ...
+    # Subtest: verifies firestore.indexes.json includes composite indexes for status, email, and role
+    ok 13 - verifies firestore.indexes.json includes composite indexes for status, email, and role
+      ---
+      duration_ms: 1.5654
+      type: 'test'
+      ...
+    # Subtest: correctly maps URL query params for ?tab=admin_users and ?tab=users to admin suite
+    ok 14 - correctly maps URL query params for ?tab=admin_users and ?tab=users to admin suite
+      ---
+      duration_ms: 1.2621
+      type: 'test'
+      ...
+    1..14
+ok 11 - User Management & Firestore Collections (/admin_users and /users) Unit Tests
+  ---
+  duration_ms: 16.3285
+  type: 'suite'
+  ...
+# Subtest: Vast.ai Client & Offers Service Tests
+    # Subtest: masks the API key safely without revealing secrets
+    ok 1 - masks the API key safely without revealing secrets
+      ---
+      duration_ms: 1.4673
+      type: 'test'
+      ...
+    # Subtest: runs testAccount in mock mode without making real network requests
+    ok 2 - runs testAccount in mock mode without making real network requests
+      ---
+      duration_ms: 0.4254
+      type: 'test'
+      ...
+    # Subtest: correctly normalizes a raw Vast.ai bundle and calculates storage $/h
+    ok 3 - correctly normalizes a raw Vast.ai bundle and calculates storage $/h
+      ---
+      duration_ms: 0.4527
+      type: 'test'
+      ...
+    # Subtest: evaluates and scores profitable offers higher than unprofitable offers
+    ok 4 - evaluates and scores profitable offers higher than unprofitable offers
+      ---
+      duration_ms: 0.6176
+      type: 'test'
+      ...
+    # Subtest: filters offers by GPU model and max hourly price
+    ok 5 - filters offers by GPU model and max hourly price
+      ---
+      duration_ms: 0.5044
+      type: 'test'
+      ...
+    1..5
+ok 12 - Vast.ai Client & Offers Service Tests
+  ---
+  duration_ms: 5.3483
+  type: 'suite'
+  ...
+1..12
+# tests 220
+# suites 35
+# pass 220
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 19390.3066

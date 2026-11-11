@@ -23,7 +23,7 @@ import { registerWithFirebase, loginWithFirebase } from '../utils/firebaseAuth';
 interface LandingPageProps {
   onEnterDashboard: () => void;
   currentUser: { id: string; username: string; email: string; fullName: string } | null;
-  onLogin: (user: any, token: string) => void;
+  onLogin: (user: any, token: string) => Promise<boolean | void> | void;
   onLogout: () => void;
 }
 
@@ -49,25 +49,22 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     setAuthLoading(true);
 
     try {
-      let isCompleted = false;
+      let candidateToken: string | null = null;
+      let candidateUser: any = null;
 
       // 1. Try Firebase Authentication First
       try {
         if (authMode === 'register') {
           const fbRes = await registerWithFirebase(email, password, fullName || username);
           if (fbRes.success && fbRes.token && fbRes.user) {
-            localStorage.setItem('minerx_auth_token', fbRes.token);
-            onLogin(fbRes.user, fbRes.token);
-            setShowAuthModal(false);
-            isCompleted = true;
+            candidateToken = fbRes.token;
+            candidateUser = fbRes.user;
           }
         } else if (username.includes('@')) {
           const fbRes = await loginWithFirebase(username, password);
           if (fbRes.success && fbRes.token && fbRes.user) {
-            localStorage.setItem('minerx_auth_token', fbRes.token);
-            onLogin(fbRes.user, fbRes.token);
-            setShowAuthModal(false);
-            isCompleted = true;
+            candidateToken = fbRes.token;
+            candidateUser = fbRes.user;
           }
         }
       } catch (fbErr: any) {
@@ -75,7 +72,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       }
 
       // 2. Try remote backend if reachable (Firebase Cloud Functions / Express API)
-      if (!isCompleted) {
+      if (!candidateToken) {
         try {
           const endpoint = authMode === 'register' ? '/api/auth/register' : '/api/auth/login';
           const body = authMode === 'register'
@@ -90,10 +87,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
           const data = await res.json();
           if (data && data.success && data.token) {
-            localStorage.setItem('minerx_auth_token', data.token);
-            onLogin(data.user, data.token);
-            setShowAuthModal(false);
-            isCompleted = true;
+            candidateToken = data.token;
+            candidateUser = data.user;
           } else if (data && data.message && !data.error?.includes('OFFLINE') && !data.error?.includes('NETWORK')) {
             throw new Error(data.message);
           }
@@ -105,25 +100,28 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         }
       }
 
-      // 2. Autonomous Local Fallback (Guarantees registration & login ALWAYS work)
-      if (!isCompleted) {
+      // 3. Autonomous Local Fallback (Guarantees registration & login ALWAYS work)
+      if (!candidateToken) {
         if (authMode === 'register') {
           const result = registerLocalUser(username, email, password, fullName);
           if (!result.success) {
             throw new Error(result.message || 'Error en el registro');
           }
-          localStorage.setItem('minerx_auth_token', result.token!);
-          onLogin(result.user, result.token!);
-          setShowAuthModal(false);
+          candidateToken = result.token!;
+          candidateUser = result.user;
         } else {
           const result = loginLocalUser(username, password);
           if (!result.success) {
             throw new Error(result.message || 'Usuario o contraseña incorrectos');
           }
-          localStorage.setItem('minerx_auth_token', result.token!);
-          onLogin(result.user, result.token!);
-          setShowAuthModal(false);
+          candidateToken = result.token!;
+          candidateUser = result.user;
         }
+      }
+
+      if (candidateToken && candidateUser) {
+        await onLogin(candidateUser, candidateToken);
+        setShowAuthModal(false);
       }
     } catch (err: any) {
       setAuthError(err.message || 'Error de conexión con el servidor');

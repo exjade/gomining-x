@@ -2,9 +2,15 @@ import { spawn, execSync, type ChildProcess } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import net from 'net';
 import { fileURLToPath } from 'url';
-import type { Server } from 'http';
+import http, { type Server } from 'http';
+import { initializeApp as initClientApp, getApps as getClientApps } from 'firebase/app';
+import { getAuth as getClientAuth, connectAuthEmulator, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { initializeApp as initAdminApp, getApps as getAdminApps, deleteApp as deleteAdminApp } from 'firebase-admin/app';
+import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { app, setCatalogService, setUsersFilePath } from '../server/server.js';
+import { firebaseAdminAuthAdapter, ADMIN_APP_NAME } from '../server/services/firebaseAdminAuthAdapter.js';
 import { CatalogService, MemoryCatalogStoreAdapter } from '../src/services/catalogService.js';
 import type { CommercialPackage } from '../src/types/admin.js';
 
@@ -124,9 +130,97 @@ function killProcTree(proc: ChildProcess | null) {
   }
 }
 
+function getFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const s = net.createServer();
+    s.listen(0, '127.0.0.1', () => {
+      const p = (s.address() as any).port;
+      s.close(() => resolve(p));
+    });
+    s.once('error', reject);
+  });
+}
+
+async function startFirebaseAuthEmulator(projectId = 'salad-miners'): Promise<{ proc: ChildProcess | null; host: string; port: number; tempDir: string }> {
+  const existingHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
+  if (existingHost) {
+    console.log(`  -> Reusing existing Firebase Auth Emulator at ${existingHost}`);
+    const port = Number(existingHost.split(':')[1]) || 9099;
+    return { proc: null, host: existingHost, port, tempDir: '' };
+  }
+
+  const hubFile = path.join(os.tmpdir(), `hub-${projectId}.json`);
+  if (fs.existsSync(hubFile)) {
+    try { fs.unlinkSync(hubFile); } catch {}
+  }
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'firebase-auth-emu-'));
+  const configPath = path.join(tempDir, 'firebase.json');
+  const port = await getFreePort();
+  fs.writeFileSync(configPath, JSON.stringify({
+    emulators: {
+      auth: {
+        host: '127.0.0.1',
+        port,
+      },
+      ui: {
+        enabled: false,
+      },
+    },
+  }, null, 2), 'utf-8');
+
+  return new Promise((resolve, reject) => {
+    const proc = spawn('npx', ['--yes', 'firebase-tools', 'emulators:start', '--only', 'auth', '--project', projectId, '--config', configPath], {
+      cwd: tempDir,
+      shell: true,
+      stdio: 'pipe',
+    });
+
+    let outputLog = '';
+    proc.stdout?.on('data', (d) => { outputLog += d.toString(); });
+    proc.stderr?.on('data', (d) => { outputLog += d.toString(); });
+
+    let isResolved = false;
+    const timeout = setTimeout(() => {
+      if (!isResolved) {
+        killProcTree(proc);
+        reject(new Error(`Official Firebase Auth Emulator failed to start within 50s on port ${port}.\nLogs:\n${outputLog}`));
+      }
+    }, 50000);
+
+    const checkReady = async () => {
+      for (let i = 0; i < 50; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        try {
+          const res = await fetch(`http://127.0.0.1:${port}`);
+          if (res.ok || res.status === 404 || res.status === 200) {
+            if (!isResolved) {
+              isResolved = true;
+              clearTimeout(timeout);
+              resolve({ proc, host: `127.0.0.1:${port}`, port, tempDir });
+              return;
+            }
+          }
+        } catch {}
+      }
+    };
+    checkReady();
+
+    proc.on('error', (err) => {
+      if (!isResolved) {
+        isResolved = true;
+        clearTimeout(timeout);
+        reject(err);
+      }
+    });
+  });
+}
+
 async function main() {
-  console.log('=== SCRUM-217 RUNTIME ADMIN 5174 VERIFICATION ===');
+  console.log('=== SCRUM-222 RUNTIME ADMIN 5174 VERIFICATION (FIREBASE AUTH CONVERGENCE) ===');
   let server: Server | null = null;
+  let emulatorProc: ChildProcess | null = null;
+  let emulatorTempDir = '';
   let viteProc: ChildProcess | null = null;
   let chromeProc: ChildProcess | null = null;
   let ws: WebSocket | null = null;
@@ -147,6 +241,17 @@ async function main() {
         }
         server.close();
       }
+      if (emulatorProc) {
+        killProcTree(emulatorProc);
+      }
+      if (emulatorTempDir && fs.existsSync(emulatorTempDir)) {
+        try { fs.rmSync(emulatorTempDir, { recursive: true, force: true }); } catch {}
+      }
+      try {
+        const hubFile = path.join(os.tmpdir(), 'hub-salad-miners.json');
+        if (fs.existsSync(hubFile)) { fs.unlinkSync(hubFile); }
+      } catch {}
+      delete process.env.FIREBASE_AUTH_EMULATOR_HOST;
     } catch {}
     try {
       setUsersFilePath(null);
@@ -173,21 +278,63 @@ async function main() {
     const catalog = new CatalogService(mockStore);
     setCatalogService(catalog);
 
-    // 2. Setup safe isolated test admin user in temp storage (NEVER touches server/data/users.json)
-    console.log('[1b/7] Isolating test authentication store in temp directory...');
-    tempUsersDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scrum217-auth-'));
+    // 2. Setup Firebase Auth Emulator & mint authentic ID token via Firebase Client Auth SDK
+    console.log('[1b/7] Starting official Firebase Auth Emulator for authentic ID token generation...');
+    const emulator = await startFirebaseAuthEmulator('salad-miners');
+    emulatorProc = emulator.proc;
+    emulatorTempDir = emulator.tempDir;
+    process.env.FIREBASE_AUTH_EMULATOR_HOST = emulator.host;
+
+    // Connect Firebase Client Auth to official Emulator and sign in to obtain authentic ID token
+    const clientApp = getClientApps().find((a) => a.name === 'runtime-client') ||
+      initClientApp({ apiKey: 'fake-api-key', projectId: 'salad-miners' }, 'runtime-client');
+    const clientAuth = getClientAuth(clientApp);
+    connectAuthEmulator(clientAuth, `http://${emulator.host}`, { disableWarnings: true });
+
+    let userCred;
+    try {
+      userCred = await createUserWithEmailAndPassword(clientAuth, 'admin@minerx.cloud', 'password123');
+    } catch (err: any) {
+      if (err?.code === 'auth/email-already-in-use') {
+        userCred = await signInWithEmailAndPassword(clientAuth, 'admin@minerx.cloud', 'password123');
+      } else {
+        throw err;
+      }
+    }
+    const testFirebaseToken = await userCred.user.getIdToken();
+    const testAdminUid = userCred.user.uid;
+    console.log('  -> Authentic Firebase ID token issued via Firebase Client Auth & Official Emulator:', testFirebaseToken.slice(0, 32) + '...');
+
+    // Initialize real Firebase Admin Auth connected to Emulator
+    const existingAdmin = getAdminApps().find((a) => a.name === ADMIN_APP_NAME);
+    if (existingAdmin) {
+      await deleteAdminApp(existingAdmin);
+    }
+    const adminApp = initAdminApp({ projectId: 'salad-miners' }, ADMIN_APP_NAME);
+    const adminAuth = getAdminAuth(adminApp);
+    firebaseAdminAuthAdapter.setAuthInstance(adminAuth);
+
+    const verifiedCheck = await firebaseAdminAuthAdapter.verifyIdToken(testFirebaseToken);
+    if (!verifiedCheck || verifiedCheck.uid !== testAdminUid) {
+      throw new Error('Initial verification of client-minted Firebase ID token failed on Firebase Admin SDK');
+    }
+    console.log('  -> Firebase Admin Auth verified real ID token successfully for UID:', verifiedCheck.uid);
+
+    tempUsersDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scrum222-auth-'));
     const tempUsersFile = path.join(tempUsersDir, 'users.json');
     const safeUsers = {
       users: [
         {
-          id: 'usr_scrum217_admin',
+          id: testAdminUid,
           username: 'admin',
           email: 'admin@minerx.cloud',
-          fullName: 'Administrator SCRUM-217',
+          fullName: 'Administrator SCRUM-222',
           role: 'admin',
-          passwordHash: 'admin123',
-          sessionToken: 'scrum217_admin_test_session_token',
+          passwordHash: '',
+          firebaseAuthUid: testAdminUid,
+          isStoredInFirebaseAuth: true,
           createdAt: new Date().toISOString(),
+          // STRICT CONVERGENCE: NO sessionToken!
         },
       ],
     };
@@ -311,13 +458,13 @@ async function main() {
     await new Promise((r) => setTimeout(r, 2000));
 
     await evaluate(`
-      localStorage.setItem('minerx_auth_token', 'scrum217_admin_test_session_token');
+      localStorage.setItem('minerx_auth_token', '${testFirebaseToken}');
       localStorage.setItem('minerx_user', JSON.stringify({
-        id: 'usr_scrum217_admin',
+        id: '${testAdminUid}',
         username: 'admin',
         email: 'admin@minerx.cloud',
         role: 'admin',
-        fullName: 'Administrator SCRUM-217'
+        fullName: 'Administrator SCRUM-222'
       }));
     `);
 
@@ -835,10 +982,72 @@ async function main() {
       throw new Error('Check 7 Failed: Backend error did not preserve open modal or display error');
     }
 
+    // CHECK 8: 401 Fail-Closed Verification & Session Teardown
+    console.log('\n--- CHECK 8: 401 Fail-Closed & Session Teardown ---');
+    const meRes = await fetch('http://127.0.0.1:3001/api/auth/me', {
+      headers: { Authorization: 'Bearer invalid_expired_token_401' },
+    });
+    console.log('  Direct /api/auth/me response status with invalid token:', meRes.status);
+    if (meRes.status !== 401) {
+      throw new Error(`Check 8 Failed: Expected 401 for invalid Firebase token on /api/auth/me, got ${meRes.status}`);
+    }
+
+    const catRes = await fetch('http://127.0.0.1:3001/api/catalog/admin', {
+      headers: { Authorization: 'Bearer invalid_expired_token_401' },
+    });
+    console.log('  Direct /api/catalog/admin response status with invalid token:', catRes.status);
+    if (catRes.status !== 401) {
+      throw new Error(`Check 8 Failed: Expected 401 for invalid Firebase token on /api/catalog/admin, got ${catRes.status}`);
+    }
+
+    const interceptedStatus = await evaluate<number>(`
+      (async () => {
+        localStorage.setItem('minerx_auth_token', 'invalid_expired_token_trigger_401');
+        const res = await (window.apiFetch ? window.apiFetch('/api/catalog/admin') : fetch('/api/catalog/admin'));
+        return res.status;
+      })()
+    `);
+
+    // Wait in Node for React 401 interceptor and state transitions to complete
+    await new Promise((r) => setTimeout(r, 1200));
+
+    const teardownResult = await evaluate(`
+      (() => {
+        const token = localStorage.getItem('minerx_auth_token');
+        const user = localStorage.getItem('minerx_user');
+        const authUser = localStorage.getItem('minerx_auth_user');
+        const avatar = document.querySelector('.minerx-admin-avatar') || document.querySelector('[title*="Conectado como"]');
+        const authForm = document.querySelector('form') || document.body.innerText.includes('Iniciar Sesión');
+
+        return {
+          interceptedStatus: ${interceptedStatus},
+          tokenCleaned: token === null,
+          userCleaned: user === null,
+          authUserCleaned: authUser === null,
+          avatarRemoved: avatar === null,
+          isAuthScreen: Boolean(authForm),
+        };
+      })()
+    `);
+    console.log('  Teardown DOM evaluation:', JSON.stringify(teardownResult, null, 2));
+    if (teardownResult.interceptedStatus !== 401) {
+      throw new Error(`Check 8 Failed: Expected 401 response from intercepted request, got ${teardownResult.interceptedStatus}`);
+    }
+    if (!teardownResult.tokenCleaned || !teardownResult.userCleaned || !teardownResult.authUserCleaned) {
+      throw new Error('Check 8 Failed: LocalStorage auth tokens were not purged upon 401');
+    }
+    if (!teardownResult.avatarRemoved) {
+      throw new Error('Check 8 Failed: "AD" avatar lingered in DOM after 401');
+    }
+    if (!teardownResult.isAuthScreen) {
+      throw new Error('Check 8 Failed: UI did not reset to AuthScreen after 401');
+    }
+    console.log('  -> Check 8 Passed: 401 cleanly purges storage and resets UI to AuthScreen with zero avatar lingering.');
+
     if (ws) {
       try { ws.close(); } catch {}
     }
-    console.log('\n[7/7] ALL 7 BROWSER ACCEPTANCE CHECKS PASSED PERFECTLY!');
+    console.log('\n[7/7] ALL ACCEPTANCE CHECKS PASSED PERFECTLY (INCLUDING 401 FAIL-CLOSED TEARDOWN)!');
   } finally {
     // Teardown everything cleanly
     if (ws) {
@@ -852,6 +1061,19 @@ async function main() {
       }
       await new Promise<void>((resolve) => server!.close(() => resolve()));
     }
+    if (emulatorProc) {
+      killProcTree(emulatorProc);
+    }
+    if (emulatorTempDir && fs.existsSync(emulatorTempDir)) {
+      try {
+        fs.rmSync(emulatorTempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+      } catch {}
+    }
+    try {
+      const hubFile = path.join(os.tmpdir(), 'hub-salad-miners.json');
+      if (fs.existsSync(hubFile)) { fs.unlinkSync(hubFile); }
+    } catch {}
+    delete process.env.FIREBASE_AUTH_EMULATOR_HOST;
     setUsersFilePath(null);
     delete process.env.USERS_FILE_PATH;
     if (tempUsersDir && fs.existsSync(tempUsersDir)) {

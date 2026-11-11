@@ -8,7 +8,7 @@
  */
 
 export function isCapacitorNative(): boolean {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined' || !window.location) return false;
   const origin = window.location.origin || '';
   const protocol = window.location.protocol || '';
   return (
@@ -20,7 +20,7 @@ export function isCapacitorNative(): boolean {
 }
 
 export function isElectronEnv(): boolean {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined' || !window.location) return false;
   const origin = window.location.origin || '';
   const protocol = window.location.protocol || '';
   return origin === 'file:' || protocol === 'file:' || origin === 'null';
@@ -154,19 +154,6 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}): Pro
         );
       } catch {}
     }
-
-    if (endpoint === '/api/auth/me') {
-      const localToken = localStorage.getItem('minerx_auth_token');
-      if (localToken) {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            user: { id: 'local_user', email: 'admin@minerx.local', role: 'admin' }
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } }
-        );
-      }
-    }
   }
 
   const url = apiUrl(endpoint);
@@ -182,6 +169,22 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}): Pro
       ...options,
       headers,
     });
+
+    // 401 Fail-Closed Session Interceptor (SCRUM-222)
+    if (
+      response.status === 401 &&
+      !endpoint.includes('/api/auth/login') &&
+      !endpoint.includes('/api/auth/logout')
+    ) {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('minerx_auth_token');
+        localStorage.removeItem('minerx_user');
+        localStorage.removeItem('minerx_auth_user');
+      }
+      if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('minerx:unauthorized', { detail: { endpoint, status: 401 } }));
+      }
+    }
 
     const contentType = response.headers.get('content-type') || '';
     
@@ -238,3 +241,6 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}): Pro
   }
 }
 
+if (typeof window !== 'undefined') {
+  (window as any).apiFetch = apiFetch;
+}

@@ -16,7 +16,7 @@ import { registerLocalUser, loginLocalUser } from '../utils/localAuthService';
 import { apiFetch } from '../utils/apiConfig';
 
 interface AuthScreenProps {
-  onLogin: (user: any, token: string) => void;
+  onLogin: (user: any, token: string) => Promise<boolean | void> | void;
   onOpenLanding?: () => void;
   isDarkTheme?: boolean;
 }
@@ -37,7 +37,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onOpenLanding, 
     setLoading(true);
 
     try {
-      let isCompleted = false;
+      let candidateToken: string | null = null;
+      let candidateUser: any = null;
 
       // 1. Firebase Auth Engine
       try {
@@ -45,16 +46,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onOpenLanding, 
           const targetEmail = email.trim() || `${username.trim().toLowerCase()}@minerx.local`;
           const fbRes = await registerWithFirebase(targetEmail, password, fullName || username);
           if (fbRes.success && fbRes.token && fbRes.user) {
-            localStorage.setItem('minerx_auth_token', fbRes.token);
-            onLogin(fbRes.user, fbRes.token);
-            isCompleted = true;
+            candidateToken = fbRes.token;
+            candidateUser = fbRes.user;
           }
         } else if (username.includes('@')) {
           const fbRes = await loginWithFirebase(username, password);
           if (fbRes.success && fbRes.token && fbRes.user) {
-            localStorage.setItem('minerx_auth_token', fbRes.token);
-            onLogin(fbRes.user, fbRes.token);
-            isCompleted = true;
+            candidateToken = fbRes.token;
+            candidateUser = fbRes.user;
           }
         }
       } catch (fbErr: any) {
@@ -62,7 +61,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onOpenLanding, 
       }
 
       // 2. Remote Backend
-      if (!isCompleted) {
+      if (!candidateToken) {
         try {
           const endpoint = authMode === 'register' ? '/api/auth/register' : '/api/auth/login';
           const body = authMode === 'register'
@@ -76,9 +75,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onOpenLanding, 
           });
           const data = await res.json();
           if (data && data.success && data.token) {
-            localStorage.setItem('minerx_auth_token', data.token);
-            onLogin(data.user, data.token);
-            isCompleted = true;
+            candidateToken = data.token;
+            candidateUser = data.user;
           } else if (data && data.message && !data.error?.includes('OFFLINE') && !data.error?.includes('NETWORK')) {
             throw new Error(data.message);
           }
@@ -90,7 +88,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onOpenLanding, 
       }
 
       // 3. Autonomous Local Vault Fallback (Guarantees login/register ALWAYS works offline)
-      if (!isCompleted) {
+      if (!candidateToken) {
         if (authMode === 'register') {
           const result = registerLocalUser(
             username, 
@@ -99,14 +97,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onOpenLanding, 
             fullName || username
           );
           if (!result.success) throw new Error(result.message || 'Error en el registro');
-          localStorage.setItem('minerx_auth_token', result.token!);
-          onLogin(result.user, result.token!);
+          candidateToken = result.token!;
+          candidateUser = result.user;
         } else {
           const result = loginLocalUser(username, password);
           if (!result.success) throw new Error(result.message || 'Credenciales incorrectas');
-          localStorage.setItem('minerx_auth_token', result.token!);
-          onLogin(result.user, result.token!);
+          candidateToken = result.token!;
+          candidateUser = result.user;
         }
+      }
+
+      if (candidateToken && candidateUser) {
+        await onLogin(candidateUser, candidateToken);
       }
     } catch (err: any) {
       setError(err.message || 'Error de conexión');
@@ -115,11 +117,20 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onOpenLanding, 
     }
   };
 
-  const handleQuickDemoLogin = () => {
-    const res = loginLocalUser('admin', 'admin123');
-    if (res.success && res.token && res.user) {
-      localStorage.setItem('minerx_auth_token', res.token);
-      onLogin(res.user, res.token);
+  const handleQuickDemoLogin = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const res = loginLocalUser('admin', 'admin123');
+      if (res.success && res.token && res.user) {
+        await onLogin(res.user, res.token);
+      } else {
+        throw new Error(res.message || 'Credenciales demo no disponibles');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Error de autorización');
+    } finally {
+      setLoading(false);
     }
   };
 

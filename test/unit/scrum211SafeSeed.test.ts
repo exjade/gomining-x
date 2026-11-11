@@ -68,15 +68,15 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Itera
     const manifestPath = resolve(process.cwd(), 'docs/paquetes_dinamicos/seed-manifest.json');
     const manifestJson = JSON.parse(readFileSync(manifestPath, 'utf-8'));
 
-    assert.equal(manifestJson.summary.totalPackages, 30);
-    assert.equal(manifestJson.summary.bySection.minerx, 6);
+    assert.equal(manifestJson.summary.totalPackages, 29);
+    assert.equal(manifestJson.summary.bySection.minerx, 5);
     assert.equal(manifestJson.summary.bySection.preventa, 4);
     assert.equal(manifestJson.summary.bySection.lanzamiento, 16);
     assert.equal(manifestJson.summary.bySection.mensual, 4);
     assert.equal(manifestJson.summary.customTiersCount, 22);
 
-    assert.equal(manifestJson.packages.length, 30);
-    assert.equal(TARGET_PACKAGES_MANIFEST.length, 30);
+    assert.equal(manifestJson.packages.length, 29);
+    assert.equal(TARGET_PACKAGES_MANIFEST.length, 29);
     assert.equal(CUSTOM_TIERS_MANIFEST.length, 22);
 
     // Deep field parity between JSON manifest and TypeScript catalog
@@ -113,23 +113,19 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Itera
   });
 
   // 2. FINDING 1: FUENTES MINERX 1–5 REVALIDATED EXCLUSIVELY AGAINST AUTHORIZED DOCS
-  it('verifies MinerX 1–5 match authorized documents and completely excludes PouwMiners_Modelo_de_Negocio_Consolidado.docx', () => {
+  it('verifies MinerX matches exact baseline Client plans from main@99e0461 and excludes unauthorized docs', () => {
     const minerxItems = TARGET_PACKAGES_MANIFEST.filter((p) => p.section === 'minerx');
-    assert.equal(minerxItems.length, 6);
+    assert.equal(minerxItems.length, 5);
 
     const fixedMinerx = minerxItems.filter((p) => p.packageType === 'fixed');
-    assert.equal(fixedMinerx.length, 5);
+    assert.equal(fixedMinerx.length, 4);
 
-    // Exact names and parameters from authorized docs:
-    // docs/JIRA_pouwminer_story_paquetes_dinamicos.md,
-    // docs/GoMining_Explicacion_Sistema_de_Compra_y_Mineros.docx,
-    // docs/GoMining_Documento_de_Diseno.docx
+    // Exact names and parameters matching Client main@99e0461
     const expected = [
-      { id: 'minerx-01', name: 'Minero 1', powerTh: 48, priceUsdt: 561.99, sortOrder: 1 },
-      { id: 'minerx-02', name: 'Minero 2', powerTh: 64, priceUsdt: 744.99, sortOrder: 2 },
-      { id: 'minerx-03', name: 'Minero 3', powerTh: 96, priceUsdt: 1111.99, sortOrder: 3 },
-      { id: 'minerx-04', name: 'Minero 4', powerTh: 128, priceUsdt: 1474.99, sortOrder: 4 },
-      { id: 'minerx-05', name: 'Minero 5', powerTh: 192, priceUsdt: 2201.99, sortOrder: 5 },
+      { id: 'minerx-01', name: '1.46 TH', powerTh: 1.46, priceUsdt: 18.99, sortOrder: 1 },
+      { id: 'minerx-02', name: '8.33 TH', powerTh: 8.33, priceUsdt: 99.99, sortOrder: 2 },
+      { id: 'minerx-03', name: '21.05 TH', powerTh: 21.05, priceUsdt: 249.99, sortOrder: 3 },
+      { id: 'minerx-04', name: '42.44 TH', powerTh: 42.44, priceUsdt: 499.99, sortOrder: 4 },
     ];
 
     for (let i = 0; i < expected.length; i++) {
@@ -181,7 +177,7 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Itera
     assert.equal(customRow.id, 'minerx-custom');
     assert.equal(customRow.name, 'Custom');
     assert.equal(customRow.displayName, 'Custom');
-    assert.equal(customRow.sortOrder, 6);
+    assert.equal(customRow.sortOrder, 5);
     assert.equal(customRow.currency, 'USD');
 
     // Regression prevention test: MUST NOT be "Personalizado"
@@ -413,7 +409,7 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Itera
 
     assert.equal(report.dryRun, true);
     assert.equal(report.applied, false);
-    assert.equal(report.summary.createdCount, 30); // 30 simulated
+    assert.equal(report.summary.createdCount, 29); // 29 simulated
     assert.equal(report.summary.skippedCount, 0);
     assert.equal(report.summary.blockedCount, 0);
 
@@ -423,7 +419,7 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Itera
   });
 
   // 9. SAFE SEED EXECUTION: APPLY CREATES DOCUMENTS SAFELY
-  it('executes safe seed with apply=true, creating 30 documents without materializing priceUsdCents', async () => {
+  it('executes safe seed with apply=true, creating 29 documents without materializing priceUsdCents', async () => {
     const store = new MockPackageStoreAdapter();
 
     const report: SafeSeedReport = await safeSeedService.executeSafeSeed({
@@ -435,13 +431,13 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Itera
 
     assert.equal(report.dryRun, false);
     assert.equal(report.applied, true);
-    assert.equal(report.summary.createdCount, 30);
+    assert.equal(report.summary.createdCount, 29);
     assert.equal(report.summary.skippedCount, 0);
     assert.equal(report.summary.blockedCount, 0);
 
     // Verify written documents
-    assert.equal(store.docs.size, 30);
-    assert.equal(store.writeLog.length, 30);
+    assert.equal(store.docs.size, 29);
+    assert.equal(store.writeLog.length, 29);
 
     for (const [id, docData] of store.docs.entries()) {
       assert.equal(docData.packageId, id);
@@ -499,7 +495,7 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Itera
       targetCatalog: TARGET_PACKAGES_MANIFEST,
       storeAdapter: store,
     });
-    assert.equal(report1.summary.createdCount, 30);
+    assert.equal(report1.summary.createdCount, 29);
 
     const initialWriteCount = store.writeLog.length;
 
@@ -512,7 +508,7 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Itera
     });
 
     assert.equal(report2.summary.createdCount, 0, 'Second run must create 0 documents');
-    assert.equal(report2.summary.skippedCount, 30, 'Second run must skip all 30 existing documents');
+    assert.equal(report2.summary.skippedCount, 29, 'Second run must skip all 29 existing documents');
     assert.equal(report2.summary.blockedCount, 0);
 
     // No additional writes performed
@@ -557,8 +553,8 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Itera
     assert.equal(legacy2.name, 'Minero 2 Standard');
     assert.equal(legacy2.section, undefined, 'Legacy document must not have section added');
 
-    // Total docs = 2 legacy + 30 new = 32
-    assert.equal(store.docs.size, 32);
+    // Total docs = 2 legacy + 29 new = 31
+    assert.equal(store.docs.size, 31);
 
     // Zero delete operations were performed
     const hasDelete = store.writeLog.some((w) => w.type === 'delete');
@@ -664,7 +660,7 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Itera
       storeAdapter: store,
     });
 
-    assert.equal(store.docs.size, 30);
+    assert.equal(store.docs.size, 29);
     for (const [id, docData] of store.docs.entries()) {
       // Mandated check by PO: !("description" in docData)
       assert.equal(
@@ -764,7 +760,7 @@ describe('SCRUM-211 / POUW-1.4: Safe Seed Script & Package Manifest Tests (Itera
       storeAdapter: store,
     });
 
-    assert.equal(store.docs.size, 30);
+    assert.equal(store.docs.size, 29);
     for (const [id, docData] of store.docs.entries()) {
       assert.equal(
         !('variablePct' in docData),

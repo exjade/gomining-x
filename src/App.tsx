@@ -41,6 +41,7 @@ import {
 
 import { BASELINE_USD_PER_THS_HOUR, resolveGpuBenchmark } from './data/gpuBenchmarks';
 import { apiFetch } from './utils/apiConfig';
+import { logoutFirebase } from './utils/firebaseAuth';
 import type { 
   SaladAccountConfig, 
   KryptexConfig, 
@@ -142,16 +143,10 @@ export const App: React.FC = () => {
 
   const [saladBalance, setSaladBalance] = useState<SaladBalanceInfo | null>(null);
 
-  // User Authentication & Session State - Requiere autenticación para entrar al dashboard
-  const [currentUser, setCurrentUser] = useState<any>(() => {
-    const savedUser = localStorage.getItem('minerx_user');
-    const savedToken = localStorage.getItem('minerx_auth_token');
-    if (savedUser && savedToken) {
-      try {
-        return JSON.parse(savedUser);
-      } catch {}
-    }
-    return null;
+  // User Authentication & Session State - Requiere autenticación verificada para entrar al dashboard
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isSessionChecking, setIsSessionChecking] = useState<boolean>(() => {
+    return typeof localStorage !== 'undefined' && Boolean(localStorage.getItem('minerx_auth_token'));
   });
 
   // UI View Mode (Landing Page vs Dashboard)
@@ -190,34 +185,94 @@ export const App: React.FC = () => {
     }
   }, [themeMode]);
 
-  // Verify auth session on mount
-  useEffect(() => {
-    const token = localStorage.getItem('minerx_auth_token');
-    if (token) {
-      apiFetch('/api/auth/me')
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data?.success && data.user) {
-            setCurrentUser(data.user);
-            localStorage.setItem('minerx_user', JSON.stringify(data.user));
-          }
-        })
-        .catch(() => {});
+  const handleLogout = useCallback(() => {
+    apiFetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    logoutFirebase().catch(() => {});
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('minerx_auth_token');
+      localStorage.removeItem('minerx_user');
+      localStorage.removeItem('minerx_auth_user');
     }
+    setCurrentUser(null);
+    setSaladBalance(null);
   }, []);
 
-  const handleLogin = (user: any, token: string) => {
-    setCurrentUser(user);
-    localStorage.setItem('minerx_user', JSON.stringify(user));
-    localStorage.setItem('minerx_auth_token', token);
-    setViewMode('dashboard');
-  };
+  // Verify auth session on mount (SCRUM-222)
+  useEffect(() => {
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('minerx_auth_token') : null;
+    if (!token) {
+      handleLogout();
+      setIsSessionChecking(false);
+      return;
+    }
 
-  const handleLogout = () => {
-    apiFetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
-    localStorage.removeItem('minerx_auth_token');
-    localStorage.removeItem('minerx_user');
-    setCurrentUser(null);
+    apiFetch('/api/auth/me')
+      .then((res) => {
+        if (!res.ok) {
+          handleLogout();
+          return null;
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (data?.success && data.user && data.user.role === 'admin') {
+          setCurrentUser(data.user);
+          localStorage.setItem('minerx_user', JSON.stringify(data.user));
+        } else if (data) {
+          handleLogout();
+        }
+      })
+      .catch(() => {
+        handleLogout();
+      })
+      .finally(() => {
+        setIsSessionChecking(false);
+      });
+  }, [handleLogout]);
+
+  // Intercept 401 unauthorized events to purge session and reset UI (SCRUM-222)
+  useEffect(() => {
+    const onUnauthorized = () => {
+      handleLogout();
+    };
+    window.addEventListener('minerx:unauthorized', onUnauthorized);
+    return () => {
+      window.removeEventListener('minerx:unauthorized', onUnauthorized);
+    };
+  }, [handleLogout]);
+
+  const handleLogin = async (_user: any, token: string): Promise<boolean> => {
+    // 1. Guardar token temporal en localStorage
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('minerx_auth_token', token);
+    }
+    setIsSessionChecking(true);
+
+    try {
+      // 2. Pre-dashboard authorization check: solo permitir entrar con 200 y rol admin aprobado
+      const res = await apiFetch('/api/auth/me');
+      if (!res.ok) {
+        throw new Error('Sesión no autorizada para el panel de administración.');
+      }
+      const data = await res.json();
+      if (!data?.success || !data?.user || data?.user?.role !== 'admin') {
+        throw new Error('Se requiere un usuario con rol de administrador aprobado.');
+      }
+
+      // 3. 200 Admin aprobado: autorizar sesión y abrir dashboard
+      setCurrentUser(data.user);
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('minerx_user', JSON.stringify(data.user));
+      }
+      setViewMode('dashboard');
+      return true;
+    } catch (err: any) {
+      // 4. No aprobado o error: purgar credenciales y permanecer en AuthScreen
+      handleLogout();
+      throw err;
+    } finally {
+      setIsSessionChecking(false);
+    }
   };
 
   const getInitialTabFromUrl = (): { tab: string; suite: 'fleet' | 'admin' } | null => {
@@ -1366,6 +1421,17 @@ export const App: React.FC = () => {
             initiallyExpanded={true}
             isStandalone={true}
           />
+        </div>
+      </div>
+    );
+  }
+
+  if (isSessionChecking) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center font-sans ${themeMode === 'light' ? 'bg-[#EDEFF8]' : 'bg-[#07090F]'}`}>
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs font-mono text-slate-500">Verificando sesión administrativa...</span>
         </div>
       </div>
     );

@@ -1064,11 +1064,11 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
 
       // No token
       const noAuthReq = { headers: {}, query: {} } as any;
-      assert.equal(getAuthenticatedUser(noAuthReq), null);
+      assert.equal(await getAuthenticatedUser(noAuthReq), null);
 
       // Invalid token
       const invalidTokenReq = { headers: { authorization: 'Bearer invalid_nonexistent_token' }, query: {} } as any;
-      assert.equal(getAuthenticatedUser(invalidTokenReq), null);
+      assert.equal(await getAuthenticatedUser(invalidTokenReq), null);
 
       // Create a temporary verified user with sessionToken in memory/users db
       const db = readUsers();
@@ -1077,6 +1077,7 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
         id: 'usr_scrum212_test_admin',
         username: 'scrum212_admin',
         email: 'scrum212_admin@minerx.cloud',
+        role: 'admin',
         passwordHash: 'dummy_hash_value',
         fullName: 'SCRUM-212 Test Administrator',
         createdAt: new Date().toISOString(),
@@ -1087,14 +1088,14 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
 
       try {
         const validReq = { headers: { authorization: `Bearer ${testToken}` }, query: {} } as any;
-        const authUser = getAuthenticatedUser(validReq);
+        const authUser = await getAuthenticatedUser(validReq);
         assert.ok(authUser);
         assert.equal(authUser?.id, 'usr_scrum212_test_admin');
         assert.equal(authUser?.username, 'scrum212_admin');
 
         // Query token fallback
         const queryTokenReq = { headers: {}, query: { token: testToken } } as any;
-        const authUserQuery = getAuthenticatedUser(queryTokenReq);
+        const authUserQuery = await getAuthenticatedUser(queryTokenReq);
         assert.ok(authUserQuery);
         assert.equal(authUserQuery?.id, 'usr_scrum212_test_admin');
       } finally {
@@ -1126,6 +1127,7 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
         id: 'usr_http_test_operator',
         username: 'http_operator',
         email: 'http_operator@minerx.cloud',
+        role: 'admin',
         passwordHash: 'hash',
         fullName: 'HTTP Operator',
         createdAt: new Date().toISOString(),
@@ -1361,8 +1363,12 @@ describe('SCRUM-212: Dynamic Catalog Service & Legacy Decoupling Tests', () => {
         assert.equal(legacyRes.headers.get('x-catalog-legacy'), 'true');
       } finally {
         // Cleanup server and test user
-        server.closeAllConnections?.();
-        server.close();
+        if (server) {
+          if (typeof (server as any).closeAllConnections === 'function') {
+            (server as any).closeAllConnections();
+          }
+          await new Promise<void>((r) => server.close(() => r()));
+        }
         const cleanedDb = readUsers();
         cleanedDb.users = cleanedDb.users.filter(u => u.id !== 'usr_http_test_operator');
         writeUsers(cleanedDb);
