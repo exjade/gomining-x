@@ -516,6 +516,11 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
 
     // 8. Untrimmed minerId is trimmed and canonicalized across contracts and orders
     const capturedPayloads: any[] = []
+    const capturedSetDocs: { docPath: string; data: any; options?: any }[] = []
+    const mockSetDoc = async (docRef: any, data: any, options?: any) => {
+      capturedSetDocs.push({ docPath: docRef?.path || '', data, options })
+      return Promise.resolve()
+    }
     const originalFetch = globalThis.fetch
     try {
       globalThis.fetch = (async (_url: string, init?: RequestInit) => {
@@ -525,14 +530,17 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
         return new Response('{}', { status: 200 })
       }) as typeof fetch
 
-      await recordMinerPurchaseToAdmin({
-        minerId: '  MINER-UNTRIMMED-123  ',
-        uid: 'usr_untrimmed_test',
-        packageId: 'minerx-01',
-        name: 'Trim Miner',
-        powerTh: 10,
-        price: 100,
-      })
+      await recordMinerPurchaseToAdmin(
+        {
+          minerId: '  MINER-UNTRIMMED-123  ',
+          uid: 'usr_untrimmed_test',
+          packageId: 'minerx-01',
+          name: 'Trim Miner',
+          powerTh: 10,
+          price: 100,
+        },
+        { setDoc: mockSetDoc }
+      )
 
       const contract = capturedPayloads.find((p) => p.contractedTh !== undefined)
       const order = capturedPayloads.find((p) => p.activatedMinerId !== undefined)
@@ -543,26 +551,47 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
       assert.equal(order.orderId, 'ord_MINER-UNTRIMMED-123')
       assert.equal(order.idempotencyKey, 'ord_MINER-UNTRIMMED-123')
 
+      // Verify Firestore mock received trimmed IDs
+      const setDocContract = capturedSetDocs.find((d) => d.data.contractedTh !== undefined)
+      const setDocOrder = capturedSetDocs.find((d) => d.data.activatedMinerId !== undefined)
+      assert.ok(setDocContract, 'Must persist contract via setDoc double')
+      assert.ok(setDocOrder, 'Must persist order via setDoc double')
+      assert.equal(setDocContract.data.id, 'MINER-UNTRIMMED-123')
+      assert.equal(setDocOrder.data.activatedMinerId, 'MINER-UNTRIMMED-123')
+
       // Untrimmed uid should be trimmed to buyerUid across contract and order
       const uidPayloads: any[] = []
+      const uidSetDocs: { docPath: string; data: any; options?: any }[] = []
+      const uidMockSetDoc = async (docRef: any, data: any, options?: any) => {
+        uidSetDocs.push({ docPath: docRef?.path || '', data, options })
+        return Promise.resolve()
+      }
       globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
         if (init?.body) uidPayloads.push(JSON.parse(init.body as string))
         return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       }) as typeof fetch
 
-      await recordMinerPurchaseToAdmin({
-        minerId: 'MINER-TRIM-UID-1',
-        uid: '   usr_trim_me   ',
-        packageId: 'minerx-01',
-        name: 'Trim UID Miner',
-        powerTh: 10,
-        price: 100,
-      })
+      await recordMinerPurchaseToAdmin(
+        {
+          minerId: 'MINER-TRIM-UID-1',
+          uid: '   usr_trim_me   ',
+          packageId: 'minerx-01',
+          name: 'Trim UID Miner',
+          powerTh: 10,
+          price: 100,
+        },
+        { setDoc: uidMockSetDoc }
+      )
 
       const uidContract = uidPayloads.find((p) => p.contractedTh !== undefined)
       const uidOrder = uidPayloads.find((p) => p.activatedMinerId !== undefined)
       assert.equal(uidContract.userId, 'usr_trim_me')
       assert.equal(uidOrder.userId, 'usr_trim_me')
+
+      const uidSetContract = uidSetDocs.find((d) => d.data.contractedTh !== undefined)
+      const uidSetOrder = uidSetDocs.find((d) => d.data.activatedMinerId !== undefined)
+      assert.equal(uidSetContract?.data?.userId, 'usr_trim_me')
+      assert.equal(uidSetOrder?.data?.userId, 'usr_trim_me')
     } finally {
       globalThis.fetch = originalFetch
     }
@@ -667,28 +696,38 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
       /Cannot save miner without a valid uid/
     )
 
-    // 8. With valid packageId and uid, validation passes and persistence proceeds to setDoc
-    // (rejection is Firestore network/permission error per ISSUE-01, not a validation error)
-    await assert.rejects(
-      async () => {
-        await savePurchasedMiner('user_save_test', {
-          ...baseMiner,
-          packageId: 'minerx-01',
-          packageSnapshot: {
-            packageId: 'divergent-will-be-overridden',
-            name: '   ',
-            powerTh: 0,
-            price: -5,
-            currency: 'USD',
-          },
-        })
+    // 8. With valid packageId and uid, validation passes and persistence proceeds to setDoc double
+    let savedDoc: any = null
+    const mockSaveSetDoc = async (_ref: any, data: any) => {
+      savedDoc = data
+      return Promise.resolve()
+    }
+
+    await savePurchasedMiner(
+      'user_save_test',
+      {
+        ...baseMiner,
+        packageId: 'minerx-01',
+        packageSnapshot: {
+          packageId: 'divergent-will-be-overridden',
+          name: '   ',
+          powerTh: 0,
+          price: -5,
+          currency: 'USD',
+        },
       },
-      (err: any) => {
-        const msg = String(err?.message || '')
-        assert.ok(!msg.includes('Cannot save miner without a valid'), `Must pass validation: ${msg}`)
-        return true
-      }
+      { setDoc: mockSaveSetDoc }
     )
+
+    assert.ok(savedDoc, 'savePurchasedMiner must persist via setDoc double')
+    assert.equal(savedDoc.id, 'MINER-SAVE-001')
+    assert.equal(savedDoc.uid, 'user_save_test')
+    assert.equal(savedDoc.packageId, 'minerx-01')
+    assert.equal(savedDoc.packageSnapshot.packageId, 'minerx-01')
+    assert.equal(savedDoc.packageSnapshot.name, 'Save Test Miner')
+    assert.equal(savedDoc.packageSnapshot.powerTh, 10)
+    assert.equal(savedDoc.packageSnapshot.price, 100)
+    assert.equal(savedDoc.packageSnapshot.currency, 'USD')
   })
 
   // --------------------------------------------------------------------------
@@ -2853,5 +2892,44 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
     } finally {
       globalThis.fetch = originalFetch
     }
+  })
+
+  // --------------------------------------------------------------------------
+  // Direct test for updateMinerInFirestore with test doubles
+  // --------------------------------------------------------------------------
+  it('updateMinerInFirestore updates miner document via double and propagates errors', async () => {
+    let capturedRef: any = null
+    let capturedUpdates: any = null
+    const mockUpdateDoc = async (ref: any, updates: any) => {
+      capturedRef = ref
+      capturedUpdates = updates
+      return Promise.resolve()
+    }
+
+    await updateMinerInFirestore(
+      'user_test_update',
+      'MINER-UPD-001',
+      { name: 'Updated Miner Name', status: 'active' },
+      { updateDoc: mockUpdateDoc }
+    )
+
+    assert.ok(capturedRef, 'updateDoc double must be called')
+    assert.deepEqual(capturedUpdates, { name: 'Updated Miner Name', status: 'active' })
+
+    // Error propagation test
+    const failingUpdateDoc = async () => {
+      throw new Error('Simulated updateDoc failure')
+    }
+    await assert.rejects(
+      async () => {
+        await updateMinerInFirestore(
+          'user_test_update',
+          'MINER-UPD-001',
+          { status: 'paused' },
+          { updateDoc: failingUpdateDoc }
+        )
+      },
+      /Simulated updateDoc failure/
+    )
   })
 })

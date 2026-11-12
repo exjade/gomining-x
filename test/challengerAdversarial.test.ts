@@ -1,4 +1,4 @@
-import { describe, it, beforeEach } from 'node:test'
+import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   fetchStorefrontCatalog,
@@ -23,6 +23,8 @@ import {
   orchestrateWalletMinerPurchaseFlow,
 } from '../src/minerPurchaseFlow.ts'
 
+const originalFetch = globalThis.fetch
+
 describe('EMPIRICAL CHALLENGER: Stress Harness for Bug 4 & Contract 6', () => {
   beforeEach(() => {
     clearCatalogCache()
@@ -38,6 +40,10 @@ describe('EMPIRICAL CHALLENGER: Stress Harness for Bug 4 & Contract 6', () => {
       receipts: [],
       presaleTokens: 0,
     })
+  })
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch
   })
 
   // =========================================================================

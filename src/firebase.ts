@@ -51,9 +51,60 @@ const firebaseConfig = {
   appId: env.VITE_FIREBASE_APP_ID ?? '',
 }
 
+const isNode = typeof window === 'undefined' && typeof process !== 'undefined' && !!process.env
+
+if (isNode && firebaseConfig.projectId === 'salad-miners') {
+  throw new Error('FATAL: Direct connection to production Firebase projectId "salad-miners" is forbidden in Node.')
+}
+
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const db = getFirestore(app)
+
+export interface FirestoreWriterHooks {
+  setDoc: (docRef: any, data: any, options?: any) => Promise<any>
+  updateDoc: (docRef: any, updates: any) => Promise<any>
+}
+
+export function assertNotProductionFirestore(docRef?: any): void {
+  const targetProjectId = docRef?.firestore?.app?.options?.projectId
+    || (typeof db !== 'undefined' && (db as any)?.app?.options?.projectId)
+    || (typeof process !== 'undefined' && process.env?.VITE_FIREBASE_PROJECT_ID)
+  if (targetProjectId === 'salad-miners') {
+    throw new Error('FATAL: Write operation attempted against production Firestore database "salad-miners".')
+  }
+}
+
+let activeWriterHooks: FirestoreWriterHooks = {
+  setDoc: (ref, data, opts) => {
+    assertNotProductionFirestore(ref)
+    return setDoc(ref, data, opts)
+  },
+  updateDoc: (ref, updates) => {
+    assertNotProductionFirestore(ref)
+    return updateDoc(ref, updates)
+  },
+}
+
+export function setFirestoreWritersForTesting(hooks: Partial<FirestoreWriterHooks> | null): void {
+  if (!hooks) {
+    activeWriterHooks = {
+      setDoc: (ref, data, opts) => {
+        assertNotProductionFirestore(ref)
+        return setDoc(ref, data, opts)
+      },
+      updateDoc: (ref, updates) => {
+        assertNotProductionFirestore(ref)
+        return updateDoc(ref, updates)
+      },
+    }
+  } else {
+    activeWriterHooks = {
+      ...activeWriterHooks,
+      ...hooks,
+    }
+  }
+}
 
 import {
   cleanupUserMinersSubscription,
@@ -885,7 +936,11 @@ export async function assignSponsorToUser(
 }
 
 /** Saves purchased miner to Firestore at /miners/{uid}/miner/{minerId} */
-export async function savePurchasedMiner(uid: string, minerData: StoredMiner) {
+export async function savePurchasedMiner(
+  uid: string,
+  minerData: StoredMiner,
+  deps?: { setDoc?: (docRef: any, data: any, options?: any) => Promise<any> },
+) {
   if (!minerData || typeof minerData !== 'object') {
     throw new Error('Cannot save miner without valid minerData')
   }
@@ -909,7 +964,8 @@ export async function savePurchasedMiner(uid: string, minerData: StoredMiner) {
   const minerRef = doc(db, 'miners', cleanUid, 'miner', minerId)
   const nowIso = new Date().toISOString()
   const snap = minerData.packageSnapshot
-  await setDoc(minerRef, {
+  const executeSetDoc = deps?.setDoc || activeWriterHooks.setDoc
+  await executeSetDoc(minerRef, {
     ...minerData,
     id: minerId,
     uid: cleanUid,
@@ -1141,18 +1197,21 @@ export async function saveStorefrontSections(config: Partial<StorefrontSectionsC
  * (/admin_contracts and /admin_orders) so it immediately displays on the MinerX Admin Dashboard.
  * Dual-syncs to Cloud Firestore and the Express REST API.
  */
-export async function recordMinerPurchaseToAdmin(params: {
-  minerId: string
-  uid?: string
-  email?: string
-  name: string
-  powerTh: number
-  price: number
-  txHash?: string
-  network?: string
-  ownerWallet?: string
-  packageId?: string
-}): Promise<void> {
+export async function recordMinerPurchaseToAdmin(
+  params: {
+    minerId: string
+    uid?: string
+    email?: string
+    name: string
+    powerTh: number
+    price: number
+    txHash?: string
+    network?: string
+    ownerWallet?: string
+    packageId?: string
+  },
+  deps?: { setDoc?: (docRef: any, data: any, options?: any) => Promise<any> },
+): Promise<void> {
   if (!params || typeof params !== 'object') {
     throw new Error('Cannot record miner purchase without valid parameters')
   }
@@ -1228,9 +1287,10 @@ export async function recordMinerPurchaseToAdmin(params: {
     settledAt: now,
   }
 
+  const executeSetDoc = deps?.setDoc || activeWriterHooks.setDoc
   await Promise.all([
-    setDoc(doc(db, 'admin_contracts', minerId), contractDoc, { merge: true }),
-    setDoc(doc(db, 'admin_orders', orderId), orderDoc, { merge: true }),
+    executeSetDoc(doc(db, 'admin_contracts', minerId), contractDoc, { merge: true }),
+    executeSetDoc(doc(db, 'admin_orders', orderId), orderDoc, { merge: true }),
   ])
 
   // Dual sync: also post to Express REST API if available
@@ -1289,10 +1349,16 @@ export async function getUserMiners(uid: string): Promise<StoredMiner[]> {
 }
 
 /** Update visual traits or status of a miner in Firestore */
-export async function updateMinerInFirestore(uid: string, minerId: string, updates: Partial<StoredMiner>) {
+export async function updateMinerInFirestore(
+  uid: string,
+  minerId: string,
+  updates: Partial<StoredMiner>,
+  deps?: { updateDoc?: (docRef: any, updates: any) => Promise<any> },
+) {
   try {
     const minerRef = doc(db, 'miners', uid, 'miner', minerId)
-    await updateDoc(minerRef, updates as any)
+    const executeUpdateDoc = deps?.updateDoc || activeWriterHooks.updateDoc
+    await executeUpdateDoc(minerRef, updates as any)
   } catch (error) {
     console.error('Error updating miner in Firestore:', error)
     throw error
