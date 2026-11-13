@@ -14,11 +14,18 @@ import {
   Coins, 
   Layers, 
   LogOut,
-  X
+  X,
+  CheckCircle2
 } from 'lucide-react';
 import { apiFetch } from '../utils/apiConfig';
 import { registerLocalUser, loginLocalUser } from '../utils/localAuthService';
 import { registerWithFirebase, loginWithFirebase } from '../utils/firebaseAuth';
+import {
+  isDevSessionAllowed,
+  isValidEmail,
+  getFirebaseAuthErrorMessage,
+  REGISTRATION_PENDING_ADMIN_NOTICE
+} from '../utils/authFlow';
 
 interface LandingPageProps {
   onEnterDashboard: () => void;
@@ -41,14 +48,75 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [password, setPassword] = useState<string>('');
   const [fullName, setFullName] = useState<string>('');
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(false);
+
+  const devAllowed = isDevSessionAllowed();
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
+    setAuthNotice(null);
     setAuthLoading(true);
 
     try {
+      // Production-like enforcement (Fail-closed, SCRUM-243)
+      if (!devAllowed) {
+        if (authMode === 'register') {
+          const targetEmail = (email.trim() || username.trim()).toLowerCase();
+          if (!targetEmail || !isValidEmail(targetEmail)) {
+            throw new Error('Ingresa un correo electrónico válido.');
+          }
+          if (!password || password.length < 6) {
+            throw new Error('La contraseña debe tener al menos 6 caracteres.');
+          }
+
+          const fbRes = await registerWithFirebase(targetEmail, password, fullName || username || targetEmail.split('@')[0]);
+          if (!fbRes.success) {
+            throw new Error(getFirebaseAuthErrorMessage(fbRes));
+          }
+
+          // Clear client tokens so unapproved user cannot attempt dashboard entry
+          try {
+            const { auth } = await import('../utils/firebaseAuth');
+            const { signOut } = await import('firebase/auth');
+            if (auth) await signOut(auth);
+          } catch {}
+          if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem('minerx_auth_token');
+            localStorage.removeItem('minerx_auth_user');
+          }
+
+          setAuthMode('login');
+          setUsername(targetEmail);
+          setPassword('');
+          setAuthNotice(REGISTRATION_PENDING_ADMIN_NOTICE);
+          return;
+        }
+
+        // Login flow
+        const targetEmail = username.trim().toLowerCase();
+        if (!targetEmail || !isValidEmail(targetEmail)) {
+          throw new Error('Ingresa un correo electrónico válido (ej. admin@ejemplo.com).');
+        }
+        if (!password) {
+          throw new Error('Ingresa tu contraseña.');
+        }
+
+        const fbRes = await loginWithFirebase(targetEmail, password);
+        if (!fbRes.success) {
+          // Visible error, zero silent fallback to local vault or legacy login
+          throw new Error(getFirebaseAuthErrorMessage(fbRes));
+        }
+
+        if (fbRes.success && fbRes.token && fbRes.user) {
+          await onLogin(fbRes.user, fbRes.token);
+          setShowAuthModal(false);
+          return;
+        }
+      }
+
+      // Legacy dev / test branch
       let candidateToken: string | null = null;
       let candidateUser: any = null;
 
@@ -100,7 +168,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         }
       }
 
-      // 3. Autonomous Local Fallback (Guarantees registration & login ALWAYS work)
+      // 3. Autonomous Local Fallback (Guarantees dev offline)
       if (!candidateToken) {
         if (authMode === 'register') {
           const result = registerLocalUser(username, email, password, fullName);
@@ -530,6 +598,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </p>
             </div>
 
+            {authNotice && (
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                <span>{authNotice}</span>
+              </div>
+            )}
+
             {authError && (
               <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
                 {authError}
@@ -557,19 +632,23 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <div>
                 <label className="text-slate-300 block mb-1 font-semibold flex items-center gap-1.5">
                   <User className="w-3.5 h-3.5 text-[#05F292]" />
-                  Usuario o Correo:
+                  {devAllowed ? 'Usuario o Correo:' : 'Correo Electrónico:'}
                 </label>
                 <input
-                  type="text"
+                  type={devAllowed ? 'text' : 'email'}
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder={authMode === 'login' ? 'admin o tu correo' : 'ej. roman'}
+                  placeholder={
+                    devAllowed
+                      ? (authMode === 'login' ? 'admin o tu correo' : 'ej. roman')
+                      : 'admin@ejemplo.com'
+                  }
                   required
                   className="w-full rounded-xl border border-white/[0.1] bg-[#070A12] px-3.5 py-2.5 text-white placeholder-slate-500 focus:border-[#05F292] focus:outline-none"
                 />
               </div>
 
-              {authMode === 'register' && (
+              {authMode === 'register' && devAllowed && (
                 <div>
                   <label className="text-slate-300 block mb-1 font-semibold flex items-center gap-1.5">
                     <Mail className="w-3.5 h-3.5 text-cyan-400" />
@@ -580,7 +659,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="minero@ejemplo.com"
-                    required
                     className="w-full rounded-xl border border-white/[0.1] bg-[#070A12] px-3.5 py-2.5 text-white placeholder-slate-500 focus:border-[#05F292] focus:outline-none"
                   />
                 </div>
@@ -608,7 +686,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               >
                 {authLoading 
                   ? 'Procesando...' 
-                  : (authMode === 'login' ? 'Iniciar Sesión' : 'Crear Cuenta & Entrar')}
+                  : (authMode === 'login' ? 'Iniciar Sesión' : 'Crear Cuenta')}
               </button>
             </form>
 
@@ -621,6 +699,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     onClick={() => {
                       setAuthMode('register');
                       setAuthError(null);
+                      setAuthNotice(null);
                     }}
                     className="text-[#05F292] hover:underline font-semibold"
                   >
@@ -634,6 +713,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     onClick={() => {
                       setAuthMode('login');
                       setAuthError(null);
+                      setAuthNotice(null);
                     }}
                     className="text-cyan-400 hover:underline font-semibold"
                   >

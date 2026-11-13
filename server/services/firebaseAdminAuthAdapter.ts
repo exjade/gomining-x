@@ -1,6 +1,6 @@
 import fs from 'fs';
 import { initializeApp, getApps, applicationDefault, type App } from 'firebase-admin/app';
-import { getAuth, type Auth, type DecodedIdToken } from 'firebase-admin/auth';
+import { getAuth, type Auth, type DecodedIdToken, type UserRecord } from 'firebase-admin/auth';
 
 export const ADMIN_APP_NAME = 'minerx-backend-admin';
 
@@ -94,6 +94,34 @@ export class FirebaseAdminAuthAdapter {
     return Boolean(this.auth);
   }
 
+  public getApp(): App | null {
+    return this.app;
+  }
+
+  public async getUser(uid: string): Promise<UserRecord | null> {
+    if (!this.auth || !uid) {
+      return null;
+    }
+    try {
+      const user = await this.auth.getUser(uid);
+      return user || null;
+    } catch {
+      return null;
+    }
+  }
+
+  public async getUserByEmail(email: string): Promise<UserRecord | null> {
+    if (!this.auth || !email) {
+      return null;
+    }
+    try {
+      const user = await this.auth.getUserByEmail(email);
+      return user || null;
+    } catch {
+      return null;
+    }
+  }
+
   public async verifyIdToken(idToken: string): Promise<DecodedIdToken | null> {
     if (!this.auth || !idToken) {
       return null;
@@ -108,4 +136,4 @@ export class FirebaseAdminAuthAdapter {
 }
 
 export const firebaseAdminAuthAdapter = new FirebaseAdminAuthAdapter();
-export type { DecodedIdToken };
+export type { DecodedIdToken, UserRecord };

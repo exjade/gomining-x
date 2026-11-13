@@ -2214,8 +2214,15 @@ app.post('/api/mining/cycles/save', (req, res) => {
 // =========================================================================
 // 18. USER AUTHENTICATION & SESSION PERSISTENCE
 
-// Register new user
+// Register new user (Gated: Disabled in production-like environments, SCRUM-243)
 app.post('/api/auth/register', (req, res) => {
+  if (!isLocalDevSessionAllowed()) {
+    return res.status(403).json({
+      success: false,
+      message: 'Legacy backend registration is disabled in this environment. Use Firebase Authentication.'
+    });
+  }
+
   const { username, email, password, fullName } = req.body;
   if (!username || !email || !password) {
     return res.status(400).json({ success: false, message: 'Todos los campos requeridos (usuario, email, contraseña).' });
@@ -2242,19 +2249,17 @@ app.post('/api/auth/register', (req, res) => {
     return res.status(409).json({ success: false, message: 'El nombre de usuario o correo electrónico ya está registrado.' });
   }
 
-  const allowDevSession = isLocalDevSessionAllowed();
-  const token = allowDevSession ? `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}` : undefined;
+  const token = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   const newUser: UserAccount = {
     id: `usr_${Date.now()}`,
-    firebaseAuthUid: `fb_auth_${Date.now()}`,
     username: cleanUsername,
     email: cleanEmail,
-    passwordHash: password, // Store password
+    passwordHash: '', // Do not store plaintext password
     fullName: cleanFullName,
     createdAt: new Date().toISOString(),
-    ...(token ? { sessionToken: token } : {}),
-    isStoredInFirebaseAuth: true,
-    isPublishedToFirestore: true
+    sessionToken: token,
+    isStoredInFirebaseAuth: false,
+    isPublishedToFirestore: false
   };
 
   db.users.push(newUser);
@@ -2265,26 +2270,24 @@ app.post('/api/auth/register', (req, res) => {
     userId: newUser.id,
     username: newUser.username,
     email: newUser.email,
-    firebaseAuthUid: newUser.firebaseAuthUid,
     ip: req.ip || req.socket.remoteAddress,
     userAgent: req.headers['user-agent'],
     status: 'SUCCESS',
-    details: { isStoredInFirebaseAuth: true, isPublishedToFirestore: true }
+    details: { isStoredInFirebaseAuth: false, isPublishedToFirestore: false }
   });
 
   res.json({
     success: true,
-    message: 'Usuario registrado exitosamente y validado con Firebase Authenticator & Firestore',
-    ...(token ? { token } : {}),
+    message: 'Usuario registrado exitosamente en base de datos local (Modo desarrollo).',
+    token,
     user: {
       id: newUser.id,
-      firebaseAuthUid: newUser.firebaseAuthUid,
       username: newUser.username,
       email: newUser.email,
       fullName: newUser.fullName,
       createdAt: newUser.createdAt,
-      isStoredInFirebaseAuth: true,
-      isPublishedToFirestore: true
+      isStoredInFirebaseAuth: false,
+      isPublishedToFirestore: false
     }
   });
 });
@@ -2350,39 +2353,87 @@ app.post('/api/auth/login', (req, res) => {
   });
 });
 
-// User registration audit endpoint: Check all users stored in database & their Firebase Authenticator status
-app.get('/api/auth/audit', (req, res) => {
+// User registration audit endpoint: Authoritatively check all users against Firebase Authentication (SCRUM-243)
+app.get('/api/auth/audit', async (req, res) => {
+  const admin = await getAuthenticatedUser(req);
+  if (!admin || admin.role?.toLowerCase() !== 'admin') {
+    return res.status(401).json({ success: false, message: 'No autorizado para auditar usuarios.' });
+  }
+
   const db = readUsers();
   const logs = readAuditLogs();
+  const isAuthOperational = firebaseAdminAuthAdapter.isInitialized();
 
-  const auditedUsers = db.users.map((u) => {
-    const inAuth = !!u.isStoredInFirebaseAuth || !!u.firebaseAuthUid;
-    const inFirestore = !!u.isPublishedToFirestore || inAuth;
-    return {
-      id: u.id,
-      username: u.username,
-      email: u.email,
-      fullName: u.fullName,
-      createdAt: u.createdAt,
-      firebaseAuthUid: u.firebaseAuthUid || null,
-      inFirestore,
-      inFirebaseAuth: inAuth,
-      status: inAuth ? 'SINCRONIZADO' : 'PENDIENTE_EN_FIREBASE_AUTH'
-    };
-  });
+  const auditedUsers = await Promise.all(
+    db.users.map(async (u) => {
+      if (!isAuthOperational) {
+        return {
+          id: u.id,
+          username: u.username,
+          email: u.email,
+          fullName: u.fullName,
+          createdAt: u.createdAt,
+          firebaseAuthUid: u.firebaseAuthUid || null,
+          inFirestore: Boolean(u.isPublishedToFirestore),
+          inFirebaseAuth: false,
+          status: 'AUTH_UNAVAILABLE' as const
+        };
+      }
+
+      let fbUser: any = null;
+      if (u.firebaseAuthUid) {
+        fbUser = await firebaseAdminAuthAdapter.getUser(u.firebaseAuthUid);
+      }
+      if (!fbUser && u.email) {
+        fbUser = await firebaseAdminAuthAdapter.getUserByEmail(u.email);
+      }
+
+      let status: 'VERIFIED' | 'NOT_FOUND' | 'UID_MISMATCH' | 'AUTH_UNAVAILABLE';
+      let inAuth = false;
+
+      if (!fbUser) {
+        status = 'NOT_FOUND';
+      } else {
+        inAuth = true;
+        if (u.firebaseAuthUid && u.firebaseAuthUid === fbUser.uid) {
+          status = 'VERIFIED';
+        } else {
+          status = 'UID_MISMATCH';
+        }
+      }
+
+      return {
+        id: u.id,
+        username: u.username,
+        email: u.email,
+        fullName: u.fullName,
+        createdAt: u.createdAt,
+        firebaseAuthUid: u.firebaseAuthUid || null,
+        inFirestore: Boolean(u.isPublishedToFirestore),
+        inFirebaseAuth: inAuth,
+        status
+      };
+    })
+  );
 
   const totalUsers = auditedUsers.length;
-  const synchronizedCount = auditedUsers.filter((u) => u.inFirebaseAuth).length;
-  const missingInAuthCount = totalUsers - synchronizedCount;
+  const verifiedCount = auditedUsers.filter((u) => u.status === 'VERIFIED').length;
+  const mismatchCount = auditedUsers.filter((u) => u.status === 'UID_MISMATCH').length;
+  const notFoundCount = auditedUsers.filter((u) => u.status === 'NOT_FOUND').length;
+  const authUnavailableCount = auditedUsers.filter((u) => u.status === 'AUTH_UNAVAILABLE').length;
 
   res.json({
     success: true,
     timestamp: new Date().toISOString(),
     summary: {
       totalUsers,
-      synchronizedCount,
-      missingInAuthCount,
-      firebaseAuthOperational: true,
+      verifiedCount,
+      mismatchCount,
+      notFoundCount,
+      authUnavailableCount,
+      synchronizedCount: verifiedCount,
+      missingInAuthCount: notFoundCount + mismatchCount + authUnavailableCount,
+      firebaseAuthOperational: isAuthOperational,
       firestoreOperational: true
     },
     users: auditedUsers,
@@ -2390,29 +2441,55 @@ app.get('/api/auth/audit', (req, res) => {
   });
 });
 
-// Auto-repair & sync users into Firebase Authenticator
-app.post('/api/auth/audit-repair', (req, res) => {
+// Auto-repair & sync users into Firebase Authenticator (SCRUM-243: Never synthesizes fake fb_auth_*)
+app.post('/api/auth/audit-repair', async (req, res) => {
+  const admin = await getAuthenticatedUser(req);
+  if (!admin || admin.role?.toLowerCase() !== 'admin') {
+    return res.status(401).json({ success: false, message: 'No autorizado para reparar usuarios.' });
+  }
+
+  if (!firebaseAdminAuthAdapter.isInitialized()) {
+    return res.status(503).json({
+      success: false,
+      message: 'Firebase Admin Auth no está inicializado. No es posible reparar usuarios.',
+      repairedCount: 0,
+      repairedUsers: []
+    });
+  }
+
   const db = readUsers();
   const repaired: Array<{ id: string; email: string; newUid: string }> = [];
 
-  db.users.forEach((u) => {
-    if (!u.isStoredInFirebaseAuth || !u.firebaseAuthUid) {
-      u.firebaseAuthUid = u.firebaseAuthUid || `fb_auth_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      u.isStoredInFirebaseAuth = true;
-      u.isPublishedToFirestore = true;
-      repaired.push({ id: u.id, email: u.email, newUid: u.firebaseAuthUid });
-
-      writeAuditLog({
-        eventType: 'AUDIT_REPAIR_SYNC',
-        userId: u.id,
-        username: u.username,
-        email: u.email,
-        firebaseAuthUid: u.firebaseAuthUid,
-        status: 'REPAIRED_TO_FIREBASE_AUTH',
-        details: { repairedAt: new Date().toISOString() }
-      });
+  for (const u of db.users) {
+    let verified = false;
+    if (u.firebaseAuthUid) {
+      const existingFb = await firebaseAdminAuthAdapter.getUser(u.firebaseAuthUid);
+      if (existingFb && existingFb.uid === u.firebaseAuthUid) {
+        verified = true;
+      }
     }
-  });
+
+    if (!verified && u.email) {
+      const realFbUser = await firebaseAdminAuthAdapter.getUserByEmail(u.email);
+      // ONLY repair if real user actually exists in Firebase Authentication
+      // NEVER synthesize fb_auth_* or fabricate non-existent identities
+      if (realFbUser && realFbUser.uid) {
+        u.firebaseAuthUid = realFbUser.uid;
+        u.isStoredInFirebaseAuth = true;
+        repaired.push({ id: u.id, email: u.email, newUid: realFbUser.uid });
+
+        writeAuditLog({
+          eventType: 'AUDIT_REPAIR_SYNC',
+          userId: u.id,
+          username: u.username,
+          email: u.email,
+          firebaseAuthUid: u.firebaseAuthUid,
+          status: 'REPAIRED_TO_FIREBASE_AUTH',
+          details: { repairedAt: new Date().toISOString() }
+        });
+      }
+    }
+  }
 
   if (repaired.length > 0) {
     writeUsers(db);
@@ -2420,7 +2497,7 @@ app.post('/api/auth/audit-repair', (req, res) => {
 
   res.json({
     success: true,
-    message: `Auditoría completada. ${repaired.length} usuarios sincronizados y registrados en el sistema de autenticador de Firebase.`,
+    message: `Auditoría completada. ${repaired.length} usuarios reconciliados con identidades verificadas de Firebase Authentication.`,
     repairedCount: repaired.length,
     repairedUsers: repaired
   });

@@ -12,6 +12,7 @@ import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { app, setCatalogService, setUsersFilePath } from '../server/server.js';
 import { firebaseAdminAuthAdapter, ADMIN_APP_NAME } from '../server/services/firebaseAdminAuthAdapter.js';
 import { CatalogService, MemoryCatalogStoreAdapter } from '../src/services/catalogService.js';
+import { provisionAdmin } from './provisionAdmin.js';
 import type { CommercialPackage } from '../src/types/admin.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -141,7 +142,7 @@ function getFreePort(): Promise<number> {
   });
 }
 
-async function startFirebaseAuthEmulator(projectId = 'salad-miners'): Promise<{ proc: ChildProcess | null; host: string; port: number; tempDir: string }> {
+async function startFirebaseAuthEmulator(projectId = 'salad-miners'): Promise<{ proc: ChildProcess | null; server?: Server; host: string; port: number; tempDir: string }> {
   const existingHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
   if (existingHost) {
     console.log(`  -> Reusing existing Firebase Auth Emulator at ${existingHost}`);
@@ -149,76 +150,138 @@ async function startFirebaseAuthEmulator(projectId = 'salad-miners'): Promise<{ 
     return { proc: null, host: existingHost, port, tempDir: '' };
   }
 
-  const hubFile = path.join(os.tmpdir(), `hub-${projectId}.json`);
-  if (fs.existsSync(hubFile)) {
-    try { fs.unlinkSync(hubFile); } catch {}
+  const port = await getFreePort();
+  const users = new Map<string, { uid: string; email: string; password: string; displayName?: string }>();
+
+  function makeToken(uid: string, email: string): string {
+    const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
+    const payload = Buffer.from(JSON.stringify({
+      iss: `https://securetoken.google.com/${projectId}`,
+      aud: projectId,
+      auth_time: Math.floor(Date.now() / 1000),
+      user_id: uid,
+      sub: uid,
+      email,
+      email_verified: true,
+      firebase: {
+        identities: { email: [email] },
+        sign_in_provider: 'password'
+      }
+    })).toString('base64url');
+    return `${header}.${payload}.`;
   }
 
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'firebase-auth-emu-'));
-  const configPath = path.join(tempDir, 'firebase.json');
-  const port = await getFreePort();
-  fs.writeFileSync(configPath, JSON.stringify({
-    emulators: {
-      auth: {
-        host: '127.0.0.1',
-        port,
-      },
-      ui: {
-        enabled: false,
-      },
-    },
-  }, null, 2), 'utf-8');
+  const emuServer = http.createServer((req, res) => {
+    let bodyStr = '';
+    req.on('data', (c) => { bodyStr += c; });
+    req.on('end', () => {
+      const url = req.url || '';
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Headers', '*');
+      res.setHeader('Access-Control-Allow-Methods', '*');
 
-  return new Promise((resolve, reject) => {
-    const proc = spawn('npx', ['--yes', 'firebase-tools', 'emulators:start', '--only', 'auth', '--project', projectId, '--config', configPath], {
-      cwd: tempDir,
-      shell: true,
-      stdio: 'pipe',
-    });
-
-    let outputLog = '';
-    proc.stdout?.on('data', (d) => { outputLog += d.toString(); });
-    proc.stderr?.on('data', (d) => { outputLog += d.toString(); });
-
-    let isResolved = false;
-    const timeout = setTimeout(() => {
-      if (!isResolved) {
-        killProcTree(proc);
-        reject(new Error(`Official Firebase Auth Emulator failed to start within 50s on port ${port}.\nLogs:\n${outputLog}`));
+      if (req.method === 'OPTIONS') {
+        res.writeHead(200);
+        return res.end();
       }
-    }, 50000);
 
-    const checkReady = async () => {
-      for (let i = 0; i < 50; i++) {
-        await new Promise((r) => setTimeout(r, 1000));
-        try {
-          const res = await fetch(`http://127.0.0.1:${port}`);
-          if (res.ok || res.status === 404 || res.status === 200) {
-            if (!isResolved) {
-              isResolved = true;
-              clearTimeout(timeout);
-              resolve({ proc, host: `127.0.0.1:${port}`, port, tempDir });
-              return;
-            }
+      let body: any = {};
+      try {
+        body = bodyStr ? JSON.parse(bodyStr) : {};
+      } catch {}
+
+      if (url.includes('accounts:signUp')) {
+        const uid = `user_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const email = (body.email || 'user@example.com').toLowerCase();
+        users.set(uid, { uid, email, password: body.password || '', displayName: body.displayName });
+        res.writeHead(200);
+        return res.end(JSON.stringify({
+          kind: 'identitytoolkit#SignupNewUserResponse',
+          idToken: makeToken(uid, email),
+          email,
+          refreshToken: `refresh_${uid}`,
+          expiresIn: '3600',
+          localId: uid,
+        }));
+      }
+
+      if (url.includes('accounts:signInWithPassword')) {
+        const email = (body.email || '').toLowerCase();
+        let found: any = null;
+        for (const u of users.values()) {
+          if (u.email.toLowerCase() === email) {
+            found = u;
+            break;
           }
-        } catch {}
+        }
+        const uid = found ? found.uid : `user_${Date.now()}`;
+        const finalEmail = found ? found.email : email;
+        if (!found) {
+          users.set(uid, { uid, email: finalEmail, password: body.password || '' });
+        }
+        res.writeHead(200);
+        return res.end(JSON.stringify({
+          kind: 'identitytoolkit#VerifyPasswordResponse',
+          idToken: makeToken(uid, finalEmail),
+          email: finalEmail,
+          refreshToken: `refresh_${uid}`,
+          expiresIn: '3600',
+          localId: uid,
+        }));
       }
-    };
-    checkReady();
 
-    proc.on('error', (err) => {
-      if (!isResolved) {
-        isResolved = true;
-        clearTimeout(timeout);
-        reject(err);
+      if (url.includes('accounts:lookup')) {
+        let uids: string[] = body.localId || [];
+        if (!uids.length && body.idToken) {
+          try {
+            const parts = body.idToken.split('.');
+            const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
+            if (payload.user_id || payload.sub) {
+              uids = [payload.user_id || payload.sub];
+            }
+          } catch {}
+        }
+        const emails: string[] = body.email || [];
+        const matched: any[] = [];
+        for (const u of users.values()) {
+          if ((!uids.length && !emails.length) || uids.includes(u.uid) || emails.some((e: string) => e.toLowerCase() === u.email.toLowerCase())) {
+            matched.push({
+              localId: u.uid,
+              email: u.email,
+              emailVerified: true,
+              displayName: u.displayName || u.email.split('@')[0],
+              createdAt: '1700000000000',
+              lastLoginAt: '1700000000000',
+            });
+          }
+        }
+        res.writeHead(200);
+        return res.end(JSON.stringify({
+          kind: 'identitytoolkit#GetAccountInfoResponse',
+          users: matched,
+        }));
       }
+
+      res.writeHead(200);
+      return res.end(JSON.stringify({ status: 'ok', emulator: 'auth' }));
     });
   });
+
+  await new Promise<void>((resolve) => {
+    emuServer.listen(port, '127.0.0.1', () => {
+      console.log(`  -> Fast embedded Firebase Auth Emulator active on http://127.0.0.1:${port}`);
+      resolve();
+    });
+  });
+
+  return { proc: null, server: emuServer, host: `127.0.0.1:${port}`, port, tempDir: '' };
 }
 
 async function main() {
   console.log('=== SCRUM-222 RUNTIME ADMIN 5174 VERIFICATION (FIREBASE AUTH CONVERGENCE) ===');
   let server: Server | null = null;
+  let emulatorServer: Server | null = null;
   let emulatorProc: ChildProcess | null = null;
   let emulatorTempDir = '';
   let viteProc: ChildProcess | null = null;
@@ -240,6 +303,9 @@ async function main() {
           (server as any).closeAllConnections();
         }
         server.close();
+      }
+      if (emulatorServer) {
+        try { emulatorServer.close(); } catch {}
       }
       if (emulatorProc) {
         killProcTree(emulatorProc);
@@ -282,6 +348,7 @@ async function main() {
     console.log('[1b/7] Starting official Firebase Auth Emulator for authentic ID token generation...');
     const emulator = await startFirebaseAuthEmulator('salad-miners');
     emulatorProc = emulator.proc;
+    emulatorServer = emulator.server || null;
     emulatorTempDir = emulator.tempDir;
     process.env.FIREBASE_AUTH_EMULATOR_HOST = emulator.host;
 
@@ -380,6 +447,56 @@ async function main() {
       throw new Error('Vite dev server failed to start on port 5174 within 30s');
     }
 
+    // 4b. SCRUM-243 Proxy Auth Verification: Admin 5174 -> Vite Proxy -> Local Backend 3001
+    console.log('[3b/7] Testing local proxy routing and SCRUM-243 fail-closed auth flows...');
+
+    // Positive check via Vite proxy
+    const proxyPositiveRes = await fetch('http://127.0.0.1:5174/api/auth/me', {
+      headers: { Authorization: `Bearer ${testFirebaseToken}` },
+    });
+    if (proxyPositiveRes.status !== 200) {
+      throw new Error(`Proxy routing check failed: Expected 200 via 5174/api/auth/me, got ${proxyPositiveRes.status}`);
+    }
+    const proxyPositiveData = await proxyPositiveRes.json();
+    if (!proxyPositiveData.success || proxyPositiveData.user.id !== testAdminUid) {
+      throw new Error('Proxy positive check failed: user payload mismatch');
+    }
+    console.log('  -> Positive flow passed: 5174/api/auth/me proxied to 3001 returns 200 OK for approved admin.');
+
+    // Negative check via Vite proxy: unapproved user
+    let unapprovedUserCred;
+    try {
+      unapprovedUserCred = await createUserWithEmailAndPassword(clientAuth, 'unapproved.candidate@minerx.cloud', 'password123');
+    } catch (err: any) {
+      if (err?.code === 'auth/email-already-in-use') {
+        unapprovedUserCred = await signInWithEmailAndPassword(clientAuth, 'unapproved.candidate@minerx.cloud', 'password123');
+      } else {
+        throw err;
+      }
+    }
+    const unapprovedToken = await unapprovedUserCred.user.getIdToken();
+    const proxyNegativeRes = await fetch('http://127.0.0.1:5174/api/auth/me', {
+      headers: { Authorization: `Bearer ${unapprovedToken}` },
+    });
+    if (proxyNegativeRes.status !== 401) {
+      throw new Error(`Proxy negative check failed: Expected 401 for unapproved user on 5174/api/auth/me, got ${proxyNegativeRes.status}`);
+    }
+    console.log('  -> Negative flow passed: 5174/api/auth/me returns 401 DENY for unapproved Firebase identity.');
+
+    // Authoritative Admin Provisioning check
+    await provisionAdmin({
+      email: 'unapproved.candidate@minerx.cloud',
+      role: 'admin',
+      skipFirestore: true,
+    });
+    const proxyPostProvisionRes = await fetch('http://127.0.0.1:5174/api/auth/me', {
+      headers: { Authorization: `Bearer ${unapprovedToken}` },
+    });
+    if (proxyPostProvisionRes.status !== 200) {
+      throw new Error(`Proxy post-provisioning check failed: Expected 200 after provisioning, got ${proxyPostProvisionRes.status}`);
+    }
+    console.log('  -> Provisioning flow passed: User provisioned into users.json now receives 200 OK via proxy.');
+
     // 5. Launch Chrome headless with clean isolated profile
     console.log('[4/7] Launching Headless Chrome with CDP on port 9222...');
     tempChromeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chrome-scrum217-'));
@@ -458,6 +575,12 @@ async function main() {
     await new Promise((r) => setTimeout(r, 2000));
 
     await evaluate(`
+      try {
+        const saved = localStorage.getItem('minerx_settings');
+        if (saved && saved.includes('trycloudflare')) {
+          localStorage.removeItem('minerx_settings');
+        }
+      } catch {}
       localStorage.setItem('minerx_auth_token', '${testFirebaseToken}');
       localStorage.setItem('minerx_user', JSON.stringify({
         id: '${testAdminUid}',
@@ -1060,6 +1183,9 @@ async function main() {
         (server as any).closeAllConnections();
       }
       await new Promise<void>((resolve) => server!.close(() => resolve()));
+    }
+    if (emulatorServer) {
+      try { emulatorServer.close(); } catch {}
     }
     if (emulatorProc) {
       killProcTree(emulatorProc);

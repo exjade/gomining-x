@@ -246,7 +246,6 @@ export const App: React.FC = () => {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('minerx_auth_token', token);
     }
-    setIsSessionChecking(true);
 
     try {
       // 2. Pre-dashboard authorization check: solo permitir entrar con 200 y rol admin aprobado
@@ -270,8 +269,6 @@ export const App: React.FC = () => {
       // 4. No aprobado o error: purgar credenciales y permanecer en AuthScreen
       handleLogout();
       throw err;
-    } finally {
-      setIsSessionChecking(false);
     }
   };
 
