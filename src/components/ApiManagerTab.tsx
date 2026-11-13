@@ -131,6 +131,10 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
       missingInAuthCount: number;
       firebaseAuthOperational: boolean;
       firestoreOperational: boolean;
+      verifiedCount?: number;
+      mismatchCount?: number;
+      notFoundCount?: number;
+      authUnavailableCount?: number;
     };
     users: Array<{
       id: string;
@@ -139,9 +143,9 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
       fullName: string;
       createdAt: string;
       firebaseAuthUid: string | null;
-      inFirestore: boolean;
+      inFirestore?: boolean;
       inFirebaseAuth: boolean;
-      status: string;
+      status: 'VERIFIED' | 'UID_MISMATCH' | 'NOT_FOUND' | 'AUTH_UNAVAILABLE' | string;
     }>;
     recentAuditLogs?: Array<{
       id: string;
@@ -1916,21 +1920,65 @@ export const ApiManagerTab: React.FC<ApiManagerTabProps> = ({
                         )}
                       </td>
                       <td className="py-2.5 px-3">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          isLight ? 'bg-cyan-100 text-cyan-800' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
-                        }`}>
-                          <Database className="h-3 w-3" />
-                          Publicado
-                        </span>
+                        {u.inFirestore === true ? (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            isLight ? 'bg-cyan-100 text-cyan-800' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
+                          }`}>
+                            <Database className="h-3 w-3" />
+                            Publicado
+                          </span>
+                        ) : u.inFirestore === false ? (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            isLight ? 'bg-rose-100 text-rose-800' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                          }`}>
+                            <AlertCircle className="h-3 w-3" />
+                            No publicado
+                          </span>
+                        ) : (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            isLight ? 'bg-slate-100 text-slate-700' : 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+                          }`}>
+                            <AlertCircle className="h-3 w-3" />
+                            Desconocido
+                          </span>
+                        )}
                       </td>
                       <td className="py-2.5 px-3">
-                        <span className={`text-[10px] font-semibold ${
-                          u.status === 'SINCRONIZADO'
-                            ? isLight ? 'text-emerald-700' : 'text-emerald-400'
-                            : isLight ? 'text-amber-700' : 'text-amber-400'
-                        }`}>
-                          {u.status}
-                        </span>
+                        {u.status === 'VERIFIED' ? (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            isLight ? 'bg-emerald-100 text-emerald-800' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          }`}>
+                            <CheckCircle2 className="h-3 w-3" />
+                            Verificado
+                          </span>
+                        ) : u.status === 'UID_MISMATCH' ? (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            isLight ? 'bg-rose-100 text-rose-800' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                          }`}>
+                            <AlertCircle className="h-3 w-3" />
+                            UID Mismatch
+                          </span>
+                        ) : u.status === 'NOT_FOUND' ? (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            isLight ? 'bg-amber-100 text-amber-800' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                          }`}>
+                            <AlertCircle className="h-3 w-3" />
+                            No encontrado en Firebase
+                          </span>
+                        ) : u.status === 'AUTH_UNAVAILABLE' ? (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            isLight ? 'bg-slate-100 text-slate-700' : 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+                          }`}>
+                            <AlertCircle className="h-3 w-3" />
+                            Auth no disponible
+                          </span>
+                        ) : (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            isLight ? 'bg-slate-100 text-slate-700' : 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+                          }`}>
+                            {u.status}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))

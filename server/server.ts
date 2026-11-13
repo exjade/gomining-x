@@ -375,20 +375,53 @@ export async function getAuthenticatedUser(req: express.Request): Promise<UserAc
       const decoded = await firebaseAdminAuthAdapter.verifyIdToken(token);
       if (decoded && decoded.uid) {
         const db = readUsers();
-        const existing = db.users.find(
-          (u) =>
-            ((u.firebaseAuthUid && u.firebaseAuthUid === decoded.uid) ||
-             (decoded.email && u.email && u.email.toLowerCase() === decoded.email.toLowerCase())) &&
-            u.role?.toLowerCase() === 'admin'
+        const adminUsers = db.users.filter((u) => u.role?.toLowerCase() === 'admin');
+
+        // 1. Exact UID match takes precedence (SCRUM-243 / B1)
+        const uidMatch = adminUsers.find(
+          (u) => Boolean(u.firebaseAuthUid && u.firebaseAuthUid.trim()) && u.firebaseAuthUid === decoded.uid
         );
-        if (existing) {
+        if (uidMatch) {
           return {
-            ...existing,
-            id: existing.id || decoded.uid,
+            ...uidMatch,
+            id: uidMatch.id || decoded.uid,
             firebaseAuthUid: decoded.uid,
-            email: decoded.email || existing.email,
+            email: decoded.email || uidMatch.email,
           };
         }
+
+        // 2. Fallback to email match ONLY for legacy records without firebaseAuthUid (disallows UID mismatch bypass)
+        const tokenEmail = decoded.email?.trim().toLowerCase();
+        if (tokenEmail) {
+          const recordsWithEmail = adminUsers.filter(
+            (u) => Boolean(u.email && u.email.trim().toLowerCase() === tokenEmail)
+          );
+
+          // If an allowlist record for this email already has a populated UID, exact UID match was required -> reject UID mismatch
+          const recordWithUid = recordsWithEmail.find(
+            (u) => Boolean(u.firebaseAuthUid && u.firebaseAuthUid.trim())
+          );
+          if (recordWithUid) {
+            console.warn(
+              `[Auth] UID mismatch for admin allowlist record '${tokenEmail}': record UID '${recordWithUid.firebaseAuthUid}' !== token UID '${decoded.uid}'. Rejecting authorization.`
+            );
+            return null;
+          }
+
+          // Legacy un-migrated record without Firebase UID: allow email fallback
+          const legacyRecord = recordsWithEmail.find(
+            (u) => !u.firebaseAuthUid || !u.firebaseAuthUid.trim()
+          );
+          if (legacyRecord) {
+            return {
+              ...legacyRecord,
+              id: legacyRecord.id || decoded.uid,
+              firebaseAuthUid: decoded.uid,
+              email: decoded.email || legacyRecord.email,
+            };
+          }
+        }
+
         // Fail closed: valid Firebase token, but user is NOT on server-side admin allowlist (privilege escalation protection)
         return null;
       }

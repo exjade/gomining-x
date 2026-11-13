@@ -483,6 +483,43 @@ async function main() {
     }
     console.log('  -> Negative flow passed: 5174/api/auth/me returns 401 DENY for unapproved Firebase identity.');
 
+    // Negative check via Vite proxy: Mismatched UID with same email (SCRUM-243 B1 runtime verification)
+    let mismatchUserCred;
+    try {
+      mismatchUserCred = await createUserWithEmailAndPassword(clientAuth, 'mismatch.admin@minerx.cloud', 'password123');
+    } catch (err: any) {
+      if (err?.code === 'auth/email-already-in-use') {
+        mismatchUserCred = await signInWithEmailAndPassword(clientAuth, 'mismatch.admin@minerx.cloud', 'password123');
+      } else {
+        throw err;
+      }
+    }
+    const mismatchToken = await mismatchUserCred.user.getIdToken();
+    const mismatchRealUid = mismatchUserCred.user.uid;
+
+    // Inject allowlist entry with matching email but DIFFERENT approved UID
+    const currentUsers = JSON.parse(fs.readFileSync(tempUsersFile, 'utf-8'));
+    currentUsers.users.push({
+      id: 'APPROVED_DIFFERENT_UID_999',
+      firebaseAuthUid: 'APPROVED_DIFFERENT_UID_999',
+      username: 'mismatch_target',
+      email: 'mismatch.admin@minerx.cloud',
+      fullName: 'Mismatch Allowlist Target',
+      role: 'admin',
+      passwordHash: '',
+      isStoredInFirebaseAuth: true,
+      createdAt: new Date().toISOString(),
+    });
+    fs.writeFileSync(tempUsersFile, JSON.stringify(currentUsers, null, 2), 'utf-8');
+
+    const mismatchRes = await fetch('http://127.0.0.1:5174/api/auth/me', {
+      headers: { Authorization: `Bearer ${mismatchToken}` },
+    });
+    if (mismatchRes.status !== 401) {
+      throw new Error(`B1 Mismatch Check Failed: Expected 401 when token UID (${mismatchRealUid}) differs from allowlist UID (APPROVED_DIFFERENT_UID_999), got ${mismatchRes.status}`);
+    }
+    console.log('  -> B1 Mismatch flow passed: 5174/api/auth/me returns 401 DENY when token UID differs from allowlist UID despite matching email.');
+
     // Authoritative Admin Provisioning check
     await provisionAdmin({
       email: 'unapproved.candidate@minerx.cloud',

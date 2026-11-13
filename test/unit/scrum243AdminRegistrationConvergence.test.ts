@@ -72,6 +72,13 @@ import {
   getFirebaseAuthErrorMessage,
   REGISTRATION_PENDING_ADMIN_NOTICE,
 } from '../../src/utils/authFlow.js';
+import {
+  registerLocalUser,
+  loginLocalUser,
+  getLocalSession,
+  auditLocalUsers,
+  repairLocalUsers,
+} from '../../src/utils/localAuthService.js';
 
 describe('SCRUM-243: Admin Registration Convergence & Security Tests (12 ACs)', () => {
   let tempDir: string;
@@ -571,5 +578,203 @@ describe('SCRUM-243: Admin Registration Convergence & Security Tests (12 ACs)', 
     // 4. Missing token -> 401
     const missingRes = await fetch(`${baseUrl}/api/auth/me`);
     assert.equal(missingRes.status, 401);
+  });
+
+  // ==========================================================================
+  // SCRUM-243 Remediated Blockers Verification (B1, B2, B3)
+  // ==========================================================================
+
+  // --------------------------------------------------------------------------
+  // Blocker B1: Reject UID mismatch even when email matches allowlist
+  // --------------------------------------------------------------------------
+  it('Blocker B1: Reject authorization with null / 401 when verified Firebase UID differs from allowlist UID (prevent email match bypass)', async () => {
+    const adminEmail = 'admin@minerx.cloud';
+    const approvedUidA = 'UID_ADMIN_A';
+    const mismatchedUidB = 'UID_ADMIN_B';
+
+    // 1. Allowlist entry has firebaseAuthUid = 'UID_ADMIN_A' and email = 'admin@minerx.cloud'
+    const db = readUsers();
+    db.users.push({
+      id: approvedUidA,
+      firebaseAuthUid: approvedUidA,
+      username: 'admin_a',
+      email: adminEmail,
+      fullName: 'Approved Admin A',
+      role: 'admin',
+      passwordHash: '',
+      createdAt: '2026-11-13T00:00:00.000Z',
+      isStoredInFirebaseAuth: true,
+    });
+    writeUsers(db);
+
+    // 2. Verified Firebase token arrives with uid = 'UID_ADMIN_B' and email = 'admin@minerx.cloud'
+    firebaseAdminAuthAdapter.setAuthInstance({
+      verifyIdToken: async (token: string) => {
+        if (token === 'mismatched_token_b') {
+          return {
+            uid: mismatchedUidB,
+            email: adminEmail,
+            name: 'Mismatched Attacker',
+          };
+        }
+        throw new Error('Invalid token');
+      },
+    });
+
+    // 3. Direct getAuthenticatedUser(req) assertion: rejects with null
+    const fakeReq: any = {
+      headers: {
+        authorization: 'Bearer mismatched_token_b',
+      },
+    };
+    const authenticated = await getAuthenticatedUser(fakeReq);
+    assert.equal(
+      authenticated,
+      null,
+      'getAuthenticatedUser must reject authorization with null when token UID does not match allowlist UID'
+    );
+
+    // 4. HTTP endpoint assertion: /api/auth/me returns 401 Unauthorized
+    const res = await fetch(`${baseUrl}/api/auth/me`, {
+      headers: { Authorization: 'Bearer mismatched_token_b' },
+    });
+    assert.equal(res.status, 401, 'HTTP /api/auth/me must return 401 Unauthorized on UID mismatch');
+    const data = await res.json();
+    assert.equal(data.success, false);
+    assert.ok(data.message.includes('Sesión expirada o inválida'));
+  });
+
+  // --------------------------------------------------------------------------
+  // Blocker B2: localAuthService produces honest local dev identities
+  // --------------------------------------------------------------------------
+  it('Blocker B2: localAuthService produces honest local identities (local_user_*, firebaseAuthUid: null, isStoredInFirebaseAuth: false, isPublishedToFirestore: false)', () => {
+    (globalThis as any).localStorage.clear();
+
+    // 1. Dev registration produces honest local user
+    const regRes = registerLocalUser('localdev', 'localdev@minerx.local', 'password123', 'Local Dev User');
+    assert.equal(regRes.success, true);
+    assert.ok(regRes.user.id.startsWith('local_user_'), `User ID must start with local_user_, got: ${regRes.user.id}`);
+    assert.equal(regRes.user.firebaseAuthUid, null, 'firebaseAuthUid must be null for local user');
+    assert.equal(regRes.user.isStoredInFirebaseAuth, false, 'isStoredInFirebaseAuth must be false for local user');
+    assert.equal(regRes.user.isPublishedToFirestore, false, 'isPublishedToFirestore must be false for local user');
+    assert.ok(regRes.message.includes('sesión local de desarrollo'));
+
+    // 2. Dev login produces honest local user
+    const loginRes = loginLocalUser('localdev@minerx.local', 'password123');
+    assert.equal(loginRes.success, true);
+    assert.ok(loginRes.user.id.startsWith('local_user_'), `User ID must start with local_user_, got: ${loginRes.user.id}`);
+    assert.equal(loginRes.user.firebaseAuthUid, null, 'firebaseAuthUid must remain null upon login');
+    assert.equal(loginRes.user.isStoredInFirebaseAuth, false, 'isStoredInFirebaseAuth must remain false upon login');
+    assert.equal(loginRes.user.isPublishedToFirestore, false, 'isPublishedToFirestore must remain false upon login');
+
+    // 3. Stored session returns honest flags
+    const session = getLocalSession();
+    assert.ok(session.user, 'Session user must be present');
+    assert.ok(session.user.id.startsWith('local_user_'));
+    assert.equal(session.user.firebaseAuthUid, null);
+    assert.equal(session.user.isStoredInFirebaseAuth, false);
+    assert.equal(session.user.isPublishedToFirestore, false);
+
+    // 4. Audit reports AUTH_UNAVAILABLE with no false synchronization
+    const audit = auditLocalUsers();
+    assert.equal(audit.success, true);
+    assert.equal(audit.summary.firebaseAuthOperational, false);
+    assert.equal(audit.summary.firestoreOperational, false);
+    assert.equal(audit.summary.synchronizedCount, 0);
+    assert.ok(
+      audit.users.every(
+        (u: any) => u.inFirebaseAuth === false && u.inFirestore === false && u.status === 'AUTH_UNAVAILABLE'
+      ),
+      'All local users in dev mode must have AUTH_UNAVAILABLE status'
+    );
+
+    // 5. Repair normalizes records without synthesizing fake Firebase claims
+    const repair = repairLocalUsers();
+    assert.equal(repair.success, true);
+    assert.equal(repair.repairedCount, 0, 'repairedCount must be 0 (no false Firebase sync claims)');
+  });
+
+  // --------------------------------------------------------------------------
+  // Blocker B3: Firestore projection failure/unavailable safety in provisionAdmin
+  // --------------------------------------------------------------------------
+  it('Blocker B3: provisionAdmin ensures isPublishedToFirestore remains false and success is false if Firestore throws or is unavailable', async () => {
+    // Case 1: Firestore throws error during .set()
+    const failingFirestore = {
+      collection: () => ({
+        doc: () => ({
+          set: async () => {
+            throw new Error('Firestore connection timeout / simulated rejection');
+          },
+        }),
+      }),
+    };
+
+    const failResult = await provisionAdmin({
+      email: realUserEmail,
+      role: 'admin',
+      dryRun: false,
+      skipFirestore: false,
+      firestoreInstance: failingFirestore,
+    });
+
+    assert.equal(failResult.success, false, 'success must be false when Firestore projection throws');
+    assert.equal(failResult.firestoreProjected, false, 'firestoreProjected must be false when Firestore throws');
+    assert.equal(failResult.user.isPublishedToFirestore, false, 'result.user.isPublishedToFirestore must remain false');
+    assert.ok(
+      failResult.firestoreError?.includes('Firestore connection timeout'),
+      'firestoreError must capture error message'
+    );
+
+    let db = readUsers();
+    let savedUser = db.users.find((u) => u.email === realUserEmail);
+    assert.ok(savedUser, 'User must be recorded in users.json');
+    assert.equal(
+      savedUser?.isPublishedToFirestore,
+      false,
+      'users.json must record isPublishedToFirestore=false when Firestore write throws'
+    );
+
+    // Case 2: Firestore unavailable (null instance and not skipped)
+    const unavailResult = await provisionAdmin({
+      email: realUserEmail,
+      role: 'admin',
+      dryRun: false,
+      skipFirestore: false,
+      firestoreInstance: null,
+    });
+
+    assert.equal(unavailResult.success, false, 'success must be false when Firestore is unavailable and not skipped');
+    assert.equal(unavailResult.firestoreProjected, false, 'firestoreProjected must be false');
+    assert.equal(unavailResult.user.isPublishedToFirestore, false, 'isPublishedToFirestore must be false');
+
+    db = readUsers();
+    savedUser = db.users.find((u) => u.email === realUserEmail);
+    assert.ok(savedUser);
+    assert.equal(
+      savedUser?.isPublishedToFirestore,
+      false,
+      'users.json must record isPublishedToFirestore=false when Firestore is unavailable'
+    );
+
+    // Case 3: Firestore explicitly skipped
+    const skippedResult = await provisionAdmin({
+      email: realUserEmail,
+      role: 'admin',
+      dryRun: false,
+      skipFirestore: true,
+    });
+
+    assert.equal(skippedResult.success, true, 'success must be true when Firestore is explicitly skipped');
+    assert.equal(skippedResult.firestoreProjected, false, 'firestoreProjected must be false when skipped');
+    assert.equal(skippedResult.user.isPublishedToFirestore, false, 'isPublishedToFirestore must remain false');
+
+    db = readUsers();
+    savedUser = db.users.find((u) => u.email === realUserEmail);
+    assert.ok(savedUser);
+    assert.equal(
+      savedUser?.isPublishedToFirestore,
+      false,
+      'users.json must record isPublishedToFirestore=false when skipped'
+    );
   });
 });

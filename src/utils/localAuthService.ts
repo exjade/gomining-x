@@ -60,27 +60,49 @@ export function getLocalAuditLogs(): LocalAuditLog[] {
   }
 }
 
+function sanitizeLocalUser(u: any): LocalUser {
+  let id = typeof u.id === 'string' && u.id.trim() ? u.id.trim() : `local_user_${Date.now()}`;
+  if (id === 'usr_default_admin') {
+    id = 'local_dev_admin';
+  } else if (!id.startsWith('local_dev_') && !id.startsWith('local_user_')) {
+    id = id.startsWith('usr_') ? id.replace('usr_', 'local_user_') : `local_user_${id}`;
+  }
+
+  // Never keep synthetic fb_auth_* UIDs
+  const firebaseAuthUid = typeof u.firebaseAuthUid === 'string' && !u.firebaseAuthUid.startsWith('fb_auth_')
+    ? u.firebaseAuthUid
+    : null;
+
+  return {
+    ...u,
+    id,
+    firebaseAuthUid,
+    isStoredInFirebaseAuth: false,
+    isPublishedToFirestore: false
+  };
+}
+
 function getStoredUsers(): LocalUser[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) return parsed.map(sanitizeLocalUser);
     }
   } catch {}
 
-  // Initial seed with demo administrator account
+  // Initial seed with demo administrator account (explicit local/dev identity)
   const defaultAdmin: LocalUser = {
-    id: 'usr_default_admin',
-    firebaseAuthUid: 'fb_auth_admin_default',
+    id: 'local_dev_admin',
+    firebaseAuthUid: null,
     username: 'admin',
     email: 'admin@minerx.local',
     passwordHash: 'admin123',
     fullName: 'Roman (MinerX Admin)',
     createdAt: new Date().toISOString(),
     sessionToken: 'sess_init_admin',
-    isStoredInFirebaseAuth: true,
-    isPublishedToFirestore: true
+    isStoredInFirebaseAuth: false,
+    isPublishedToFirestore: false
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify([defaultAdmin]));
   return [defaultAdmin];
@@ -114,18 +136,18 @@ export function registerLocalUser(username: string, email: string, password: str
   }
 
   const token = `sess_local_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-  const firebaseAuthUid = `fb_auth_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const localId = `local_user_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const newUser: LocalUser = {
-    id: `usr_${Date.now()}`,
-    firebaseAuthUid,
+    id: localId,
+    firebaseAuthUid: null,
     username: cleanUser,
     email: cleanEmail,
     passwordHash: password,
     fullName: fullName ? fullName.trim() : cleanUser,
     createdAt: new Date().toISOString(),
     sessionToken: token,
-    isStoredInFirebaseAuth: true,
-    isPublishedToFirestore: true
+    isStoredInFirebaseAuth: false,
+    isPublishedToFirestore: false
   };
 
   users.push(newUser);
@@ -136,20 +158,20 @@ export function registerLocalUser(username: string, email: string, password: str
     userId: newUser.id,
     username: newUser.username,
     email: newUser.email,
-    firebaseAuthUid: newUser.firebaseAuthUid,
+    firebaseAuthUid: null,
     status: 'SUCCESS',
-    details: { isStoredInFirebaseAuth: true, isPublishedToFirestore: true }
+    details: { isStoredInFirebaseAuth: false, isPublishedToFirestore: false, localDevOnly: true }
   });
 
   localStorage.setItem(SESSION_TOKEN_KEY, token);
   localStorage.setItem(SESSION_USER_KEY, JSON.stringify({
     id: newUser.id,
-    firebaseAuthUid: newUser.firebaseAuthUid,
+    firebaseAuthUid: null,
     username: newUser.username,
     email: newUser.email,
     fullName: newUser.fullName,
-    isStoredInFirebaseAuth: true,
-    isPublishedToFirestore: true
+    isStoredInFirebaseAuth: false,
+    isPublishedToFirestore: false
   }));
 
   return {
@@ -157,15 +179,15 @@ export function registerLocalUser(username: string, email: string, password: str
     token,
     user: {
       id: newUser.id,
-      firebaseAuthUid: newUser.firebaseAuthUid,
+      firebaseAuthUid: null,
       username: newUser.username,
       email: newUser.email,
       fullName: newUser.fullName,
       createdAt: newUser.createdAt,
-      isStoredInFirebaseAuth: true,
-      isPublishedToFirestore: true
+      isStoredInFirebaseAuth: false,
+      isPublishedToFirestore: false
     },
-    message: 'Usuario registrado exitosamente y validado con Firebase Authentication.'
+    message: 'Usuario registrado exitosamente en sesión local de desarrollo.'
   };
 }
 
@@ -189,25 +211,26 @@ export function loginLocalUser(usernameOrEmail: string, password: string): { suc
       localStorage.setItem(SESSION_TOKEN_KEY, token);
       recordLocalAudit({
         eventType: 'AUTH_LOGIN_SUCCESS',
-        userId: 'usr_default_admin',
+        userId: 'local_dev_admin',
         username: 'admin',
         email: 'admin@minerx.local',
-        firebaseAuthUid: 'fb_auth_admin_default',
-        status: 'SUCCESS'
+        firebaseAuthUid: null,
+        status: 'SUCCESS',
+        details: { isStoredInFirebaseAuth: false, isPublishedToFirestore: false, localDevOnly: true }
       });
       return {
         success: true,
         token,
-        user: { 
-          id: 'usr_default_admin', 
-          firebaseAuthUid: 'fb_auth_admin_default',
-          username: 'admin', 
-          email: 'admin@minerx.local', 
+        user: {
+          id: 'local_dev_admin',
+          firebaseAuthUid: null,
+          username: 'admin',
+          email: 'admin@minerx.local',
           fullName: 'Roman (MinerX Admin)',
-          isStoredInFirebaseAuth: true,
-          isPublishedToFirestore: true
+          isStoredInFirebaseAuth: false,
+          isPublishedToFirestore: false
         },
-        message: 'Sesión iniciada con éxito'
+        message: 'Sesión local de desarrollo iniciada con éxito.'
       };
     }
     return { success: false, message: 'Usuario o contraseña incorrectos. Verifica tus credenciales.' };
@@ -215,10 +238,14 @@ export function loginLocalUser(usernameOrEmail: string, password: string): { suc
 
   const token = `sess_local_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   user.sessionToken = token;
-  if (!user.firebaseAuthUid) {
-    user.firebaseAuthUid = `fb_auth_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    user.isStoredInFirebaseAuth = true;
-    user.isPublishedToFirestore = true;
+  // Ensure local dev identity is truthful and never fabricates Firebase state
+  if (user.firebaseAuthUid && user.firebaseAuthUid.startsWith('fb_auth_')) {
+    user.firebaseAuthUid = null;
+  }
+  user.isStoredInFirebaseAuth = false;
+  user.isPublishedToFirestore = false;
+  if (!user.id.startsWith('local_dev_') && !user.id.startsWith('local_user_')) {
+    user.id = user.id === 'usr_default_admin' ? 'local_dev_admin' : (user.id.startsWith('usr_') ? user.id.replace('usr_', 'local_user_') : `local_user_${user.id}`);
   }
   saveUsers(users);
 
@@ -227,19 +254,20 @@ export function loginLocalUser(usernameOrEmail: string, password: string): { suc
     userId: user.id,
     username: user.username,
     email: user.email,
-    firebaseAuthUid: user.firebaseAuthUid,
-    status: 'SUCCESS'
+    firebaseAuthUid: user.firebaseAuthUid || null,
+    status: 'SUCCESS',
+    details: { isStoredInFirebaseAuth: false, isPublishedToFirestore: false, localDevOnly: true }
   });
 
   localStorage.setItem(SESSION_TOKEN_KEY, token);
   localStorage.setItem(SESSION_USER_KEY, JSON.stringify({
     id: user.id,
-    firebaseAuthUid: user.firebaseAuthUid,
+    firebaseAuthUid: user.firebaseAuthUid || null,
     username: user.username,
     email: user.email,
     fullName: user.fullName,
-    isStoredInFirebaseAuth: true,
-    isPublishedToFirestore: true
+    isStoredInFirebaseAuth: false,
+    isPublishedToFirestore: false
   }));
 
   return {
@@ -247,15 +275,15 @@ export function loginLocalUser(usernameOrEmail: string, password: string): { suc
     token,
     user: {
       id: user.id,
-      firebaseAuthUid: user.firebaseAuthUid,
+      firebaseAuthUid: user.firebaseAuthUid || null,
       username: user.username,
       email: user.email,
       fullName: user.fullName,
       createdAt: user.createdAt,
-      isStoredInFirebaseAuth: true,
-      isPublishedToFirestore: true
+      isStoredInFirebaseAuth: false,
+      isPublishedToFirestore: false
     },
-    message: 'Inicio de sesión exitoso.'
+    message: 'Inicio de sesión exitoso en sesión local de desarrollo.'
   };
 }
 
@@ -268,25 +296,29 @@ export function auditLocalUsers() {
     email: u.email,
     fullName: u.fullName,
     createdAt: u.createdAt,
-    firebaseAuthUid: u.firebaseAuthUid || null,
-    inFirestore: true,
-    inFirebaseAuth: !!u.firebaseAuthUid || !!u.isStoredInFirebaseAuth,
-    status: (u.firebaseAuthUid || u.isStoredInFirebaseAuth) ? 'SINCRONIZADO' : 'PENDIENTE_EN_FIREBASE_AUTH'
+    firebaseAuthUid: u.firebaseAuthUid && !u.firebaseAuthUid.startsWith('fb_auth_') ? u.firebaseAuthUid : null,
+    inFirestore: false,
+    inFirebaseAuth: false,
+    status: 'AUTH_UNAVAILABLE' as const
   }));
 
   const totalUsers = audited.length;
-  const synchronizedCount = audited.filter(u => u.inFirebaseAuth).length;
-  const missingInAuthCount = totalUsers - synchronizedCount;
+  const synchronizedCount = 0;
+  const missingInAuthCount = totalUsers;
 
   return {
     success: true,
     timestamp: new Date().toISOString(),
     summary: {
       totalUsers,
+      verifiedCount: 0,
+      mismatchCount: 0,
+      notFoundCount: 0,
+      authUnavailableCount: totalUsers,
       synchronizedCount,
       missingInAuthCount,
-      firebaseAuthOperational: true,
-      firestoreOperational: true
+      firebaseAuthOperational: false,
+      firestoreOperational: false
     },
     users: audited,
     recentAuditLogs: logs
@@ -295,34 +327,49 @@ export function auditLocalUsers() {
 
 export function repairLocalUsers() {
   const users = getStoredUsers();
-  const repaired: Array<{ id: string; email: string; newUid: string }> = [];
+  const normalized: Array<{ id: string; email: string }> = [];
 
   users.forEach(u => {
-    if (!u.firebaseAuthUid || !u.isStoredInFirebaseAuth) {
-      u.firebaseAuthUid = u.firebaseAuthUid || `fb_auth_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      u.isStoredInFirebaseAuth = true;
-      u.isPublishedToFirestore = true;
-      repaired.push({ id: u.id, email: u.email, newUid: u.firebaseAuthUid });
+    let changed = false;
+    if (u.firebaseAuthUid && u.firebaseAuthUid.startsWith('fb_auth_')) {
+      u.firebaseAuthUid = null;
+      changed = true;
+    }
+    if (u.isStoredInFirebaseAuth !== false) {
+      u.isStoredInFirebaseAuth = false;
+      changed = true;
+    }
+    if (u.isPublishedToFirestore !== false) {
+      u.isPublishedToFirestore = false;
+      changed = true;
+    }
+    if (!u.id.startsWith('local_dev_') && !u.id.startsWith('local_user_')) {
+      u.id = u.id === 'usr_default_admin' ? 'local_dev_admin' : (u.id.startsWith('usr_') ? u.id.replace('usr_', 'local_user_') : `local_user_${u.id}`);
+      changed = true;
+    }
+    if (changed) {
+      normalized.push({ id: u.id, email: u.email });
       recordLocalAudit({
-        eventType: 'AUDIT_REPAIR_SYNC',
+        eventType: 'AUDIT_LOCAL_REPAIR',
         userId: u.id,
         username: u.username,
         email: u.email,
-        firebaseAuthUid: u.firebaseAuthUid,
-        status: 'REPAIRED_TO_FIREBASE_AUTH'
+        firebaseAuthUid: null,
+        status: 'LOCAL_DEV_NORMALIZED',
+        details: { isStoredInFirebaseAuth: false, isPublishedToFirestore: false, localDevOnly: true }
       });
     }
   });
 
-  if (repaired.length > 0) {
+  if (normalized.length > 0) {
     saveUsers(users);
   }
 
   return {
     success: true,
-    message: `Auditoría local finalizada. ${repaired.length} usuarios sincronizados con Firebase Authentication.`,
-    repairedCount: repaired.length,
-    repairedUsers: repaired
+    message: `Auditoría local finalizada: ${normalized.length} registros locales normalizados. Modo local de desarrollo (sin sincronización con Firebase Authentication).`,
+    repairedCount: 0,
+    repairedUsers: []
   };
 }
 
@@ -332,7 +379,10 @@ export function getLocalSession(): { token: string | null; user: any | null } {
   let user = null;
   if (rawUser) {
     try {
-      user = JSON.parse(rawUser);
+      const parsed = JSON.parse(rawUser);
+      if (parsed) {
+        user = sanitizeLocalUser(parsed);
+      }
     } catch {}
   }
   return { token, user };

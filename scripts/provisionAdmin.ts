@@ -26,6 +26,7 @@ export interface ProvisionAdminResult {
   message: string;
   user: UserAccount;
   firestoreProjected: boolean;
+  firestoreError?: string;
 }
 
 /**
@@ -87,6 +88,7 @@ export async function provisionAdmin(options: ProvisionAdminOptions): Promise<Pr
     existing.fullName = existing.fullName || displayName;
     existing.role = role;
     existing.isStoredInFirebaseAuth = true;
+    existing.isPublishedToFirestore = false;
     existing.passwordHash = ''; // Never store plaintext password
     provisionedUser = existing;
   } else {
@@ -100,17 +102,16 @@ export async function provisionAdmin(options: ProvisionAdminOptions): Promise<Pr
       passwordHash: '',
       createdAt: new Date().toISOString(),
       isStoredInFirebaseAuth: true,
-      isPublishedToFirestore: !skipFirestore,
+      isPublishedToFirestore: false,
     };
     db.users.push(provisionedUser);
   }
 
   let firestoreProjected = false;
+  let firestoreError: string | null = null;
+  let firestoreUnavailable = false;
 
   if (!dryRun) {
-    // Write allowlist to users.json
-    writeUsers(db);
-
     // 3. Optional projection to Firestore /admin_users/{realUid}
     if (!skipFirestore) {
       try {
@@ -135,23 +136,43 @@ export async function provisionAdmin(options: ProvisionAdminOptions): Promise<Pr
             { merge: true }
           );
           firestoreProjected = true;
+          provisionedUser.isPublishedToFirestore = true;
+        } else {
+          firestoreUnavailable = true;
+          console.warn(`[provisionAdmin] Advertencia: Firestore no disponible o no inicializado. Proyección en /admin_users/${realUid} omitida.`);
         }
       } catch (fsErr: any) {
-        console.warn('[provisionAdmin] Advertencia al proyectar en Firestore:', fsErr?.message || fsErr);
+        firestoreError = fsErr?.message || String(fsErr);
+        console.error(`[provisionAdmin] Error al proyectar en Firestore /admin_users/${realUid}:`, firestoreError);
       }
     }
+
+    // Write allowlist to users.json ONLY AFTER Firestore projection has succeeded or failed
+    writeUsers(db);
   }
 
-  const message = dryRun
-    ? `[DRY-RUN] Usuario Firebase validado. Simulado aprovisionamiento como ${role}: UID=${realUid}, Email=${realEmail}`
-    : `Administrador aprovisionado exitosamente: UID=${realUid}, Email=${realEmail}, Rol=${role}${firestoreProjected ? ' (proyectado en /admin_users)' : ''}`;
+  const success = dryRun || skipFirestore || firestoreProjected;
+
+  let message: string;
+  if (dryRun) {
+    message = `[DRY-RUN] Usuario Firebase validado. Simulado aprovisionamiento como ${role}: UID=${realUid}, Email=${realEmail}`;
+  } else if (skipFirestore) {
+    message = `Administrador aprovisionado exitosamente: UID=${realUid}, Email=${realEmail}, Rol=${role} (proyección a Firestore omitida)`;
+  } else if (firestoreProjected) {
+    message = `Administrador aprovisionado exitosamente: UID=${realUid}, Email=${realEmail}, Rol=${role} (proyectado en /admin_users)`;
+  } else if (firestoreError) {
+    message = `Administrador guardado en allowlist local pero falló la proyección a Firestore: UID=${realUid}, Email=${realEmail}, Rol=${role} (error: ${firestoreError})`;
+  } else {
+    message = `Administrador guardado en allowlist local pero no se proyectó a Firestore: UID=${realUid}, Email=${realEmail}, Rol=${role} (Firestore no disponible)`;
+  }
 
   return {
-    success: true,
+    success,
     dryRun,
     message,
     user: provisionedUser,
     firestoreProjected,
+    ...(firestoreError ? { firestoreError } : {}),
   };
 }
 
@@ -183,20 +204,31 @@ export function parseCliArgs(argv: string[] = process.argv.slice(2)): ProvisionA
   return options;
 }
 
+export async function runCli(argv: string[] = process.argv.slice(2)): Promise<{ exitCode: number; result?: ProvisionAdminResult }> {
+  try {
+    const opts = parseCliArgs(argv);
+    const result = await provisionAdmin(opts);
+    if (result.success) {
+      console.log(result.message);
+      console.log(JSON.stringify(result.user, null, 2));
+      return { exitCode: 0, result };
+    } else {
+      console.error(result.message);
+      console.error(JSON.stringify(result.user, null, 2));
+      return { exitCode: 1, result };
+    }
+  } catch (err: any) {
+    console.error('Error de aprovisionamiento:', err?.message || err);
+    return { exitCode: 1 };
+  }
+}
+
 // Run CLI directly if executed from command line
 if (
   process.argv[1] &&
   (process.argv[1].endsWith('provisionAdmin.ts') || process.argv[1].endsWith('provisionAdmin.js'))
 ) {
-  const opts = parseCliArgs();
-  provisionAdmin(opts)
-    .then((result) => {
-      console.log(result.message);
-      console.log(JSON.stringify(result.user, null, 2));
-      process.exit(0);
-    })
-    .catch((err) => {
-      console.error('Error de aprovisionamiento:', err?.message || err);
-      process.exit(1);
-    });
+  runCli().then(({ exitCode }) => {
+    process.exit(exitCode);
+  });
 }
