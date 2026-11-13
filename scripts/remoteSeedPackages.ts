@@ -17,10 +17,13 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import http, { type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { TARGET_PACKAGES_MANIFEST, type SeedPackageItem } from '../src/data/seedManifest.js';
 import { FirebaseAdminCatalogStoreAdapter } from '../server/services/firebaseAdminCatalogAdapter.js';
 import { CatalogService, type CatalogSection, VALID_SECTIONS } from '../src/services/catalogService.js';
 import type { CommercialPackage } from '../src/types/admin.js';
+import { app, setCatalogService, catalogService as currentCatalogService } from '../server/server.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,6 +59,13 @@ export interface SeedSummary {
     legacyItems: Array<{ id: string; name?: string }>;
   };
   bySection: Record<string, { total: number; created: number; skipped: number }>;
+}
+
+export interface StorefrontVerifyOptions {
+  adapter?: any;
+  baseUrl?: string;
+  credentialsPath?: string;
+  logger?: (msg: string) => void;
 }
 
 export interface StorefrontSectionReport {
@@ -376,24 +386,57 @@ export async function runRemoteSeed(options: RemoteSeedOptions = { dryRun: true 
 }
 
 /**
- * Storefront Verification.
- * Queries CatalogService.getStorefrontCatalog(section) for all 4 canonical sections.
- * Verifies that:
- * - 29 canonical visible
- * - status === 'ACTIVE'
- * - isPublished === true
- * - names/TH/prices equal to manifest
- * - sortOrder ASC
- * - zero legacy in storefront
+ * Storefront Verification via Real HTTP GET against Express /api/catalog/storefront.
+ * Binds an ephemeral server on port 0 (127.0.0.1) if baseUrl is not provided,
+ * and issues native HTTP GET requests with Cache-Control and payload verification.
+ * Cleans up ephemeral server handles and restores previous catalogService in finally.
  */
-export async function verifyStorefrontCatalog(adapter?: any): Promise<StorefrontVerificationReport> {
+export async function verifyStorefrontCatalog(
+  optionsOrAdapter?: StorefrontVerifyOptions | any
+): Promise<StorefrontVerificationReport> {
+  let adapter: any = undefined;
+  let explicitBaseUrl: string | undefined = undefined;
+  let credentialsPath: string | undefined = undefined;
+
+  if (optionsOrAdapter) {
+    if (
+      typeof optionsOrAdapter.getExistingPackages === 'function' ||
+      typeof optionsOrAdapter.getPackages === 'function' ||
+      typeof optionsOrAdapter.createPackageDoc === 'function'
+    ) {
+      adapter = optionsOrAdapter;
+    } else if (typeof optionsOrAdapter === 'object') {
+      adapter = optionsOrAdapter.adapter;
+      explicitBaseUrl = optionsOrAdapter.baseUrl;
+      credentialsPath = optionsOrAdapter.credentialsPath;
+    }
+  }
+
+  if (!explicitBaseUrl && process.env.STOREFRONT_BASE_URL) {
+    explicitBaseUrl = process.env.STOREFRONT_BASE_URL;
+  }
+
   let resolvedAdapter = adapter;
-  if (!resolvedAdapter) {
-    resolveCredentials();
+  if (!resolvedAdapter && !explicitBaseUrl) {
+    resolveCredentials(credentialsPath);
     resolvedAdapter = new FirebaseAdminCatalogStoreAdapter();
   }
 
-  const catalogService = new CatalogService(resolvedAdapter);
+  if (resolvedAdapter && typeof resolvedAdapter.getPackages !== 'function' && typeof resolvedAdapter.getExistingPackages === 'function') {
+    const origAdapter = resolvedAdapter;
+    resolvedAdapter = {
+      ...origAdapter,
+      async getPackages() {
+        const map = await origAdapter.getExistingPackages();
+        return Array.from(map.values());
+      },
+    };
+  }
+
+  const previousCatalogService = currentCatalogService;
+  let server: Server | null = null;
+  let baseUrl = explicitBaseUrl;
+
   const manifestMap = new Map<string, SeedPackageItem>();
   for (const p of TARGET_PACKAGES_MANIFEST) {
     manifestMap.set(p.id, p);
@@ -412,74 +455,122 @@ export async function verifyStorefrontCatalog(adapter?: any): Promise<Storefront
     errors: [],
   };
 
-  for (const section of VALID_SECTIONS) {
-    const secReport = report.sections[section];
-    const storefrontPkgs = await catalogService.getStorefrontCatalog(section);
-
-    secReport.actualCount = storefrontPkgs.length;
-    secReport.packages = storefrontPkgs;
-    report.totalCanonical += storefrontPkgs.length;
-
-    // Check count
-    if (storefrontPkgs.length !== secReport.expectedCount) {
-      const err = `Section '${section}' count mismatch: expected ${secReport.expectedCount}, got ${storefrontPkgs.length}`;
-      secReport.errors.push(err);
-      report.errors.push(err);
+  try {
+    if (resolvedAdapter) {
+      setCatalogService(new CatalogService(resolvedAdapter));
     }
 
-    // Check sortOrder ascending
-    for (let i = 0; i < storefrontPkgs.length; i++) {
-      const pkg = storefrontPkgs[i];
-      if (i > 0) {
-        const prev = storefrontPkgs[i - 1];
-        if ((prev.sortOrder ?? 0) > (pkg.sortOrder ?? 0)) {
-          const err = `Section '${section}' sortOrder violation: pkg '${prev.id}' (${prev.sortOrder}) > pkg '${pkg.id}' (${pkg.sortOrder})`;
-          secReport.errors.push(err);
-          report.errors.push(err);
-        }
-      }
-
-      // Check legacy exclusion
-      if (pkg.id.startsWith('pkg-miner-') || (pkg as any).isLegacy) {
-        const err = `Legacy package '${pkg.id}' leaked into storefront for section '${section}'`;
-        secReport.errors.push(err);
-        report.errors.push(err);
-        report.legacyCount++;
-      }
-
-      // Check status & isPublished
-      if (pkg.status !== 'ACTIVE' || !pkg.isPublished) {
-        const err = `Package '${pkg.id}' has invalid status/isPublished: status=${pkg.status}, isPublished=${pkg.isPublished}`;
-        secReport.errors.push(err);
-        report.errors.push(err);
-      }
-
-      // Check parity against manifest
-      const manifestItem = manifestMap.get(pkg.id);
-      if (!manifestItem) {
-        const err = `Package '${pkg.id}' returned in storefront is not in manifest`;
-        secReport.errors.push(err);
-        report.errors.push(err);
-      } else {
-        if (pkg.name !== manifestItem.name) {
-          const err = `Package '${pkg.id}' name mismatch: manifest='${manifestItem.name}', storefront='${pkg.name}'`;
-          secReport.errors.push(err);
-          report.errors.push(err);
-        }
-        if (pkg.powerTh !== manifestItem.powerTh) {
-          const err = `Package '${pkg.id}' powerTh mismatch: manifest=${manifestItem.powerTh}, storefront=${pkg.powerTh}`;
-          secReport.errors.push(err);
-          report.errors.push(err);
-        }
-        if (pkg.priceUsdt !== manifestItem.priceUsdt) {
-          const err = `Package '${pkg.id}' priceUsdt mismatch: manifest=${manifestItem.priceUsdt}, storefront=${pkg.priceUsdt}`;
-          secReport.errors.push(err);
-          report.errors.push(err);
-        }
-      }
+    if (!baseUrl) {
+      server = http.createServer(app);
+      await new Promise<void>((resolve, reject) => {
+        server!.listen(0, '127.0.0.1', () => resolve());
+        server!.once('error', reject);
+      });
+      const addr = server.address() as AddressInfo;
+      baseUrl = `http://127.0.0.1:${addr.port}`;
     }
 
-    secReport.pass = secReport.errors.length === 0;
+    for (const section of VALID_SECTIONS) {
+      const secReport = report.sections[section];
+      const requestUrl = `${baseUrl}/api/catalog/storefront?section=${section}`;
+
+      const res = await fetch(requestUrl);
+      if (res.status !== 200) {
+        const err = `HTTP GET ${requestUrl} returned status ${res.status} ${res.statusText}`;
+        secReport.errors.push(err);
+        report.errors.push(err);
+        continue;
+      }
+
+      const cacheControl = res.headers.get('cache-control');
+      if (cacheControl !== 'no-cache') {
+        const err = `HTTP GET ${requestUrl} expected Cache-Control: no-cache, got '${cacheControl}'`;
+        secReport.errors.push(err);
+        report.errors.push(err);
+      }
+
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const err = `HTTP GET ${requestUrl} returned non-JSON content-type: '${contentType}'`;
+        secReport.errors.push(err);
+        report.errors.push(err);
+        continue;
+      }
+
+      const storefrontPkgs: CommercialPackage[] = await res.json();
+      secReport.actualCount = storefrontPkgs.length;
+      secReport.packages = storefrontPkgs;
+      report.totalCanonical += storefrontPkgs.length;
+
+      // Check count
+      if (storefrontPkgs.length !== secReport.expectedCount) {
+        const err = `Section '${section}' count mismatch: expected ${secReport.expectedCount}, got ${storefrontPkgs.length}`;
+        secReport.errors.push(err);
+        report.errors.push(err);
+      }
+
+      // Check sortOrder ascending
+      for (let i = 0; i < storefrontPkgs.length; i++) {
+        const pkg = storefrontPkgs[i];
+        if (i > 0) {
+          const prev = storefrontPkgs[i - 1];
+          if ((prev.sortOrder ?? 0) > (pkg.sortOrder ?? 0)) {
+            const err = `Section '${section}' sortOrder violation: pkg '${prev.id}' (${prev.sortOrder}) > pkg '${pkg.id}' (${pkg.sortOrder})`;
+            secReport.errors.push(err);
+            report.errors.push(err);
+          }
+        }
+
+        // Check legacy exclusion
+        if (pkg.id.startsWith('pkg-miner-') || (pkg as any).isLegacy) {
+          const err = `Legacy package '${pkg.id}' leaked into storefront for section '${section}'`;
+          secReport.errors.push(err);
+          report.errors.push(err);
+          report.legacyCount++;
+        }
+
+        // Check status & isPublished
+        if (pkg.status !== 'ACTIVE' || !pkg.isPublished) {
+          const err = `Package '${pkg.id}' has invalid status/isPublished: status=${pkg.status}, isPublished=${pkg.isPublished}`;
+          secReport.errors.push(err);
+          report.errors.push(err);
+        }
+
+        // Check parity against manifest
+        const manifestItem = manifestMap.get(pkg.id);
+        if (!manifestItem) {
+          const err = `Package '${pkg.id}' returned in storefront is not in manifest`;
+          secReport.errors.push(err);
+          report.errors.push(err);
+        } else {
+          if (pkg.name !== manifestItem.name) {
+            const err = `Package '${pkg.id}' name mismatch: manifest='${manifestItem.name}', storefront='${pkg.name}'`;
+            secReport.errors.push(err);
+            report.errors.push(err);
+          }
+          if (pkg.powerTh !== manifestItem.powerTh) {
+            const err = `Package '${pkg.id}' powerTh mismatch: manifest=${manifestItem.powerTh}, storefront=${pkg.powerTh}`;
+            secReport.errors.push(err);
+            report.errors.push(err);
+          }
+          if (pkg.priceUsdt !== manifestItem.priceUsdt) {
+            const err = `Package '${pkg.id}' priceUsdt mismatch: manifest=${manifestItem.priceUsdt}, storefront=${pkg.priceUsdt}`;
+            secReport.errors.push(err);
+            report.errors.push(err);
+          }
+        }
+      }
+
+      secReport.pass = secReport.errors.length === 0 && secReport.actualCount === secReport.expectedCount;
+    }
+  } finally {
+    if (server) {
+      if (typeof (server as any).closeAllConnections === 'function') {
+        (server as any).closeAllConnections();
+      }
+      await new Promise<void>((resolve) => server!.close(() => resolve()));
+    }
+    setCatalogService(previousCatalogService);
   }
 
   report.pass = report.errors.length === 0 && report.totalCanonical === 29 && report.legacyCount === 0;
@@ -555,16 +646,18 @@ async function main() {
 
   // After apply (or verify-only): run storefront verification
   console.log('\n' + '-'.repeat(72));
-  console.log('  RUNNING STOREFRONT VERIFICATION (GET /api/catalog/storefront)');
+  console.log('  RUNNING REAL HTTP STOREFRONT VERIFICATION (GET /api/catalog/storefront)');
   console.log('-'.repeat(72));
 
-  const verifyReport = await verifyStorefrontCatalog();
-  console.log(`  Verification Result: ${verifyReport.pass ? 'PASS (100% CANONICAL STOREFRONT PARITY)' : 'FAIL'}`);
+  const verifyReport = await verifyStorefrontCatalog({
+    credentialsPath: credsArg,
+  });
+  console.log(`  Verification Result: ${verifyReport.pass ? 'PASS (100% CANONICAL STOREFRONT PARITY VIA REAL HTTP GET)' : 'FAIL'}`);
   console.log(`  Total Canonical in Storefront: ${verifyReport.totalCanonical} / 29`);
   console.log(`  Legacy in Storefront:          ${verifyReport.legacyCount} (Expected: 0)`);
 
   for (const [sec, sRep] of Object.entries(verifyReport.sections)) {
-    console.log(`    - ${sec.padEnd(12)}: ${sRep.actualCount}/${sRep.expectedCount} packages [${sRep.pass ? 'PASS' : 'FAIL'}]`);
+    console.log(`    - ${sec.padEnd(12)}: HTTP 200 OK — ${sRep.actualCount}/${sRep.expectedCount} packages [${sRep.pass ? 'PASS' : 'FAIL'}]`);
     if (sRep.errors.length > 0) {
       for (const err of sRep.errors) {
         console.log(`        Error: ${err}`);

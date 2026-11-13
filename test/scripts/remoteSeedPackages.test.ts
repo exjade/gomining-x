@@ -4,6 +4,7 @@ import {
   runRemoteSeed,
   validateManifest,
   buildCanonicalPackagePayload,
+  verifyStorefrontCatalog,
 } from '../../scripts/remoteSeedPackages.js';
 import {
   TARGET_PACKAGES_MANIFEST,
@@ -32,6 +33,11 @@ class MockCatalogStoreAdapter {
       copy.set(k, { ...v });
     }
     return copy;
+  }
+
+  async getPackages(): Promise<any[]> {
+    this.calls.push({ method: 'getPackages' });
+    return Array.from(this.docs.values());
   }
 
   async createPackageDoc(id: string, payload: any): Promise<void> {
@@ -299,5 +305,138 @@ describe('SCRUM-224 / POUW-1.9: Create-Only Semantics & Adapter Mock', () => {
     assert.equal(summary.created, 0);
     assert.equal(summary.skipped, 29, 'Collisions at DB level must be gracefully counted as skipped');
     assert.equal(summary.blocked, 0);
+  });
+});
+
+describe('SCRUM-224 / POUW-1.9: Real HTTP GET Storefront Verification', () => {
+  it('executes real HTTP GET requests against Express app to verify all 4 canonical sections (5/4/16/4 = 29 total, 0 legacy)', async () => {
+    const allDocs = new Map<string, any>();
+    for (const pkg of TARGET_PACKAGES_MANIFEST) {
+      allDocs.set(pkg.id, buildCanonicalPackagePayload(pkg));
+    }
+    // Also include a legacy package in the store to verify it does not leak into storefront
+    allDocs.set('pkg-miner-1', {
+      id: 'pkg-miner-1',
+      name: 'Legacy Minero 1',
+      isLegacy: true,
+      priceUsdt: 561.99,
+      powerTh: 48,
+    });
+
+    const adapter = new MockCatalogStoreAdapter(allDocs);
+    const report = await verifyStorefrontCatalog(adapter);
+
+    assert.equal(report.pass, true, `Verification failed with errors: ${report.errors.join('; ')}`);
+    assert.equal(report.totalCanonical, 29);
+    assert.equal(report.legacyCount, 0);
+    assert.equal(report.sections.minerx.actualCount, 5);
+    assert.equal(report.sections.preventa.actualCount, 4);
+    assert.equal(report.sections.lanzamiento.actualCount, 16);
+    assert.equal(report.sections.mensual.actualCount, 4);
+    assert.equal(report.errors.length, 0);
+
+    // Verify sortOrder ascending for each section
+    for (const sec of ['minerx', 'preventa', 'lanzamiento', 'mensual'] as const) {
+      const pkgs = report.sections[sec].packages;
+      for (let i = 1; i < pkgs.length; i++) {
+        assert.ok((pkgs[i].sortOrder ?? 0) >= (pkgs[i - 1].sortOrder ?? 0), `Section ${sec} sortOrder must be non-decreasing`);
+      }
+    }
+  });
+
+  it('detects and fails verification via HTTP when a section count is mismatched', async () => {
+    // Populate with only 28 packages (missing 1 from preventa)
+    const incompleteDocs = new Map<string, any>();
+    const allExceptOne = TARGET_PACKAGES_MANIFEST.filter((p) => p.id !== 'preventa-01');
+    for (const pkg of allExceptOne) {
+      incompleteDocs.set(pkg.id, buildCanonicalPackagePayload(pkg));
+    }
+
+    const adapter = new MockCatalogStoreAdapter(incompleteDocs);
+    const report = await verifyStorefrontCatalog(adapter);
+
+    assert.equal(report.pass, false);
+    assert.equal(report.sections.preventa.pass, false);
+    assert.equal(report.sections.preventa.actualCount, 3);
+    assert.equal(report.sections.preventa.expectedCount, 4);
+    assert.ok(report.errors.some((e) => e.includes('count mismatch')));
+  });
+
+  it('detects and fails verification when a legacy package leaks into storefront', async () => {
+    const docsWithLeak = new Map<string, any>();
+    for (const pkg of TARGET_PACKAGES_MANIFEST) {
+      docsWithLeak.set(pkg.id, buildCanonicalPackagePayload(pkg));
+    }
+    // Leaked legacy package claiming a section
+    docsWithLeak.set('pkg-miner-leaked', {
+      id: 'pkg-miner-leaked',
+      name: 'Leaked Legacy Minero',
+      section: 'minerx',
+      status: 'ACTIVE',
+      isPublished: true,
+      priceUsdt: 100,
+      powerTh: 10,
+      sortOrder: 99,
+    });
+
+    const adapter = new MockCatalogStoreAdapter(docsWithLeak);
+    const report = await verifyStorefrontCatalog(adapter);
+
+    assert.equal(report.pass, false);
+    assert.ok(report.legacyCount > 0);
+    assert.ok(report.errors.some((e) => e.includes('Legacy package')));
+  });
+
+  it('detects and fails verification when package price, name, or TH mismatches manifest', async () => {
+    const docsWithMismatch = new Map<string, any>();
+    for (const pkg of TARGET_PACKAGES_MANIFEST) {
+      if (pkg.id === 'minerx-01') {
+        const altered = buildCanonicalPackagePayload(pkg);
+        altered.priceUsdt = 999999;
+        docsWithMismatch.set(pkg.id, altered);
+      } else {
+        docsWithMismatch.set(pkg.id, buildCanonicalPackagePayload(pkg));
+      }
+    }
+
+    const adapter = new MockCatalogStoreAdapter(docsWithMismatch);
+    const report = await verifyStorefrontCatalog(adapter);
+
+    assert.equal(report.pass, false);
+    assert.ok(report.errors.some((e) => e.includes('priceUsdt mismatch')));
+  });
+
+  it('supports custom baseUrl option for external or pre-existing HTTP server', async () => {
+    const http = await import('node:http');
+    const { app } = await import('../../server/server.js');
+
+    const allDocs = new Map<string, any>();
+    for (const pkg of TARGET_PACKAGES_MANIFEST) {
+      allDocs.set(pkg.id, buildCanonicalPackagePayload(pkg));
+    }
+    const adapter = new MockCatalogStoreAdapter(allDocs);
+
+    const testServer = http.createServer(app);
+    await new Promise<void>((resolve) => {
+      testServer.listen(0, '127.0.0.1', () => resolve());
+    });
+    const addr = testServer.address() as any;
+    const customBaseUrl = `http://127.0.0.1:${addr.port}`;
+
+    try {
+      const report = await verifyStorefrontCatalog({
+        baseUrl: customBaseUrl,
+        adapter,
+      });
+
+      assert.equal(report.pass, true);
+      assert.equal(report.totalCanonical, 29);
+      assert.equal(report.legacyCount, 0);
+    } finally {
+      if (typeof (testServer as any).closeAllConnections === 'function') {
+        (testServer as any).closeAllConnections();
+      }
+      await new Promise<void>((resolve) => testServer.close(() => resolve()));
+    }
   });
 });
