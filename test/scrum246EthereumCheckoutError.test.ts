@@ -32,11 +32,15 @@ const { sanitizeErrorReason, classifyPaymentError } = (await import(dataUrl)) as
     message: string
     showSimulateFallback: boolean
     kind: string
+    name?: string
+    code?: number | string
+    shortMessage?: string
+    category: string
   }
 }
 
 describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Checkout', () => {
-  describe('Suite 1: User Rejection Isolation', () => {
+  describe('Suite 1: User Rejection Isolation and Provider Disambiguation', () => {
     it('isolates viem UserRejectedRequestError with zero simulation fallback', () => {
       const err = {
         name: 'UserRejectedRequestError',
@@ -46,6 +50,10 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       }
       const result = classifyPaymentError(err, 'Ethereum')
       assert.equal(result.kind, 'USER_REJECTION')
+      assert.equal(result.category, 'USER_REJECTION')
+      assert.equal(result.name, 'UserRejectedRequestError')
+      assert.equal(result.code, 4001)
+      assert.equal(result.shortMessage, 'User rejected the request.')
       assert.equal(result.message, 'Transacción rechazada en tu billetera.')
       assert.equal(result.showSimulateFallback, false)
     })
@@ -57,6 +65,8 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       }
       const result = classifyPaymentError(err, 'Ethereum')
       assert.equal(result.kind, 'USER_REJECTION')
+      assert.equal(result.category, 'USER_REJECTION')
+      assert.equal(result.code, 4001)
       assert.equal(result.message, 'Transacción rechazada en tu billetera.')
       assert.equal(result.showSimulateFallback, false)
     })
@@ -69,6 +79,8 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       }
       const result = classifyPaymentError(err, 'Ethereum')
       assert.equal(result.kind, 'USER_REJECTION')
+      assert.equal(result.category, 'USER_REJECTION')
+      assert.equal(result.code, 4001)
       assert.equal(result.message, 'Transacción rechazada en tu billetera.')
       assert.equal(result.showSimulateFallback, false)
     })
@@ -80,6 +92,8 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       }
       const result = classifyPaymentError(err, 'Ethereum')
       assert.equal(result.kind, 'USER_REJECTION')
+      assert.equal(result.category, 'USER_REJECTION')
+      assert.equal(result.name, 'TransactionRejectedRpcError')
       assert.equal(result.message, 'Transacción rechazada en tu billetera.')
       assert.equal(result.showSimulateFallback, false)
     })
@@ -93,8 +107,63 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
 
       const result = classifyPaymentError(e1, 'Ethereum')
       assert.equal(result.kind, 'USER_REJECTION')
+      assert.equal(result.category, 'USER_REJECTION')
+      assert.equal(result.code, 4001)
       assert.equal(result.message, 'Transacción rechazada en tu billetera.')
       assert.equal(result.showSimulateFallback, false)
+    })
+
+    // R2 Adversarial tests: Provider rejection strings must NOT trigger USER_REJECTION
+    it('classifies "RPC request rejected by provider rate limit" as RPC_ERROR, NOT USER_REJECTION', () => {
+      const err = new Error('RPC request rejected by provider rate limit')
+      const result = classifyPaymentError(err, 'Ethereum')
+      assert.notEqual(result.kind, 'USER_REJECTION')
+      assert.equal(result.kind, 'RPC_ERROR')
+      assert.equal(result.category, 'RPC_ERROR')
+      assert.equal(result.showSimulateFallback, true)
+      assert.equal(result.shortMessage, 'RPC request rejected by provider rate limit')
+      assert.match(result.message, /Error de comunicación con el proveedor RPC/)
+    })
+
+    it('classifies "request denied by provider policy" as RPC_ERROR, NOT USER_REJECTION', () => {
+      const err = new Error('request denied by provider policy')
+      const result = classifyPaymentError(err, 'Ethereum')
+      assert.notEqual(result.kind, 'USER_REJECTION')
+      assert.equal(result.kind, 'RPC_ERROR')
+      assert.equal(result.category, 'RPC_ERROR')
+      assert.equal(result.showSimulateFallback, true)
+      assert.equal(result.shortMessage, 'request denied by provider policy')
+      assert.match(result.message, /Error de comunicación con el proveedor RPC/)
+    })
+
+    it('classifies "provider-side cancellation due to gateway timeout" as RPC_ERROR, NOT USER_REJECTION', () => {
+      const err = new Error('provider-side cancellation due to gateway timeout')
+      const result = classifyPaymentError(err, 'Ethereum')
+      assert.notEqual(result.kind, 'USER_REJECTION')
+      assert.equal(result.kind, 'RPC_ERROR')
+      assert.equal(result.category, 'RPC_ERROR')
+      assert.equal(result.showSimulateFallback, true)
+      assert.equal(result.shortMessage, 'provider-side cancellation due to gateway timeout')
+      assert.match(result.message, /Error de comunicación con el proveedor RPC/)
+    })
+
+    // R1 Safe diagnostics test: populates safe diagnostic fields across classification paths without leaking secrets
+    it('populates safe diagnostic fields (name, code, shortMessage, category) without leaking sensitive tokens or URLs', () => {
+      const err = {
+        name: 'InsufficientFundsError',
+        shortMessage: 'insufficient balance for transfer with apiKey=secret_key_123 at https://rpc.example.com/v1/private',
+        code: -32000,
+      }
+      const result = classifyPaymentError(err, 'Ethereum')
+      assert.equal(result.kind, 'INSUFFICIENT_FUNDS')
+      assert.equal(result.category, 'INSUFFICIENT_FUNDS')
+      assert.equal(result.name, 'InsufficientFundsError')
+      assert.equal(result.code, -32000)
+      assert.ok(result.shortMessage, 'shortMessage must be populated')
+      assert.doesNotMatch(result.shortMessage, /secret_key_123/)
+      assert.doesNotMatch(result.shortMessage, /https?:\/\//)
+      assert.match(result.shortMessage, /token=\[masked\]/)
+      assert.match(result.shortMessage, /\[rpc-endpoint\]/)
     })
   })
 

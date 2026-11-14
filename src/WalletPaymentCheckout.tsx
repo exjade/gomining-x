@@ -107,6 +107,10 @@ export type ClassifiedPaymentError = {
   message: string
   showSimulateFallback: boolean
   kind: string
+  name?: string
+  code?: number | string
+  shortMessage?: string
+  category: string
 }
 
 export function classifyPaymentError(
@@ -185,20 +189,27 @@ export function classifyPaymentError(
 
   const codeStr = code !== undefined ? String(code) : ''
   const cleanReason = sanitizeErrorReason(rawReason)
+  const safeName = rootName ? sanitizeErrorReason(rootName) : undefined
+  const safeShortMessage = cleanReason || undefined
   const checkText = `${cleanReason} ${rootName} ${codeStr} ${(err as Error)?.message || ''}${causeMessages}`.toLowerCase()
 
   // 1. User Rejection (Independent case: zero simulation fallback)
-  if (
+  const isExplicitUserRejection =
     code === 4001 ||
-    String(code) === '4001' ||
+    codeStr === '4001' ||
     rootName === 'UserRejectedRequestError' ||
     rootName === 'TransactionRejectedRpcError' ||
-    /reject|cancel|denied|declin|4001/.test(checkText)
-  ) {
+    /(?:user|wallet|signer)\s+(?:has\s+)?(?:rejected|denied|declined|cancelled|canceled)|(?:rejected|denied|declined|cancelled|canceled)\s+by\s+(?:the\s+)?(?:user|wallet|signer)|user\s+(?:rejected|denied|declined|cancelled|canceled)/i.test(checkText)
+
+  if (isExplicitUserRejection) {
     return {
       message: 'Transacción rechazada en tu billetera.',
       showSimulateFallback: false,
       kind: 'USER_REJECTION',
+      name: safeName,
+      code,
+      shortMessage: safeShortMessage,
+      category: 'USER_REJECTION',
     }
   }
 
@@ -212,6 +223,10 @@ export function classifyPaymentError(
       message: `La billetera está conectada a otra red. Cambia a la red ${networkName} en tu billetera para continuar.`,
       showSimulateFallback: false,
       kind: 'CHAIN_MISMATCH',
+      name: safeName,
+      code,
+      shortMessage: safeShortMessage,
+      category: 'CHAIN_MISMATCH',
     }
   }
 
@@ -225,6 +240,10 @@ export function classifyPaymentError(
       message: `No hay una billetera compatible conectada para autorizar la transacción en ${networkName}. Conecta tu billetera para continuar.`,
       showSimulateFallback: false,
       kind: 'WALLET_NOT_CONNECTED',
+      name: safeName,
+      code,
+      shortMessage: safeShortMessage,
+      category: 'WALLET_NOT_CONNECTED',
     }
   }
 
@@ -240,6 +259,10 @@ export function classifyPaymentError(
       message: `La transacción fue revertida en la red ${networkName}${detail}. Puedes verificar los parámetros o confirmar en modo de simulación de prueba.`,
       showSimulateFallback: true,
       kind: 'EXECUTION_REVERTED',
+      name: safeName,
+      code,
+      shortMessage: safeShortMessage,
+      category: 'EXECUTION_REVERTED',
     }
   }
 
@@ -252,6 +275,10 @@ export function classifyPaymentError(
       message: `No se pudo procesar la transacción en la red ${networkName} (fondos insuficientes para el pago o para el gas de red). Puedes verificar el saldo en tu billetera o confirmar en modo de simulación de prueba.`,
       showSimulateFallback: true,
       kind: 'INSUFFICIENT_FUNDS',
+      name: safeName,
+      code,
+      shortMessage: safeShortMessage,
+      category: 'INSUFFICIENT_FUNDS',
     }
   }
 
@@ -262,15 +289,23 @@ export function classifyPaymentError(
     rootName.includes('Http') ||
     code === -32000 ||
     code === -32603 ||
+    code === 429 ||
+    code === 502 ||
+    code === 503 ||
+    code === 504 ||
     codeStr === '-32000' ||
     codeStr === '-32603' ||
-    /\b512\b|rpc|timeout|timed out|network error|failed to fetch|-32603|-32000|rate limit|429|502|503|504|nonce too low|replacement.*underpriced/.test(checkText)
+    /\b512\b|rpc|provider|gateway|timeout|timed out|network error|failed to fetch|-32603|-32000|rate limit|429|502|503|504|nonce too low|replacement.*underpriced/.test(checkText)
   ) {
     const detail = cleanReason ? ` (${cleanReason})` : ''
     return {
       message: `Error de comunicación con el proveedor RPC en la red ${networkName}${detail}. Puedes verificar tu conexión o confirmar en modo simulación de prueba.`,
       showSimulateFallback: true,
       kind: 'RPC_ERROR',
+      name: safeName,
+      code,
+      shortMessage: safeShortMessage,
+      category: 'RPC_ERROR',
     }
   }
 
@@ -280,6 +315,10 @@ export function classifyPaymentError(
     message: `No se pudo completar el pago en ${networkName}${detail}. Puedes verificar tu conexión o confirmar en modo simulación de prueba.`,
     showSimulateFallback: true,
     kind: 'GENERIC_DIAGNOSTIC',
+    name: safeName,
+    code,
+    shortMessage: safeShortMessage,
+    category: 'GENERIC_DIAGNOSTIC',
   }
 }
 
