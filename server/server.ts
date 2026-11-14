@@ -10,6 +10,7 @@ import { StrategyEngine } from './services/strategyEngine.js';
 import { CatalogService, VALID_SECTIONS, VALID_STATUSES, type CatalogSection } from '../src/services/catalogService.js';
 import { FirebaseAdminCatalogStoreAdapter } from './services/firebaseAdminCatalogAdapter.js';
 import { firebaseAdminAuthAdapter } from './services/firebaseAdminAuthAdapter.js';
+import { platformBalancePurchaseService } from './services/platformBalancePurchaseService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -847,6 +848,40 @@ app.post('/api/admin/storefront-sections', (req, res) => {
   };
   writeStorefrontSections(updated);
   res.json({ success: true, config: updated });
+});
+
+// 2e. Platform Balance Purchases Endpoint (SCRUM-221)
+app.post('/api/purchases/platform-balance', async (req, res) => {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (!token) {
+    return res.status(401).json({ error: 'Token de autenticación requerido' });
+  }
+
+  try {
+    const decoded = await firebaseAdminAuthAdapter.verifyIdToken(token);
+    if (!decoded || !decoded.uid || decoded.firebase?.sign_in_provider === 'anonymous' || (decoded as any).anonymous === true) {
+      return res.status(401).json({ error: 'Token inválido o expirado' });
+    }
+
+    const { packageId, purchaseId } = req.body || {};
+    if (!packageId || typeof packageId !== 'string' || !packageId.trim() ||
+        !purchaseId || typeof purchaseId !== 'string' || !purchaseId.trim()) {
+      return res.status(400).json({ error: 'packageId y purchaseId son requeridos' });
+    }
+
+    const result = await platformBalancePurchaseService.executePurchase(
+      decoded.uid,
+      decoded.email || '',
+      { packageId: packageId.trim(), purchaseId: purchaseId.trim() }
+    );
+    res.status(200).json(result);
+  } catch (err: any) {
+    if (err && err.statusCode && typeof err.statusCode === 'number') {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    res.status(500).json({ error: 'Error interno al procesar la compra' });
+  }
 });
 
 // 2b. Resilient Alert Dispatcher (Discord & Telegram)
