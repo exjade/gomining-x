@@ -83,6 +83,19 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       assert.equal(result.message, 'Transacción rechazada en tu billetera.')
       assert.equal(result.showSimulateFallback, false)
     })
+
+    it('isolates multi-level standard Error cause chains (depth >= 3) with code 4001 as USER_REJECTION with zero simulation fallback', () => {
+      const e5 = Object.assign(new Error('User rejected the transaction'), { code: 4001, name: 'UserRejectedRequestError' })
+      const e4 = new Error('RPC sendTransaction failed', { cause: e5 })
+      const e3 = new Error('Contract call failed', { cause: e4 })
+      const e2 = new Error('Wallet action failed', { cause: e3 })
+      const e1 = new Error('Checkout failed', { cause: e2 })
+
+      const result = classifyPaymentError(e1, 'Ethereum')
+      assert.equal(result.kind, 'USER_REJECTION')
+      assert.equal(result.message, 'Transacción rechazada en tu billetera.')
+      assert.equal(result.showSimulateFallback, false)
+    })
   })
 
   describe('Suite 2: Insufficient Funds and Gas Isolation', () => {
@@ -197,6 +210,33 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       const result = classifyPaymentError(err, 'Ethereum')
       assert.equal(result.kind, 'RPC_ERROR')
       assert.match(result.message, /Error de comunicación con el proveedor RPC en la red Ethereum/)
+      assert.equal(result.showSimulateFallback, true)
+    })
+
+    it('diagnoses non-standard JSON-RPC code -32000 as RPC_ERROR', () => {
+      const err = { code: -32000, message: 'Server error' }
+      const result = classifyPaymentError(err, 'Ethereum')
+      assert.equal(result.kind, 'RPC_ERROR')
+      assert.match(result.message, /Error de comunicación con el proveedor RPC en la red Ethereum/)
+      assert.match(result.message, /Server error/)
+      assert.equal(result.showSimulateFallback, true)
+    })
+
+    it('diagnoses JSON-RPC revert payload in data.message as EXECUTION_REVERTED with detail', () => {
+      const err = { code: -32603, data: { message: 'execution reverted: custom error' } }
+      const result = classifyPaymentError(err, 'Ethereum')
+      assert.equal(result.kind, 'EXECUTION_REVERTED')
+      assert.match(result.message, /La transacción fue revertida en la red Ethereum/)
+      assert.match(result.message, /execution reverted: custom error/)
+      assert.equal(result.showSimulateFallback, true)
+    })
+
+    it('safely handles circular cause references without infinite loops', () => {
+      const circErr: Record<string, unknown> = new Error('Circular root')
+      circErr.cause = circErr
+      const result = classifyPaymentError(circErr, 'Ethereum')
+      assert.ok(result.message)
+      assert.equal(result.kind, 'GENERIC_DIAGNOSTIC')
       assert.equal(result.showSimulateFallback, true)
     })
 

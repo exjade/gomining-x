@@ -116,6 +116,7 @@ export function classifyPaymentError(
   let rawReason = ''
   let rootName = (err as { name?: string })?.name || ''
   let code = (err as { code?: number | string })?.code ?? (err as { cause?: { code?: number | string } })?.cause?.code
+  let causeMessages = ''
 
   if (err && typeof err === 'object') {
     const baseErr = err as {
@@ -124,11 +125,14 @@ export function classifyPaymentError(
       message?: string
       cause?: unknown
       walk?: (fn?: (e: unknown) => boolean) => any
+      data?: { message?: string }
     }
     if (baseErr.shortMessage) {
       rawReason = baseErr.shortMessage
     } else if (baseErr.details) {
       rawReason = baseErr.details
+    } else if (baseErr.data?.message) {
+      rawReason = baseErr.data.message
     } else if (baseErr.message) {
       rawReason = baseErr.message
     }
@@ -139,12 +143,39 @@ export function classifyPaymentError(
           rootName = (root as { name?: string }).name || rootName
           code = (root as { code?: number | string }).code ?? code
           if (!rawReason) {
-            rawReason = (root as { details?: string }).details || (root as { shortMessage?: string }).shortMessage || (root as { message?: string }).message || ''
+            rawReason = (root as { details?: string }).details || (root as { shortMessage?: string }).shortMessage || (root as { data?: { message?: string } }).data?.message || (root as { message?: string }).message || ''
           }
         }
       } catch {
         // ignore walk errors if any
       }
+    }
+    // Traverse standard Error cause chain (depth up to 10)
+    let curr = baseErr.cause
+    let depth = 0
+    const seen = new Set<unknown>()
+    while (curr && typeof curr === 'object' && depth < 10 && !seen.has(curr)) {
+      seen.add(curr)
+      const cObj = curr as {
+        code?: number | string
+        name?: string
+        cause?: unknown
+        message?: string
+        shortMessage?: string
+        details?: string
+        data?: { message?: string }
+      }
+      if (code === undefined && cObj.code !== undefined) code = cObj.code
+      if ((!rootName || rootName === 'Error') && cObj.name && cObj.name !== 'Error') {
+        rootName = cObj.name
+      }
+      if (!rawReason) {
+        rawReason = cObj.shortMessage || cObj.details || cObj.data?.message || cObj.message || ''
+      }
+      if (cObj.message) causeMessages += ' ' + cObj.message
+      if (cObj.data?.message) causeMessages += ' ' + cObj.data.message
+      curr = cObj.cause
+      depth++
     }
   } else if (err instanceof Error) {
     rawReason = err.message
@@ -152,8 +183,9 @@ export function classifyPaymentError(
     rawReason = String(err ?? '')
   }
 
+  const codeStr = code !== undefined ? String(code) : ''
   const cleanReason = sanitizeErrorReason(rawReason)
-  const checkText = `${cleanReason} ${rootName} ${(err as Error)?.message || ''}`.toLowerCase()
+  const checkText = `${cleanReason} ${rootName} ${codeStr} ${(err as Error)?.message || ''}${causeMessages}`.toLowerCase()
 
   // 1. User Rejection (Independent case: zero simulation fallback)
   if (
@@ -228,6 +260,10 @@ export function classifyPaymentError(
     rootName.includes('Rpc') ||
     rootName.includes('Timeout') ||
     rootName.includes('Http') ||
+    code === -32000 ||
+    code === -32603 ||
+    codeStr === '-32000' ||
+    codeStr === '-32603' ||
     /\b512\b|rpc|timeout|timed out|network error|failed to fetch|-32603|-32000|rate limit|429|502|503|504|nonce too low|replacement.*underpriced/.test(checkText)
   ) {
     const detail = cleanReason ? ` (${cleanReason})` : ''
