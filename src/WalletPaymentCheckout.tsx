@@ -91,6 +91,237 @@ const ERC20_ABI = [
   },
 ] as const
 
+export function sanitizeErrorReason(raw: unknown): string {
+  if (!raw) return ''
+  return String(raw)
+    .replace(/https?:\/\/[^\s'")]+/g, '[rpc-endpoint]')
+    .replace(/0x[a-fA-F0-9]{10,}/g, '[hash/data]')
+    .replace(/bearer\s+[a-z0-9._-]+/gi, '[token]')
+    .replace(/(?:api[_-]?key|secret|token)=([a-zA-Z0-9_-]+)/gi, 'token=[masked]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120)
+}
+
+export type ClassifiedPaymentError = {
+  message: string
+  showSimulateFallback: boolean
+  kind: string
+  name?: string
+  code?: number | string
+  shortMessage?: string
+  category: string
+}
+
+export function classifyPaymentError(
+  err: unknown,
+  networkName: string
+): ClassifiedPaymentError {
+  let rawReason = ''
+  let rootName = (err as { name?: string })?.name || ''
+  let code = (err as { code?: number | string })?.code ?? (err as { cause?: { code?: number | string } })?.cause?.code
+  let causeMessages = ''
+
+  if (err && typeof err === 'object') {
+    const baseErr = err as {
+      shortMessage?: string
+      details?: string
+      message?: string
+      cause?: unknown
+      walk?: (fn?: (e: unknown) => boolean) => any
+      data?: { message?: string }
+    }
+    if (baseErr.shortMessage) {
+      rawReason = baseErr.shortMessage
+    } else if (baseErr.details) {
+      rawReason = baseErr.details
+    } else if (baseErr.data?.message) {
+      rawReason = baseErr.data.message
+    } else if (baseErr.message) {
+      rawReason = baseErr.message
+    }
+    if (typeof baseErr.walk === 'function') {
+      try {
+        const root = baseErr.walk()
+        if (root && root !== err) {
+          rootName = (root as { name?: string }).name || rootName
+          code = (root as { code?: number | string }).code ?? code
+          if (!rawReason) {
+            rawReason = (root as { details?: string }).details || (root as { shortMessage?: string }).shortMessage || (root as { data?: { message?: string } }).data?.message || (root as { message?: string }).message || ''
+          }
+        }
+      } catch {
+        // ignore walk errors if any
+      }
+    }
+    // Traverse standard Error cause chain (depth up to 10)
+    let curr = baseErr.cause
+    let depth = 0
+    const seen = new Set<unknown>()
+    while (curr && typeof curr === 'object' && depth < 10 && !seen.has(curr)) {
+      seen.add(curr)
+      const cObj = curr as {
+        code?: number | string
+        name?: string
+        cause?: unknown
+        message?: string
+        shortMessage?: string
+        details?: string
+        data?: { message?: string }
+      }
+      if (code === undefined && cObj.code !== undefined) code = cObj.code
+      if ((!rootName || rootName === 'Error') && cObj.name && cObj.name !== 'Error') {
+        rootName = cObj.name
+      }
+      if (!rawReason) {
+        rawReason = cObj.shortMessage || cObj.details || cObj.data?.message || cObj.message || ''
+      }
+      if (cObj.message) causeMessages += ' ' + cObj.message
+      if (cObj.data?.message) causeMessages += ' ' + cObj.data.message
+      curr = cObj.cause
+      depth++
+    }
+  } else if (err instanceof Error) {
+    rawReason = err.message
+  } else {
+    rawReason = String(err ?? '')
+  }
+
+  const codeStr = code !== undefined ? String(code) : ''
+  const cleanReason = sanitizeErrorReason(rawReason)
+  const safeName = rootName ? sanitizeErrorReason(rootName) : undefined
+  const safeShortMessage = cleanReason || undefined
+  const checkText = `${cleanReason} ${rootName} ${codeStr} ${(err as Error)?.message || ''}${causeMessages}`.toLowerCase()
+
+  // 1. User Rejection (Independent case: zero simulation fallback)
+  const isExplicitUserRejection =
+    code === 4001 ||
+    codeStr === '4001' ||
+    rootName === 'UserRejectedRequestError' ||
+    rootName === 'TransactionRejectedRpcError' ||
+    /(?:user|wallet|signer)\s+(?:has\s+)?(?:rejected|denied|declined|cancelled|canceled)|(?:rejected|denied|declined|cancelled|canceled)\s+by\s+(?:the\s+)?(?:user|wallet|signer)|user\s+(?:rejected|denied|declined|cancelled|canceled)/i.test(checkText)
+
+  if (isExplicitUserRejection) {
+    return {
+      message: 'Transacción rechazada en tu billetera.',
+      showSimulateFallback: false,
+      kind: 'USER_REJECTION',
+      name: safeName,
+      code,
+      shortMessage: safeShortMessage,
+      category: 'USER_REJECTION',
+    }
+  }
+
+  // 2. Chain / Network Mismatch
+  if (
+    rootName === 'ChainMismatchError' ||
+    rootName === 'ConnectorChainMismatchError' ||
+    /chain.*mismatch|does not match the target chain|wrong network/.test(checkText)
+  ) {
+    return {
+      message: `La billetera está conectada a otra red. Cambia a la red ${networkName} en tu billetera para continuar.`,
+      showSimulateFallback: false,
+      kind: 'CHAIN_MISMATCH',
+      name: safeName,
+      code,
+      shortMessage: safeShortMessage,
+      category: 'CHAIN_MISMATCH',
+    }
+  }
+
+  // 3. Missing or Disconnected Wallet
+  if (
+    rootName === 'ConnectorNotConnectedError' ||
+    rootName === 'ProviderNotFoundError' ||
+    /no hay una wallet|wallet not connected|connector not connected|wallet.*desconectada|provider not found/.test(checkText)
+  ) {
+    return {
+      message: `No hay una billetera compatible conectada para autorizar la transacción en ${networkName}. Conecta tu billetera para continuar.`,
+      showSimulateFallback: false,
+      kind: 'WALLET_NOT_CONNECTED',
+      name: safeName,
+      code,
+      shortMessage: safeShortMessage,
+      category: 'WALLET_NOT_CONNECTED',
+    }
+  }
+
+  // 4. Contract Revert / Execution Revert
+  if (
+    rootName === 'ExecutionRevertedError' ||
+    rootName === 'ContractFunctionRevertedError' ||
+    rootName === 'ContractFunctionExecutionError' ||
+    /execution reverted|contract reverted|reverted with reason|transfer amount exceeds/.test(checkText)
+  ) {
+    const detail = cleanReason ? ` (${cleanReason})` : ''
+    return {
+      message: `La transacción fue revertida en la red ${networkName}${detail}. Puedes verificar los parámetros o confirmar en modo de simulación de prueba.`,
+      showSimulateFallback: true,
+      kind: 'EXECUTION_REVERTED',
+      name: safeName,
+      code,
+      shortMessage: safeShortMessage,
+      category: 'EXECUTION_REVERTED',
+    }
+  }
+
+  // 5. Insufficient Funds / Gas (Independent case)
+  if (
+    rootName === 'InsufficientFundsError' ||
+    /insufficient.*(?:funds|balance|gas)|exceeds balance|gas required exceeds|saldo insuficiente/.test(checkText)
+  ) {
+    return {
+      message: `No se pudo procesar la transacción en la red ${networkName} (fondos insuficientes para el pago o para el gas de red). Puedes verificar el saldo en tu billetera o confirmar en modo de simulación de prueba.`,
+      showSimulateFallback: true,
+      kind: 'INSUFFICIENT_FUNDS',
+      name: safeName,
+      code,
+      shortMessage: safeShortMessage,
+      category: 'INSUFFICIENT_FUNDS',
+    }
+  }
+
+  // 6. RPC / Provider / Timeout Error (Separate from insufficient funds)
+  if (
+    rootName.includes('Rpc') ||
+    rootName.includes('Timeout') ||
+    rootName.includes('Http') ||
+    code === -32000 ||
+    code === -32603 ||
+    code === 429 ||
+    code === 502 ||
+    code === 503 ||
+    code === 504 ||
+    codeStr === '-32000' ||
+    codeStr === '-32603' ||
+    /\b512\b|rpc|provider|gateway|timeout|timed out|network error|failed to fetch|-32603|-32000|rate limit|429|502|503|504|nonce too low|replacement.*underpriced/.test(checkText)
+  ) {
+    const detail = cleanReason ? ` (${cleanReason})` : ''
+    return {
+      message: `Error de comunicación con el proveedor RPC en la red ${networkName}${detail}. Puedes verificar tu conexión o confirmar en modo simulación de prueba.`,
+      showSimulateFallback: true,
+      kind: 'RPC_ERROR',
+      name: safeName,
+      code,
+      shortMessage: safeShortMessage,
+      category: 'RPC_ERROR',
+    }
+  }
+
+  // 7. Generic Diagnostic Fallback
+  const detail = cleanReason ? ` (${cleanReason})` : ''
+  return {
+    message: `No se pudo completar el pago en ${networkName}${detail}. Puedes verificar tu conexión o confirmar en modo simulación de prueba.`,
+    showSimulateFallback: true,
+    kind: 'GENERIC_DIAGNOSTIC',
+    name: safeName,
+    code,
+    shortMessage: safeShortMessage,
+    category: 'GENERIC_DIAGNOSTIC',
+  }
+}
+
 export function WalletPaymentCheckout({
   productName,
   amount,
@@ -653,20 +884,9 @@ export function WalletPaymentCheckout({
 
       await processPurchaseCompletion(txHash, allocatedMinerId, initialRecovery)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err ?? '')
-      const isRejection = /reject|cancel|denied|declin|4001/i.test(msg)
-      const is512 = /\b512\b|unknown.*rpc|rpc.*unknown|code 512|-32000/i.test(msg)
-      const isInsufficient = /insufficient|exceeds balance|gas required exceeds/i.test(msg)
-
-      if (isRejection) {
-        setError('Transacción rechazada en tu billetera.')
-      } else if (is512 || isInsufficient) {
-        setError(`No se pudo procesar la transacción en la red ${activeDestination.name} (fondos insuficientes para el pago o para el gas de red). Puedes verificar el saldo en tu billetera o confirmar en modo de simulación de prueba.`)
-        setShowSimulateFallback(true)
-      } else {
-        setError(`No se pudo completar el pago en ${activeDestination.name}. Puedes verificar tu conexión o confirmar en modo simulación de prueba.`)
-        setShowSimulateFallback(true)
-      }
+      const classified = classifyPaymentError(err, activeDestination.name)
+      setError(classified.message)
+      setShowSimulateFallback(classified.showSimulateFallback)
     } finally {
       setPaying(false)
     }
