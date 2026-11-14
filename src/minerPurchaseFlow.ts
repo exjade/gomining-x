@@ -35,18 +35,16 @@ import type { MinerPlan } from './minerCatalog.ts'
 import type { PaymentCurrency } from './paymentQuote.ts'
 import type { PaymentNetworkId } from './paymentDestinations.ts'
 import type { WalletId } from './walletSession.ts'
-import { isProductionFirestore, updateMinerInFirestore, type StoredMiner } from './firebase.ts'
+import {
+  isProductionFirestoreTarget,
+  isProductionFirestore,
+  sanitizeFirestoreErrorMessage,
+  updateMinerInFirestore,
+  type StoredMiner,
+} from './firebase.ts'
 
-export function sanitizeErrorMessage(
-  message?: string | null,
-  fallback = 'No se pudo completar la operación local en este momento.'
-): string {
-  if (!message || typeof message !== 'string') return fallback
-  if (/salad-miners|fatal|projectid|write operation attempted/i.test(message)) {
-    return fallback
-  }
-  return message
-}
+export const sanitizeErrorMessage = sanitizeFirestoreErrorMessage
+export { isProductionFirestoreTarget, isProductionFirestore, sanitizeFirestoreErrorMessage }
 
 export interface PackageSnapshot {
   packageId: string
@@ -726,7 +724,7 @@ export async function completeLocalMinerPurchase(
     },
   }
 
-  if (!isProductionFirestore()) {
+  if (!isProductionFirestoreTarget()) {
     try {
       await options.saveMinerToFirestore(cleanUid, storedMiner)
     } catch (persistErr) {
@@ -747,7 +745,7 @@ export async function completeLocalMinerPurchase(
     return commitRes
   }
 
-  if (options.recordPurchaseToAdmin && !isProductionFirestore()) {
+  if (options.recordPurchaseToAdmin && !isProductionFirestoreTarget()) {
     try {
       await options.recordPurchaseToAdmin({
         minerId,
@@ -873,7 +871,7 @@ export async function payPendingMinerOrderAndRecordToAdmin(
       },
     }
 
-    if (!isProductionFirestore()) {
+    if (!isProductionFirestoreTarget()) {
       try {
         await options.saveMinerToFirestore(cleanUid, storedMiner)
       } catch (persistErr) {
@@ -894,7 +892,7 @@ export async function payPendingMinerOrderAndRecordToAdmin(
       return result
     }
 
-    if (options.recordPurchaseToAdmin && !isProductionFirestore()) {
+    if (options.recordPurchaseToAdmin && !isProductionFirestoreTarget()) {
       try {
         await options.recordPurchaseToAdmin({
           minerId,

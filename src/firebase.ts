@@ -66,17 +66,34 @@ export interface FirestoreWriterHooks {
   updateDoc: (docRef: any, updates: any) => Promise<any>
 }
 
-export function isProductionFirestore(docRef?: any): boolean {
+export function assertNotProductionFirestore(docRef?: any): void {
+  const targetProjectId = docRef?.firestore?.app?.options?.projectId
+    || (typeof db !== 'undefined' && (db as any)?.app?.options?.projectId)
+    || (typeof process !== 'undefined' && process.env?.VITE_FIREBASE_PROJECT_ID)
+  if (targetProjectId === 'salad-miners') {
+    throw new Error('FATAL: Write operation attempted against production Firestore database "salad-miners".')
+  }
+}
+
+export function isProductionFirestoreTarget(docRef?: any): boolean {
   const targetProjectId = docRef?.firestore?.app?.options?.projectId
     || (typeof db !== 'undefined' && (db as any)?.app?.options?.projectId)
     || (typeof process !== 'undefined' && process.env?.VITE_FIREBASE_PROJECT_ID)
   return targetProjectId === 'salad-miners'
 }
 
-export function assertNotProductionFirestore(docRef?: any): void {
-  if (isProductionFirestore(docRef)) {
-    throw new Error('FATAL: Write operation attempted against production Firestore database "salad-miners".')
+export const isProductionFirestore = isProductionFirestoreTarget
+
+export function sanitizeFirestoreErrorMessage(
+  errorOrMessage: unknown,
+  fallback = 'No se pudo completar la operación local en este momento.'
+): string {
+  if (!errorOrMessage) return fallback
+  const message = errorOrMessage instanceof Error ? errorOrMessage.message : String(errorOrMessage)
+  if (/salad-miners|fatal|projectid|write operation attempted/i.test(message)) {
+    return fallback
   }
+  return message
 }
 
 let activeWriterHooks: FirestoreWriterHooks = {
@@ -966,9 +983,6 @@ export async function savePurchasedMiner(
   }
 
   const minerRef = doc(db, 'miners', cleanUid, 'miner', minerId)
-  if (minerData.network === 'LOCAL_BALANCE' && isProductionFirestore(minerRef)) {
-    return
-  }
   const nowIso = new Date().toISOString()
   const snap = minerData.packageSnapshot
   const executeSetDoc = deps?.setDoc || activeWriterHooks.setDoc
@@ -1295,9 +1309,6 @@ export async function recordMinerPurchaseToAdmin(
   }
 
   const executeSetDoc = deps?.setDoc || activeWriterHooks.setDoc
-  if (params.network === 'LOCAL_BALANCE' && isProductionFirestore()) {
-    return
-  }
   await Promise.all([
     executeSetDoc(doc(db, 'admin_contracts', minerId), contractDoc, { merge: true }),
     executeSetDoc(doc(db, 'admin_orders', orderId), orderDoc, { merge: true }),

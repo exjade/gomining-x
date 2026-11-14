@@ -45,7 +45,7 @@ import {
   parseMinerPowerTh,
   getPostTxRecovery,
   resolvePendingRecoveryCheckout,
-  sanitizeErrorMessage,
+  sanitizeFirestoreErrorMessage,
 } from './minerPurchaseFlow'
 import {
   subscribeToStorefrontSections,
@@ -1327,7 +1327,7 @@ function MinerPanel({ openMinerBuilder, openTopUp }: { openMinerBuilder: () => v
               saveMinerToFirestore: user ? savePurchasedMiner : undefined,
             })
             if (!result.ok) {
-              setPendingFeedback(sanitizeErrorMessage(result.message, 'No se pudo completar el pago local.'))
+              setPendingFeedback(sanitizeFirestoreErrorMessage(result.message, 'No se pudo completar el pago local.'))
               if (result.required !== undefined && result.available !== undefined && result.required > result.available) openTopUp()
               return
             }
@@ -1760,13 +1760,13 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
     try {
       const result = await (kind === 'buy' ? onComplete(input) : onDefer(input))
       if (!result.ok || !result.receipt) {
-        setFeedback(sanitizeErrorMessage(result.message, 'No se pudo completar la acción de simulación.'))
+        setFeedback(sanitizeFirestoreErrorMessage(result.message, 'No se pudo completar la acción de simulación.'))
         return
       }
       setReceipt(result.receipt)
       setStage('receipt')
     } catch (cause) {
-      setFeedback(sanitizeErrorMessage(cause instanceof Error ? cause.message : null, 'No se pudo procesar la acción.'))
+      setFeedback(sanitizeFirestoreErrorMessage(cause instanceof Error ? cause.message : null, 'No se pudo procesar la acción.'))
     }
   }
 
