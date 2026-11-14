@@ -45,6 +45,7 @@ import {
   parseMinerPowerTh,
   getPostTxRecovery,
   resolvePendingRecoveryCheckout,
+  sanitizeErrorMessage,
 } from './minerPurchaseFlow'
 import {
   subscribeToStorefrontSections,
@@ -1277,16 +1278,28 @@ function MinerPanel({ openMinerBuilder, openTopUp }: { openMinerBuilder: () => v
   const { miners: realMiners } = useRealtimeUserMiners(user?.uid)
   const isAuth = Boolean(user)
   const displayMiners = isAuth
-    ? realMiners.map((miner) => ({
-        id: miner.id,
-        name: miner.name,
-        powerTh: miner.powerTh,
-        efficiency: miner.efficiencyWattsPerTh || miner.efficiency || 15,
-        purchaseMode: miner.cadence || miner.purchaseMode || 'once',
-        acquiredAt: typeof miner.createdAt === 'string' ? miner.createdAt : (miner.createdAtIso || 'reciente'),
-        status: miner.status || 'active',
-        isReal: true,
-      }))
+    ? [
+        ...realMiners.map((miner) => ({
+          id: miner.id,
+          name: miner.name,
+          powerTh: miner.powerTh,
+          efficiency: miner.efficiencyWattsPerTh || miner.efficiency || 15,
+          purchaseMode: miner.cadence || miner.purchaseMode || 'once',
+          acquiredAt: typeof miner.createdAt === 'string' ? miner.createdAt : (miner.createdAtIso || 'reciente'),
+          status: miner.status || 'active',
+          isReal: true,
+        })),
+        ...demo.miners.map((miner) => ({
+          id: miner.id,
+          name: miner.name,
+          powerTh: miner.powerTh,
+          efficiency: miner.efficiency,
+          purchaseMode: miner.purchaseMode,
+          acquiredAt: miner.acquiredAt,
+          status: 'active',
+          isReal: false,
+        })),
+      ]
     : demo.miners.map((miner) => ({
         id: miner.id,
         name: miner.name,
@@ -1314,7 +1327,7 @@ function MinerPanel({ openMinerBuilder, openTopUp }: { openMinerBuilder: () => v
               saveMinerToFirestore: user ? savePurchasedMiner : undefined,
             })
             if (!result.ok) {
-              setPendingFeedback(result.message ?? 'No se pudo completar el pago local.')
+              setPendingFeedback(sanitizeErrorMessage(result.message, 'No se pudo completar el pago local.'))
               if (result.required !== undefined && result.available !== undefined && result.required > result.available) openTopUp()
               return
             }
@@ -1747,13 +1760,13 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
     try {
       const result = await (kind === 'buy' ? onComplete(input) : onDefer(input))
       if (!result.ok || !result.receipt) {
-        setFeedback(result.message ?? 'No se pudo completar la acción de simulación.')
+        setFeedback(sanitizeErrorMessage(result.message, 'No se pudo completar la acción de simulación.'))
         return
       }
       setReceipt(result.receipt)
       setStage('receipt')
     } catch (cause) {
-      setFeedback(cause instanceof Error ? cause.message : 'No se pudo procesar la acción.')
+      setFeedback(sanitizeErrorMessage(cause instanceof Error ? cause.message : null, 'No se pudo procesar la acción.'))
     }
   }
 

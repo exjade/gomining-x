@@ -66,11 +66,15 @@ export interface FirestoreWriterHooks {
   updateDoc: (docRef: any, updates: any) => Promise<any>
 }
 
-export function assertNotProductionFirestore(docRef?: any): void {
+export function isProductionFirestore(docRef?: any): boolean {
   const targetProjectId = docRef?.firestore?.app?.options?.projectId
     || (typeof db !== 'undefined' && (db as any)?.app?.options?.projectId)
     || (typeof process !== 'undefined' && process.env?.VITE_FIREBASE_PROJECT_ID)
-  if (targetProjectId === 'salad-miners') {
+  return targetProjectId === 'salad-miners'
+}
+
+export function assertNotProductionFirestore(docRef?: any): void {
+  if (isProductionFirestore(docRef)) {
     throw new Error('FATAL: Write operation attempted against production Firestore database "salad-miners".')
   }
 }
@@ -962,6 +966,9 @@ export async function savePurchasedMiner(
   }
 
   const minerRef = doc(db, 'miners', cleanUid, 'miner', minerId)
+  if (minerData.network === 'LOCAL_BALANCE' && isProductionFirestore(minerRef)) {
+    return
+  }
   const nowIso = new Date().toISOString()
   const snap = minerData.packageSnapshot
   const executeSetDoc = deps?.setDoc || activeWriterHooks.setDoc
@@ -1288,6 +1295,9 @@ export async function recordMinerPurchaseToAdmin(
   }
 
   const executeSetDoc = deps?.setDoc || activeWriterHooks.setDoc
+  if (params.network === 'LOCAL_BALANCE' && isProductionFirestore()) {
+    return
+  }
   await Promise.all([
     executeSetDoc(doc(db, 'admin_contracts', minerId), contractDoc, { merge: true }),
     executeSetDoc(doc(db, 'admin_orders', orderId), orderDoc, { merge: true }),

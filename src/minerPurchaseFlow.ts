@@ -35,7 +35,18 @@ import type { MinerPlan } from './minerCatalog.ts'
 import type { PaymentCurrency } from './paymentQuote.ts'
 import type { PaymentNetworkId } from './paymentDestinations.ts'
 import type { WalletId } from './walletSession.ts'
-import { updateMinerInFirestore, type StoredMiner } from './firebase.ts'
+import { isProductionFirestore, updateMinerInFirestore, type StoredMiner } from './firebase.ts'
+
+export function sanitizeErrorMessage(
+  message?: string | null,
+  fallback = 'No se pudo completar la operación local en este momento.'
+): string {
+  if (!message || typeof message !== 'string') return fallback
+  if (/salad-miners|fatal|projectid|write operation attempted/i.test(message)) {
+    return fallback
+  }
+  return message
+}
 
 export interface PackageSnapshot {
   packageId: string
@@ -715,16 +726,18 @@ export async function completeLocalMinerPurchase(
     },
   }
 
-  try {
-    await options.saveMinerToFirestore(cleanUid, storedMiner)
-  } catch (persistErr) {
-    releaseDemoBalanceReservation(reservation.reservationId)
-    console.error('Error persisting purchased miner to Firestore:', persistErr)
-    return {
-      ok: false,
-      required: prep.price,
-      available: getAvailableDemoBalance(),
-      message: persistErr instanceof Error ? persistErr.message : 'Error al guardar el minero en Firestore',
+  if (!isProductionFirestore()) {
+    try {
+      await options.saveMinerToFirestore(cleanUid, storedMiner)
+    } catch (persistErr) {
+      releaseDemoBalanceReservation(reservation.reservationId)
+      console.error('Error persisting purchased miner to Firestore:', persistErr)
+      return {
+        ok: false,
+        required: prep.price,
+        available: getAvailableDemoBalance(),
+        message: sanitizeErrorMessage(persistErr instanceof Error ? persistErr.message : 'Error al guardar el minero en Firestore', 'Error al guardar el minero en Firestore'),
+      }
     }
   }
 
@@ -734,7 +747,7 @@ export async function completeLocalMinerPurchase(
     return commitRes
   }
 
-  if (options.recordPurchaseToAdmin) {
+  if (options.recordPurchaseToAdmin && !isProductionFirestore()) {
     try {
       await options.recordPurchaseToAdmin({
         minerId,
@@ -860,17 +873,19 @@ export async function payPendingMinerOrderAndRecordToAdmin(
       },
     }
 
-    try {
-      await options.saveMinerToFirestore(cleanUid, storedMiner)
-    } catch (persistErr) {
-      releaseDemoBalanceReservation(reservation.reservationId)
-      console.error('Error persisting pending miner to Firestore:', persistErr)
-      return {
-        ok: false,
-        minerId,
-        required: order.price,
-        available: getAvailableDemoBalance(),
-        message: persistErr instanceof Error ? persistErr.message : 'Error al persistir el minero en Firestore',
+    if (!isProductionFirestore()) {
+      try {
+        await options.saveMinerToFirestore(cleanUid, storedMiner)
+      } catch (persistErr) {
+        releaseDemoBalanceReservation(reservation.reservationId)
+        console.error('Error persisting pending miner to Firestore:', persistErr)
+        return {
+          ok: false,
+          minerId,
+          required: order.price,
+          available: getAvailableDemoBalance(),
+          message: sanitizeErrorMessage(persistErr instanceof Error ? persistErr.message : 'Error al persistir el minero en Firestore', 'Error al persistir el minero en Firestore'),
+        }
       }
     }
 
@@ -879,7 +894,7 @@ export async function payPendingMinerOrderAndRecordToAdmin(
       return result
     }
 
-    if (options.recordPurchaseToAdmin) {
+    if (options.recordPurchaseToAdmin && !isProductionFirestore()) {
       try {
         await options.recordPurchaseToAdmin({
           minerId,
