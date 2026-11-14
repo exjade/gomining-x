@@ -123,6 +123,10 @@ export default defineConfig({
         target: 'http://127.0.0.1:3001',
         changeOrigin: true,
       },
+      '/api/purchases': {
+        target: 'http://127.0.0.1:3001',
+        changeOrigin: true,
+      },
     },
     allowedHosts: [
       'sprinkler-wooing-graceful.ngrok-free.dev',
@@ -140,6 +144,10 @@ export default defineConfig({
     port: 4174,
     proxy: {
       '/api/catalog': {
+        target: 'http://127.0.0.1:3001',
+        changeOrigin: true,
+      },
+      '/api/purchases': {
         target: 'http://127.0.0.1:3001',
         changeOrigin: true,
       },

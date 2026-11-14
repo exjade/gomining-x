@@ -37,6 +37,7 @@ import { SubscriptionsPage } from './SubscriptionsPage'
 import { LandingPage } from './LandingPage'
 import { ReferralPage } from './ReferralPage'
 import { usePersonalization } from './personalization'
+import { purchaseWithPlatformBalance } from './platformBalancePurchase'
 import {
   buildMinerBuilderCheckoutPayload,
   createWalletCheckoutState,
@@ -513,7 +514,12 @@ function AppContent() {
         setTopUpOpen(false)
         setWalletCheckout({ productName: 'Recarga de saldo', amount, currency: 'USD', networkId, walletId })
       }} onConfirm={(amount) => { addDemoFunds(amount); setTopUpOpen(false) }} />}
-      {minerBuilderOpen && <MinerBuilderDialog balance={demo.balance} walletSession={effectiveWalletSession} onClose={closeMinerBuilder} onPayWithWallet={(productName, amount, currency, packageId, purchaseMode) => {
+      {minerBuilderOpen && <MinerBuilderDialog
+        balance={user && !user.isAnonymous ? (profile?.balance ?? 0) : demo.balance}
+        isAuth={Boolean(user && !user.isAnonymous)}
+        walletSession={effectiveWalletSession}
+        onClose={closeMinerBuilder}
+        onPayWithWallet={(productName, amount, currency, packageId, purchaseMode) => {
         if (!user || user.isAnonymous) {
           closeMinerBuilder()
           setMinerBuilderOpen(false)
@@ -530,6 +536,30 @@ function AppContent() {
         if (!canonicalPackageId || lowerPkg.startsWith('pkg-miner_') || lowerPkg.startsWith('pkg-miner-') || lowerPkg.startsWith('pkg-miner')) {
           return { ok: false, message: `No se puede completar la compra sin un packageId canónico válido: '${input.packageId}'` }
         }
+
+        if (user && !user.isAnonymous) {
+          const result = await purchaseWithPlatformBalance({
+            packageId: canonicalPackageId,
+            purchaseId: input.purchaseId,
+            user,
+          })
+          if (!result.ok) {
+            return { ok: false, message: result.message }
+          }
+          const receipt: DemoReceipt = {
+            id: result.minerId,
+            kind: 'miner',
+            label: input.name,
+            amount: input.price,
+            detail: `${input.powerTh.toFixed(2)} TH · Contrato ${result.orderId}`,
+            createdAt: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
+            balanceAfter: result.balance,
+          }
+          setSessionEvents((items) => [`${input.name} · ${input.powerTh.toFixed(2)} TH añadidos a la granja`, ...items].slice(0, 5))
+          setToast('Minero adquirido con saldo de plataforma')
+          return { ok: true, receipt }
+        }
+
         const priceUsd = await convertCatalogPriceToUsd(input.price, input.currency)
         const demoInput = { ...input, packageId: canonicalPackageId, price: priceUsd, ownerWallet: activeWalletAddress || effectiveWalletSession.connection?.address }
 
@@ -1278,28 +1308,16 @@ function MinerPanel({ openMinerBuilder, openTopUp }: { openMinerBuilder: () => v
   const { miners: realMiners } = useRealtimeUserMiners(user?.uid)
   const isAuth = Boolean(user)
   const displayMiners = isAuth
-    ? [
-        ...realMiners.map((miner) => ({
-          id: miner.id,
-          name: miner.name,
-          powerTh: miner.powerTh,
-          efficiency: miner.efficiencyWattsPerTh || miner.efficiency || 15,
-          purchaseMode: miner.cadence || miner.purchaseMode || 'once',
-          acquiredAt: typeof miner.createdAt === 'string' ? miner.createdAt : (miner.createdAtIso || 'reciente'),
-          status: miner.status || 'active',
-          isReal: true,
-        })),
-        ...demo.miners.map((miner) => ({
-          id: miner.id,
-          name: miner.name,
-          powerTh: miner.powerTh,
-          efficiency: miner.efficiency,
-          purchaseMode: miner.purchaseMode,
-          acquiredAt: miner.acquiredAt,
-          status: 'active',
-          isReal: false,
-        })),
-      ]
+    ? realMiners.map((miner) => ({
+        id: miner.id,
+        name: miner.name,
+        powerTh: miner.powerTh,
+        efficiency: miner.efficiencyWattsPerTh || miner.efficiency || 15,
+        purchaseMode: miner.cadence || miner.purchaseMode || 'once',
+        acquiredAt: typeof miner.createdAt === 'string' ? miner.createdAt : (miner.createdAtIso || 'reciente'),
+        status: miner.status || 'active',
+        isReal: true,
+      }))
     : demo.miners.map((miner) => ({
         id: miner.id,
         name: miner.name,
@@ -1586,15 +1604,17 @@ function DemoProductGrid({ products, addProduct }: { products: DemoProduct[]; ad
   </div>
 }
 
-function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, onComplete, onDefer }: {
+function MinerBuilderDialog({ balance, isAuth = false, walletSession, onClose, onPayWithWallet, onComplete, onDefer }: {
   balance: number
+  isAuth?: boolean
   walletSession: ReturnType<typeof useWalletSession>
   onClose: () => void
   onPayWithWallet: (productName: string, amount: number, currency: PaymentCurrency, packageId?: string, purchaseMode?: 'once' | 'monthly') => void
-  onComplete: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; packageId?: string; durationDays?: number }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
-  onDefer: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; packageId?: string; durationDays?: number }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
+  onComplete: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; packageId?: string; durationDays?: number; purchaseId?: string }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
+  onDefer: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; packageId?: string; durationDays?: number; purchaseId?: string }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
 }) {
   const [storefrontSections, setStorefrontSections] = useState<StorefrontSectionsConfig>(DEFAULT_STOREFRONT_SECTIONS)
+  const [stablePurchaseId] = useState(() => `pb_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`)
   const [categoryTab, setCategoryTab] = useState<MinerCategoryTab>('packages')
   const [presetId, setPresetId] = useState<string>('presale-1')
   const [isCustomEditorOpen, setIsCustomEditorOpen] = useState(false)
@@ -1755,18 +1775,19 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
       currency,
       purchaseMode,
       packageId,
+      purchaseId: stablePurchaseId,
       durationDays: purchaseMode === 'monthly' ? 30 : undefined,
     }
     try {
       const result = await (kind === 'buy' ? onComplete(input) : onDefer(input))
       if (!result.ok || !result.receipt) {
-        setFeedback(sanitizeFirestoreErrorMessage(result.message, 'No se pudo completar la acción de simulación.'))
+        setFeedback(sanitizeFirestoreErrorMessage(result.message, isAuth ? 'No se pudo completar la compra con saldo.' : 'No se pudo completar la acción de simulación.'))
         return
       }
       setReceipt(result.receipt)
       setStage('receipt')
     } catch (cause) {
-      setFeedback(sanitizeFirestoreErrorMessage(cause instanceof Error ? cause.message : null, 'No se pudo procesar la acción.'))
+      setFeedback(sanitizeFirestoreErrorMessage(cause instanceof Error ? cause.message : null, isAuth ? 'No se pudo procesar la compra.' : 'No se pudo procesar la acción.'))
     }
   }
 
@@ -1779,15 +1800,17 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
         {stage === 'receipt' && receipt ? (
           <>
             <div className="purchase-success-mark">✓</div>
-            <p className="eyebrow">COMPROBANTE LOCAL</p>
-            <h2 id="miner-builder-title">{receiptIsPending ? 'Pedido local registrado' : 'Minero añadido a la granja'}</h2>
+            <p className="eyebrow">{isAuth ? 'COMPROBANTE DE COMPRA' : 'COMPROBANTE LOCAL'}</p>
+            <h2 id="miner-builder-title">{receiptIsPending ? (isAuth ? 'Pedido registrado' : 'Pedido local registrado') : 'Minero añadido a la granja'}</h2>
             <div className="receipt-lines">
               <div className="receipt-line"><span>Potencia</span><strong>{powerTh.toFixed(2)} TH</strong></div>
               <div className="receipt-line"><span>Importe equivalente</span><strong>{formatCatalogPrice(receipt.amount, 'USD')}</strong></div>
-              <div className="receipt-line"><span>{receiptIsPending ? 'Estado' : 'Saldo local restante'}</span><strong>{receiptIsPending ? 'Pendiente' : formatDemoCurrency(receipt.balanceAfter)}</strong></div>
+              <div className="receipt-line"><span>{receiptIsPending ? 'Estado' : (isAuth ? 'Saldo restante' : 'Saldo local restante')}</span><strong>{receiptIsPending ? 'Pendiente' : formatDemoCurrency(receipt.balanceAfter)}</strong></div>
             </div>
             <p className="purchase-muted">Referencia {receipt.id} · {receipt.createdAt}</p>
-            <div className="simulation-warning"><span>i</span><span>Esta acción afecta tu sesión local y activa el worker correspondiente en tu panel de minería.</span></div>
+            {!isAuth && (
+              <div className="simulation-warning"><span>i</span><span>Esta acción afecta tu sesión local y activa el worker correspondiente en tu panel de minería.</span></div>
+            )}
             <div className="purchase-modal-actions">
               <button className="button button-primary" onClick={onClose}>Listo <span>✓</span></button>
             </div>
@@ -1831,14 +1854,24 @@ function MinerBuilderDialog({ balance, walletSession, onClose, onPayWithWallet, 
                 {walletSession.connection ? `Pagar con ${walletSession.connection.name}` : 'Conectar wallet y pagar'} <span>↗</span>
               </button>
             </div>
-            <details className="miner-demo-payment" style={{ marginTop: '12px' }}>
-              <summary>Otras opciones de simulación local</summary>
-              <p>Saldo local disponible: {formatDemoCurrency(balance)}.</p>
-              <div className="purchase-modal-actions">
-                <button className="button button-secondary" disabled={!accepted} onClick={() => void runDemoAction('buy')}>Añadir con saldo local <span>✓</span></button>
-                <button className="button button-quiet" disabled={!accepted} onClick={() => void runDemoAction('defer')}>Guardar pedido pendiente</button>
+            {isAuth ? (
+              <div className="miner-platform-balance-section" style={{ marginTop: '12px' }}>
+                <p>Saldo en plataforma disponible: {formatDemoCurrency(balance)}.</p>
+                <div className="purchase-modal-actions">
+                  <button className="button button-secondary" disabled={!accepted} onClick={() => void runDemoAction('buy')}>Comprar con saldo <span>✓</span></button>
+                  <button className="button button-quiet" disabled={!accepted} onClick={() => void runDemoAction('defer')}>Guardar pedido pendiente</button>
+                </div>
               </div>
-            </details>
+            ) : (
+              <details className="miner-demo-payment" style={{ marginTop: '12px' }}>
+                <summary>Otras opciones de simulación local</summary>
+                <p>Saldo local disponible: {formatDemoCurrency(balance)}.</p>
+                <div className="purchase-modal-actions">
+                  <button className="button button-secondary" disabled={!accepted} onClick={() => void runDemoAction('buy')}>Añadir con saldo local <span>✓</span></button>
+                  <button className="button button-quiet" disabled={!accepted} onClick={() => void runDemoAction('defer')}>Guardar pedido pendiente</button>
+                </div>
+              </details>
+            )}
           </>
         ) : (
           <>

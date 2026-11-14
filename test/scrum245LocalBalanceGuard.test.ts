@@ -22,6 +22,10 @@ import {
   recordMinerPurchaseToAdmin,
   type StoredMiner,
 } from '../src/firebase.ts'
+import {
+  purchaseWithPlatformBalance,
+  generatePlatformPurchaseId,
+} from '../src/platformBalancePurchase.ts'
 
 function resetStore(balance = 1000) {
   restoreDemoSession({
@@ -39,6 +43,7 @@ function resetStore(balance = 1000) {
 
 describe('SCRUM-245: Local Balance Production Guard & Zero Detail Leakage', () => {
   let originalProjectId: string | undefined
+  const originalFetch = globalThis.fetch
 
   beforeEach(() => {
     resetStore(1000)
@@ -46,156 +51,280 @@ describe('SCRUM-245: Local Balance Production Guard & Zero Detail Leakage', () =
   })
 
   afterEach(() => {
+    globalThis.fetch = originalFetch
     if ((db as any)?.app?.options) {
       ;(db as any).app.options.projectId = originalProjectId
     }
   })
 
   // =========================================================================
-  // Group 1: Local Balance Purchase Clean Success (Zero Prod Guard Triggers)
+  // Group 1: Platform Balance Purchase Contract & Zero Production Writes
   // =========================================================================
-  describe('Group 1: Local Balance Purchase Clean Success & Zero Production Writes', () => {
-    it('1.1 Authenticated local balance purchase completes without triggering production Firestore guard', async () => {
-      ;(db as any).app.options.projectId = 'salad-miners'
-      assert.equal(isProductionFirestore(), true, 'isProductionFirestore must report true')
+  describe('Group 1: Platform Balance Purchase Contract & Zero Production Writes', () => {
+    let capturedRequests: Array<{ url: string; method: string; headers: Headers; body: any }> = []
 
-      const demoInput: DemoMinerPurchaseInput = {
-        name: 'Local Demo Antminer',
-        powerTh: 20,
-        efficiency: 15,
-        price: 150,
-        purchaseMode: 'once',
-        packageId: 'minerx-01',
+    beforeEach(() => {
+      capturedRequests = []
+      globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as any).url
+        const method = init?.method || 'GET'
+        const headers = new Headers(init?.headers)
+        let body: any = null
+        if (init?.body && typeof init.body === 'string') {
+          try {
+            body = JSON.parse(init.body)
+          } catch {
+            body = init.body
+          }
+        }
+        capturedRequests.push({ url, method, headers, body })
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            minerId: `miner_${body?.purchaseId || 'default'}`,
+            orderId: `ord_u_auth_prod_test_${body?.purchaseId || 'default'}`,
+            balance: 850,
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        )
       }
-
-      const result = await completeLocalMinerPurchase(demoInput, {
-        user: { uid: 'u_auth_prod_test', email: 'test@salad.local' },
-        saveMinerToFirestore: savePurchasedMiner,
-        recordPurchaseToAdmin: recordMinerPurchaseToAdmin,
-      })
-
-      assert.equal(result.ok, true, 'Purchase must succeed locally')
-      assert.ok(result.miner, 'Miner must be created')
-      assert.equal(result.miner?.name, 'Local Demo Antminer')
-      assert.equal(result.miner?.packageId, 'minerx-01')
-      assert.ok(result.receipt, 'Receipt must be generated')
-      assert.equal(result.receipt?.kind, 'miner')
-      assert.equal(result.receipt?.balanceAfter, 850, 'Balance must be decremented by purchase price')
-
-      const session = getDemoSessionForPersistence()
-      assert.equal(session.balance, 850)
-      assert.equal(session.miners.length, 1)
-      assert.equal(session.receipts.length, 1)
     })
 
-    it('1.2 Zero writes attempted against Firestore during local balance purchase in production mode', async () => {
-      ;(db as any).app.options.projectId = 'salad-miners'
-      let writeInvocations = 0
-      let adminInvocations = 0
-
-      const demoInput: DemoMinerPurchaseInput = {
-        name: 'Guarded Local Miner',
-        powerTh: 25,
-        efficiency: 15,
-        price: 200,
-        purchaseMode: 'once',
-        packageId: 'minerx-01',
+    it('1.1 Authenticated platform balance purchase sends Bearer ID token in Authorization header', async () => {
+      const mockUser = {
+        uid: 'u_auth_token_test',
+        getIdToken: async () => 'test_firebase_id_token_xyz123',
       }
 
-      const result = await completeLocalMinerPurchase(demoInput, {
-        user: { uid: 'u_zero_write_test', email: 'guard@salad.local' },
-        saveMinerToFirestore: async () => {
-          writeInvocations++
-          throw new Error('FATAL: Write operation attempted against production Firestore database "salad-miners".')
-        },
-        recordPurchaseToAdmin: async () => {
-          adminInvocations++
-        },
+      const result = await purchaseWithPlatformBalance({
+        packageId: 'minerx-01',
+        user: mockUser,
       })
 
-      assert.equal(result.ok, true, 'Purchase must succeed in local demo state')
-      assert.equal(writeInvocations, 0, 'saveMinerToFirestore must NOT be called in production mode')
-      assert.equal(adminInvocations, 0, 'recordPurchaseToAdmin must NOT be called in production mode')
-      assert.equal(getDemoSessionForPersistence().balance, 800)
-      assert.equal(getDemoSessionForPersistence().miners.length, 1)
+      assert.equal(result.ok, true)
+      assert.equal(capturedRequests.length, 1)
+      assert.equal(capturedRequests[0].url, '/api/purchases/platform-balance')
+      assert.equal(capturedRequests[0].method, 'POST')
+      assert.equal(capturedRequests[0].headers.get('authorization'), 'Bearer test_firebase_id_token_xyz123')
+      assert.equal(capturedRequests[0].headers.get('content-type'), 'application/json')
     })
 
-    it('1.3 Paying pending local order with local balance succeeds without triggering production guard', async () => {
-      const deferRes = deferDemoMinerPurchase({
-        name: 'Pending Local Rig',
-        powerTh: 30,
-        efficiency: 15,
-        price: 200,
-        purchaseMode: 'once',
+    it('1.2 Request body strictly transmits packageId and purchaseId with zero price or power authority', async () => {
+      const mockUser = {
+        uid: 'u_auth_body_test',
+        getIdToken: async () => 'test_token',
+      }
+
+      const result = await purchaseWithPlatformBalance({
         packageId: 'minerx-02',
+        purchaseId: 'pb_test_custom_id_456',
+        user: mockUser,
       })
-      assert.equal(deferRes.ok, true)
 
-      const sessionBefore = getDemoSessionForPersistence()
-      assert.equal(sessionBefore.pendingMinerOrders.length, 1)
-      const order = sessionBefore.pendingMinerOrders[0]
+      assert.equal(result.ok, true)
+      assert.equal(capturedRequests.length, 1)
+      const body = capturedRequests[0].body
+      assert.ok(body, 'Body must be sent')
+      assert.deepEqual(Object.keys(body).sort(), ['packageId', 'purchaseId'])
+      assert.equal(body.packageId, 'minerx-02')
+      assert.equal(body.purchaseId, 'pb_test_custom_id_456')
+      assert.equal((body as any).price, undefined, 'Must not send price authority')
+      assert.equal((body as any).powerTh, undefined, 'Must not send power authority')
+      assert.equal((body as any).currency, undefined, 'Must not send currency authority')
+    })
 
+    it('1.3 Retrying the same attempt reuses identical purchaseId for idempotency', async () => {
+      const mockUser = {
+        uid: 'u_auth_retry_test',
+        getIdToken: async () => 'test_token',
+      }
+      const stablePurchaseId = 'pb_stable_attempt_789'
+
+      let attemptCount = 0
+      globalThis.fetch = async (input, init) => {
+        attemptCount++
+        const headers = new Headers(init?.headers)
+        const body = JSON.parse((init?.body as string) || '{}')
+        capturedRequests.push({ url: String(input), method: init?.method || 'GET', headers, body })
+        if (attemptCount === 1) {
+          return new Response(JSON.stringify({ error: 'Internal glitch' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        return new Response(
+          JSON.stringify({
+            success: true,
+            minerId: `miner_${body.purchaseId}`,
+            orderId: `ord_u_${body.purchaseId}`,
+            balance: 700,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const result1 = await purchaseWithPlatformBalance({
+        packageId: 'minerx-01',
+        purchaseId: stablePurchaseId,
+        user: mockUser,
+      })
+      assert.equal(result1.ok, false)
+
+      const result2 = await purchaseWithPlatformBalance({
+        packageId: 'minerx-01',
+        purchaseId: stablePurchaseId,
+        user: mockUser,
+      })
+      assert.equal(result2.ok, true)
+
+      assert.equal(capturedRequests.length, 2)
+      assert.equal(capturedRequests[0].body.purchaseId, stablePurchaseId)
+      assert.equal(capturedRequests[1].body.purchaseId, stablePurchaseId)
+      assert.equal(capturedRequests[0].body.purchaseId, capturedRequests[1].body.purchaseId)
+    })
+
+    it('1.4 Zero client Firestore or Admin writes triggered on platform balance purchase success', async () => {
       ;(db as any).app.options.projectId = 'salad-miners'
-      assert.equal(isProductionFirestore(), true)
+      assert.equal(isProductionFirestore(), true, 'Must be in production mode')
 
-      let pendingWrites = 0
-      const result = await payPendingMinerOrderAndRecordToAdmin(order, {
-        user: { uid: 'u_pending_prod_test', email: 'pending@salad.local' },
-        saveMinerToFirestore: async () => {
-          pendingWrites++
-          throw new Error('FATAL: Write operation attempted against production Firestore database "salad-miners".')
-        },
-        recordPurchaseToAdmin: recordMinerPurchaseToAdmin,
-      })
+      let clientFirestoreWrites = 0
+      let clientAdminWrites = 0
 
-      assert.equal(result.ok, true, 'Pending payment must succeed locally')
-      assert.equal(pendingWrites, 0, 'Zero writes must be attempted against production Firestore')
-      assert.ok(result.receipt, 'Receipt must be generated')
-      assert.equal(result.receipt?.balanceAfter, 800)
-
-      const sessionAfter = getDemoSessionForPersistence()
-      assert.equal(sessionAfter.pendingMinerOrders.length, 0, 'Pending order must be cleared')
-      assert.equal(sessionAfter.miners.length, 1, 'Miner must be added to farm')
-      assert.equal(sessionAfter.balance, 800)
-    })
-
-    it('1.4 Adapter requirement check fails closed if saveMinerToFirestore is omitted for authenticated user', async () => {
-      const demoInput: DemoMinerPurchaseInput = {
-        name: 'Missing Adapter Miner',
-        powerTh: 10,
-        efficiency: 15,
-        price: 100,
-        purchaseMode: 'once',
-        packageId: 'minerx-01',
+      const mockUser = {
+        uid: 'u_prod_guard_test',
+        getIdToken: async () => 'test_token',
       }
 
-      const result = await completeLocalMinerPurchase(demoInput, {
-        user: { uid: 'u_no_adapter', email: 'noadapter@test.com' },
+      const result = await purchaseWithPlatformBalance({
+        packageId: 'minerx-01',
+        user: mockUser,
       })
 
-      assert.equal(result.ok, false)
-      assert.match(result.message || '', /saveMinerToFirestore adapter is required/)
-      assert.equal(getDemoSessionForPersistence().balance, 1000, 'Balance must remain untouched')
+      assert.equal(result.ok, true)
+      assert.equal(clientFirestoreWrites, 0, 'Zero savePurchasedMiner calls')
+      assert.equal(clientAdminWrites, 0, 'Zero recordMinerPurchaseToAdmin calls')
     })
 
-    it('1.5 Anonymous user fails closed for canonical local miner purchase', async () => {
-      const demoInput: DemoMinerPurchaseInput = {
-        name: 'Anon Miner',
-        powerTh: 10,
-        efficiency: 15,
-        price: 100,
-        purchaseMode: 'once',
-        packageId: 'minerx-01',
+    it('1.5 demoStore balance, miners, and receipts remain completely untouched on platform purchase', async () => {
+      const initialSession = getDemoSessionForPersistence()
+      assert.equal(initialSession.balance, 1000)
+      assert.equal(initialSession.miners.length, 0)
+      assert.equal(initialSession.receipts.length, 0)
+
+      const mockUser = {
+        uid: 'u_demostore_isolation',
+        getIdToken: async () => 'test_token',
       }
 
-      const result = await completeLocalMinerPurchase(demoInput, {
-        user: { uid: 'u_anon', isAnonymous: true },
-        saveMinerToFirestore: savePurchasedMiner,
+      const result = await purchaseWithPlatformBalance({
+        packageId: 'minerx-01',
+        user: mockUser,
       })
 
-      assert.equal(result.ok, false)
-      assert.match(result.message || '', /authenticated, non-anonymous user account/)
-      assert.equal(getDemoSessionForPersistence().balance, 1000)
+      assert.equal(result.ok, true)
+      const afterSession = getDemoSessionForPersistence()
+      assert.equal(afterSession.balance, 1000, 'demoStore balance must NOT be debited')
+      assert.equal(afterSession.miners.length, 0, 'demoStore miners must NOT be populated')
+      assert.equal(afterSession.receipts.length, 0, 'demoStore receipts must NOT be populated')
+    })
+
+    it('1.6 Returned backend balance is accurately reported in result and balanceAfter', async () => {
+      globalThis.fetch = async () => {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            minerId: 'miner_pb_bal_999',
+            orderId: 'ord_u_test_pb_bal_999',
+            balance: 642.50,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const result = await purchaseWithPlatformBalance({
+        packageId: 'minerx-01',
+        user: { uid: 'u_bal_test', getIdToken: async () => 'tok' },
+      })
+
+      assert.equal(result.ok, true)
+      if (result.ok) {
+        assert.equal(result.balance, 642.50)
+        assert.equal(result.minerId, 'miner_pb_bal_999')
+        assert.equal(result.orderId, 'ord_u_test_pb_bal_999')
+
+        const receipt = {
+          id: result.minerId,
+          kind: 'miner' as const,
+          label: 'MinerX Rig',
+          amount: 250,
+          detail: `20.00 TH · Contrato ${result.orderId}`,
+          createdAt: '12:00',
+          balanceAfter: result.balance,
+        }
+        assert.equal(receipt.balanceAfter, 642.50, 'Returned backend balance must be reflected in balanceAfter')
+      }
+    })
+
+    it('1.7 Backend errors 401, 404, 409, 500 are sanitized with zero infrastructure detail leakage', async () => {
+      const user = { uid: 'u_err_test', getIdToken: async () => 'tok' }
+
+      // 401 Token invalid
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify({ error: 'Token inválido o expirado' }), { status: 401, headers: { 'Content-Type': 'application/json' } })
+      const res401 = await purchaseWithPlatformBalance({ packageId: 'minerx-01', user })
+      assert.equal(res401.ok, false)
+      assert.equal(res401.message, 'Token inválido o expirado')
+
+      // 404 Package unavailable
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify({ error: 'Paquete no disponible' }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+      const res404 = await purchaseWithPlatformBalance({ packageId: 'minerx-nonexistent', user })
+      assert.equal(res404.ok, false)
+      assert.equal(res404.message, 'Paquete no disponible')
+
+      // 409 Insufficient platform balance
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify({ error: 'Saldo insuficiente en la plataforma' }), { status: 409, headers: { 'Content-Type': 'application/json' } })
+      const res409 = await purchaseWithPlatformBalance({ packageId: 'minerx-01', user })
+      assert.equal(res409.ok, false)
+      assert.equal(res409.message, 'Saldo insuficiente en la plataforma')
+
+      // 500 Internal error with sensitive database leakage
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify({ error: 'FATAL: database salad-miners connection timeout [projectId: salad-miners]' }), { status: 500, headers: { 'Content-Type': 'application/json' } })
+      const res500 = await purchaseWithPlatformBalance({ packageId: 'minerx-01', user })
+      assert.equal(res500.ok, false)
+      assert.doesNotMatch(res500.message, /salad-miners/i, 'Must not leak salad-miners')
+      assert.doesNotMatch(res500.message, /fatal/i, 'Must not leak FATAL')
+      assert.doesNotMatch(res500.message, /projectid/i, 'Must not leak projectId')
+      assert.equal(res500.message, 'No se pudo completar la compra con saldo.')
+    })
+
+    it('1.8 Anonymous or unauthenticated user fails closed without making network requests', async () => {
+      let fetchCalled = false
+      globalThis.fetch = async () => {
+        fetchCalled = true
+        return new Response('{}', { status: 200 })
+      }
+
+      const resAnon = await purchaseWithPlatformBalance({
+        packageId: 'minerx-01',
+        user: { uid: 'u_anon', isAnonymous: true, getIdToken: async () => 'anon_tok' },
+      })
+      assert.equal(resAnon.ok, false)
+      assert.match(resAnon.message, /autenticada y no anónima/)
+      assert.equal(fetchCalled, false, 'Network must not be called for anonymous user')
+
+      const resNull = await purchaseWithPlatformBalance({
+        packageId: 'minerx-01',
+        user: null,
+      })
+      assert.equal(resNull.ok, false)
+      assert.equal(fetchCalled, false, 'Network must not be called for null user')
     })
   })
 
