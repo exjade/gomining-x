@@ -77,11 +77,19 @@ import {
 
 type PendingAction = { title: string; detail: string; productId?: string }
 
+function formatMinerAcquiredAt(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
+
 function AppContent() {
   const location = useLocation()
   const navigate = useNavigate()
   const screen = getScreen(location.pathname)
   const { user, profile, loading, isEmailVerified, openAuthModal } = useAuth()
+  const isAuthenticated = Boolean(user && !user.isAnonymous)
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
   const [toast, setToast] = useState('')
   const [sessionEvents, setSessionEvents] = useState<string[]>([])
@@ -348,9 +356,14 @@ function AppContent() {
               {theme === 'dark' ? '☀️' : '🌙'}
             </button>
             {user && (
-              <Link className="header-balance" to="/finance/wallets/virtual" aria-label={`Saldo local ${formatWalletBalance(demo.balance)}; abrir saldo local`} title="Saldo local; no es la wallet conectada">
-                <span className="header-balance-label">LOCAL</span>
-                <strong>{formatWalletBalance(demo.balance)}</strong>
+              <Link
+                className="header-balance"
+                to={isAuthenticated ? '/profile' : '/finance/wallets/virtual'}
+                aria-label={`${isAuthenticated ? 'Saldo de plataforma' : 'Saldo local'} ${isAuthenticated ? (profile ? formatWalletBalance(profile.balance) : 'no disponible') : formatWalletBalance(demo.balance)}; abrir saldo`}
+                title={isAuthenticated ? 'Saldo de plataforma' : 'Saldo local; no es la wallet conectada'}
+              >
+                <span className="header-balance-label">{isAuthenticated ? 'SALDO' : 'LOCAL'}</span>
+                <strong>{isAuthenticated ? (profile ? formatWalletBalance(profile.balance) : '—') : formatWalletBalance(demo.balance)}</strong>
               </Link>
             )}
             {walletSession.restoringWallet && !isWalletConnected ? (
@@ -424,7 +437,7 @@ function AppContent() {
         </header>
 
         <main className="page-wrap" aria-label={activeLabel}>
-          {user && (
+          {user && !isAuthenticated && (
             <div className="replica-note">
               <span className="note-icon">i</span>
               <span>{t('replica.connected_wallet_note')}</span>
@@ -461,7 +474,7 @@ function AppContent() {
           ) : ((location.pathname.startsWith('/miners/') || location.pathname.startsWith('/nft-miners/')) && location.pathname.endsWith('/customize')) ? (
             <MinerCustomizer />
           ) : screen ? (
-          <Page screen={screen} pathname={location.pathname} openAction={openAction} addProduct={addProduct} openMinerBuilder={openMinerBuilder} openTopUp={() => setTopUpOpen(true)} onPayWithWallet={(productName, amount, currency = 'USD') => {
+          <Page isAuthenticated={isAuthenticated} screen={screen} pathname={location.pathname} openAction={openAction} addProduct={addProduct} openMinerBuilder={openMinerBuilder} openTopUp={() => setTopUpOpen(true)} onPayWithWallet={(productName, amount, currency = 'USD') => {
             if (!user || user.isAnonymous) {
               openAuthModal('register')
               return
@@ -681,6 +694,7 @@ function CartGlyph() {
 }
 
 function Page({
+  isAuthenticated,
   screen,
   pathname,
   openAction,
@@ -692,6 +706,7 @@ function Page({
   walletSession,
   paymentReceipts,
 }: {
+  isAuthenticated: boolean
   screen: ScreenDefinition
   pathname: string
   openAction: (title: string, detail?: string) => void
@@ -779,22 +794,22 @@ function Page({
           {screen.mode === 'governance' && <GovernancePanel screen={screen} openAction={openAction} />}
           {screen.mode === 'article' && <ArticlePanel screen={screen} />}
           {screen.mode === 'generic' && !pathname.startsWith('/nft-rewards/') && <GenericPanel screen={screen} openAction={openAction} />}
-          {sessionEvents.length > 0 && <SessionActivity items={sessionEvents} />}
-          <div className="data-source-note"><span className="source-lock">▣</span><div><strong>{snapshot.message}</strong><small>{pathname.startsWith('/data-centers') ? 'El ingreso estimado viene de una API pública de Kryptex PRL. Operaciones muestra los estados de origen que publica la pool; no hay datos privados de GoMining ni confirmación de liquidaciones a compradores.' : pathname === '/mining-calculator' ? 'La proyección usa hashrate, recompensas recientes y precio público de Bitcoin; no representa ingresos acreditados ni garantiza rentabilidad.' : 'No se consultan servicios privados de GoMining ni se guardan credenciales o tokens.'}</small></div></div>
+          {sessionEvents.length > 0 && <SessionActivity isAuth={isAuthenticated} items={sessionEvents} />}
+          {!isAuthenticated || (pathname !== '/profile' && pathname !== '/nft-miners') ? <div className="data-source-note"><span className="source-lock">▣</span><div><strong>{snapshot.message}</strong><small>{pathname.startsWith('/data-centers') ? 'El ingreso estimado viene de una API pública de Kryptex PRL. Operaciones muestra los estados de origen que publica la pool; no hay datos privados de GoMining ni confirmación de liquidaciones a compradores.' : pathname === '/mining-calculator' ? 'La proyección usa hashrate, recompensas recientes y precio público de Bitcoin; no representa ingresos acreditados ni garantiza rentabilidad.' : 'No se consultan servicios privados de GoMining ni se guardan credenciales o tokens.'}</small></div></div> : null}
         </>
       )}
-      {screen.mode === 'dashboard' && pathname === '/home' && sessionEvents.length > 0 && <SessionActivity items={sessionEvents} />}
+      {screen.mode === 'dashboard' && pathname === '/home' && sessionEvents.length > 0 && <SessionActivity isAuth={isAuthenticated} items={sessionEvents} />}
     </>
   )
 }
 
 function HomeDashboard({ openMinerBuilder, openTopUp }: { openMinerBuilder: () => void; openTopUp: () => void }) {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const demo = useDemoSession()
   const { language } = usePersonalization()
   const { miners: realMiners } = useRealtimeUserMiners(user?.uid)
   const isEn = language === 'en'
-  const isAuth = Boolean(user)
+  const isAuth = Boolean(user && !user.isAnonymous)
   const totalMinersCount = isAuth ? realMiners.length : demo.miners.length
   const totalFarmPowerTh = isAuth
     ? realMiners.reduce((total, miner) => total + (miner.powerTh || 0), 0)
@@ -805,10 +820,10 @@ function HomeDashboard({ openMinerBuilder, openTopUp }: { openMinerBuilder: () =
       <section className="account-hero">
         <div className="account-hero-heading">
           <div>
-            <p className="eyebrow">{isEn ? 'LOCAL BALANCE' : 'SALDO LOCAL'}</p>
-            <h1>{formatWalletBalance(demo.balance)}</h1>
+            <p className="eyebrow">{isAuth ? (isEn ? 'PLATFORM BALANCE' : 'SALDO DE PLATAFORMA') : (isEn ? 'LOCAL BALANCE' : 'SALDO LOCAL')}</p>
+            <h1>{isAuth ? (profile ? formatWalletBalance(profile.balance) : '—') : formatWalletBalance(demo.balance)}</h1>
           </div>
-          <span className="account-data-state"><i /> LOCAL</span>
+          <span className="account-data-state"><i /> {isAuth ? (isEn ? 'ACCOUNT' : 'SALDO') : 'LOCAL'}</span>
         </div>
         <div className="hero-mining-visual" aria-hidden="true">
           <span className="hero-orbit hero-orbit-one" />
@@ -836,7 +851,7 @@ function HomeDashboard({ openMinerBuilder, openTopUp }: { openMinerBuilder: () =
       <div className="dashboard-grid">
         <DashboardCard tone="purple" kicker={isEn ? 'EARNINGS SUMMARY' : 'RESUMEN DE GANANCIAS'} title={isEn ? 'Check your activity' : 'Consulta tu actividad'} body={isEn ? 'Rewards will appear when a verified source exists.' : 'Las recompensas solo aparecerán cuando exista una fuente verificada.'} action={isEn ? 'Open summary' : 'Abrir resumen'} to="/finance/earn-summary" icon="▥" />
         <DashboardCard tone="teal" kicker={isEn ? 'MINING' : 'MINERÍA'} title={isEn ? 'Pool and operations' : 'Pool y operaciones'} body={isEn ? 'Check public readings and their source.' : 'Consulta las lecturas públicas y su fuente.'} action={isEn ? 'View traceability' : 'Ver trazabilidad'} to="/data-centers" icon="♧" />
-        <DashboardCard tone="blue" kicker={isEn ? 'FARM POWER' : 'POTENCIA EN GRANJA'} title={`${totalFarmPowerTh.toFixed(2)} TH`} body={isAuth ? (isEn ? `${totalMinersCount} miners in farm.` : `${totalMinersCount} mineros en la granja.`) : (isEn ? `${demo.miners.length} miners in local session.` : `${demo.miners.length} mineros en sesión local.`)} action={isEn ? 'View miners' : 'Ver mineros'} to="/nft-miners" icon="▧" />
+        <DashboardCard tone="blue" kicker={isEn ? 'FARM POWER' : 'POTENCIA EN GRANJA'} title={`${totalFarmPowerTh.toFixed(2)} TH`} body={isAuth ? (isEn ? `${totalMinersCount} ${totalMinersCount === 1 ? 'miner' : 'miners'} in farm.` : `${totalMinersCount} ${totalMinersCount === 1 ? 'minero' : 'mineros'} en la granja.`) : (isEn ? `${demo.miners.length} ${demo.miners.length === 1 ? 'miner' : 'miners'} in local session.` : `${demo.miners.length} ${demo.miners.length === 1 ? 'minero' : 'mineros'} en sesión local.`)} action={isEn ? 'View miners' : 'Ver mineros'} to="/nft-miners" icon="▧" />
         <DashboardCard tone="gold" kicker={isEn ? 'VIP LEVEL · DEMO' : 'NIVEL VIP · DEMO'} title="Bronze II" body={isEn ? 'Explore subscription benefits.' : 'Explora los beneficios de suscripción.'} action={isEn ? 'View benefits' : 'Ver beneficios'} to="/subscriptions" icon="◈" />
         <DashboardCard tone="platinum" kicker="PLATINUM+" title={demo.subscription ? (isEn ? `Active · ${demo.subscription.cycle === 'monthly' ? 'monthly' : 'annual'}` : `Activo · ${demo.subscription.cycle === 'monthly' ? 'mensual' : 'anual'}`) : (isEn ? 'Subscription' : 'Suscripción')} body={demo.subscription ? (isEn ? '+1% active power boost during this session.' : '+1% sobre potencia activa durante esta sesión.') : (isEn ? 'Activate a local subscription to check the perk.' : 'Activa una suscripción local para consultar el beneficio.')} action={isEn ? 'View subscriptions' : 'Ver suscripciones'} to="/subscriptions" icon="✦" />
         <DashboardCard tone="green" kicker={isEn ? 'PROMOTIONS' : 'PROMOCIONES'} title={isEn ? 'Platform news' : 'Novedades de la plataforma'} body={isEn ? 'Check current MVP promotions.' : 'Consulta las promociones vigentes del MVP.'} action={isEn ? 'View promos' : 'Ver promos'} to="/promos" icon="✦" />
@@ -845,7 +860,7 @@ function HomeDashboard({ openMinerBuilder, openTopUp }: { openMinerBuilder: () =
       <section className="explore-section">
         <div className="section-heading"><div><p className="eyebrow">{isEn ? 'KEEP EXPLORING' : 'SIGUE EXPLORANDO'}</p><h2>{isEn ? 'More to discover' : 'Más para descubrir'}</h2></div><span className="section-counter">2 / 2</span></div>
         <div className="explore-grid">
-          <ExploreCard icon="▧" title={isEn ? 'Create a miner' : 'Crear un minero'} subtitle={isEn ? 'Configure hashrate and review purchase' : 'Configura la potencia y revisa la compra'} badge="LOCAL" onClick={openMinerBuilder} />
+          <ExploreCard icon="▧" title={isEn ? 'Create a miner' : 'Crear un minero'} subtitle={isEn ? 'Configure hashrate and review purchase' : 'Configura la potencia y revisa la compra'} badge={isAuth ? undefined : 'LOCAL'} onClick={openMinerBuilder} />
           <ExploreCard icon="∑" title={isEn ? 'Mining calculator' : 'Calculadora de minería'} subtitle={isEn ? 'Hashrate and estimated gross earnings by model' : 'Hashrate e ingreso bruto estimado por modelo'} badge={isEn ? 'ESTIMATE' : 'ESTIMACIÓN'} to="/mining-calculator" />
         </div>
       </section>
@@ -1249,8 +1264,8 @@ function DashboardCard({
   return to ? <Link className="dashboard-card" to={to}>{inside}</Link> : <button className="dashboard-card" onClick={onClick}>{inside}</button>
 }
 
-function ExploreCard({ icon, title, subtitle, badge, to, onClick }: { icon: string; title: string; subtitle: string; badge: string; to?: string; onClick?: () => void }) {
-  const content = <><span className="explore-icon">{icon}</span><span className="explore-copy"><strong>{title}</strong><small>{subtitle}</small></span><span className="explore-badge">{badge}</span><span className="explore-arrow">↗</span></>
+function ExploreCard({ icon, title, subtitle, badge, to, onClick }: { icon: string; title: string; subtitle: string; badge?: string; to?: string; onClick?: () => void }) {
+  const content = <><span className="explore-icon">{icon}</span><span className="explore-copy"><strong>{title}</strong><small>{subtitle}</small></span>{badge && <span className="explore-badge">{badge}</span>}<span className="explore-arrow">↗</span></>
   return to ? <Link to={to} className="explore-card">{content}</Link> : <button onClick={onClick} className="explore-card">{content}</button>
 }
 
@@ -1309,7 +1324,7 @@ function MinerPanel({ openMinerBuilder, openTopUp }: { openMinerBuilder: () => v
   const [pendingFeedback, setPendingFeedback] = useState('')
   const demo = useDemoSession()
   const { miners: realMiners } = useRealtimeUserMiners(user?.uid)
-  const isAuth = Boolean(user)
+  const isAuth = Boolean(user && !user.isAnonymous)
   const displayMiners = isAuth
     ? realMiners.map((miner) => ({
         id: miner.id,
@@ -1361,11 +1376,11 @@ function MinerPanel({ openMinerBuilder, openTopUp }: { openMinerBuilder: () => v
         {pendingFeedback && <p className="inline-feedback" role="status">{pendingFeedback}</p>}
       </section>}
       <section className="content-panel catalog-panel">
-        <div className="panel-toolbar"><div><h2>Mis mineros</h2><p>{totalMinersCount} minero(s) · {totalPowerTh.toFixed(3)} TH en la granja{isAuth ? ' de minería' : ' de simulación'}.</p></div><button className="button button-primary button-small" onClick={openMinerBuilder}>Crear minero <span>↗</span></button></div>
+        <div className="panel-toolbar"><div><h2>Mis mineros</h2><p>{totalMinersCount} {totalMinersCount === 1 ? 'minero' : 'mineros'} · {totalPowerTh.toFixed(3)} TH en la granja{isAuth ? ' de minería' : ' de simulación'}.</p></div><button className="button button-primary button-small" onClick={openMinerBuilder}>Crear minero <span>↗</span></button></div>
         <div className="filter-row"><button className="filter-chip" onClick={() => setFiltersOpen((open) => !open)}>☷ Filtros <span>{filtersOpen ? '⌃' : '⌄'}</span></button><span className="results-hint">{isAuth ? 'En tiempo real' : 'Vista local'}</span></div>
         {filtersOpen && <div className="miner-filter-panel"><label className="search-box"><span>⌕</span><input placeholder="Buscar mineros" /></label><button className="filter-chip">Estado <span>⌄</span></button><button className="filter-chip">Colección <span>⌄</span></button><button className="button button-primary button-small" onClick={() => setApplied(true)}>Aplicar</button><button className="button button-quiet button-small" onClick={() => { setApplied(false); setFiltersOpen(false) }}>Limpiar</button></div>}
         {applied && <div className="filter-applied">Filtros aplicados en esta vista.</div>}
-        {displayMiners.length === 0 ? <div className="asset-empty"><div className="miner-visual">▧</div><div><strong>Tu granja está lista</strong><p>{isAuth ? 'Crea un minero y completa la compra para verlo aquí.' : 'Crea un minero y completa la compra de simulación para verlo aquí.'}</p><button className="button button-primary button-small" onClick={openMinerBuilder}>Crear minero <span>↗</span></button></div></div> : <div className="demo-miner-grid">{displayMiners.map((miner) => <article className="demo-miner-card" key={miner.id}><span className="miner-visual">▧</span><div><span className="card-kicker">MINERO · {miner.purchaseMode === 'monthly' ? 'MENSUAL' : 'UNA SOLA VEZ'}</span><strong>{miner.name}</strong><small>{miner.powerTh.toFixed(2)} TH · {miner.efficiency} W/TH</small><small>Compra {miner.isReal ? '' : 'local '}{miner.acquiredAt}</small></div><span className="table-demo-status">{miner.isReal ? miner.status.toUpperCase() : 'ACTIVO · LOCAL'}</span></article>)}</div>}
+        {displayMiners.length === 0 ? <div className="asset-empty"><div className="miner-visual">▧</div><div><strong>Tu granja está lista</strong><p>{isAuth ? 'Crea un minero y completa la compra para verlo aquí.' : 'Crea un minero y completa la compra de simulación para verlo aquí.'}</p><button className="button button-primary button-small" onClick={openMinerBuilder}>Crear minero <span>↗</span></button></div></div> : <div className="demo-miner-grid">{displayMiners.map((miner) => <article className="demo-miner-card" key={miner.id}><span className="miner-visual">▧</span><div><span className="card-kicker">MINERO · {miner.purchaseMode === 'monthly' ? 'MENSUAL' : 'UNA SOLA VEZ'}</span><strong>{miner.name}</strong><small>{miner.powerTh.toFixed(2)} TH · {miner.efficiency} W/TH</small><small>Compra {miner.isReal ? formatMinerAcquiredAt(miner.acquiredAt) : `local ${miner.acquiredAt}`}</small></div><span className="table-demo-status">{miner.isReal ? miner.status.toUpperCase() : 'ACTIVO · LOCAL'}</span></article>)}</div>}
       </section>
     </div>
   )
@@ -1589,8 +1604,8 @@ function GenericPanel({ screen, openAction }: { screen: ScreenDefinition; openAc
   return <section className="content-panel generic-panel"><div className="generic-art">{screen.icon}</div><div><span className="card-kicker">{screen.group.toUpperCase()}</span><h2>{screen.title}</h2><p>La navegación confirma esta sección. El contenido detallado no quedó visible durante la inspección.</p>{screen.action && <button className="button button-primary button-small" onClick={() => openAction(screen.action!, actionDetail(screen.action!))}>{screen.action} <span>↗</span></button>}</div></section>
 }
 
-function SessionActivity({ items }: { items: string[] }) {
-  return <section className="session-activity"><div><strong>Actividad simulada en esta sesión</strong><small>Se borra al recargar la página.</small></div><ul>{items.map((item, index) => <li key={`${item}-${index}`}><span>✓</span>{item}</li>)}</ul></section>
+function SessionActivity({ items, isAuth }: { items: string[]; isAuth: boolean }) {
+  return <section className="session-activity"><div><strong>{isAuth ? 'Actividad de esta sesión' : 'Actividad simulada en esta sesión'}</strong><small>{isAuth ? 'Acciones recientes registradas durante esta sesión.' : 'Se borra al recargar la página.'}</small></div><ul>{items.map((item, index) => <li key={`${item}-${index}`}><span>✓</span>{item}</li>)}</ul></section>
 }
 
 function DemoProductGrid({ products, addProduct }: { products: DemoProduct[]; addProduct: (product: DemoProduct) => void }) {
