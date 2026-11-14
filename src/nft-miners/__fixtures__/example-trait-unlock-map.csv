@@ -1,0 +1,4 @@
+trait_id,category,value,unlockType,requiredLevel,taskId,operator,descriptionEs,buttonText,linkTo,requirements_json,source,evidence_status,notes
+wall-white,wall,White,level,3,,,,,,,local-fixture,EXAMPLE-NOT-DECISIONS,Example for local development only; not a product decision
+wall-green,wall,Green,level,3,,,EXAMPLE-NOT-DECISIONS,,,,local-fixture,EXAMPLE-NOT-DECISIONS,Example available state only; not a product decision
+wall-yellow,wall,Yellow,upcoming,,,,,,,,local-fixture,EXAMPLE-NOT-DECISIONS,Example upcoming state only; not a product decision

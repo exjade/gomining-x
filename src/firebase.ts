@@ -26,6 +26,7 @@ import {
   type Timestamp,
   type FieldValue,
 } from 'firebase/firestore'
+import type { MinerAppearance } from './nft-miners/appearance'
 
 import { detectUserGeo } from './geoIp.ts'
 
@@ -295,6 +296,7 @@ export interface StoredMiner {
   network: string
   ownerWallet: string
   visualTraits: StoredMinerTraits
+  appearance?: MinerAppearance
   purchaseMode?: string
   cadence?: string
   packageSnapshot?: StoredMinerPurchaseSnapshot

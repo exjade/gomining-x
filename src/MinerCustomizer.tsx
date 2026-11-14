@@ -6,6 +6,7 @@ import { useAuth } from './AuthContext'
 import { updateMinerInFirestore } from './firebase'
 import { subscribeToSingleMinerDoc } from './userMinersStore'
 import { saveMinerCustomization } from './minerPurchaseFlow'
+import { MinerCustomizer as RealMinerCustomizer } from './nft-miners/MinerCustomizer'
 
 export { saveMinerCustomization }
 
@@ -34,7 +35,7 @@ const SCREEN_EXPRESSIONS = [
   { id: 'turbo', label: 'Overclock', glow: '#ec4899' },
 ]
 
-export function MinerCustomizer() {
+function LegacyMinerCustomizer() {
   const routeParams = useParams<{ minerId?: string }>()
   const parsedIdFromPath = typeof window !== 'undefined'
     ? window.location.pathname.match(/\/(?:nft-)?miners\/([^/]+)\/customize/)?.[1]
@@ -450,4 +451,9 @@ export function MinerCustomizer() {
       </div>
     </div>
   )
+}
+
+export function MinerCustomizer() {
+  const { user } = useAuth()
+  return user && !user.isAnonymous ? <RealMinerCustomizer /> : <LegacyMinerCustomizer />
 }

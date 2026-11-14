@@ -302,7 +302,7 @@ function AppContent() {
     setPendingAction(null)
   }
 
-  const activeLabel = findActiveLabel(location.pathname)
+  const activeLabel = findActiveLabel(location.pathname, isAuthenticated)
 
   return (
     <div className="app-shell">
@@ -471,7 +471,7 @@ function AppContent() {
           <div key={location.pathname} className="route-transition">
           {location.pathname === '/' ? (
             <LandingPage openAuthModal={openAuthModal} />
-          ) : ((location.pathname.startsWith('/miners/') || location.pathname.startsWith('/nft-miners/')) && location.pathname.endsWith('/customize')) ? (
+          ) : ((location.pathname.startsWith('/miners/') || location.pathname.startsWith('/nft-miners/')) && (location.pathname.endsWith('/customize') || /^\/nft-miners\/[^/]+$/.test(location.pathname))) ? (
             <MinerCustomizer />
           ) : screen ? (
           <Page isAuthenticated={isAuthenticated} screen={screen} pathname={location.pathname} openAction={openAction} addProduct={addProduct} openMinerBuilder={openMinerBuilder} openTopUp={() => setTopUpOpen(true)} onPayWithWallet={(productName, amount, currency = 'USD') => {
@@ -1380,7 +1380,7 @@ function MinerPanel({ openMinerBuilder, openTopUp }: { openMinerBuilder: () => v
         <div className="filter-row"><button className="filter-chip" onClick={() => setFiltersOpen((open) => !open)}>☷ Filtros <span>{filtersOpen ? '⌃' : '⌄'}</span></button><span className="results-hint">{isAuth ? 'En tiempo real' : 'Vista local'}</span></div>
         {filtersOpen && <div className="miner-filter-panel"><label className="search-box"><span>⌕</span><input placeholder="Buscar mineros" /></label><button className="filter-chip">Estado <span>⌄</span></button><button className="filter-chip">Colección <span>⌄</span></button><button className="button button-primary button-small" onClick={() => setApplied(true)}>Aplicar</button><button className="button button-quiet button-small" onClick={() => { setApplied(false); setFiltersOpen(false) }}>Limpiar</button></div>}
         {applied && <div className="filter-applied">Filtros aplicados en esta vista.</div>}
-        {displayMiners.length === 0 ? <div className="asset-empty"><div className="miner-visual">▧</div><div><strong>Tu granja está lista</strong><p>{isAuth ? 'Crea un minero y completa la compra para verlo aquí.' : 'Crea un minero y completa la compra de simulación para verlo aquí.'}</p><button className="button button-primary button-small" onClick={openMinerBuilder}>Crear minero <span>↗</span></button></div></div> : <div className="demo-miner-grid">{displayMiners.map((miner) => <article className="demo-miner-card" key={miner.id}><span className="miner-visual">▧</span><div><span className="card-kicker">MINERO · {miner.purchaseMode === 'monthly' ? 'MENSUAL' : 'UNA SOLA VEZ'}</span><strong>{miner.name}</strong><small>{miner.powerTh.toFixed(2)} TH · {miner.efficiency} W/TH</small><small>Compra {miner.isReal ? formatMinerAcquiredAt(miner.acquiredAt) : `local ${miner.acquiredAt}`}</small></div><span className="table-demo-status">{miner.isReal ? miner.status.toUpperCase() : 'ACTIVO · LOCAL'}</span></article>)}</div>}
+        {displayMiners.length === 0 ? <div className="asset-empty"><div className="miner-visual">▧</div><div><strong>Tu granja está lista</strong><p>{isAuth ? 'Crea un minero y completa la compra para verlo aquí.' : 'Crea un minero y completa la compra de simulación para verlo aquí.'}</p><button className="button button-primary button-small" onClick={openMinerBuilder}>Crear minero <span>↗</span></button></div></div> : <div className="demo-miner-grid">{displayMiners.map((miner) => <article className="demo-miner-card" key={miner.id}><span className="miner-visual">▧</span><div><span className="card-kicker">MINERO · {miner.purchaseMode === 'monthly' ? 'MENSUAL' : 'UNA SOLA VEZ'}</span><strong>{miner.name}</strong><small>{miner.powerTh.toFixed(2)} TH · {miner.efficiency} W/TH</small><small>Compra {miner.isReal ? formatMinerAcquiredAt(miner.acquiredAt) : `local ${miner.acquiredAt}`}</small>{miner.isReal && <Link className="button button-quiet button-small" to={`/nft-miners/${encodeURIComponent(miner.id)}`}>Abrir minero <span>↗</span></Link>}</div><span className="table-demo-status">{miner.isReal ? miner.status.toUpperCase() : 'ACTIVO · LOCAL'}</span></article>)}</div>}
       </section>
     </div>
   )
@@ -2242,7 +2242,8 @@ function actionDetail(title: string): string {
   return `La sección “${title}” se muestra de forma local y permanece en memoria durante esta sesión.`
 }
 
-function findActiveLabel(pathname: string) {
+function findActiveLabel(pathname: string, isAuthenticated = false) {
+  if (isAuthenticated && pathname.startsWith('/nft-miners/')) return 'Mineros'
   for (const group of navGroups) {
     const found = group.items.find((item) => item.path.split('?')[0] === pathname)
     if (found) return found.label

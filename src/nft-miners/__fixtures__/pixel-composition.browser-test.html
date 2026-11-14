@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Prueba de píxeles · mineros</title>
+    <style>
+      :root { color-scheme: dark; font: 15px/1.5 system-ui, sans-serif; background: #0d0e18; color: #f4f2ff; }
+      body { margin: 0; padding: 32px; }
+      main { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(280px, 600px); gap: 28px; max-width: 1100px; margin: auto; }
+      h1 { margin: 0 0 8px; font-size: 22px; }
+      p { color: #c6c2d6; }
+      #result { font-weight: 700; }
+      #result[data-result="PASS"] { color: #55dfaa; }
+      #result[data-result="FAIL"] { color: #ff7489; }
+      li { margin: 12px 0; }
+      canvas { display: block; width: min(100%, 600px); height: auto; background: #252633; border-radius: 12px; }
+      @media (max-width: 760px) { main { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section>
+        <h1>Prueba de composición por píxeles</h1>
+        <p>Rasteriza la imagen real y las capas Wall, Body y Screen con Canvas 2D.</p>
+        <p id="result" role="status">Ejecutando…</p>
+        <ol id="checks"></ol>
+      </section>
+      <canvas id="preview" width="600" height="600" aria-label="Vista de las tres capas aplicadas"></canvas>
+    </main>
+    <script type="module" src="./pixel-composition.browser-test.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "source": "derived-demo",
+  "source_file": "src/nft-miners/assets/bonus-miner-reference.png",
+  "source_sha256": "245cc097f36de9a1d0df4c06dd66d651561c04add5ed7da0470e94e5bdbdbfea",
+  "source_size": {
+    "width": 3678,
+    "height": 3654
+  },
+  "crop": {
+    "x": 630,
+    "y": 280,
+    "width": 990,
+    "height": 990
+  },
+  "edge_softening_radius_px": 0.5,
+  "segmentation": {
+    "wall": "crop; HSV hue 122..158, saturation >= 40, value >= 50",
+    "body": "crop; HSV hue 164..204, saturation >= 45, value >= 38",
+    "screen": "crop; HSV hue 32..103, saturation >= 45, value >= 50",
+    "bottom": "crop below source y=890; saturation <= 42, value >= 66"
+  }
+}
