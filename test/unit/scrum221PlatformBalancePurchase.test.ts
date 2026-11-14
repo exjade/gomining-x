@@ -188,6 +188,9 @@ describe('SCRUM-221: Platform Balance Purchase Integration & Unit Tests', () => 
 
   afterEach(async () => {
     if (server) {
+      if (typeof (server as any).closeAllConnections === 'function') {
+        (server as any).closeAllConnections();
+      }
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
     firebaseAdminAuthAdapter.setAuthInstance(null);
@@ -229,7 +232,7 @@ describe('SCRUM-221: Platform Balance Purchase Integration & Unit Tests', () => 
     assert.equal(body.success, true);
     assert.equal(body.balance, 300);
     assert.equal(body.minerId, 'miner_purch_test_1');
-    assert.equal(body.orderId, 'ord_purch_test_1');
+    assert.equal(body.orderId, 'ord_uid_buyer_1_purch_test_1');
 
     // Verify Firestore mutations
     const updatedUser = mockDb.getDocument('users/uid_buyer_1');
@@ -245,13 +248,17 @@ describe('SCRUM-221: Platform Balance Purchase Integration & Unit Tests', () => 
     assert.equal(minerDoc.status, 'active');
     assert.equal(minerDoc.txHash, 'platform_balance:purch_test_1');
 
-    const orderDoc = mockDb.getDocument('admin_orders/ord_purch_test_1');
+    const orderDoc = mockDb.getDocument('admin_orders/ord_uid_buyer_1_purch_test_1');
     assert.ok(orderDoc);
     assert.equal(orderDoc.amountUsd, 200);
     assert.equal(orderDoc.status, 'SETTLED');
     assert.equal(orderDoc.userId, 'uid_buyer_1');
+    assert.equal(orderDoc.paymentNetwork, 'PLATFORM_BALANCE');
+    assert.equal(orderDoc.txHash, 'platform_balance:purch_test_1');
+    assert.equal(orderDoc.confirmations, 0);
+    assert.equal(orderDoc.requiredConfirmations, 0);
 
-    const contractDoc = mockDb.getDocument('admin_contracts/ctr_purch_test_1');
+    const contractDoc = mockDb.getDocument('admin_contracts/ctr_uid_buyer_1_purch_test_1');
     assert.ok(contractDoc);
     assert.equal(contractDoc.contractedTh, 50);
     assert.equal(contractDoc.status, 'ACTIVE');
@@ -301,7 +308,7 @@ describe('SCRUM-221: Platform Balance Purchase Integration & Unit Tests', () => 
     const miners = mockDb.getDocumentsByPrefix('miners/uid_buyer_2');
     assert.equal(miners.length, 0);
 
-    const orders = mockDb.getDocumentsByPrefix('admin_orders/ord_purch_test_2');
+    const orders = mockDb.getDocumentsByPrefix('admin_orders/ord_uid_buyer_2_purch_test_2');
     assert.equal(orders.length, 0);
   });
 
@@ -449,7 +456,7 @@ describe('SCRUM-221: Platform Balance Purchase Integration & Unit Tests', () => 
     assert.equal(minerDoc?.price, 200);
     assert.equal(minerDoc?.powerTh, 50);
 
-    const orderDoc = mockDb.getDocument('admin_orders/ord_purch_tamper_5');
+    const orderDoc = mockDb.getDocument('admin_orders/ord_uid_buyer_1_purch_tamper_5');
     assert.equal(orderDoc?.amountUsd, 200);
     assert.equal(orderDoc?.contractedTh, 50);
   });
@@ -486,7 +493,7 @@ describe('SCRUM-221: Platform Balance Purchase Integration & Unit Tests', () => 
     assert.equal(body1.success, true);
     assert.equal(body1.balance, 300);
     assert.equal(body1.minerId, 'miner_purch_idempotent_6');
-    assert.equal(body1.orderId, 'ord_purch_idempotent_6');
+    assert.equal(body1.orderId, 'ord_uid_buyer_1_purch_idempotent_6');
 
     // Second purchase call with same purchaseId
     const res2 = await fetch(`${baseUrl}/api/purchases/platform-balance`, {
@@ -633,5 +640,115 @@ describe('SCRUM-221: Platform Balance Purchase Integration & Unit Tests', () => 
     const parsedTime = Date.parse(miner.createdAtIso);
     assert.equal(isNaN(parsedTime), false);
     assert.ok(parsedTime > 0);
+  });
+
+  it('9. Cross-user collision prevention: UID A + purchaseId X y UID B + purchaseId X producen órdenes/contratos distintos sin overwrite', async () => {
+    mockDb.setDocument('users/uid_buyer_1', {
+      uid: 'uid_buyer_1',
+      balance: 500,
+      purchasesCount: 0,
+    });
+    mockDb.setDocument('users/uid_buyer_2', {
+      uid: 'uid_buyer_2',
+      balance: 500,
+      purchasesCount: 0,
+    });
+    mockDb.setDocument('commercial_packages/pkg_alpha', {
+      id: 'pkg_alpha',
+      name: 'Alpha Rig 50TH',
+      powerTh: 50,
+      priceUsdt: 200,
+      status: 'ACTIVE',
+      isPublished: true,
+      cadence: 'once',
+      durationDays: 365,
+    });
+
+    const sharedPurchaseId = 'shared_purch_collision_9';
+
+    // Buyer 1 purchase
+    const resA = await fetch(`${baseUrl}/api/purchases/platform-balance`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token_buyer_1',
+      },
+      body: JSON.stringify({
+        packageId: 'pkg_alpha',
+        purchaseId: sharedPurchaseId,
+      }),
+    });
+    assert.equal(resA.status, 200);
+    const bodyA = await resA.json() as any;
+    assert.equal(bodyA.success, true);
+    assert.equal(bodyA.orderId, `ord_uid_buyer_1_${sharedPurchaseId}`);
+
+    // Buyer 2 purchase with IDENTICAL purchaseId
+    const resB = await fetch(`${baseUrl}/api/purchases/platform-balance`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token_buyer_2',
+      },
+      body: JSON.stringify({
+        packageId: 'pkg_alpha',
+        purchaseId: sharedPurchaseId,
+      }),
+    });
+    assert.equal(resB.status, 200);
+    const bodyB = await resB.json() as any;
+    assert.equal(bodyB.success, true);
+    assert.equal(bodyB.orderId, `ord_uid_buyer_2_${sharedPurchaseId}`);
+
+    // Verify two distinct admin orders exist simultaneously without overwrite
+    const orderDocA = mockDb.getDocument(`admin_orders/ord_uid_buyer_1_${sharedPurchaseId}`);
+    const orderDocB = mockDb.getDocument(`admin_orders/ord_uid_buyer_2_${sharedPurchaseId}`);
+    assert.ok(orderDocA, 'Buyer 1 admin order must exist');
+    assert.ok(orderDocB, 'Buyer 2 admin order must exist');
+    assert.equal(orderDocA.userId, 'uid_buyer_1');
+    assert.equal(orderDocB.userId, 'uid_buyer_2');
+    assert.notEqual(orderDocA.orderId, orderDocB.orderId);
+
+    // Verify two distinct admin contracts exist simultaneously without overwrite
+    const contractDocA = mockDb.getDocument(`admin_contracts/ctr_uid_buyer_1_${sharedPurchaseId}`);
+    const contractDocB = mockDb.getDocument(`admin_contracts/ctr_uid_buyer_2_${sharedPurchaseId}`);
+    assert.ok(contractDocA, 'Buyer 1 admin contract must exist');
+    assert.ok(contractDocB, 'Buyer 2 admin contract must exist');
+    assert.equal(contractDocA.userId, 'uid_buyer_1');
+    assert.equal(contractDocB.userId, 'uid_buyer_2');
+    assert.notEqual(contractDocA.id, contractDocB.id);
+
+    // Verify both user miners exist under their respective user paths
+    const minerDocA = mockDb.getDocument(`miners/uid_buyer_1/miner/miner_${sharedPurchaseId}`);
+    const minerDocB = mockDb.getDocument(`miners/uid_buyer_2/miner/miner_${sharedPurchaseId}`);
+    assert.ok(minerDocA, 'Buyer 1 miner must exist');
+    assert.ok(minerDocB, 'Buyer 2 miner must exist');
+    assert.equal(minerDocA.uid, 'uid_buyer_1');
+    assert.equal(minerDocB.uid, 'uid_buyer_2');
+
+    // Verify balances
+    const userA = mockDb.getDocument('users/uid_buyer_1');
+    const userB = mockDb.getDocument('users/uid_buyer_2');
+    assert.equal(userA?.balance, 300);
+    assert.equal(userB?.balance, 300);
+
+    // Verify idempotency still holds for same UID + same purchaseId
+    const resA2 = await fetch(`${baseUrl}/api/purchases/platform-balance`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token_buyer_1',
+      },
+      body: JSON.stringify({
+        packageId: 'pkg_alpha',
+        purchaseId: sharedPurchaseId,
+      }),
+    });
+    assert.equal(resA2.status, 200);
+    const bodyA2 = await resA2.json() as any;
+    assert.equal(bodyA2.orderId, bodyA.orderId);
+    assert.equal(bodyA2.balance, 300);
+    const userAAfterIdempotent = mockDb.getDocument('users/uid_buyer_1');
+    assert.equal(userAAfterIdempotent?.balance, 300, 'Zero second debit on duplicate call');
   });
 });

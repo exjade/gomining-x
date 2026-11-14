@@ -153,9 +153,10 @@ export class PlatformBalancePurchaseService {
       const now = new Date();
       const nowIso = now.toISOString();
 
+      const cleanUid = uid.trim();
       const minerId = `miner_${cleanPurchaseId}`;
-      const orderId = `ord_${cleanPurchaseId}`;
-      const contractId = `ctr_${cleanPurchaseId}`;
+      const orderId = `ord_${cleanUid}_${cleanPurchaseId}`;
+      const contractId = `ctr_${cleanUid}_${cleanPurchaseId}`;
 
       // 1. Update user balance and purchase counters
       const purchasesCount = (typeof userData.purchasesCount === 'number' ? userData.purchasesCount : 0) + 1;
@@ -234,8 +235,8 @@ export class PlatformBalancePurchaseService {
         paymentNetwork: 'PLATFORM_BALANCE',
         recipientAddress: 'INTERNAL_PLATFORM_BALANCE',
         txHash: `platform_balance:${cleanPurchaseId}`,
-        confirmations: 1,
-        requiredConfirmations: 1,
+        confirmations: 0,
+        requiredConfirmations: 0,
         status: 'SETTLED',
         bridgeStatus: 'NONE',
         activatedMinerId: minerId,
