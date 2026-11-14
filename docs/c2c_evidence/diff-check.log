@@ -1,1 +1,1 @@
-﻿git diff --check: exit code 0 (clean, zero whitespace/diff errors)
+git diff --check HEAD~1 HEAD: exit code 0 (clean, zero whitespace/diff errors in commit 95fb908a8641d0ee60cb8d1747c057b30b1f1b00)
