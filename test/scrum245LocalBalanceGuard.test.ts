@@ -1,5 +1,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
 
 import {
   restoreDemoSession,
@@ -658,6 +660,66 @@ describe('SCRUM-245: Local Balance Production Guard & Zero Detail Leakage', () =
       } finally {
         console.error = origError
       }
+    })
+
+    it('4.4 Authenticated platform balance purchase context cannot create or settle deferred demo/local pending orders, isolating pendingMinerOrders', async () => {
+      // 1. Functional isolation: Platform balance purchase does not populate demoStore.pendingMinerOrders
+      const initialSession = getDemoSessionForPersistence()
+      assert.equal(initialSession.pendingMinerOrders.length, 0)
+
+      const mockUser = {
+        uid: 'u_auth_real_balance_guard',
+        getIdToken: async () => 'test_token',
+      }
+
+      globalThis.fetch = async (_input, init) => {
+        const body = JSON.parse((init?.body as string) || '{}')
+        return new Response(
+          JSON.stringify({
+            success: true,
+            minerId: `miner_${body.purchaseId}`,
+            orderId: `ord_${mockUser.uid}_${body.purchaseId}`,
+            balance: 900,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const purchaseRes = await purchaseWithPlatformBalance({
+        packageId: 'minerx-01',
+        user: mockUser,
+      })
+      assert.equal(purchaseRes.ok, true)
+
+      const afterSession = getDemoSessionForPersistence()
+      assert.equal(afterSession.pendingMinerOrders.length, 0, 'pendingMinerOrders must remain strictly empty on platform purchase')
+      assert.equal(afterSession.balance, 1000, 'demo balance must remain untouched')
+
+      // 2. Static UI & Handler Guards in App.tsx:
+      const appSource = fs.readFileSync(path.resolve(import.meta.dirname, '../src/App.tsx'), 'utf8')
+
+      // a) MinerBuilderDialog authenticated section must NOT render "Guardar pedido pendiente"
+      const platformSectionMatch = appSource.match(/miner-platform-balance-section[\s\S]*?<\/div>\s*<\/div>/)
+      assert.ok(platformSectionMatch, 'miner-platform-balance-section must exist')
+      assert.doesNotMatch(
+        platformSectionMatch[0],
+        /Guardar pedido pendiente/,
+        'miner-platform-balance-section must NOT contain "Guardar pedido pendiente"'
+      )
+
+      // b) onDefer must reject authenticated users
+      assert.match(
+        appSource,
+        /onDefer=\{async\s*\(input\)\s*=>\s*\{[\s\S]*?if\s*\(user\s*&&\s*!user\.isAnonymous\)[\s\S]*?Los pedidos pendientes no están disponibles para compras con saldo de plataforma/,
+        'onDefer handler must reject authenticated non-anonymous users'
+      )
+
+      // c) MinerPanel must guard pending-miner-orders with !isAuth
+      assert.match(
+        appSource,
+        /\{!isAuth\s*&&\s*demo\.pendingMinerOrders\.length\s*>\s*0\s*&&\s*<section className="content-panel pending-miner-orders"/,
+        'MinerPanel must render pending-miner-orders ONLY for unauthenticated users (!isAuth)'
+      )
     })
   })
 })

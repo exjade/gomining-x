@@ -574,6 +574,9 @@ function AppContent() {
         }
         return result
       }} onDefer={async (input) => {
+        if (user && !user.isAnonymous) {
+          return { ok: false, message: 'Los pedidos pendientes no están disponibles para compras con saldo de plataforma.' }
+        }
         if (!user || user.isAnonymous) {
           openAuthModal('register')
           return { ok: false, message: 'Se requiere una cuenta registrada para guardar pedidos pendientes.' }
@@ -1334,7 +1337,7 @@ function MinerPanel({ openMinerBuilder, openTopUp }: { openMinerBuilder: () => v
     : getDemoMiningPower(demo).total
   return (
     <div className="miner-page-stack">
-      {demo.pendingMinerOrders.length > 0 && <section className="content-panel pending-miner-orders">
+      {!isAuth && demo.pendingMinerOrders.length > 0 && <section className="content-panel pending-miner-orders">
         <div className="panel-toolbar"><div><h2>Pedidos locales pendientes</h2><p>El minero se añade a la granja al completar el pago con saldo local.</p></div><span className="checkout-local-badge">LOCAL</span></div>
         <div className="pending-miner-list">{demo.pendingMinerOrders.map((order) => <article className="pending-miner-row" key={order.id}>
           <div><span className="card-kicker">PAGO PENDIENTE · {order.purchaseMode === 'monthly' ? 'MENSUAL' : 'UNA SOLA VEZ'}</span><strong>{order.name} · {order.powerTh.toFixed(2)} TH</strong><small>{formatDemoCurrency(order.price)} · creado {order.createdAt}</small></div>
@@ -1859,7 +1862,6 @@ function MinerBuilderDialog({ balance, isAuth = false, walletSession, onClose, o
                 <p>Saldo en plataforma disponible: {formatDemoCurrency(balance)}.</p>
                 <div className="purchase-modal-actions">
                   <button className="button button-secondary" disabled={!accepted} onClick={() => void runDemoAction('buy')}>Comprar con saldo <span>✓</span></button>
-                  <button className="button button-quiet" disabled={!accepted} onClick={() => void runDemoAction('defer')}>Guardar pedido pendiente</button>
                 </div>
               </div>
             ) : (
