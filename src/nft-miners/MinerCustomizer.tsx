@@ -171,7 +171,35 @@ function MinerDetails({ miner, catalog }: { miner: MinerCustomizationMiner; cata
                   <button type="button" className={taskFilter === 'inactive' ? 'pwm-task-status-tab pwm-task-status-tab-active' : 'pwm-task-status-tab'} aria-pressed={taskFilter === 'inactive'} onClick={() => setTaskFilter('inactive')}>{t('minerCustomization.inactiveTasks')}</button>
                 </div>
                 <div className="pwm-detail-task-panel">
-                  <p className="pwm-detail-task-empty" role="status">{t('minerCustomization.tasksEmpty')}</p>
+                  {taskFilter === 'active' ? <>
+                    <section className="pwm-task-level">
+                      <div className="pwm-task-level-heading"><h2>Level 1</h2></div>
+                      <p className="pwm-task-neutral-data" role="status">{t('minerCustomization.tasksEmpty')}</p>
+                    </section>
+                    <section className="pwm-task-level">
+                      <div className="pwm-task-level-heading">
+                        <span className="pwm-task-level-lock-region" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg></span>
+                        <h2>Level 2</h2>
+                        <button className="pwm-task-action pwm-task-action-create" type="button" disabled>Create miner</button>
+                      </div>
+                      <p className="pwm-task-neutral-data">{t('minerCustomization.tasksEmpty')}</p>
+                    </section>
+                    <section className="pwm-task-level pwm-task-level-with-cards">
+                      <div className="pwm-task-level-heading">
+                        <span className="pwm-task-level-lock-region" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg></span>
+                        <h2>Level 3</h2>
+                        <button className="pwm-task-action pwm-task-action-upgrade" type="button" disabled>Upgrade miner</button>
+                      </div>
+                      <div className="pwm-task-placeholder-list">
+                        {Array.from({ length: 4 }, (_, index) => <article className="pwm-task-placeholder-card" key={`neutral-task-${index}`}>
+                          <span className="pwm-task-expiry pwm-task-neutral-data">—</span>
+                          <h3 className="pwm-task-neutral-data">—</h3>
+                          <p className="pwm-task-neutral-data">{t('minerCustomization.tasksEmpty')}</p>
+                          <div className="pwm-task-reward pwm-task-neutral-data"><span>REWARD</span><strong>—</strong></div>
+                        </article>)}
+                      </div>
+                    </section>
+                  </> : <div className="pwm-task-inactive-empty pwm-task-neutral-data" role="status">{t('minerCustomization.tasksEmpty')}</div>}
                 </div>
               </div>}
               {activeTab === 'upgrades' && <div className="pwm-detail-neutral-empty" role="status">{t('minerCustomization.emptyState')}</div>}
@@ -327,7 +355,12 @@ function CustomizeMiner({ miner, catalog, saveAppearance }: { miner: MinerCustom
               {optionRows.map((row, rowIndex) => <div className="pwm-option-grid-row" role="row" aria-rowindex={rowIndex + 1} key={`row-${rowIndex}`}>
                 {row.map((option, columnIndex) => {
                   const index = rowIndex * 6 + columnIndex
-                  if (option.kind === 'empty') return <div className="pwm-option-cell pwm-option-empty" role="presentation" aria-hidden="true" key={option.key}><div className="pwm-option pwm-option-empty-tile" /></div>
+                  if (option.kind === 'empty') return <div className={`pwm-option-cell pwm-option-empty${activePart === 'wall' || activePart === 'screen' ? ' pwm-option-evidence-cell' : ''}`} role="presentation" aria-hidden="true" key={option.key}>
+                    <div className="pwm-option pwm-option-evidence-slot">
+                      <span className="pwm-option-evidence-interior" aria-hidden="true" />
+                      {activePart === 'wall' && <span className="pwm-option-evidence-lock-region" aria-hidden="true" />}
+                    </div>
+                  </div>
                   if (option.kind === 'none') {
                     const selected = noneSelected
                     return <div className="pwm-option-cell" role="gridcell" aria-colindex={columnIndex + 1} aria-selected={selected} key="none">
@@ -356,7 +389,7 @@ function CustomizeMiner({ miner, catalog, saveAppearance }: { miner: MinerCustom
                       ?? (trait.presentationKind === 'overlay' || trait.presentationKind === 'recolor'
                         ? { kind: 'miner-thumbnail' as const }
                         : { kind: 'placeholder' as const })
-                  return <div key={trait.trait_id} className="pwm-option-cell" role="gridcell" aria-colindex={columnIndex + 1} aria-selected={selected}>
+                  return <div key={trait.trait_id} className={`pwm-option-cell${activePart === 'wall' && index >= 6 ? ' pwm-option-evidence-cell' : ''}`} role="gridcell" aria-colindex={columnIndex + 1} aria-selected={selected}>
                     <button
                       ref={(element) => { optionButtons.current[index] = element }}
                       tabIndex={focusedOptionIndex === index ? 0 : -1}
@@ -391,6 +424,12 @@ function CustomizeMiner({ miner, catalog, saveAppearance }: { miner: MinerCustom
                         : presentation.kind === 'miner-thumbnail'
                           ? <span className="pwm-option-thumbnail"><MinerAppearancePreview miner={miner} appearanceOverride={{ ...draft, [category.payloadKey]: trait.trait_id }} catalogOverride={catalog} /></span>
                           : <span className="pwm-option-placeholder" aria-hidden="true">▧</span>}
+                      {activePart === 'wall' && <>
+                        <span className="pwm-option-source-asset-interior" aria-hidden="true" />
+                        <span className="pwm-option-evidence-trait-interior" aria-hidden="true" />
+                      </>}
+                      {activePart === 'screen' && <span className="pwm-option-evidence-interior pwm-option-source-asset-interior" aria-hidden="true" />}
+                      {((activePart === 'wall' && index >= 6) || (activePart === 'screen' && index > 0)) && <span className="pwm-option-evidence-lock-region" style={{ visibility: 'hidden' }} aria-hidden="true" />}
                       {locked && <span className="pwm-option-lock" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="4" y="10" width="16" height="12" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg></span>}
                       {traitStatus === 'Applied' && <span className="pwm-option-state pwm-option-state-applied" aria-hidden="true">✓</span>}
                       {traitStatus === 'Upcoming' && <span className="pwm-option-state pwm-option-state-soon" aria-hidden="true">SOON</span>}

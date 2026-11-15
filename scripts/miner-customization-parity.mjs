@@ -10,7 +10,7 @@ import net from 'node:net'
 const worktreeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const workspaceRoot = resolve(worktreeRoot, '..', '..')
 const specPath = join(worktreeRoot, 'UI-UX', 'Mineros-customizables', 'parity-spec.json')
-const ITERATION = 2
+const ITERATION = 4
 const evidenceRoot = join(worktreeRoot, 'UI-UX', 'Mineros-customizables', 'evidence', `iteration-${ITERATION}`)
 assert.equal(basename(evidenceRoot), `iteration-${ITERATION}`, 'Evidence output must target the current iteration directory.')
 const spec = JSON.parse(readFileSync(specPath, 'utf8'))
@@ -3577,7 +3577,30 @@ async function main() {
       || blockedRequests.some((request) => request.method === 'WEBSOCKET')
       || fetchLifecycle.unsafeInterceptionFailures.length > 0
       || routeViolations.length > 0
-    console.log(JSON.stringify({ appPort, cdpPort, scenarios: scenarioReports.map(({ id, status, comparison }) => ({ id, status, mismatchPercent: comparison?.mismatchPercent ?? null })), functionalResults, blockedRequests: blockedRequests.length, fetchLifecycle, blockedNetworkWriteAttempts: processWrites.length, routeViolations: routeViolations.length, exitCode: failed ? 1 : 0 }, null, 2))
+    const scenarioEvidence = scenarioReports.map(({ id, status, comparison }) => ({
+      id,
+      status,
+      rawOverallMismatchPercent: comparison?.rawOverallMismatchPercent ?? null,
+      comparableMismatchPercent: comparison?.comparableMismatchPercent ?? null,
+      mismatchPass: comparison?.mismatchPass ?? null,
+      dimensionsPass: comparison?.dimensionsPass ?? null,
+      geometryPass: comparison?.geometryPass ?? null,
+      colorPass: comparison?.colorPass ?? null,
+      integrityPass: comparison?.integrityPass ?? null,
+      blockedPixelsExcluded: comparison?.blockedPixelsExcluded ?? null,
+      blockedMismatchedPixels: comparison?.blockedMismatchedPixels ?? null,
+      unclassifiedPixels: comparison?.unclassifiedPixels ?? null,
+      unresolvedSubregions: comparison?.unresolvedSubregions ?? [],
+      subregions: (comparison?.subregions ?? []).map(({ id: subregionId, classification, mismatchPercent, pixels, mismatchedPixels, reason }) => ({
+        id: subregionId,
+        classification,
+        mismatchPercent,
+        pixels,
+        mismatchedPixels,
+        reason: reason ?? null,
+      })),
+    }))
+    console.log(JSON.stringify({ appPort, cdpPort, iteration: ITERATION, scenarios: scenarioEvidence, functionalResults, blockedRequests: blockedRequests.length, fetchLifecycle, blockedNetworkWriteAttempts: processWrites.length, routeViolations: routeViolations.length, exitCode: failed ? 1 : 0 }, null, 2))
     if (failed) process.exitCode = 1
   } finally {
     await drainFetchHandlers()
