@@ -443,6 +443,23 @@ export async function getAuthenticatedUser(req: express.Request): Promise<UserAc
   return null;
 }
 
+/**
+ * Express middleware helper to enforce admin authentication (SCRUM-237).
+ * Reuses getAuthenticatedUser(req) fail-closed.
+ * Returns the authenticated admin UserAccount, or sends a 401 response and returns null.
+ */
+export async function requireAdmin(
+  req: express.Request,
+  res: express.Response
+): Promise<UserAccount | null> {
+  const admin = await getAuthenticatedUser(req);
+  if (!admin) {
+    res.status(401).json({ error: 'Unauthorized: valid admin authentication required' });
+    return null;
+  }
+  return admin;
+}
+
 function getUserDataDir(userId: string): string {
   const userDir = path.join(DATA_DIR, 'users', userId);
   if (!fs.existsSync(userDir)) {
@@ -524,20 +541,22 @@ function readConfig(userId: string = 'usr_default_admin'): SavedConfig {
     if (fs.existsSync(userConfigFile)) {
       return JSON.parse(fs.readFileSync(userConfigFile, 'utf-8'));
     }
-    if (fs.existsSync(CONFIG_FILE)) {
+    if (userId === 'usr_default_admin' && fs.existsSync(CONFIG_FILE)) {
       return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
     }
   } catch (err) {
     console.error('Error reading config file:', err);
   }
-  return DEFAULT_CONFIG;
+  return JSON.parse(JSON.stringify(DEFAULT_CONFIG));
 }
 
 function writeConfig(cfg: SavedConfig, userId: string = 'usr_default_admin') {
   try {
     const userConfigFile = path.join(getUserDataDir(userId), 'config.json');
     fs.writeFileSync(userConfigFile, JSON.stringify(cfg, null, 2), 'utf-8');
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2), 'utf-8');
+    if (userId === 'usr_default_admin') {
+      fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2), 'utf-8');
+    }
   } catch (err) {
     console.error('Error writing config file:', err);
   }
@@ -579,20 +598,22 @@ app.get('/api/health', (req, res) => {
 });
 
 // 2. Configuration Read / Write (User-Isolated)
-app.get('/api/config', (req, res) => {
-  const userId = getUserIdFromReq(req);
-  const config = readConfig(userId);
+app.get('/api/config', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+  const config = readConfig(admin.id);
   res.json(config);
 });
 
-app.post('/api/config', (req, res) => {
-  const userId = getUserIdFromReq(req);
+app.post('/api/config', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const newConfig = req.body;
   if (newConfig.vastConfig?.apiKey && !newConfig.vastConfig.apiKey.includes('...')) {
     vastClient.setApiKey(newConfig.vastConfig.apiKey);
   }
-  writeConfig(newConfig, userId);
-  res.json({ success: true, message: 'Configuración guardada para tu usuario', userId });
+  writeConfig(newConfig, admin.id);
+  res.json({ success: true, message: 'Configuración guardada para tu usuario', userId: admin.id });
 });
 
 // 2a. Commercial Packages Endpoints (Platform Admin Packages)
@@ -742,7 +763,9 @@ app.get(['/api/packages', '/api/commercial-packages'], (_req, res) => {
   res.json(markedPackages);
 });
 
-app.post(['/api/packages', '/api/commercial-packages'], (req, res) => {
+app.post(['/api/packages', '/api/commercial-packages'], async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   res.setHeader('X-Catalog-Legacy', 'true');
   res.setHeader('X-Catalog-Notice', 'Legacy package endpoint. Canonical catalog uses /api/catalog/packages');
   const pkg = req.body;
@@ -782,12 +805,16 @@ app.post(['/api/packages', '/api/commercial-packages'], (req, res) => {
 });
 
 // 2b. Admin Contracts Endpoints (Client-purchased miners allocated to platform)
-app.get('/api/admin/contracts', (_req, res) => {
+app.get('/api/admin/contracts', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const contracts = readContracts();
   res.json(contracts);
 });
 
-app.post('/api/admin/contracts', (req, res) => {
+app.post('/api/admin/contracts', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const contract = req.body;
   if (!contract || !contract.id) {
     return res.status(400).json({ error: 'ID de contrato requerido' });
@@ -808,12 +835,16 @@ app.post('/api/admin/contracts', (req, res) => {
 });
 
 // 2c. Admin Package Orders & Payments Endpoints
-app.get('/api/admin/orders', (_req, res) => {
+app.get('/api/admin/orders', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const orders = readOrders();
   res.json(orders);
 });
 
-app.post('/api/admin/orders', (req, res) => {
+app.post('/api/admin/orders', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const order = req.body;
   if (!order || !order.orderId) {
     return res.status(400).json({ error: 'orderId requerido' });
@@ -822,15 +853,19 @@ app.post('/api/admin/orders', (req, res) => {
   const idx = orders.findIndex(o => o.orderId === order.orderId);
   if (idx >= 0) {
     orders[idx] = { ...orders[idx], ...order, updatedAt: new Date().toISOString() };
+    writeOrders(orders);
+    res.json({ success: true, order: orders[idx] });
   } else {
-    orders.unshift({
+    const initialStatus = (order.status && order.status !== 'SETTLED') ? order.status : 'PENDING';
+    const newOrder = {
       ...order,
-      status: order.status || 'SETTLED',
+      status: initialStatus,
       createdAt: order.createdAt || new Date().toISOString()
-    });
+    };
+    orders.unshift(newOrder);
+    writeOrders(orders);
+    res.json({ success: true, order: newOrder });
   }
-  writeOrders(orders);
-  res.json({ success: true, order });
 });
 
 // 2d. Storefront Sections Visibility (Admin Remote Control for Client Modal)
@@ -839,11 +874,14 @@ app.get('/api/admin/storefront-sections', (_req, res) => {
   res.json(sections);
 });
 
-app.post('/api/admin/storefront-sections', (req, res) => {
+app.post('/api/admin/storefront-sections', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const current = readStorefrontSections();
   const updated = {
     ...current,
     ...req.body,
+    updatedBy: admin.id,
     updatedAt: new Date().toISOString()
   };
   writeStorefrontSections(updated);
@@ -935,9 +973,10 @@ async function dispatchAlertNotification(
 }
 
 // 2c. Vast.ai Configuration & Connection Test Endpoints
-app.get('/api/vast/config', (req, res) => {
-  const userId = getUserIdFromReq(req);
-  const cfg = readConfig(userId);
+app.get('/api/vast/config', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+  const cfg = readConfig(admin.id);
   const vastCfg = cfg.vastConfig || { apiKey: '', enabled: false, balanceUSD: 0, status: 'untested' };
   const hasKey = !!vastCfg.apiKey;
   const maskedKey = hasKey
@@ -954,9 +993,10 @@ app.get('/api/vast/config', (req, res) => {
   });
 });
 
-app.post('/api/vast/config', (req, res) => {
-  const userId = getUserIdFromReq(req);
-  const cfg = readConfig(userId);
+app.post('/api/vast/config', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+  const cfg = readConfig(admin.id);
   const { apiKey, enabled } = req.body;
 
   if (!cfg.vastConfig) {
@@ -970,13 +1010,14 @@ app.post('/api/vast/config', (req, res) => {
     cfg.vastConfig.enabled = !!enabled;
   }
 
-  writeConfig(cfg, userId);
+  writeConfig(cfg, admin.id);
   res.json({ success: true, message: 'Configuración de Vast.ai guardada.' });
 });
 
 app.post('/api/vast/test-account', async (req, res) => {
-  const userId = getUserIdFromReq(req);
-  const cfg = readConfig(userId);
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+  const cfg = readConfig(admin.id);
   const { apiKey } = req.body;
   const keyToTest = apiKey || cfg.vastConfig?.apiKey || process.env.VAST_API_KEY;
 
@@ -993,7 +1034,7 @@ app.post('/api/vast/test-account', async (req, res) => {
     cfg.vastConfig.balanceUSD = result.user.balance;
     cfg.vastConfig.status = 'connected';
     cfg.vastConfig.lastTested = new Date().toISOString();
-    writeConfig(cfg, userId);
+    writeConfig(cfg, admin.id);
   }
   res.json(result);
 });
@@ -1024,14 +1065,17 @@ app.get('/api/vast/offers', async (req, res) => {
 });
 
 // 2e. Vast.ai Instances & Telemetry
-app.get('/api/vast/instances', (_req, res) => {
+app.get('/api/vast/instances', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const instances = vastInstanceService.getInstances();
   res.json({ success: true, instances });
 });
 
 app.post('/api/vast/instances', async (req, res) => {
-  const userId = getUserIdFromReq(req);
-  const cfg = readConfig(userId);
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+  const cfg = readConfig(admin.id);
   const { offerId, gpuModel, gpuCount, gpuMemoryGB, hourlyComputeCostUSD, hourlyStorageCostUSD, strategyId } = req.body;
 
   const poolWallet = cfg.kryptexConfig.walletAddress;
@@ -1057,29 +1101,39 @@ app.post('/api/vast/instances', async (req, res) => {
 });
 
 app.post('/api/vast/instances/:id/stop', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const { id } = req.params;
   const result = await vastInstanceService.stopInstance(id, 'User manual stop from dashboard');
   res.json(result);
 });
 
 app.delete('/api/vast/instances/:id', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const { id } = req.params;
   const result = await vastInstanceService.deleteInstance(id, 'User manual delete from dashboard');
   res.json(result);
 });
 
 // 2f. Rental Strategies Engine
-app.get('/api/strategies', (_req, res) => {
+app.get('/api/strategies', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const strategies = strategyEngine.getStrategies();
   res.json({ success: true, strategies });
 });
 
-app.post('/api/strategies', (req, res) => {
+app.post('/api/strategies', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const strat = strategyEngine.saveStrategy(req.body);
   res.json({ success: true, strategy: strat });
 });
 
-app.post('/api/strategies/:id/enable', (req, res) => {
+app.post('/api/strategies/:id/enable', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const { id } = req.params;
   const strategies = strategyEngine.getStrategies();
   const target = strategies.find(s => s.id === id);
@@ -1089,7 +1143,9 @@ app.post('/api/strategies/:id/enable', (req, res) => {
   res.json({ success: true, strategy: target });
 });
 
-app.post('/api/strategies/:id/disable', (req, res) => {
+app.post('/api/strategies/:id/disable', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const { id } = req.params;
   const strategies = strategyEngine.getStrategies();
   const target = strategies.find(s => s.id === id);
@@ -1099,24 +1155,29 @@ app.post('/api/strategies/:id/disable', (req, res) => {
   res.json({ success: true, strategy: target });
 });
 
-app.get('/api/strategies/audit', (req, res) => {
+app.get('/api/strategies/audit', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const { strategyId } = req.query;
   const runs = strategyEngine.getAuditRuns(strategyId as string);
   res.json({ success: true, runs });
 });
 
 app.post('/api/strategies/evaluate', async (req, res) => {
-  const userId = getUserIdFromReq(req);
-  const cfg = readConfig(userId);
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+  const cfg = readConfig(admin.id);
   const wallet = cfg.kryptexConfig.walletAddress;
   const result = await strategyEngine.executeStrategyCycle(wallet, (title, msg, sev) => {
-    dispatchAlertNotification(title, msg, sev, userId);
+    dispatchAlertNotification(title, msg, sev, admin.id);
   });
   res.json({ success: true, result });
 });
 
 // 3. Test Salad Account Connection
 app.post('/api/salad/test-account', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const { organizationName, projectName, apiKey } = req.body;
 
   const cleanOrg = (organizationName || '').trim();
@@ -1312,6 +1373,8 @@ async function fetchContainerGroupLogTelemetry(apiKey: string, org: string, grou
 
 // 4. Query All Active Instances Across Salad Accounts with Real Log Telemetry
 app.post('/api/salad/all-active', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const { accounts } = req.body;
   if (!Array.isArray(accounts) || accounts.length === 0) {
     return res.json({ instances: [], groups: [], capacity: { totalReplicas: 0, runningGpus: 0, allocatingGpus: 0, stoppedGpus: 0, totalSaladLogHashrateTHs: 0 } });
@@ -1417,6 +1480,8 @@ app.post('/api/salad/all-active', async (req, res) => {
 
 // 5. Reallocate Salad Instance (1-Click Silicon Lottery / Fix underperforming node)
 app.post('/api/salad/reallocate', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const { organizationName, projectName, containerGroupName, instanceId, apiKey } = req.body;
 
   if (!organizationName || !projectName || !containerGroupName || !instanceId || !apiKey) {
@@ -1461,6 +1526,8 @@ app.post('/api/salad/reallocate', async (req, res) => {
 
 // 5b. Restart Salad Instance (In-Place Fast Reboot)
 app.post('/api/salad/restart-instance', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const { organizationName, projectName, containerGroupName, instanceId, apiKey } = req.body;
   if (!organizationName || !projectName || !containerGroupName || !instanceId || !apiKey) {
     return res.status(400).json({ success: false, message: 'Faltan parámetros requeridos' });
@@ -1483,6 +1550,8 @@ app.post('/api/salad/restart-instance', async (req, res) => {
 
 // 5c. Recreate Salad Instance (Hard Clean Container Reset)
 app.post('/api/salad/recreate-instance', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const { organizationName, projectName, containerGroupName, instanceId, apiKey } = req.body;
   if (!organizationName || !projectName || !containerGroupName || !instanceId || !apiKey) {
     return res.status(400).json({ success: false, message: 'Faltan parámetros requeridos' });
@@ -1505,6 +1574,8 @@ app.post('/api/salad/recreate-instance', async (req, res) => {
 
 // 5d. SaladCloud Quotas & GPU Limits
 app.get('/api/salad/quotas', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const org = (req.query.org as string) || '';
   const apiKey = (req.headers['salad-api-key'] as string) || (req.query.apiKey as string);
   if (!org || !apiKey) {
@@ -1527,6 +1598,8 @@ app.get('/api/salad/quotas', async (req, res) => {
 
 // 5e. SaladCloud GPU Classes Catalog & Pricing
 app.get('/api/salad/gpu-classes', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const org = (req.query.org as string) || '';
   const apiKey = (req.headers['salad-api-key'] as string) || (req.query.apiKey as string);
   if (!org || !apiKey) {
@@ -1549,6 +1622,8 @@ app.get('/api/salad/gpu-classes', async (req, res) => {
 
 // 5f. Container Group Control (Start, Stop, Scale Replicas)
 app.post('/api/salad/container-group/control', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const { organizationName, projectName, containerGroupName, action, replicas, apiKey } = req.body;
   if (!organizationName || !projectName || !containerGroupName || !action || !apiKey) {
     return res.status(400).json({ success: false, message: 'Faltan parámetros requeridos' });
@@ -1713,6 +1788,8 @@ app.get('/api/kryptex/daily-revenue', async (req, res) => {
 
 // 11. Dedicated Telegram Bot Test & Verification Endpoint
 app.post('/api/telegram/test', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const { token, botToken, chatId, telegramChatId, customMessage } = req.body;
   const actualToken = (token || botToken || '').trim();
   const actualChatId = (chatId || telegramChatId || '').trim();
@@ -1765,8 +1842,10 @@ app.post('/api/telegram/test', async (req, res) => {
 
 // 11b. Send Fleet Status Report to Telegram
 app.post('/api/telegram/send-status', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   try {
-    const cfg = readConfig();
+    const cfg = readConfig(admin.id);
     const token = (req.body.token || cfg.appSettings?.telegramBotToken || '').trim();
     const chatId = (req.body.chatId || cfg.appSettings?.telegramChatId || '').trim();
 
@@ -1875,20 +1954,22 @@ app.post('/api/alerts/webhook', async (req, res) => {
 });
 
 // 13. Update Salad Account Balance manually
-app.post('/api/salad/account-balance', (req, res) => {
+app.post('/api/salad/account-balance', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const { accountId, balanceUSD } = req.body;
   if (balanceUSD === undefined || balanceUSD === null) {
     return res.status(400).json({ success: false, message: 'Falta el parámetro balanceUSD' });
   }
 
-  const cfg = readConfig();
+  const cfg = readConfig(admin.id);
   const acc = accountId 
     ? ((cfg.saladAccounts || []).find((a: any) => a.id === accountId || a.organizationName === accountId) || cfg.saladAccounts?.[0])
     : cfg.saladAccounts?.[0];
 
   if (acc) {
     acc.balanceUSD = Math.max(0, Number(balanceUSD));
-    writeConfig(cfg);
+    writeConfig(cfg, admin.id);
     return res.json({ success: true, message: 'Saldo actualizado correctamente', balanceUSD: acc.balanceUSD });
   }
 
@@ -1897,7 +1978,9 @@ app.post('/api/salad/account-balance', (req, res) => {
 
 // 13b. SaladCloud Balance & Runway Monitor (Tarea 1 - Total y por Cuenta)
 app.get('/api/salad/balance', async (req, res) => {
-  const cfg = readConfig();
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+  const cfg = readConfig(admin.id);
   const accounts = cfg.saladAccounts || [];
   let totalBalanceUSD = 0;
   let totalHourlySpendingUSD = 0;
@@ -1964,8 +2047,10 @@ app.get('/api/salad/balance', async (req, res) => {
 
 // 14. Container Remote Logs Viewer (Tarea 3 - Conectado a Salad Log Explorer real)
 app.get('/api/salad/logs/:org/:proj/:containerGroup/:instanceId', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   const { org, proj, containerGroup, instanceId } = req.params;
-  const cfg = readConfig();
+  const cfg = readConfig(admin.id);
   const acc = (cfg.saladAccounts || []).find((a: any) => a.organizationName?.toLowerCase() === org?.toLowerCase()) || cfg.saladAccounts?.[0];
   const apiKey = acc?.apiKey || '';
 
@@ -2068,11 +2153,15 @@ let autoscaleConfig = {
   lastActionTime: new Date().toLocaleTimeString()
 };
 
-app.get('/api/fleet/autoscale', (req, res) => {
+app.get('/api/fleet/autoscale', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   res.json(autoscaleConfig);
 });
 
-app.post('/api/fleet/autoscale', (req, res) => {
+app.post('/api/fleet/autoscale', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
   autoscaleConfig = { ...autoscaleConfig, ...req.body, lastActionTime: new Date().toLocaleTimeString() };
   res.json({ success: true, autoscaleConfig });
 });
@@ -2126,9 +2215,10 @@ app.get('/api/history', (req, res) => {
 });
 
 // 17. FinTech Accounting Audit & Reconciliation (Tarea 5 - Ciclos_de_minado_PERL.xlsx)
-app.get('/api/fintech/audit', (req, res) => {
-  const userId = getUserIdFromReq(req);
-  const cfg = readConfig(userId);
+app.get('/api/fintech/audit', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+  const cfg = readConfig(admin.id);
   const acc = (cfg.saladAccounts || [])[0];
   const liveBal = acc?.balanceUSD !== undefined ? Number(acc.balanceUSD) : 4.50;
 

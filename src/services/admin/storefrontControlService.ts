@@ -5,6 +5,7 @@ import {
   setDoc,
   onSnapshot
 } from '../../utils/firebaseAuth';
+import { apiFetch } from '../../utils/apiConfig';
 
 export interface StorefrontSectionsConfig {
   showPresale: boolean;
@@ -116,7 +117,7 @@ export class StorefrontControlService {
 
     // Optional local REST backend sync
     try {
-      await fetch('http://127.0.0.1:3001/api/admin/storefront-sections', {
+      await apiFetch('/api/admin/storefront-sections', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(this.currentConfig),
