@@ -9,6 +9,9 @@ export default defineConfig({
       '@': resolve(__dirname, './src'),
     },
   },
+  server: {
+    allowedHosts: ['.trycloudflare.com'],
+  },
   build: {
     target: 'esnext',
     minify: 'esbuild',

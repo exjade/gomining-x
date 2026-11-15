@@ -70,7 +70,7 @@ export function StickyEarningsBar({ currentTh = 120, onOpenAuth }: StickyEarning
 
           {/* Right: 15-day Badge & Actions */}
           <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0">
-            <span className="text-[9px] sm:text-[10px] font-mono text-white/70 uppercase tracking-widest border border-white/15 bg-white/[0.03] px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full whitespace-nowrap">
+            <span className="hidden sm:inline-flex text-[9px] sm:text-[10px] font-mono text-white/70 uppercase tracking-widest border border-white/15 bg-white/[0.03] px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full whitespace-nowrap">
               15 Días
             </span>
 
