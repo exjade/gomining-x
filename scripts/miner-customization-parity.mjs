@@ -674,7 +674,7 @@ async function captureCustomizerPreviewCropDiagnostic(cdp, appPort, scenarios) {
       }
       const style = getComputedStyle(art)
       const gridStyle = getComputedStyle(grid)
-      const cells = Array.from(grid.querySelectorAll(':scope > .pwm-option-cell')).map((cell, index) => {
+      const cells = Array.from(grid.querySelectorAll('.pwm-option-grid-row > .pwm-option-cell')).map((cell, index) => {
         const option = cell.querySelector('.pwm-option')
         const optionStyle = option ? getComputedStyle(option) : null
         return {
@@ -2227,7 +2227,7 @@ async function captureCustomizerSelectedFrameLocalizationDiagnostic(cdp, port, s
 
     const live = await evaluate(cdp, `(() => {
       const grid = document.querySelector('.pwm-option-grid')
-      const cells = Array.from(grid?.querySelectorAll(':scope > .pwm-option-cell') ?? [])
+      const cells = Array.from(grid?.querySelectorAll('.pwm-option-grid-row > .pwm-option-cell') ?? [])
       const selected = cells.map((cell, index) => ({ cell, index })).filter(({ cell }) => cell.getAttribute('aria-selected') === 'true')
       const selectedCell = selected[0]?.cell
       const option = selectedCell?.querySelector('.pwm-option')
@@ -2419,7 +2419,7 @@ async function captureCustomizerBorderEdgeDiagnostic(cdp, port, scenarios) {
 
     const live = await evaluate(cdp, `(() => {
       const grid = document.querySelector('.pwm-option-grid')
-      const cells = Array.from(grid?.querySelectorAll(':scope > .pwm-option-cell') ?? [])
+      const cells = Array.from(grid?.querySelectorAll('.pwm-option-grid-row > .pwm-option-cell') ?? [])
       const selected = cells.map((cell, index) => ({ cell, index })).filter(({ cell }) => cell.getAttribute('aria-selected') === 'true')
       const first = selected[0]?.cell
       const option = first?.querySelector('.pwm-option')
@@ -2623,7 +2623,7 @@ async function captureCustomizerGridChromeDiagnostic(cdp, port, scenarios) {
         computedStyle: style(element),
       } : null
       const grid = document.querySelector('.pwm-option-grid')
-      const cells = Array.from(grid?.querySelectorAll(':scope > .pwm-option-cell') ?? [])
+      const cells = Array.from(grid?.querySelectorAll('.pwm-option-grid-row > .pwm-option-cell') ?? [])
       return {
         pathname: location.pathname,
         customizer: rect(document.querySelector('.pwm-customizer-column')),

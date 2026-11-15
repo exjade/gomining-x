@@ -648,9 +648,9 @@
 
 @media (min-width: 901px) and (max-width: 1440px) {
   body:has(.pwm-miner-grid) .page-wrap { padding-inline: 36px; }
-  .pwm-farm-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .pwm-miner-grid { grid-template-columns: repeat(auto-fill, minmax(290px, 290px)); }
-  .pwm-miner-tile { width: 290px; }
+  .pwm-farm-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .pwm-miner-grid { grid-template-columns: repeat(auto-fill, minmax(229px, 229px)); }
+  .pwm-miner-tile { width: 229px; }
 }
 
 @media (min-width: 681px) and (max-width: 900px) {
@@ -724,7 +724,7 @@
   .pwm-customizer-card { width: 100%; min-width: 0; margin-top: 0; }
   .pwm-customizer-tabs { gap: 4px; overflow-x: auto; scrollbar-width: none; }
   .pwm-customizer-tab { flex: 0 0 auto; padding-right: 5px; padding-left: 5px; white-space: nowrap; }
-  .pwm-option-grid { width: 100%; max-width: 548px; margin-right: auto; margin-left: auto; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .pwm-customizer-flow .pwm-option-grid { width: 100%; max-width: 554px; margin-right: auto; margin-left: auto; padding-top: 24px; transform: none; grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .pwm-option-cell { width: 100%; }
 }
 
@@ -749,9 +749,9 @@
 
 @media (min-width: 1280px) {
   .pwm-detail-flow .pwm-miner-detail-layout {
-    width: min(100%, 1208px);
-    max-width: 1208px;
-    grid-template-columns: 494px minmax(0, 698px);
+    width: min(100%, 1207px);
+    max-width: 1207px;
+    grid-template-columns: 494px 700px;
     gap: 16px;
   }
   .pwm-detail-flow .pwm-detail-art-panel,
@@ -1101,7 +1101,8 @@
 
 @media (min-width: 1200px) {
   .page-wrap:has(.pwm-detail-flow) {
-    padding: 10px max(20px, calc((100vw - 1208px) / 2)) 40px;
+    width: 100%;
+    padding: 10px max(20px, calc((100vw - 1207px) / 2)) 40px;
   }
   .page-wrap:has(.pwm-detail-flow) .replica-note { display: none; }
   .pwm-detail-flow { padding-inline: 0; }
