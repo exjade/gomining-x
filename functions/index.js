@@ -95,20 +95,117 @@ let memoryUsers = [
   }
 ];
 
-// Helper to resolve userId from Request Token
-async function getUserIdFromReq(req) {
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-  if (token) {
-    const users = await getPersistedUsers();
-    const user = users.find(u => u.sessionToken === token);
-    if (user) return user.id;
+const ADMIN_ROLES = new Set(['admin', 'super_admin', 'finance', 'operator']);
+
+function isLocalDevSessionAllowed() {
+  if (process.env.NODE_ENV === 'production') {
+    return false;
   }
-  return "usr_default_admin";
+  if (process.env.ALLOW_DEV_LOCAL_SESSION_TOKEN === 'false') {
+    return false;
+  }
+  if (process.env.ALLOW_DEV_LOCAL_SESSION_TOKEN === 'true') {
+    return true;
+  }
+  return Boolean(
+    process.env.NODE_ENV === 'test' ||
+    process.env.NODE_ENV === 'development' ||
+    process.env.NODE_TEST_CONTEXT ||
+    process.execArgv.includes('--test') ||
+    process.argv.some((arg) => arg.includes('test') || arg.includes('--test') || arg.includes('node:test')) ||
+    process.env.FIREBASE_AUTH_EMULATOR_HOST
+  );
+}
+
+function getBearerToken(req) {
+  const authHeader = req.headers.authorization || '';
+  return authHeader.replace(/^Bearer\s+/i, '').trim();
+}
+
+async function getAuthenticatedIdentity(req) {
+  const token = getBearerToken(req);
+  if (!token) return null;
+
+  if (authAdmin) {
+    try {
+      const decoded = await authAdmin.verifyIdToken(token);
+      if (decoded?.uid) {
+        return {
+          source: 'firebase',
+          userId: decoded.uid,
+          firebaseAuthUid: decoded.uid,
+          email: decoded.email || null,
+          claims: decoded
+        };
+      }
+    } catch {}
+  }
+
+  if (!isLocalDevSessionAllowed()) return null;
+  const users = await getPersistedUsers();
+  const user = users.find((candidate) => candidate.sessionToken === token);
+  if (!user) return null;
+
+  return {
+    source: 'local-session',
+    userId: user.id,
+    firebaseAuthUid: user.firebaseAuthUid || null,
+    email: user.email || null,
+    user
+  };
+}
+
+async function isAdminIdentity(identity) {
+  if (!identity) return false;
+
+  if (identity.source === 'firebase') {
+    const claims = identity.claims || {};
+    const role = typeof claims.role === 'string' ? claims.role.toLowerCase() : '';
+    if (claims.admin === true || ADMIN_ROLES.has(role)) return true;
+
+    if (db) {
+      try {
+        const adminDoc = await db.collection('admin_users').doc(identity.userId).get();
+        if (adminDoc.exists) return true;
+      } catch {}
+    }
+    return false;
+  }
+
+  return identity.user?.role?.toLowerCase() === 'admin' || identity.user?.id === 'usr_default_admin';
+}
+
+function requireAuthenticated(req, res, next) {
+  getAuthenticatedIdentity(req)
+    .then((identity) => {
+      if (!identity) {
+        return res.status(401).json({ success: false, message: 'Autenticación Firebase requerida' });
+      }
+      req.minerxIdentity = identity;
+      next();
+    })
+    .catch(() => res.status(401).json({ success: false, message: 'Sesión inválida o expirada' }));
+}
+
+function requireAdmin(req, res, next) {
+  getAuthenticatedIdentity(req)
+    .then(async (identity) => {
+      if (!identity || !(await isAdminIdentity(identity))) {
+        return res.status(401).json({ success: false, message: 'Sesión de administrador requerida' });
+      }
+      req.minerxIdentity = identity;
+      next();
+    })
+    .catch(() => res.status(401).json({ success: false, message: 'Sesión de administrador inválida o expirada' }));
+}
+
+// Helper to resolve userId from an already authenticated request
+async function getUserIdFromReq(req) {
+  return req.minerxIdentity.userId;
 }
 
 // Database Persistence Helpers (Firestore User-Isolated Collections + Fallback)
-async function getPersistedConfig(userId = "usr_default_admin") {
+async function getPersistedConfig(userId) {
   if (db) {
     try {
       // 1. Isolated User Subcollection: minerx_users/{userId}/data/config
@@ -116,16 +213,17 @@ async function getPersistedConfig(userId = "usr_default_admin") {
       if (doc.exists) {
         return doc.data();
       }
-      // 2. Legacy fallback check
-      const legacyDoc = await db.collection("minerx_app_data").doc("config").get();
-      if (legacyDoc.exists) {
-        return legacyDoc.data();
+      if (userId === 'usr_default_admin') {
+        const legacyDoc = await db.collection("minerx_app_data").doc("config").get();
+        if (legacyDoc.exists) {
+          return legacyDoc.data();
+        }
       }
     } catch (err) {
       console.warn("Firestore get config error:", err.message);
     }
   }
-  return memoryConfig[userId] || memoryConfig["usr_default_admin"] || defaultTemplateConfig;
+  return memoryConfig[userId] || defaultTemplateConfig;
 }
 
 async function savePersistedConfig(userId, cfg) {
@@ -140,7 +238,7 @@ async function savePersistedConfig(userId, cfg) {
   }
 }
 
-async function getPersistedCycles(userId = "usr_default_admin") {
+async function getPersistedCycles(userId) {
   if (db) {
     try {
       // 1. Isolated User Subcollection: minerx_users/{userId}/data/mining_cycles
@@ -148,16 +246,17 @@ async function getPersistedCycles(userId = "usr_default_admin") {
       if (doc.exists) {
         return doc.data();
       }
-      // 2. Legacy fallback check
-      const legacyDoc = await db.collection("minerx_app_data").doc("mining_cycles").get();
-      if (legacyDoc.exists) {
-        return legacyDoc.data();
+      if (userId === 'usr_default_admin') {
+        const legacyDoc = await db.collection("minerx_app_data").doc("mining_cycles").get();
+        if (legacyDoc.exists) {
+          return legacyDoc.data();
+        }
       }
     } catch (err) {
       console.warn("Firestore get cycles error:", err.message);
     }
   }
-  return memoryCycles[userId] || memoryCycles["usr_default_admin"] || { activeCycle: null, closedCycles: [] };
+  return memoryCycles[userId] || { activeCycle: null, closedCycles: [] };
 }
 
 async function savePersistedCycles(userId, cycles) {
@@ -205,13 +304,13 @@ async function savePersistedUser(user) {
 // ----------------------------------------------------
 // 1. CONFIGURATION ENDPOINTS (User-Isolated)
 // ----------------------------------------------------
-app.get('/api/config', async (req, res) => {
+app.get('/api/config', requireAuthenticated, async (req, res) => {
   const userId = await getUserIdFromReq(req);
   const cfg = await getPersistedConfig(userId);
   res.json(cfg);
 });
 
-app.post('/api/config', async (req, res) => {
+app.post('/api/config', requireAuthenticated, async (req, res) => {
   const userId = await getUserIdFromReq(req);
   const current = await getPersistedConfig(userId);
   const newConfig = { ...current, ...req.body };
@@ -223,6 +322,13 @@ app.post('/api/config', async (req, res) => {
 // 2. AUTHENTICATION & SESSION PERSISTENCE (FIREBASE AUTH & FIRESTORE)
 // ----------------------------------------------------
 app.post('/api/auth/register', async (req, res) => {
+  if (!isLocalDevSessionAllowed()) {
+    return res.status(403).json({
+      success: false,
+      message: 'Legacy backend registration is disabled in this environment. Use Firebase Authentication.'
+    });
+  }
+
   const { username, email, password, fullName } = req.body;
   if (!username || !email || !password) {
     return res.status(400).json({ success: false, message: 'Usuario, email y contraseña requeridos' });
@@ -348,6 +454,13 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
+  if (!isLocalDevSessionAllowed()) {
+    return res.status(403).json({
+      success: false,
+      message: 'Legacy sessionToken login is disabled in this environment. Use Firebase Authentication.'
+    });
+  }
+
   const { usernameOrEmail, password } = req.body;
   if (!usernameOrEmail || !password) {
     return res.status(400).json({ success: false, message: 'Credenciales incompletas' });
@@ -397,7 +510,7 @@ app.post('/api/auth/login', async (req, res) => {
 // ----------------------------------------------------
 // 3. MOTOR DE AUDITORÍA DE REGISTROS (FIREBASE AUTH VS FIRESTORE)
 // ----------------------------------------------------
-app.get('/api/auth/audit', async (req, res) => {
+app.get('/api/auth/audit', requireAdmin, async (req, res) => {
   try {
     const firestoreUsers = await getPersistedUsers();
     let authUsers = [];
@@ -477,7 +590,7 @@ app.get('/api/auth/audit', async (req, res) => {
 });
 
 // Reparar y migrar usuarios a Firebase Authentication
-app.post('/api/auth/audit-repair', async (req, res) => {
+app.post('/api/auth/audit-repair', requireAdmin, async (req, res) => {
   if (!authAdmin) {
     return res.status(503).json({ success: false, message: 'Firebase Admin Auth no disponible en este entorno' });
   }
@@ -531,16 +644,14 @@ app.post('/api/auth/audit-repair', async (req, res) => {
   }
 });
 
-app.get('/api/auth/me', async (req, res) => {
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-
-  if (!token) {
-    return res.status(401).json({ success: false, message: 'No autenticado' });
-  }
-
+app.get('/api/auth/me', requireAuthenticated, async (req, res) => {
+  const identity = req.minerxIdentity;
   const users = await getPersistedUsers();
-  const user = users.find(u => u.sessionToken === token);
+  const user = users.find((candidate) =>
+    candidate.id === identity.userId ||
+    candidate.firebaseAuthUid === identity.firebaseAuthUid ||
+    (identity.email && candidate.email?.toLowerCase() === identity.email.toLowerCase())
+  );
 
   if (!user) {
     return res.status(401).json({ success: false, message: 'Sesión expirada o inválida' });
@@ -555,7 +666,7 @@ app.get('/api/auth/me', async (req, res) => {
 // ----------------------------------------------------
 // 3. MINING CYCLES PERSISTENCE (User-Isolated)
 // ----------------------------------------------------
-app.get('/api/mining/cycles', async (req, res) => {
+app.get('/api/mining/cycles', requireAuthenticated, async (req, res) => {
   const userId = await getUserIdFromReq(req);
   const data = await getPersistedCycles(userId);
   res.json({
@@ -565,7 +676,7 @@ app.get('/api/mining/cycles', async (req, res) => {
   });
 });
 
-app.post('/api/mining/cycles/start', async (req, res) => {
+app.post('/api/mining/cycles/start', requireAuthenticated, async (req, res) => {
   const userId = await getUserIdFromReq(req);
   const { fleetGpuCount, totalHashrateTHs, hourlySaladCostUSD } = req.body;
   const cyclesData = await getPersistedCycles(userId);
@@ -592,7 +703,7 @@ app.post('/api/mining/cycles/start', async (req, res) => {
   res.json({ success: true, message: 'Nuevo ciclo de minado iniciado en base de datos', cycle: newCycle });
 });
 
-app.post('/api/mining/cycles/close', async (req, res) => {
+app.post('/api/mining/cycles/close', requireAuthenticated, async (req, res) => {
   const userId = await getUserIdFromReq(req);
   const { currentTotalAcceptedShares, averageHashrateTHs } = req.body;
   const cyclesData = await getPersistedCycles(userId);
@@ -640,7 +751,7 @@ app.post('/api/mining/cycles/close', async (req, res) => {
 // 4. SALADCLOUD CONTAINER ENGINE API ENDPOINTS
 // ----------------------------------------------------
 // 4a. Balance & Wallet
-app.get('/api/salad/balance', async (req, res) => {
+app.get('/api/salad/balance', requireAdmin, async (req, res) => {
   const userId = await getUserIdFromReq(req);
   const cfg = await getPersistedConfig(userId);
   const accounts = cfg.saladAccounts || [];
@@ -677,7 +788,7 @@ app.get('/api/salad/balance', async (req, res) => {
 });
 
 // 4b. Test Account Connection
-app.post('/api/salad/test-account', async (req, res) => {
+app.post('/api/salad/test-account', requireAdmin, async (req, res) => {
   try {
     const { organizationName, projectName, apiKey } = req.body;
     if (!apiKey) {
@@ -717,7 +828,7 @@ app.post('/api/salad/test-account', async (req, res) => {
 });
 
 // 4c. All Active Instances
-app.post('/api/salad/all-active', async (req, res) => {
+app.post('/api/salad/all-active', requireAdmin, async (req, res) => {
   try {
     const userId = await getUserIdFromReq(req);
     const cfg = await getPersistedConfig(userId);
@@ -774,7 +885,7 @@ app.post('/api/salad/all-active', async (req, res) => {
 });
 
 // 4d. Reallocate Instance (Move to new physical node)
-app.post('/api/salad/reallocate', async (req, res) => {
+app.post('/api/salad/reallocate', requireAdmin, async (req, res) => {
   try {
     const { organizationName, projectName, containerGroupName, instanceId, apiKey } = req.body;
     if (!organizationName || !containerGroupName || !instanceId || !apiKey) {
@@ -803,7 +914,7 @@ app.post('/api/salad/reallocate', async (req, res) => {
 });
 
 // 4e. Restart Instance (In-Place Fast Reboot)
-app.post('/api/salad/restart-instance', async (req, res) => {
+app.post('/api/salad/restart-instance', requireAdmin, async (req, res) => {
   try {
     const { organizationName, projectName, containerGroupName, instanceId, apiKey } = req.body;
     const org = encodeURIComponent(organizationName.trim());
@@ -828,7 +939,7 @@ app.post('/api/salad/restart-instance', async (req, res) => {
 });
 
 // 4f. Recreate Instance (Hard Container Reset)
-app.post('/api/salad/recreate-instance', async (req, res) => {
+app.post('/api/salad/recreate-instance', requireAdmin, async (req, res) => {
   try {
     const { organizationName, projectName, containerGroupName, instanceId, apiKey } = req.body;
     const org = encodeURIComponent(organizationName.trim());
@@ -853,7 +964,7 @@ app.post('/api/salad/recreate-instance', async (req, res) => {
 });
 
 // 4g. Salad Quotas & GPU Classes
-app.get('/api/salad/quotas', async (req, res) => {
+app.get('/api/salad/quotas', requireAdmin, async (req, res) => {
   try {
     const org = req.query.org || '';
     const apiKey = req.headers['salad-api-key'] || req.query.apiKey;
@@ -872,7 +983,7 @@ app.get('/api/salad/quotas', async (req, res) => {
 });
 
 // 4h. Salad GPU Classes
-app.get('/api/salad/gpu-classes', async (req, res) => {
+app.get('/api/salad/gpu-classes', requireAdmin, async (req, res) => {
   try {
     const org = req.query.org || '';
     const apiKey = req.headers['salad-api-key'] || req.query.apiKey;
@@ -891,7 +1002,7 @@ app.get('/api/salad/gpu-classes', async (req, res) => {
 });
 
 // 4i. Salad Container Group Control (Start, Stop, Scale)
-app.post('/api/salad/container-group/control', async (req, res) => {
+app.post('/api/salad/container-group/control', requireAdmin, async (req, res) => {
   try {
     const { organizationName, projectName, containerGroupName, action, replicas, apiKey } = req.body;
     const base = `https://api.salad.com/api/public/organizations/${encodeURIComponent(organizationName)}/projects/${encodeURIComponent(projectName)}/containers/${encodeURIComponent(containerGroupName)}`;
@@ -1007,7 +1118,7 @@ app.get('/api/kryptex/rates', async (_req, res) => {
 // ----------------------------------------------------
 // 6. TELEGRAM NOTIFICATIONS
 // ----------------------------------------------------
-app.post('/api/telegram/test', async (req, res) => {
+app.post('/api/telegram/test', requireAdmin, async (req, res) => {
   try {
     const userId = await getUserIdFromReq(req);
     const cfg = await getPersistedConfig(userId);
@@ -1048,7 +1159,7 @@ app.post('/api/telegram/test', async (req, res) => {
   }
 });
 
-app.post('/api/telegram/send-status', async (req, res) => {
+app.post('/api/telegram/send-status', requireAdmin, async (req, res) => {
   try {
     const userId = await getUserIdFromReq(req);
     const cfg = await getPersistedConfig(userId);
