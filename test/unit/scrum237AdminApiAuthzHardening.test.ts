@@ -59,6 +59,10 @@ import {
   getAuthenticatedUser,
   setUsersFilePath,
   writeUsers,
+  readContracts,
+  writeContracts,
+  readOrders,
+  writeOrders,
   type UserAccount,
 } from '../../server/server.js';
 import { firebaseAdminAuthAdapter } from '../../server/services/firebaseAdminAuthAdapter.js';
@@ -140,6 +144,8 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
   let tempDir: string;
   let tempUsersFile: string;
   let originalFetch: typeof globalThis.fetch;
+  let initialContractsBackup: any[];
+  let initialOrdersBackup: any[];
 
   const adminUidA = 'admin_uid_scrum237_A';
   const adminEmailA = 'adminA@minerx.cloud';
@@ -157,6 +163,10 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
   const invalidToken = 'bearer_mock_invalid_token';
 
   beforeEach(async () => {
+    // 0. Backup contracts and orders disk state for strict test isolation
+    initialContractsBackup = JSON.parse(JSON.stringify(readContracts()));
+    initialOrdersBackup = JSON.parse(JSON.stringify(readOrders()));
+
     // 1. Temporary users.json isolation
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scrum237-auth-'));
     tempUsersFile = path.join(tempDir, 'users.json');
@@ -261,7 +271,7 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
         });
       }
       if (urlStr.includes('vast.ai')) {
-        return new Response(JSON.stringify({ success: true, offers: [], user: { balance: 42.0 } }), {
+        return new Response(JSON.stringify({ success: true, balance: 42.0, user: { balance: 42.0 }, offers: [] }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
@@ -277,6 +287,10 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
   });
 
   afterEach(async () => {
+    // Restore contracts and orders disk state
+    if (initialContractsBackup) writeContracts(initialContractsBackup);
+    if (initialOrdersBackup) writeOrders(initialOrdersBackup);
+
     globalThis.fetch = originalFetch;
     setUsersFilePath(null);
     try {
@@ -720,6 +734,382 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
       const serverConfig = await verifyRes.json() as any;
       assert.equal(serverConfig.showPresale, false);
       assert.equal(serverConfig.updatedBy, adminUidA);
+    });
+  });
+
+  // ==========================================================================
+  // Section 9: AC6 & F3: Authorized Admin Operational Success Verification
+  // ==========================================================================
+  describe('AC6 & F3: Authorized Admin Operational Success Verification', () => {
+    // 1. Strategies Operational Action
+    it('allows authorized Admin to manage and create strategies (POST & GET /api/strategies)', async () => {
+      const stratId = `strat_success_${Date.now()}`;
+      const postRes = await fetch(`${baseUrl}/api/strategies`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminTokenA}`,
+        },
+        body: JSON.stringify({
+          id: stratId,
+          name: 'Authorized Strategy A',
+          type: 'threshold',
+          enabled: true,
+          config: { targetMargin: 0.25 },
+        }),
+      });
+      assert.equal(postRes.status, 200, 'Admin must be permitted to save strategy');
+      const postData = await postRes.json() as any;
+      assert.equal(postData.success, true);
+      assert.equal(postData.strategy.id, stratId);
+
+      const getRes = await fetch(`${baseUrl}/api/strategies`, {
+        headers: { Authorization: `Bearer ${adminTokenA}` },
+      });
+      assert.equal(getRes.status, 200);
+      const getData = await getRes.json() as any;
+      assert.equal(getData.success, true);
+      assert.ok(Array.isArray(getData.strategies));
+      assert.ok(getData.strategies.some((s: any) => s.id === stratId));
+    });
+
+    // 2. Vast.ai Operational Action
+    it('allows authorized Admin to execute Vast operational account check (POST /api/vast/test-account)', async () => {
+      const res = await fetch(`${baseUrl}/api/vast/test-account`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminTokenA}`,
+        },
+        body: JSON.stringify({ apiKey: 'vast_mock_api_key_valid' }),
+      });
+      assert.equal(res.status, 200, 'Admin must be permitted to test Vast account');
+      const data = await res.json() as any;
+      assert.equal(data.success, true);
+      assert.equal(data.user.balance, 42.0);
+
+      const instRes = await fetch(`${baseUrl}/api/vast/instances`, {
+        headers: { Authorization: `Bearer ${adminTokenA}` },
+      });
+      assert.equal(instRes.status, 200);
+      const instData = await instRes.json() as any;
+      assert.equal(instData.success, true);
+      assert.ok(Array.isArray(instData.instances));
+    });
+
+    // 3. SaladCloud Operational Action
+    it('allows authorized Admin to execute Salad container control action (POST /api/salad/container-group/control)', async () => {
+      const res = await fetch(`${baseUrl}/api/salad/container-group/control`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminTokenA}`,
+        },
+        body: JSON.stringify({
+          organizationName: 'test-org',
+          projectName: 'test-proj',
+          containerGroupName: 'test-grp',
+          action: 'start',
+          apiKey: 'salad_mock_key',
+        }),
+      });
+      assert.equal(res.status, 200, 'Admin must be permitted to start container group');
+      const data = await res.json() as any;
+      assert.equal(data.success, true);
+      assert.ok(data.message.includes('start'));
+
+      const testAccRes = await fetch(`${baseUrl}/api/salad/test-account`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminTokenA}`,
+        },
+        body: JSON.stringify({
+          organizationName: 'test-org',
+          apiKey: 'salad_mock_key',
+        }),
+      });
+      assert.equal(testAccRes.status, 200);
+      const testAccData = await testAccRes.json() as any;
+      assert.equal(testAccData.success, true);
+    });
+
+    // 4. Telegram Bot Operational Action
+    it('allows authorized Admin to trigger Telegram integration test (POST /api/telegram/test)', async () => {
+      const res = await fetch(`${baseUrl}/api/telegram/test`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminTokenA}`,
+        },
+        body: JSON.stringify({
+          token: 'mock_telegram_token',
+          chatId: '12345678',
+          customMessage: 'Admin authorized test message',
+        }),
+      });
+      assert.equal(res.status, 200, 'Admin must be permitted to send Telegram test message');
+      const data = await res.json() as any;
+      assert.equal(data.success, true);
+      assert.equal(data.telegramResult.message_id, 8888);
+    });
+
+    // 5. Fleet Autoscale Operational Action
+    it('allows authorized Admin to configure and read Fleet autoscale policy (POST & GET /api/fleet/autoscale)', async () => {
+      const postRes = await fetch(`${baseUrl}/api/fleet/autoscale`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminTokenA}`,
+        },
+        body: JSON.stringify({
+          enabled: true,
+          minInstances: 3,
+          maxInstances: 9,
+        }),
+      });
+      assert.equal(postRes.status, 200, 'Admin must be permitted to update fleet autoscale');
+      const postData = await postRes.json() as any;
+      assert.equal(postData.success, true);
+      assert.equal(postData.autoscaleConfig.enabled, true);
+      assert.equal(postData.autoscaleConfig.minInstances, 3);
+      assert.equal(postData.autoscaleConfig.maxInstances, 9);
+
+      const getRes = await fetch(`${baseUrl}/api/fleet/autoscale`, {
+        headers: { Authorization: `Bearer ${adminTokenA}` },
+      });
+      assert.equal(getRes.status, 200);
+      const getData = await getRes.json() as any;
+      assert.equal(getData.enabled, true);
+      assert.equal(getData.minInstances, 3);
+    });
+
+    // 6. Fintech Accounting Audit Read
+    it('allows authorized Admin to read Fintech accounting audit reconciliation (GET /api/fintech/audit)', async () => {
+      const res = await fetch(`${baseUrl}/api/fintech/audit`, {
+        headers: { Authorization: `Bearer ${adminTokenA}` },
+      });
+      assert.equal(res.status, 200, 'Admin must be permitted to read fintech audit');
+      const data = await res.json() as any;
+      assert.ok(typeof data === 'object');
+      assert.ok(typeof data.capitalBolsilloUSD === 'number');
+      assert.ok(typeof data.efectivoCobradoUSD === 'number');
+      assert.ok(data.rutas && typeof data.rutas === 'object');
+    });
+  });
+
+  // ==========================================================================
+  // Section 10: AC4 & F1: Existing Order Settlement Adversarial Barrier
+  // ==========================================================================
+  describe('AC4 & F1: Existing Order Settlement Adversarial Barrier', () => {
+    it('blocks transition to SETTLED when client sends status: SETTLED for an existing unsettled order', async () => {
+      const orderId = `ord_exist_pending_${Date.now()}`;
+
+      // 1. Create a legitimate pending order
+      const createRes = await fetch(`${baseUrl}/api/admin/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminTokenA}`,
+        },
+        body: JSON.stringify({
+          orderId,
+          packageId: 'pkg_miner_standard',
+          amount: 750,
+          status: 'PENDING',
+        }),
+      });
+      assert.equal(createRes.status, 200);
+      const createData = await createRes.json() as any;
+      assert.equal(createData.order.status, 'PENDING');
+
+      // 2. Adversarial update: attempt to force transition to SETTLED
+      const updateRes = await fetch(`${baseUrl}/api/admin/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminTokenA}`,
+        },
+        body: JSON.stringify({
+          orderId,
+          status: 'SETTLED', // Malicious attempt to force settlement
+          notes: 'Client attempted settlement transition',
+        }),
+      });
+      assert.equal(updateRes.status, 200);
+      const updateData = await updateRes.json() as any;
+      assert.notEqual(
+        updateData.order.status,
+        'SETTLED',
+        'Existing unsettled order must NOT transition to SETTLED via body.status'
+      );
+      assert.equal(updateData.order.status, 'PENDING');
+      assert.equal(updateData.order.notes, 'Client attempted settlement transition');
+
+      // 3. Verify disk persistence integrity
+      const persisted = readOrders().find((o: any) => o.orderId === orderId);
+      assert.ok(persisted, 'Order must exist in persistence');
+      assert.equal(persisted.status, 'PENDING');
+    });
+
+    it('preserves existing legitimate SETTLED status when administrative updates modify other fields', async () => {
+      const orderId = `ord_exist_settled_${Date.now()}`;
+
+      // 1. Pre-seed a legitimately settled order directly into storage
+      const orders = readOrders();
+      orders.unshift({
+        orderId,
+        packageId: 'pkg_settled_vip',
+        amount: 2500,
+        status: 'SETTLED',
+        createdAt: new Date().toISOString(),
+        settledAt: new Date().toISOString(),
+      });
+      writeOrders(orders);
+
+      // 2. Admin updates auxiliary fields (e.g. notes, tracking ID)
+      const updateRes = await fetch(`${baseUrl}/api/admin/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminTokenA}`,
+        },
+        body: JSON.stringify({
+          orderId,
+          notes: 'Administrative tracking: invoice mailed',
+          trackingNumber: 'TRACK-998877',
+        }),
+      });
+      assert.equal(updateRes.status, 200);
+      const updateData = await updateRes.json() as any;
+      assert.equal(
+        updateData.order.status,
+        'SETTLED',
+        'Pre-existing SETTLED status must be preserved and never reset or corrupted'
+      );
+      assert.equal(updateData.order.notes, 'Administrative tracking: invoice mailed');
+      assert.equal(updateData.order.trackingNumber, 'TRACK-998877');
+
+      // 3. Verify disk persistence preserves SETTLED
+      const persisted = readOrders().find((o: any) => o.orderId === orderId);
+      assert.ok(persisted);
+      assert.equal(persisted.status, 'SETTLED');
+    });
+  });
+
+  // ==========================================================================
+  // Section 11: AC2, §28 & F2: Contract & Order Authority Spoofing Immunity
+  // ==========================================================================
+  describe('AC2, §28 & F2: Contract & Order Authority Spoofing Immunity', () => {
+    it('strips authority metadata and derives updatedBy from admin.id when creating a contract (POST /api/admin/contracts)', async () => {
+      const contractId = `cnt_spoof_new_${Date.now()}`;
+      const res = await fetch(`${baseUrl}/api/admin/contracts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminTokenA}`,
+        },
+        body: JSON.stringify({
+          id: contractId,
+          minerModel: 'Antminer S19 Pro+ Hyd',
+          hashrateTH: 198,
+          userId: 'attacker_target_user',
+          updatedBy: 'spoofed_root_admin',
+          role: 'superadmin',
+          adminId: 'hacker_admin_id',
+        }),
+      });
+      assert.equal(res.status, 200);
+      const data = await res.json() as any;
+      assert.equal(data.success, true);
+      assert.equal(data.contract.updatedBy, adminUidA, 'Returned contract updatedBy must derive from admin.id');
+      assert.equal(data.contract.role, undefined, 'Returned contract must not have role');
+      assert.equal(data.contract.adminId, undefined, 'Returned contract must not have adminId');
+      assert.equal(data.contract.userId, undefined, 'Returned contract must not have userId');
+
+      // Verify stored contract
+      const contracts = readContracts();
+      const stored = contracts.find((c: any) => c.id === contractId);
+      assert.ok(stored, 'Contract must be persisted');
+      assert.equal(stored.updatedBy, adminUidA, 'updatedBy must strictly derive from authenticated admin.id');
+      assert.equal(stored.role, undefined, 'Client-supplied role must be stripped from stored contract');
+      assert.equal(stored.adminId, undefined, 'Client-supplied adminId must be stripped from stored contract');
+      assert.equal(stored.userId, undefined, 'Client-supplied userId must be stripped from stored contract');
+      assert.equal(stored.minerModel, 'Antminer S19 Pro+ Hyd');
+    });
+
+    it('strips authority metadata and updates updatedBy to admin.id when updating an existing contract', async () => {
+      const contractId = `cnt_spoof_exist_${Date.now()}`;
+      // 1. Seed contract created by Admin B
+      const contracts = readContracts();
+      contracts.unshift({
+        id: contractId,
+        minerModel: 'WhatsMiner M30S',
+        status: 'ACTIVE',
+        updatedBy: adminUidB,
+        createdAt: new Date().toISOString(),
+      });
+      writeContracts(contracts);
+
+      // 2. Admin A updates contract with spoofed body authority fields
+      const res = await fetch(`${baseUrl}/api/admin/contracts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminTokenA}`,
+        },
+        body: JSON.stringify({
+          id: contractId,
+          minerModel: 'WhatsMiner M30S++',
+          updatedBy: 'forged_identity',
+          role: 'god_mode',
+          adminId: 'injected_admin_id',
+          userId: 'injected_user_id',
+        }),
+      });
+      assert.equal(res.status, 200);
+      const data = await res.json() as any;
+      assert.equal(data.contract.updatedBy, adminUidA);
+      assert.equal(data.contract.role, undefined);
+
+      // 3. Verify stored contract has updatedBy = adminUidA and no spoofed fields
+      const stored = readContracts().find((c: any) => c.id === contractId);
+      assert.ok(stored);
+      assert.equal(stored.updatedBy, adminUidA, 'updatedBy must be overwritten with current authenticated admin.id');
+      assert.equal(stored.role, undefined);
+      assert.equal(stored.adminId, undefined);
+      assert.equal(stored.userId, undefined);
+      assert.equal(stored.minerModel, 'WhatsMiner M30S++');
+    });
+
+    it('strips authority metadata and derives updatedBy from admin.id for order creation and updates (POST /api/admin/orders)', async () => {
+      const orderId = `ord_spoof_auth_${Date.now()}`;
+      const res = await fetch(`${baseUrl}/api/admin/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminTokenA}`,
+        },
+        body: JSON.stringify({
+          orderId,
+          packageId: 'pkg_cloud_gpu',
+          amount: 1500,
+          updatedBy: 'spoofed_operator',
+          role: 'admin_override',
+          adminId: 'fake_admin_999',
+        }),
+      });
+      assert.equal(res.status, 200);
+      const data = await res.json() as any;
+      assert.equal(data.order.updatedBy, adminUidA);
+      assert.equal(data.order.role, undefined);
+      assert.equal(data.order.adminId, undefined);
+
+      const stored = readOrders().find((o: any) => o.orderId === orderId);
+      assert.ok(stored, 'Order must be persisted');
+      assert.equal(stored.updatedBy, adminUidA, 'Order updatedBy must derive from admin.id');
+      assert.equal(stored.role, undefined, 'Spoofed role must be stripped from order');
+      assert.equal(stored.adminId, undefined, 'Spoofed adminId must be stripped from order');
     });
   });
 });

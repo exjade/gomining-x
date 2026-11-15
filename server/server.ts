@@ -608,11 +608,16 @@ app.get('/api/config', async (req, res) => {
 app.post('/api/config', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
-  const newConfig = req.body;
-  if (newConfig.vastConfig?.apiKey && !newConfig.vastConfig.apiKey.includes('...')) {
-    vastClient.setApiKey(newConfig.vastConfig.apiKey);
+  const { userId: _u, updatedBy: _ub, role: _r, adminId: _a, ...safeConfig } = req.body || {};
+  if (safeConfig.vastConfig?.apiKey && !safeConfig.vastConfig.apiKey.includes('...')) {
+    vastClient.setApiKey(safeConfig.vastConfig.apiKey);
   }
-  writeConfig(newConfig, admin.id);
+  const configToSave = {
+    ...safeConfig,
+    updatedBy: admin.id,
+    updatedAt: new Date().toISOString()
+  };
+  writeConfig(configToSave, admin.id);
   res.json({ success: true, message: 'Configuración guardada para tu usuario', userId: admin.id });
 });
 
@@ -768,9 +773,9 @@ app.post(['/api/packages', '/api/commercial-packages'], async (req, res) => {
   if (!admin) return;
   res.setHeader('X-Catalog-Legacy', 'true');
   res.setHeader('X-Catalog-Notice', 'Legacy package endpoint. Canonical catalog uses /api/catalog/packages');
-  const pkg = req.body;
+  const { updatedBy: _u, role: _r, adminId: _a, userId: _user, ...safePkg } = req.body || {};
   const packages = readPackages();
-  const packageId = pkg?.packageId || pkg?.id;
+  const packageId = safePkg?.packageId || safePkg?.id;
   const existingIdx = packageId ? packages.findIndex((p: any) => p.id === packageId || p.packageId === packageId) : -1;
   const existingPkg = existingIdx >= 0 ? packages[existingIdx] : undefined;
 
@@ -781,19 +786,21 @@ app.post(['/api/packages', '/api/commercial-packages'], async (req, res) => {
     const nextVersion = (Number(existingPkg.version) || 1) + 1;
     saved = {
       ...existingPkg,
-      ...pkg,
+      ...safePkg,
       id: existingPkg.id,
       version: nextVersion,
+      updatedBy: admin.id,
       updatedAt: now
     };
     packages[existingIdx] = saved;
   } else {
     const newId = packageId || `pkg-${Date.now()}`;
     saved = {
-      ...pkg,
+      ...safePkg,
       id: newId,
       version: 1,
       isLegacy: true,
+      updatedBy: admin.id,
       createdAt: now,
       updatedAt: now
     };
@@ -816,22 +823,39 @@ app.post('/api/admin/contracts', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
   const contract = req.body;
-  if (!contract || !contract.id) {
+  if (!contract || typeof contract !== 'object' || !contract.id) {
     return res.status(400).json({ error: 'ID de contrato requerido' });
   }
+
+  // Strip client authority metadata
+  const { updatedBy: _u, role: _r, adminId: _a, userId: _user, ...safeContract } = contract;
+  const now = new Date().toISOString();
   const contracts = readContracts();
-  const idx = contracts.findIndex(c => c.id === contract.id);
+  const idx = contracts.findIndex(c => c.id === safeContract.id);
+  let savedContract: any;
+
   if (idx >= 0) {
-    contracts[idx] = { ...contracts[idx], ...contract, updatedAt: new Date().toISOString() };
+    savedContract = {
+      ...contracts[idx],
+      ...safeContract,
+      id: contracts[idx].id,
+      updatedBy: admin.id,
+      updatedAt: now
+    };
+    contracts[idx] = savedContract;
   } else {
-    contracts.unshift({
-      ...contract,
-      status: contract.status || 'ACTIVE',
-      createdAt: contract.createdAt || new Date().toISOString()
-    });
+    savedContract = {
+      ...safeContract,
+      id: safeContract.id,
+      status: safeContract.status || 'ACTIVE',
+      updatedBy: admin.id,
+      createdAt: safeContract.createdAt || now,
+      updatedAt: now
+    };
+    contracts.unshift(savedContract);
   }
   writeContracts(contracts);
-  res.json({ success: true, contract });
+  res.json({ success: true, contract: savedContract });
 });
 
 // 2c. Admin Package Orders & Payments Endpoints
@@ -846,21 +870,49 @@ app.post('/api/admin/orders', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
   const order = req.body;
-  if (!order || !order.orderId) {
+  if (!order || typeof order !== 'object' || !order.orderId) {
     return res.status(400).json({ error: 'orderId requerido' });
   }
+
+  // Strip client authority metadata
+  const { updatedBy: _u, role: _r, adminId: _a, ...safeOrder } = order;
+  const now = new Date().toISOString();
   const orders = readOrders();
-  const idx = orders.findIndex(o => o.orderId === order.orderId);
+  const idx = orders.findIndex(o => o.orderId === safeOrder.orderId);
+
   if (idx >= 0) {
-    orders[idx] = { ...orders[idx], ...order, updatedAt: new Date().toISOString() };
+    const existing = orders[idx];
+    // FINDING_F1: Ordinary POST must NOT create a new settlement transition.
+    // Preserve existing legitimate settled state if already SETTLED;
+    // otherwise reject new transition to SETTLED and keep existing status.
+    let targetStatus: string;
+    if (existing.status === 'SETTLED') {
+      targetStatus = 'SETTLED';
+    } else if (safeOrder.status && safeOrder.status !== 'SETTLED') {
+      targetStatus = safeOrder.status;
+    } else {
+      targetStatus = existing.status || 'PENDING';
+    }
+
+    orders[idx] = {
+      ...existing,
+      ...safeOrder,
+      orderId: existing.orderId,
+      status: targetStatus,
+      updatedBy: admin.id,
+      updatedAt: now
+    };
     writeOrders(orders);
     res.json({ success: true, order: orders[idx] });
   } else {
-    const initialStatus = (order.status && order.status !== 'SETTLED') ? order.status : 'PENDING';
+    const initialStatus = (safeOrder.status && safeOrder.status !== 'SETTLED') ? safeOrder.status : 'PENDING';
     const newOrder = {
-      ...order,
+      ...safeOrder,
+      orderId: safeOrder.orderId,
       status: initialStatus,
-      createdAt: order.createdAt || new Date().toISOString()
+      updatedBy: admin.id,
+      createdAt: safeOrder.createdAt || now,
+      updatedAt: now
     };
     orders.unshift(newOrder);
     writeOrders(orders);
@@ -878,12 +930,16 @@ app.post('/api/admin/storefront-sections', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
   const current = readStorefrontSections();
+  const { updatedBy: _u, role: _r, adminId: _a, userId: _user, ...safeBody } = req.body || {};
   const updated = {
     ...current,
-    ...req.body,
+    ...safeBody,
     updatedBy: admin.id,
     updatedAt: new Date().toISOString()
   };
+  delete (updated as any).role;
+  delete (updated as any).adminId;
+  delete (updated as any).userId;
   writeStorefrontSections(updated);
   res.json({ success: true, config: updated });
 });
@@ -2162,7 +2218,16 @@ app.get('/api/fleet/autoscale', async (req, res) => {
 app.post('/api/fleet/autoscale', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
-  autoscaleConfig = { ...autoscaleConfig, ...req.body, lastActionTime: new Date().toLocaleTimeString() };
+  const { updatedBy: _u, role: _r, adminId: _a, userId: _user, ...safeBody } = req.body || {};
+  autoscaleConfig = {
+    ...autoscaleConfig,
+    ...safeBody,
+    updatedBy: admin.id,
+    lastActionTime: new Date().toLocaleTimeString()
+  };
+  delete (autoscaleConfig as any).role;
+  delete (autoscaleConfig as any).adminId;
+  delete (autoscaleConfig as any).userId;
   res.json({ success: true, autoscaleConfig });
 });
 
