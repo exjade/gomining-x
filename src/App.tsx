@@ -10,6 +10,8 @@ import { useWalletSession, type WalletId } from './walletSession'
 import { useDemoFirestorePersistence } from './firestoreDemoSync'
 import { WalletPaymentCheckout, initialWallet, networkForConnection, networks, walletOptions, type PaymentReceipt } from './WalletPaymentCheckout'
 import { MinerCustomizer } from './MinerCustomizer'
+import { MinerFarm } from './nft-miners/MinerFarm'
+import { DEV_PARITY_UID, getDevParityMiners } from './nft-miners/dev-parity-miners'
 import { CryptoIcon } from './CryptoIcon'
 import { isPaymentNetworkId, type PaymentNetworkId } from './paymentDestinations'
 import { AppRouteSkeleton, MetricValueSkeleton, PoolTableSkeleton, Skeleton, WalletIdentitySkeleton } from './Skeletons'
@@ -1317,7 +1319,18 @@ function CatalogPanel({ screen, pathname, openAction, addProduct }: { screen: Sc
   )
 }
 
-function MinerPanel({ openMinerBuilder, openTopUp }: { openMinerBuilder: () => void; openTopUp: () => void }) {
+function MinerPanel(props: { openMinerBuilder: () => void; openTopUp: () => void }) {
+  const location = useLocation()
+  const { user } = useAuth()
+  const parityMiners = !user || user.isAnonymous ? getDevParityMiners(location.search) : null
+  return user && !user.isAnonymous
+    ? <MinerFarm uid={user.uid} openMinerBuilder={props.openMinerBuilder} />
+    : parityMiners !== null
+      ? <MinerFarm uid={DEV_PARITY_UID} minersOverride={parityMiners} openMinerBuilder={props.openMinerBuilder} />
+    : <LegacyMinerPanel {...props} />
+}
+
+function LegacyMinerPanel({ openMinerBuilder, openTopUp }: { openMinerBuilder: () => void; openTopUp: () => void }) {
   const { user } = useAuth()
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [applied, setApplied] = useState(false)

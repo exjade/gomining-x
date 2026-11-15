@@ -122,3 +122,29 @@ test('SCRUM-240 real customizer has no prohibited synthetic miner fallbacks', ()
   const source = readFileSync(resolve('src/nft-miners/MinerCustomizer.tsx'), 'utf8')
   assert.doesNotMatch(source, /demo\.miners\[0\]|bonus-miner-default|pkg-\$\{minerId\}/)
 })
+
+test('SCRUM-240 authenticated farm uses real IDs and preserves demo-only fixture isolation', () => {
+  const farm = readFileSync(resolve('src/nft-miners/MinerFarm.tsx'), 'utf8')
+  const app = readFileSync(resolve('src/App.tsx'), 'utf8')
+  const parity = readFileSync(resolve('src/nft-miners/dev-parity-miners.ts'), 'utf8')
+
+  assert.match(farm, /useRealtimeUserMiners\(minersOverride \? undefined : uid\)/)
+  assert.match(farm, /to=\{`\/nft-miners\/\$\{encodeURIComponent\(miner\.id\)\}`\}/)
+  assert.match(farm, /data-miner-id=\{miner\.id\}/)
+  assert.doesNotMatch(farm, /demo\.miners|demo\.balance|LOCAL_BALANCE/)
+  assert.match(app, /<MinerFarm uid=\{user\.uid\}/)
+  assert.match(parity, /import\.meta\.env\.DEV/)
+  assert.match(parity, /parityFixture/)
+  assert.notEqual('5422372', 'minerx-01')
+})
+
+test('SCRUM-240 parity fixture is explicit and cannot become a real-miner fallback', () => {
+  const fixture = readFileSync(resolve('src/nft-miners/dev-parity-miners.ts'), 'utf8')
+  const customizer = readFileSync(resolve('src/nft-miners/MinerCustomizer.tsx'), 'utf8')
+
+  assert.match(fixture, /DEV_PARITY_UID/)
+  assert.match(fixture, /new URLSearchParams\(search\)\.get\('parityFixture'\)/)
+  assert.match(customizer, /getDevParityMiner\(location\.search, minerId\)/)
+  assert.match(customizer, /parityMiner[\r\n]+\s+\? async/)
+  assert.doesNotMatch(customizer, /saveOwnedMinerAppearance\(DEV_PARITY_UID/)
+})

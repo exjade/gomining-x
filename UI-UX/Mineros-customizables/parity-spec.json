@@ -1,0 +1,1053 @@
+{
+  "version": 1,
+  "routePrefix": "/nft-miners",
+  "portRange": [
+    5190,
+    5199
+  ],
+  "pixelChannelTolerance": 2,
+  "thresholds": {
+    "maxMismatchPercent": 0.5,
+    "maxGeometryDifferenceCssPx": 1,
+    "maxMeanDeltaE": 2
+  },
+  "scenarios": [
+    {
+      "id": "farm-zero",
+      "reference": null,
+      "referenceNote": "No supplied capture shows the zero-miner state.",
+      "route": "/nft-miners",
+      "readySelectors": [
+        ".pwm-mining-farm",
+        ".pwm-farm-empty"
+      ],
+      "fixture": "zero",
+      "viewport": {
+        "width": 1280,
+        "height": 900,
+        "deviceScaleFactor": 1
+      },
+      "state": {
+        "tab": null,
+        "page": null,
+        "modal": null
+      },
+      "roi": null,
+      "masks": [],
+      "geometrySelectors": [
+        ".pwm-mining-farm",
+        ".pwm-farm-empty"
+      ]
+    },
+    {
+      "id": "farm-saved",
+      "reference": "Screenshot_1.png",
+      "physicalDimensions": {
+        "width": 1413,
+        "height": 684
+      },
+      "route": "/nft-miners",
+      "readySelectors": [
+        ".pwm-mining-farm",
+        ".pwm-farm-banner",
+        ".pwm-miner-tile"
+      ],
+      "fixture": "saved",
+      "viewport": {
+        "width": 1413,
+        "height": 684,
+        "deviceScaleFactor": 1
+      },
+      "state": {
+        "tab": null,
+        "page": null,
+        "modal": null
+      },
+      "roi": {
+        "x": 104,
+        "y": 43,
+        "width": 1208,
+        "height": 611
+      },
+      "masks": [],
+      "colorSamples": [
+        {
+          "id": "farm-card-background",
+          "rect": {
+            "x": 110,
+            "y": 50,
+            "width": 70,
+            "height": 12
+          }
+        },
+        {
+          "id": "farm-page-background",
+          "rect": {
+            "x": 500,
+            "y": 490,
+            "width": 40,
+            "height": 20
+          }
+        }
+      ],
+      "geometrySelectors": [
+        ".pwm-mining-farm",
+        ".pwm-farm-banner",
+        ".pwm-miner-tile"
+      ],
+      "expectedGeometry": {
+        ".pwm-mining-farm": {
+          "x": 104,
+          "y": 43,
+          "width": 1208,
+          "height": 219
+        },
+        ".pwm-farm-banner": {
+          "x": 104,
+          "y": 278,
+          "width": 1208,
+          "height": 74
+        },
+        ".pwm-miner-tile": {
+          "x": 104,
+          "y": 424,
+          "width": 229,
+          "height": 229
+        }
+      },
+      "subregions": [
+        {
+          "id": "farm-page",
+          "selector": ".pwm-miner-page-stack",
+          "classification": "comparable",
+          "reason": "Measured route-local content wrapper."
+        },
+        {
+          "id": "farm-panel",
+          "selector": ".pwm-mining-farm",
+          "classification": "comparable",
+          "reason": "The reference visibly shows this panel and its metrics."
+        },
+        {
+          "id": "farm-header",
+          "selector": ".pwm-farm-header",
+          "classification": "comparable",
+          "reason": "The reference visibly shows the farm title and controls."
+        },
+        {
+          "id": "farm-metrics",
+          "selector": ".pwm-farm-metrics",
+          "classification": "comparable",
+          "reason": "The reference visibly shows the four metric cards."
+        },
+        {
+          "id": "farm-metric-miners",
+          "selector": ".pwm-farm-metric:nth-child(1)",
+          "classification": "comparable",
+          "reason": "Miner count, icon, and control are visible in the supplied farm reference."
+        },
+        {
+          "id": "farm-metric-power",
+          "selector": ".pwm-farm-metric:nth-child(2)",
+          "classification": "comparable",
+          "reason": "The power value and icon are visible in the supplied farm reference."
+        },
+        {
+          "id": "farm-metric-efficiency",
+          "selector": ".pwm-farm-metric:nth-child(3)",
+          "classification": "comparable",
+          "reason": "The efficiency value and icon are visible in the supplied farm reference."
+        },
+        {
+          "id": "farm-metric-discount-value",
+          "selector": ".pwm-farm-metric:nth-child(4) span:nth-child(2) strong",
+          "classification": "BLOCKED_EVIDENCE",
+          "reason": "The local miner data does not provide the 1.09% discount shown in the reference; no business percentage is inferred."
+        },
+        {
+          "id": "farm-banner",
+          "selector": ".pwm-farm-banner",
+          "classification": "comparable",
+          "reason": "The reference visibly shows the service-data banner."
+        },
+        {
+          "id": "farm-miners-heading",
+          "selector": ".pwm-farm-miners-heading",
+          "classification": "comparable",
+          "reason": "The reference visibly shows the miner count and tools."
+        },
+        {
+          "id": "farm-miner-tile",
+          "selector": ".pwm-miner-tile",
+          "classification": "comparable",
+          "reason": "The supplied saved-miner reference provides this tile."
+        },
+        {
+          "id": "farm-tile-art",
+          "selector": ".pwm-miner-tile .pwm-miner-reference-art",
+          "classification": "comparable",
+          "reason": "The bonus miner artwork is an authentic local source asset and can be measured independently from tile chrome."
+        },
+        {
+          "id": "farm-tile-power-badge",
+          "selector": ".pwm-miner-tile .pwm-miner-metric",
+          "classification": "comparable",
+          "reason": "The power badge and value are visible in the supplied farm reference."
+        },
+        {
+          "id": "farm-tile-efficiency-badge",
+          "selector": ".pwm-miner-tile .pwm-miner-efficiency",
+          "classification": "comparable",
+          "reason": "The efficiency badge and value are visible in the supplied farm reference."
+        },
+        {
+          "id": "farm-tile-caption",
+          "selector": ".pwm-miner-tile .pwm-miner-card-caption",
+          "classification": "comparable",
+          "reason": "Miner number, name, and caption shading are visible in the supplied farm reference."
+        },
+        {
+          "id": "farm-tile-miner-id",
+          "selector": ".pwm-miner-tile .pwm-miner-card-caption strong",
+          "classification": "comparable",
+          "reason": "The miner identifier text is visible in the supplied farm reference."
+        },
+        {
+          "id": "farm-tile-miner-name",
+          "selector": ".pwm-miner-tile .pwm-miner-card-caption span",
+          "classification": "comparable",
+          "reason": "The miner name text is visible in the supplied farm reference."
+        }
+      ],
+      "anchor": {
+        "selector": ".pwm-miner-page-stack",
+        "reference": {
+          "x": 104,
+          "y": 43
+        }
+      }
+    },
+    {
+      "id": "detail-tasks",
+      "reference": "app.gomining.com_bonus-miner-v3.png",
+      "physicalDimensions": {
+        "width": 3678,
+        "height": 3654
+      },
+      "route": "/nft-miners/5422372",
+      "readySelectors": [
+        ".pwm-detail-flow"
+      ],
+      "fixture": "empty",
+      "viewport": {
+        "width": 1839,
+        "height": 1827,
+        "deviceScaleFactor": 2
+      },
+      "state": {
+        "tab": "tasks",
+        "page": null,
+        "modal": null
+      },
+      "roi": {
+        "x": 315,
+        "y": 140,
+        "width": 1208,
+        "height": 1245
+      },
+      "masks": [],
+      "colorSamples": [
+        {
+          "id": "detail-route-background",
+          "rect": {
+            "x": 813,
+            "y": 490,
+            "width": 6,
+            "height": 20
+          }
+        }
+      ],
+      "geometrySelectors": [
+        ".pwm-detail-art-panel",
+        ".pwm-miner-stats",
+        ".pwm-detail-content-card"
+      ],
+      "expectedGeometry": {
+        ".pwm-detail-art-panel": {
+          "x": 315,
+          "y": 140,
+          "width": 495,
+          "height": 650
+        },
+        ".pwm-detail-content-card": {
+          "x": 826,
+          "y": 282,
+          "width": 700,
+          "height": 1095
+        }
+      },
+      "subregions": [
+        {
+          "id": "detail-layout",
+          "selector": ".pwm-miner-detail-layout",
+          "classification": "comparable",
+          "reason": "Measured detail layout from the supplied miner reference."
+        },
+        {
+          "id": "detail-art-panel",
+          "selector": ".pwm-detail-art-panel",
+          "classification": "comparable",
+          "reason": "The supplied reference shows the miner art and action panel."
+        },
+        {
+          "id": "detail-art",
+          "selector": ".pwm-detail-art-panel > .pwm-miner-visual",
+          "classification": "comparable",
+          "reason": "The miner artwork is available as an authentic local source asset."
+        },
+        {
+          "id": "detail-actions",
+          "selector": ".pwm-detail-art-actions",
+          "classification": "comparable",
+          "reason": "The supplied reference shows the Customize and promo-code controls."
+        },
+        {
+          "id": "detail-stats",
+          "selector": ".pwm-miner-stats",
+          "classification": "comparable",
+          "reason": "The supplied reference shows power and efficiency cards."
+        },
+        {
+          "id": "detail-card",
+          "selector": ".pwm-detail-content-card",
+          "classification": "comparable",
+          "reason": "The supplied reference shows the detail card and tab structure."
+        },
+        {
+          "id": "detail-tabs",
+          "selector": ".pwm-detail-tabs",
+          "classification": "comparable",
+          "reason": "The four detail tabs are visible in the supplied reference."
+        },
+        {
+          "id": "task-status-tabs",
+          "selector": ".pwm-task-status-tabs",
+          "classification": "comparable",
+          "reason": "Active and Not active controls are visible in the supplied reference."
+        },
+        {
+          "id": "task-levels",
+          "selector": ".pwm-task-level",
+          "classification": "comparable",
+          "reason": "The reference visibly shows three level sections."
+        },
+        {
+          "id": "task-level-locks",
+          "selector": ".pwm-task-level-lock-region",
+          "classification": "BLOCKED_EVIDENCE",
+          "reason": "The reference shows locked level badges, but their local unlock rules and metadata are unresolved."
+        },
+        {
+          "id": "task-cards",
+          "selector": ".pwm-task-placeholder-card",
+          "classification": "comparable",
+          "reason": "The reference visibly shows four task-card positions."
+        },
+        {
+          "id": "unknown-task-values",
+          "selector": ".pwm-task-neutral-data",
+          "classification": "BLOCKED_EVIDENCE",
+          "reason": "Task names, dates, requirements, progress and rewards cannot be applied to every miner without product data; neutral placeholders are shown."
+        }
+      ],
+      "anchor": {
+        "selector": ".pwm-miner-detail-layout",
+        "reference": {
+          "x": 315,
+          "y": 140
+        }
+      }
+    },
+    {
+      "id": "detail-appearance",
+      "reference": null,
+      "referenceNote": "The supplied detail capture shows Tasks selected, not Appearance.",
+      "route": "/nft-miners/5422372",
+      "readySelectors": [
+        ".pwm-detail-flow"
+      ],
+      "fixture": "empty",
+      "viewport": {
+        "width": 1280,
+        "height": 900,
+        "deviceScaleFactor": 1
+      },
+      "state": {
+        "tab": "appearance",
+        "page": null,
+        "modal": null
+      },
+      "roi": null,
+      "masks": [],
+      "geometrySelectors": [
+        ".pwm-detail-art-panel",
+        ".pwm-miner-stats",
+        ".pwm-detail-content-card"
+      ]
+    },
+    {
+      "id": "customizer-wall",
+      "reference": "app.gomining.com_bonus-miner-v3_customize.png",
+      "physicalDimensions": {
+        "width": 3678,
+        "height": 3294
+      },
+      "route": "/nft-miners/5422372/customize",
+      "readySelectors": [
+        ".pwm-customizer-flow",
+        "#pwm-customizer-options"
+      ],
+      "fixture": "saved",
+      "viewport": {
+        "width": 1839,
+        "height": 1647,
+        "deviceScaleFactor": 2
+      },
+      "state": {
+        "tab": "wall",
+        "page": 1,
+        "modal": null
+      },
+      "roi": {
+        "x": 620,
+        "y": 149,
+        "width": 600,
+        "height": 1037
+      },
+      "masks": [],
+      "colorSamples": [
+        {
+          "id": "customizer-panel-background",
+          "rect": {
+            "x": 624,
+            "y": 752,
+            "width": 16,
+            "height": 6
+          }
+        }
+      ],
+      "geometrySelectors": [
+        ".pwm-customizer-column",
+        ".pwm-miner-visual",
+        ".pwm-customizer-card",
+        ".pwm-customizer-tabs",
+        ".pwm-option-cell",
+        ".pwm-pagination"
+      ],
+      "expectedGeometry": {
+        ".pwm-customizer-column": {
+          "x": 620,
+          "y": 149,
+          "width": 600,
+          "height": 1035
+        },
+        ".pwm-miner-visual": {
+          "x": 620,
+          "y": 149,
+          "width": 600,
+          "height": 600
+        },
+        ".pwm-customizer-card": {
+          "x": 620,
+          "y": 749,
+          "width": 600,
+          "height": 435
+        },
+        ".pwm-option-cell": {
+          "x": 643,
+          "y": 827,
+          "width": 89,
+          "height": 89
+        }
+      },
+      "subregions": [
+        {
+          "id": "customizer-column",
+          "selector": ".pwm-customizer-column",
+          "classification": "comparable",
+          "reason": "Measured outer customization geometry."
+        },
+        {
+          "id": "preview-art",
+          "selector": ".pwm-customizer-column > .pwm-miner-visual",
+          "classification": "comparable",
+          "reason": "The supplied reference artwork is available as an authentic local source asset."
+        },
+        {
+          "id": "customizer-tabs",
+          "selector": ".pwm-customizer-tabs",
+          "classification": "comparable",
+          "reason": "The category tabs and selection underline are visible in the supplied reference."
+        },
+        {
+          "id": "grid-chrome",
+          "selector": ".pwm-option-grid",
+          "classification": "comparable",
+          "reason": "The 6 by 3 arrangement and option borders are visible in the supplied reference."
+        },
+        {
+          "id": "missing-option-interiors",
+          "selector": ".pwm-option-evidence-interior",
+          "comparisonOutsetCssPx": 5,
+          "classification": "BLOCKED_ASSETS",
+          "reason": "Authentic option artwork is absent for these evidence-only positions; no trait data is inferred."
+        },
+        {
+          "id": "wall-mapped-swatch-art",
+          "selector": ".pwm-option-source-asset-interior",
+          "comparisonOutsetCssPx": 5,
+          "classification": "BLOCKED_ASSETS",
+          "reason": "The local trait colors are known, but the reference uses textured swatch artwork whose authentic source asset is unavailable."
+        },
+        {
+          "id": "wall-conflicting-swatches",
+          "selector": ".pwm-option-evidence-trait-interior",
+          "comparisonOutsetCssPx": 5,
+          "classification": "BLOCKED_EVIDENCE",
+          "reason": "The reference swatch sequence cannot be mapped unambiguously to local trait IDs without reordering or inventing product data."
+        },
+        {
+          "id": "wall-evidence-lock-regions",
+          "selector": ".pwm-option-evidence-lock-region",
+          "classification": "BLOCKED_EVIDENCE",
+          "reason": "The reference lock glyphs are visible, but local lock semantics are not established for these evidence-only positions."
+        },
+        {
+          "id": "wall-local-lock-state",
+          "selector": ".pwm-option-grid-wall > .pwm-option-cell:nth-child(2) .pwm-option-lock",
+          "classification": "BLOCKED_EVIDENCE",
+          "reason": "The local Bronze II lock state conflicts with the unlocked appearance in this reference; the trait status cannot be changed without a product decision."
+        },
+        {
+          "id": "pagination",
+          "selector": ".pwm-pagination",
+          "classification": "comparable",
+          "reason": "The source reference visibly shows pagination controls; page 2 remains disabled because its contents are unsupported."
+        }
+      ],
+      "anchor": {
+        "selector": ".pwm-customizer-column",
+        "reference": {
+          "x": 620,
+          "y": 149
+        }
+      }
+    },
+    {
+      "id": "customizer-screen",
+      "reference": "app.gomining.com_bonus-miner-v3_customize (2).png",
+      "physicalDimensions": {
+        "width": 3678,
+        "height": 3294
+      },
+      "route": "/nft-miners/5422372/customize",
+      "readySelectors": [
+        ".pwm-customizer-flow",
+        "#pwm-customizer-options"
+      ],
+      "fixture": "saved",
+      "viewport": {
+        "width": 1839,
+        "height": 1647,
+        "deviceScaleFactor": 2
+      },
+      "state": {
+        "tab": "screen",
+        "page": 1,
+        "modal": null
+      },
+      "roi": {
+        "x": 620,
+        "y": 149,
+        "width": 600,
+        "height": 1037
+      },
+      "masks": [],
+      "geometrySelectors": [
+        ".pwm-customizer-column",
+        ".pwm-miner-visual",
+        ".pwm-customizer-card",
+        ".pwm-customizer-tabs",
+        ".pwm-option-cell",
+        ".pwm-pagination"
+      ],
+      "expectedGeometry": {
+        ".pwm-customizer-column": {
+          "x": 620,
+          "y": 149,
+          "width": 600,
+          "height": 1035
+        },
+        ".pwm-miner-visual": {
+          "x": 620,
+          "y": 149,
+          "width": 600,
+          "height": 600
+        },
+        ".pwm-customizer-card": {
+          "x": 620,
+          "y": 749,
+          "width": 600,
+          "height": 435
+        }
+      },
+      "subregions": [
+        {
+          "id": "customizer-column",
+          "selector": ".pwm-customizer-column",
+          "classification": "comparable",
+          "reason": "Measured outer customization geometry."
+        },
+        {
+          "id": "preview-art",
+          "selector": ".pwm-customizer-column > .pwm-miner-visual",
+          "classification": "comparable",
+          "reason": "The supplied reference artwork is available as an authentic local source asset."
+        },
+        {
+          "id": "customizer-tabs",
+          "selector": ".pwm-customizer-tabs",
+          "classification": "comparable",
+          "reason": "The category tabs and selection underline are visible in the supplied reference."
+        },
+        {
+          "id": "grid-chrome",
+          "selector": ".pwm-option-grid",
+          "classification": "comparable",
+          "reason": "The 6 by 3 arrangement and option borders are visible in the supplied reference."
+        },
+        {
+          "id": "missing-option-interiors",
+          "selector": ".pwm-option-evidence-interior",
+          "comparisonOutsetCssPx": 5,
+          "classification": "BLOCKED_ASSETS",
+          "reason": "Authentic option artwork is absent for these evidence-only positions; no trait data is inferred."
+        },
+        {
+          "id": "screen-evidence-lock-regions",
+          "selector": ".pwm-option-evidence-lock-region",
+          "classification": "BLOCKED_EVIDENCE",
+          "reason": "The reference displays lock glyphs for 17 positions, but local lock semantics are not established for those evidence-only positions."
+        },
+        {
+          "id": "pagination",
+          "selector": ".pwm-pagination",
+          "classification": "comparable",
+          "reason": "The source reference visibly shows pagination controls; page 2 remains disabled because its contents are unsupported."
+        }
+      ],
+      "anchor": {
+        "selector": ".pwm-customizer-column",
+        "reference": {
+          "x": 620,
+          "y": 149
+        }
+      }
+    },
+    {
+      "id": "customizer-locked-bronze",
+      "reference": "app.gomining.com_bonus-miner-v3_customize (1).png",
+      "physicalDimensions": {
+        "width": 3678,
+        "height": 3294
+      },
+      "route": "/nft-miners/5422372/customize",
+      "readySelectors": [
+        ".pwm-customizer-flow",
+        "#pwm-customizer-options"
+      ],
+      "fixture": "locked",
+      "viewport": {
+        "width": 1839,
+        "height": 1647,
+        "deviceScaleFactor": 2
+      },
+      "state": {
+        "tab": "wall",
+        "page": 1,
+        "modal": "bronze"
+      },
+      "roi": {
+        "x": 653,
+        "y": 877,
+        "width": 536,
+        "height": 413
+      },
+      "masks": [],
+      "geometrySelectors": [
+        ".pwm-customizer-column",
+        ".pwm-customizer-card",
+        ".pwm-lock-modal"
+      ],
+      "expectedGeometry": {
+        ".pwm-customizer-column": {
+          "x": 620,
+          "y": 149,
+          "width": 600,
+          "height": 1035
+        },
+        ".pwm-lock-modal": {
+          "x": 653,
+          "y": 877,
+          "width": 536,
+          "height": 413
+        }
+      },
+      "subregions": [
+        {
+          "id": "modal-backdrop",
+          "rect": {
+            "x": 100,
+            "y": 100,
+            "width": 40,
+            "height": 20
+          },
+          "classification": "comparable",
+          "reason": "A measured 40 by 20 CSS pixel neutral surface at x=100,y=100 isolates the overlay color from unrelated page content."
+        },
+        {
+          "id": "modal-card",
+          "selector": ".pwm-lock-modal",
+          "classification": "comparable",
+          "reason": "The supplied reference shows the Bronze modal surface and layout."
+        },
+        {
+          "id": "bronze-thumbnail",
+          "selector": ".pwm-lock-thumbnail",
+          "classification": "BLOCKED_ASSETS",
+          "reason": "An authentic Bronze thumbnail is not present in the local asset set; no gradient or replacement image is fabricated."
+        },
+        {
+          "id": "modal-close",
+          "selector": ".pwm-modal-close",
+          "classification": "comparable",
+          "reason": "The close control is visible in the supplied reference."
+        },
+        {
+          "id": "modal-title",
+          "selector": ".pwm-lock-modal h2",
+          "classification": "comparable",
+          "reason": "The Bronze title is visible in the supplied reference."
+        },
+        {
+          "id": "modal-subtitle",
+          "selector": ".pwm-lock-modal p",
+          "classification": "comparable",
+          "reason": "The VIP requirement line is visible in the supplied reference."
+        },
+        {
+          "id": "modal-cta",
+          "selector": ".pwm-lock-modal .pwm-button",
+          "classification": "comparable",
+          "reason": "The inert VIP CTA is visible in the supplied reference."
+        }
+      ],
+      "colorSamples": [
+        {
+          "id": "bronze-backdrop",
+          "rect": {
+            "x": 100,
+            "y": 100,
+            "width": 40,
+            "height": 20
+          }
+        },
+        {
+          "id": "bronze-card-surface",
+          "rect": {
+            "x": 680,
+            "y": 910,
+            "width": 28,
+            "height": 20
+          }
+        },
+        {
+          "id": "bronze-cta",
+          "rect": {
+            "x": 700,
+            "y": 1222,
+            "width": 30,
+            "height": 10
+          }
+        }
+      ],
+      "anchor": {
+        "selector": ".pwm-lock-modal",
+        "reference": {
+          "x": 653,
+          "y": 877
+        }
+      }
+    },
+    {
+      "id": "customizer-selected-dirty",
+      "reference": null,
+      "referenceNote": "No supplied capture shows a dirty selection or Save enabled.",
+      "route": "/nft-miners/5422372/customize",
+      "readySelectors": [
+        ".pwm-customizer-flow",
+        "#pwm-customizer-options"
+      ],
+      "fixture": "empty",
+      "viewport": {
+        "width": 1280,
+        "height": 900,
+        "deviceScaleFactor": 1
+      },
+      "state": {
+        "tab": "wall",
+        "page": 1,
+        "modal": null
+      },
+      "selectSelector": "button[title=\"Blue\"]",
+      "selectTrait": "wall-sky-blue",
+      "roi": null,
+      "masks": [],
+      "geometrySelectors": [
+        ".pwm-customizer-column",
+        ".pwm-customizer-card",
+        ".pwm-button-save"
+      ]
+    },
+    {
+      "id": "customizer-empty",
+      "reference": null,
+      "referenceNote": "No supplied capture shows a miner with no saved appearance.",
+      "route": "/nft-miners/5422372/customize",
+      "readySelectors": [
+        ".pwm-customizer-flow",
+        "#pwm-customizer-options"
+      ],
+      "fixture": "empty",
+      "viewport": {
+        "width": 1280,
+        "height": 900,
+        "deviceScaleFactor": 1
+      },
+      "state": {
+        "tab": "wall",
+        "page": 1,
+        "modal": null
+      },
+      "roi": null,
+      "masks": [],
+      "geometrySelectors": [
+        ".pwm-customizer-column",
+        ".pwm-customizer-card",
+        ".pwm-button-save"
+      ]
+    },
+    {
+      "id": "customizer-body",
+      "reference": null,
+      "referenceNote": "No supplied image shows the Body tab state.",
+      "route": "/nft-miners/5422372/customize",
+      "readySelectors": [
+        ".pwm-customizer-flow",
+        "#pwm-customizer-options"
+      ],
+      "fixture": "empty",
+      "viewport": {
+        "width": 1280,
+        "height": 900,
+        "deviceScaleFactor": 1
+      },
+      "state": {
+        "tab": "body",
+        "page": 1,
+        "modal": null
+      },
+      "roi": null,
+      "masks": [],
+      "geometrySelectors": [
+        ".pwm-customizer-column",
+        ".pwm-customizer-card",
+        ".pwm-option-cell"
+      ]
+    },
+    {
+      "id": "customizer-bottom",
+      "reference": null,
+      "referenceNote": "No supplied image shows the Bottom tab state.",
+      "route": "/nft-miners/5422372/customize",
+      "readySelectors": [
+        ".pwm-customizer-flow",
+        "#pwm-customizer-options"
+      ],
+      "fixture": "empty",
+      "viewport": {
+        "width": 1280,
+        "height": 900,
+        "deviceScaleFactor": 1
+      },
+      "state": {
+        "tab": "bottom",
+        "page": 1,
+        "modal": null
+      },
+      "roi": null,
+      "masks": [],
+      "geometrySelectors": [
+        ".pwm-customizer-column",
+        ".pwm-customizer-card",
+        ".pwm-option-cell"
+      ]
+    },
+    {
+      "id": "customizer-fans",
+      "reference": null,
+      "referenceNote": "No supplied image shows the Fans tab state.",
+      "route": "/nft-miners/5422372/customize",
+      "readySelectors": [
+        ".pwm-customizer-flow",
+        "#pwm-customizer-options"
+      ],
+      "fixture": "empty",
+      "viewport": {
+        "width": 1280,
+        "height": 900,
+        "deviceScaleFactor": 1
+      },
+      "state": {
+        "tab": "fans",
+        "page": 1,
+        "modal": null
+      },
+      "roi": null,
+      "masks": [],
+      "geometrySelectors": [
+        ".pwm-customizer-column",
+        ".pwm-customizer-card",
+        ".pwm-option-cell"
+      ]
+    },
+    {
+      "id": "customizer-buttons",
+      "reference": null,
+      "referenceNote": "No supplied image shows the Buttons tab state.",
+      "route": "/nft-miners/5422372/customize",
+      "readySelectors": [
+        ".pwm-customizer-flow",
+        "#pwm-customizer-options"
+      ],
+      "fixture": "empty",
+      "viewport": {
+        "width": 1280,
+        "height": 900,
+        "deviceScaleFactor": 1
+      },
+      "state": {
+        "tab": "buttons",
+        "page": 1,
+        "modal": null
+      },
+      "roi": null,
+      "masks": [],
+      "geometrySelectors": [
+        ".pwm-customizer-column",
+        ".pwm-customizer-card",
+        ".pwm-option-cell"
+      ]
+    },
+    {
+      "id": "customizer-top",
+      "reference": null,
+      "referenceNote": "No supplied image shows the Top tab state.",
+      "route": "/nft-miners/5422372/customize",
+      "readySelectors": [
+        ".pwm-customizer-flow",
+        "#pwm-customizer-options"
+      ],
+      "fixture": "empty",
+      "viewport": {
+        "width": 1280,
+        "height": 900,
+        "deviceScaleFactor": 1
+      },
+      "state": {
+        "tab": "top",
+        "page": 1,
+        "modal": null
+      },
+      "roi": null,
+      "masks": [],
+      "geometrySelectors": [
+        ".pwm-customizer-column",
+        ".pwm-customizer-card",
+        ".pwm-option-cell"
+      ]
+    },
+    {
+      "id": "customizer-stickers",
+      "reference": null,
+      "referenceNote": "No supplied image shows the Stickers tab state.",
+      "route": "/nft-miners/5422372/customize",
+      "readySelectors": [
+        ".pwm-customizer-flow",
+        "#pwm-customizer-options"
+      ],
+      "fixture": "empty",
+      "viewport": {
+        "width": 1280,
+        "height": 900,
+        "deviceScaleFactor": 1
+      },
+      "state": {
+        "tab": "stickers",
+        "page": 1,
+        "modal": null
+      },
+      "roi": null,
+      "masks": [],
+      "geometrySelectors": [
+        ".pwm-customizer-column",
+        ".pwm-customizer-card",
+        ".pwm-option-cell"
+      ]
+    },
+    {
+      "id": "customizer-page2",
+      "reference": "app.gomining.com_bonus-miner-v3_customize (2).png",
+      "referenceNote": "The capture proves a page 2 control exists but does not show page-2 contents.",
+      "blockedEvidence": "The supplied capture shows page 1 selected and only proves that a page 2 control exists; there is no evidenced page-2 trait content to compare or reproduce.",
+      "physicalDimensions": {
+        "width": 3678,
+        "height": 3294
+      },
+      "route": "/nft-miners/5422372/customize",
+      "fixture": "page2",
+      "viewport": {
+        "width": 1839,
+        "height": 1647,
+        "deviceScaleFactor": 2
+      },
+      "state": {
+        "tab": "screen",
+        "page": 2,
+        "modal": null
+      },
+      "roi": {
+        "x": 620,
+        "y": 149,
+        "width": 600,
+        "height": 600
+      },
+      "masks": [],
+      "geometrySelectors": [
+        ".pwm-customizer-column",
+        ".pwm-customizer-card",
+        ".pwm-pagination"
+      ]
+    }
+  ]
+}

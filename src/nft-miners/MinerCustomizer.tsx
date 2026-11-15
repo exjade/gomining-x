@@ -15,6 +15,7 @@ import { unlockRulesFromCatalog } from './catalog-unlocks'
 import type { CustomizationCatalog } from './catalog-contract'
 import { customizationMinerFromStored, type MinerCustomizationMiner } from './miner-customization-model'
 import { saveOwnedMinerAppearance } from './miner-customization-repository'
+import { DEV_PARITY_UID, getDevParityMiner } from './dev-parity-miners'
 import {
   MINER_APPEARANCE_PAGE_SIZE,
   MINER_APPEARANCE_TRAIT_BY_ID,
@@ -47,11 +48,17 @@ export function MinerCustomizer() {
   const routeMatch = normalizedPath.match(/^\/(?:nft-)?miners\/([^/]+)(?:\/customize)?$/)
   const minerId = routeMatch ? decodeURIComponent(routeMatch[1]) : ''
   const isCustomizeRoute = normalizedPath.endsWith('/customize')
-  const uid = user && !user.isAnonymous ? user.uid : ''
+  const parityMiner = getDevParityMiner(location.search, minerId)
+  const uid = user && !user.isAnonymous ? user.uid : parityMiner ? DEV_PARITY_UID : ''
   const [storedMiner, setStoredMiner] = useState<StoredMiner | null>(null)
   const [lookupState, setLookupState] = useState<'loading' | 'found' | 'missing'>('loading')
 
   useEffect(() => {
+    if (parityMiner) {
+      setStoredMiner(null)
+      setLookupState('found')
+      return
+    }
     if (!routeMatch || !uid || !minerId) {
       setStoredMiner(null)
       setLookupState('missing')
@@ -62,13 +69,15 @@ export function MinerCustomizer() {
       setStoredMiner(nextMiner)
       setLookupState(nextMiner ? 'found' : 'missing')
     })
-  }, [minerId, uid])
+  }, [minerId, parityMiner?.id, uid])
 
   if (!routeMatch || !uid) return <MinerNotFound />
   if (lookupState === 'loading') return <MinerLoading />
-  if (!storedMiner) return <MinerNotFound />
-  const miner = customizationMinerFromStored(storedMiner)
-  const saveAppearance = (targetId: string, appearance: MinerAppearance) => saveOwnedMinerAppearance(uid, targetId, appearance)
+  if (!storedMiner && !parityMiner) return <MinerNotFound />
+  const miner = parityMiner ?? customizationMinerFromStored(storedMiner!)
+  const saveAppearance = parityMiner
+    ? async (_targetId: string, _appearance: MinerAppearance) => {}
+    : (targetId: string, appearance: MinerAppearance) => saveOwnedMinerAppearance(uid, targetId, appearance)
   return <>
     {error && <p className="pwm-catalog-error" role="alert">{t('minerCustomization.catalogUnavailable')}</p>}
     {isCustomizeRoute ? <CustomizeMiner miner={miner} catalog={catalog} saveAppearance={saveAppearance} /> : <MinerDetails miner={miner} catalog={catalog} />}

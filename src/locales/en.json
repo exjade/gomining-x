@@ -350,6 +350,7 @@
   },
   "minerCustomization": {
     "farmTitle": "Mining farm",
+    "loading": "Loading miners...",
     "service": "Service",
     "settings": "Settings",
     "miners": "Miners",

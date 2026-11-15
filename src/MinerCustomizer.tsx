@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useDemoSession, updateDemoMinerCustomization, type MinerCustomization } from './demoStore'
 import { startMiningSimulation } from './miningSimulation'
 import { useAuth } from './AuthContext'
@@ -7,6 +7,7 @@ import { updateMinerInFirestore } from './firebase'
 import { subscribeToSingleMinerDoc } from './userMinersStore'
 import { saveMinerCustomization } from './minerPurchaseFlow'
 import { MinerCustomizer as RealMinerCustomizer } from './nft-miners/MinerCustomizer'
+import { isDevParityFixture } from './nft-miners/dev-parity-miners'
 
 export { saveMinerCustomization }
 
@@ -455,5 +456,6 @@ function LegacyMinerCustomizer() {
 
 export function MinerCustomizer() {
   const { user } = useAuth()
-  return user && !user.isAnonymous ? <RealMinerCustomizer /> : <LegacyMinerCustomizer />
+  const location = useLocation()
+  return user && !user.isAnonymous || isDevParityFixture(location.search) ? <RealMinerCustomizer /> : <LegacyMinerCustomizer />
 }

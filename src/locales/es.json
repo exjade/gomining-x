@@ -350,6 +350,7 @@
   },
   "minerCustomization": {
     "farmTitle": "Granja de minería",
+    "loading": "Cargando mineros...",
     "service": "Servicio",
     "settings": "Ajustes",
     "miners": "Mineros",
