@@ -176,7 +176,7 @@ export function UnilevelSection({ onOpenAuth }: UnilevelSectionProps) {
             </div>
 
             {/* Content Side: Empowerment Narrative */}
-            <div className="lg:col-span-6 p-8 sm:p-12 space-y-6">
+            <div className="lg:col-span-6 p-4 sm:p-8 lg:p-12 space-y-4 sm:space-y-6">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-purple-500/30 bg-purple-500/10 text-purple-300 text-xs font-mono">
                 <Sparkles className="w-3.5 h-3.5 text-purple-400" />
                 <span>LIBERTAD FINANCIERA & CRECIMIENTO COLECTIVO</span>
@@ -218,7 +218,7 @@ export function UnilevelSection({ onOpenAuth }: UnilevelSectionProps) {
               {tiers.map((tier) => (
                 <div
                   key={tier.level}
-                  className={`p-6 rounded-3xl bg-[#0a0a0a]/85 backdrop-blur-2xl border transition-all duration-300 hover:scale-[1.02] flex flex-col justify-between ${
+                  className={`p-4 sm:p-6 rounded-3xl bg-[#0a0a0a]/85 backdrop-blur-2xl border transition-all duration-300 hover:scale-[1.02] flex flex-col justify-between ${
                     tier.highlight
                       ? 'border-white bg-[#0e0e0e] shadow-2xl shadow-purple-950/30'
                       : 'border-white/10 hover:border-white/20'
@@ -264,7 +264,7 @@ export function UnilevelSection({ onOpenAuth }: UnilevelSectionProps) {
             </div>
 
             {/* Visual Flow diagram banner */}
-            <div className="p-8 rounded-3xl bg-[#0a0a0a] border border-white/10 flex flex-col lg:flex-row items-center justify-between gap-6">
+            <div className="p-4 sm:p-8 rounded-3xl bg-[#0a0a0a] border border-white/10 flex flex-col lg:flex-row items-center justify-between gap-4 sm:gap-6">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0">
                   <Network className="w-6 h-6 text-purple-400" />

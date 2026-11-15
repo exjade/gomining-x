@@ -98,7 +98,7 @@ export function MembershipsSection({ onOpenAuth }: MembershipsSectionProps) {
         </div>
 
         {/* 3 Membership Cards */}
-        <motion.div style={{ y: yCards }} className="grid md:grid-cols-3 gap-8 mb-20">
+        <motion.div style={{ y: yCards }} className="grid md:grid-cols-3 gap-6 sm:gap-8 mb-16 sm:mb-20">
           {membershipPlans.map((plan) => {
             const isHighlight = plan.highlight;
             const price = billingCycle === 'annual' ? plan.priceAnnual : plan.priceQuarterly;
@@ -107,50 +107,50 @@ export function MembershipsSection({ onOpenAuth }: MembershipsSectionProps) {
             return (
               <div
                 key={plan.id}
-                className={`relative flex flex-col justify-between p-8 sm:p-10 rounded-3xl bg-[#0a0a0a]/85 backdrop-blur-2xl border transition-all duration-300 hover:scale-[1.02] shadow-2xl ${
+                className={`relative flex flex-col justify-between p-4 sm:p-6 lg:p-8 rounded-3xl bg-[#0a0a0a]/85 backdrop-blur-2xl border transition-all duration-300 hover:scale-[1.02] shadow-2xl ${
                   isHighlight
                     ? 'border-purple-500/60 bg-[#0e0c14]/95 shadow-[0_0_50px_-10px_rgba(168,85,247,0.3)] ring-1 ring-purple-500/40'
                     : 'border-white/10 hover:border-white/30'
                 }`}
               >
                 {isHighlight && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-[10px] font-bold text-white font-mono uppercase tracking-widest shadow-lg flex items-center gap-1">
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-3.5 py-0.5 sm:px-4 sm:py-1 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-[9px] sm:text-[10px] font-bold text-white font-mono uppercase tracking-widest shadow-lg flex items-center gap-1">
                     <Star className="w-3 h-3 fill-white" />
                     <span>Líder Pro VIP</span>
                   </div>
                 )}
 
                 <div>
-                  <div className="flex justify-between items-start mb-6">
+                  <div className="flex justify-between items-start mb-4 sm:mb-6">
                     <div>
-                      <h3 className="text-2xl font-bold tracking-tight text-white mb-1">
+                      <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-white mb-1">
                         {plan.name}
                       </h3>
-                      <span className="text-[10px] font-mono text-white/40 uppercase tracking-widest">
+                      <span className="text-[9px] sm:text-[10px] font-mono text-white/40 uppercase tracking-widest">
                         Nivel de Plataforma
                       </span>
                     </div>
                     {plan.badge && (
-                      <span className="px-2.5 py-1 rounded-full border border-white/15 bg-white/5 text-[10px] font-mono text-white/80">
+                      <span className="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full border border-white/15 bg-white/5 text-[9px] sm:text-[10px] font-mono text-white/80">
                         {plan.badge}
                       </span>
                     )}
                   </div>
 
                   {/* Price */}
-                  <div className="mb-8">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-4xl sm:text-5xl font-bold tracking-tight text-white font-mono">
+                  <div className="mb-6 sm:mb-8">
+                    <div className="flex items-baseline gap-1.5 sm:gap-2">
+                      <span className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-white font-mono">
                         {price === 0 ? 'Gratis' : `$${price}`}
                       </span>
                       {price > 0 && (
-                        <span className="text-xs font-mono text-white/40 uppercase">
+                        <span className="text-[10px] sm:text-xs font-mono text-white/40 uppercase">
                           USDT {periodLabel}
                         </span>
                       )}
                     </div>
                     {billingCycle === 'annual' && price > 0 && (
-                      <span className="text-[10px] font-mono text-purple-400 mt-1 block">
+                      <span className="text-[9px] sm:text-[10px] font-mono text-purple-400 mt-1 block">
                         Equivalente a ${(price / 12).toFixed(1)} USDT / mes
                       </span>
                     )}
@@ -232,39 +232,42 @@ export function MembershipsSection({ onOpenAuth }: MembershipsSectionProps) {
         </motion.div>
 
         {/* EXPLOSIVE MINING POOL RESIDUALS SECTION IN THE CLOUDS */}
-        <div className="relative rounded-3xl p-8 sm:p-14 bg-gradient-to-b from-[#0e0a19] via-[#090712] to-[#050505] border border-purple-500/30 overflow-hidden shadow-2xl shadow-purple-950/50">
+        <div className="relative rounded-3xl p-4 sm:p-8 lg:p-12 bg-gradient-to-b from-[#0e0a19] via-[#090712] to-[#050505] border border-purple-500/30 overflow-hidden shadow-2xl shadow-purple-950/50">
           {/* Volumetric Glowing Cloud Explosions in the Background */}
           <div className="absolute -top-20 -left-20 w-80 h-80 bg-purple-600/25 rounded-full blur-[100px] pointer-events-none animate-pulse" />
           <div className="absolute -bottom-20 -right-20 w-80 h-80 bg-emerald-600/20 rounded-full blur-[110px] pointer-events-none" />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[radial-gradient(circle_at_center,rgba(168,85,247,0.12),transparent_70%)] pointer-events-none" />
 
           {/* Lightning / Particle Energy Sparks */}
-          <div className="absolute top-6 right-8 flex items-center gap-2 px-3 py-1 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300 font-mono text-[10px] uppercase tracking-wider">
-            <Flame className="w-3.5 h-3.5 animate-bounce" />
-            <span>OPCIÓN EXPLOSIVA: RESIDUALES DE LA POOL DE MINERÍA</span>
+          <div className="sm:absolute sm:top-6 sm:right-8 mb-4 sm:mb-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300 font-mono text-[9px] sm:text-[10px] uppercase tracking-wider">
+            <Flame className="w-3 h-3 sm:w-3.5 sm:h-3.5 animate-bounce flex-shrink-0" />
+            <span className="truncate">RESIDUALES DE LA POOL DE MINERÍA</span>
           </div>
 
-          <div className="max-w-3xl mb-10 relative z-10">
-            <span className="text-[10px] font-mono uppercase tracking-[0.3em] text-purple-400 block mb-2">
+          <div className="max-w-3xl mb-6 sm:mb-10 relative z-10">
+            <span className="text-[9px] sm:text-[10px] font-mono uppercase tracking-[0.25em] text-purple-400 block mb-1.5">
               DIVIDENDOS RESIDUALES INSTITUCIONALES EN LA NUBE
             </span>
-            <h3 className="text-3xl sm:text-5xl font-bold tracking-tight text-white mb-4">
+            <h3 className="text-2xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white mb-2 sm:mb-4">
               Residuales Directos de la Pool Global.
             </h3>
-            <p className="text-sm text-white/70 leading-relaxed max-w-2xl">
+            <p className="text-xs sm:text-sm text-white/70 leading-relaxed max-w-2xl">
               Los líderes con red activa o miembros con suscripción <strong className="text-white">Starter o Pro VIP</strong> reciben un porcentaje residual automático de todos los bloques minados en la pool institucional. Tus ganancias escalan con el volumen total de cómputo en la nube.
             </p>
           </div>
 
           {/* Dynamic Interactive Cloud Simulator */}
-          <div className="grid lg:grid-cols-12 gap-8 items-center relative z-10">
+          <div className="grid lg:grid-cols-12 gap-6 sm:gap-8 items-center relative z-10">
             {/* Left: Volume Slider */}
-            <div className="lg:col-span-7 p-6 sm:p-8 rounded-2xl bg-white/[0.02] border border-white/10 space-y-6">
+            <div className="lg:col-span-7 p-3.5 sm:p-6 lg:p-8 rounded-2xl bg-white/[0.02] border border-white/10 space-y-4 sm:space-y-6">
               <div>
-                <div className="flex justify-between items-baseline mb-2">
-                  <span className="text-xs font-mono text-white/60">Volumen Diario Minado por la Pool:</span>
-                  <span className="text-2xl sm:text-3xl font-mono font-bold text-white">
-                    {poolVolumePearl.toLocaleString()} <span className="text-xs text-purple-300">PEARL / d</span>
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1 mb-2">
+                  <span className="text-[10px] sm:text-xs font-mono text-white/60">
+                    Volumen Diario Minado por la Pool:
+                  </span>
+                  <span className="text-xl sm:text-2xl md:text-3xl font-mono font-bold text-white">
+                    {poolVolumePearl.toLocaleString()}{' '}
+                    <span className="text-[10px] sm:text-xs text-purple-300">PEARL / d</span>
                   </span>
                 </div>
                 <input
@@ -276,58 +279,58 @@ export function MembershipsSection({ onOpenAuth }: MembershipsSectionProps) {
                   onChange={(e) => setPoolVolumePearl(Number(e.target.value))}
                   className="w-full h-2 rounded-full appearance-none bg-white/10 accent-purple-400 cursor-pointer"
                 />
-                <div className="flex justify-between text-[10px] font-mono text-white/40 mt-2">
-                  <span>20,000 PEARL (Básico)</span>
-                  <span className="text-purple-300">100,000 PEARL (Estándar)</span>
-                  <span>300,000 PEARL (Clúster Global)</span>
+                <div className="flex justify-between text-[9px] sm:text-[10px] font-mono text-white/40 mt-2">
+                  <span>20k (Básico)</span>
+                  <span className="text-purple-300">100k (Estándar)</span>
+                  <span>300k (Global)</span>
                 </div>
               </div>
 
-              {/* Cloud Node Badges */}
-              <div className="grid grid-cols-3 gap-3 pt-4 border-t border-white/5 text-[11px] font-mono">
-                <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5">
-                  <span className="text-white/40 block text-[9px]">Hashrate de Pool</span>
-                  <strong className="text-white">184.25 PH/s</strong>
+              {/* Cloud Node Badges - Mobile single column or clean grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 pt-4 border-t border-white/5 text-[10px] sm:text-[11px] font-mono">
+                <div className="p-2.5 sm:p-3 rounded-xl bg-white/[0.02] border border-white/5 flex sm:flex-col justify-between sm:justify-start items-center sm:items-start">
+                  <span className="text-white/40 block text-[8px] sm:text-[9px]">Hashrate de Pool</span>
+                  <strong className="text-white text-xs sm:text-sm">184.25 PH/s</strong>
                 </div>
-                <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5">
-                  <span className="text-white/40 block text-[9px]">Data Centers</span>
-                  <strong className="text-white">+9 Nodos</strong>
+                <div className="p-2.5 sm:p-3 rounded-xl bg-white/[0.02] border border-white/5 flex sm:flex-col justify-between sm:justify-start items-center sm:items-start">
+                  <span className="text-white/40 block text-[8px] sm:text-[9px]">Data Centers</span>
+                  <strong className="text-white text-xs sm:text-sm">+9 Nodos</strong>
                 </div>
-                <div className="p-3 rounded-xl bg-emerald-500/[0.05] border border-emerald-500/20">
-                  <span className="text-emerald-400/70 block text-[9px]">Reparto Automático</span>
-                  <strong className="text-emerald-400">Cada 24 Horas</strong>
+                <div className="p-2.5 sm:p-3 rounded-xl bg-emerald-500/[0.05] border border-emerald-500/20 flex sm:flex-col justify-between sm:justify-start items-center sm:items-start">
+                  <span className="text-emerald-400/70 block text-[8px] sm:text-[9px]">Reparto Automático</span>
+                  <strong className="text-emerald-400 text-xs sm:text-sm">Cada 24 Horas</strong>
                 </div>
               </div>
             </div>
 
             {/* Right: Explosive Earnings Result */}
-            <div className="lg:col-span-5 p-6 sm:p-8 rounded-2xl bg-[#120d20] border border-purple-500/40 shadow-2xl space-y-4">
-              <span className="text-[10px] font-mono uppercase tracking-[0.25em] text-purple-300 block">
+            <div className="lg:col-span-5 p-3.5 sm:p-6 lg:p-8 rounded-2xl bg-[#120d20] border border-purple-500/40 shadow-2xl space-y-3 sm:space-y-4">
+              <span className="text-[9px] sm:text-[10px] font-mono uppercase tracking-[0.2em] sm:tracking-[0.25em] text-purple-300 block">
                 Tu Residual Estimado como Líder
               </span>
 
-              <div className="space-y-3">
-                <div className="p-4 rounded-xl bg-white/[0.03] border border-white/10">
-                  <span className="text-[10px] font-mono text-white/40 block mb-1">
+              <div className="space-y-2.5 sm:space-y-3">
+                <div className="p-3 sm:p-4 rounded-xl bg-white/[0.03] border border-white/10">
+                  <span className="text-[9px] sm:text-[10px] font-mono text-white/40 block mb-0.5 sm:mb-1">
                     Goteo Diario en PEARL
                   </span>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-mono font-bold text-emerald-400">
+                    <span className="text-2xl sm:text-3xl font-mono font-bold text-emerald-400">
                       +{dailyLeaderPearl.toFixed(1)}
                     </span>
-                    <span className="text-xs font-mono text-emerald-400 font-bold">PEARL / día</span>
+                    <span className="text-[11px] sm:text-xs font-mono text-emerald-400 font-bold">PEARL / día</span>
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/20">
-                  <span className="text-[10px] font-mono text-emerald-400/80 block mb-1">
+                <div className="p-3 sm:p-4 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/20">
+                  <span className="text-[9px] sm:text-[10px] font-mono text-emerald-400/80 block mb-0.5 sm:mb-1">
                     Proyección Residual Mensual
                   </span>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-mono font-bold text-white">
+                    <span className="text-2xl sm:text-3xl font-mono font-bold text-white">
                       ~${monthlyLeaderResidualUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
-                    <span className="text-xs font-mono text-white/50">USD / mes</span>
+                    <span className="text-[11px] sm:text-xs font-mono text-white/50">USD / mes</span>
                   </div>
                 </div>
               </div>
@@ -335,7 +338,7 @@ export function MembershipsSection({ onOpenAuth }: MembershipsSectionProps) {
               <button
                 type="button"
                 onClick={() => onOpenAuth ? onOpenAuth('register') : window.location.assign('#comenzar')}
-                className="w-full py-3.5 rounded-full bg-white hover:bg-white/90 text-[#050505] font-semibold text-xs flex items-center justify-center gap-2 transition-all active:scale-[0.97] shadow-xl"
+                className="w-full py-3 sm:py-3.5 rounded-full bg-white hover:bg-white/90 text-[#050505] font-semibold text-xs flex items-center justify-center gap-2 transition-all active:scale-[0.97] shadow-xl"
               >
                 <Activity className="w-4 h-4 text-[#050505]" />
                 <span>Desbloquear Residuales con Pro VIP</span>

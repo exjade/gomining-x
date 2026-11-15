@@ -174,19 +174,19 @@ export function BattleMinerSection({ onOpenAuth }: BattleMinerSectionProps) {
           </motion.div>
 
           {/* Right: Interactive Card Deck & Battle Arena */}
-          <div className="lg:col-span-6 p-8 sm:p-10 rounded-3xl bg-[#0a0a0a]/80 backdrop-blur-3xl border border-white/15 shadow-2xl flex flex-col justify-between space-y-6">
+          <div className="lg:col-span-6 p-4 sm:p-8 lg:p-10 rounded-3xl bg-[#0a0a0a]/80 backdrop-blur-3xl border border-white/15 shadow-2xl flex flex-col justify-between space-y-4 sm:space-y-6">
             <div>
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-[10px] font-mono uppercase tracking-[0.3em] text-white/40">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <span className="text-[9px] sm:text-[10px] font-mono uppercase tracking-[0.25em] text-white/40">
                   SELECCIONA TU MINER NFT DE BATALLA
                 </span>
-                <span className="text-[9px] font-mono text-purple-300 border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 rounded-full">
+                <span className="text-[8px] sm:text-[9px] font-mono text-purple-300 border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 rounded-full">
                   Temporada 1
                 </span>
               </div>
 
               {/* 3 Selectable Fighter Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 mb-4 sm:mb-6">
                 {CARDS.map((card) => {
                   const isSelected = selectedCard.id === card.id;
                   return (
@@ -197,7 +197,7 @@ export function BattleMinerSection({ onOpenAuth }: BattleMinerSectionProps) {
                         setSelectedCard(card);
                         setBattleState('idle');
                       }}
-                      className={`p-3.5 rounded-2xl border text-left transition-all duration-300 active:scale-[0.97] flex flex-col justify-between ${
+                      className={`p-2.5 sm:p-3.5 rounded-2xl border text-left transition-all duration-300 active:scale-[0.97] flex flex-col justify-between ${
                         isSelected
                           ? 'border-white bg-[#161616] ring-1 ring-white/40 shadow-xl shadow-purple-950/40'
                           : 'border-white/10 hover:border-white/20 bg-white/[0.02] text-white/60'
@@ -211,11 +211,11 @@ export function BattleMinerSection({ onOpenAuth }: BattleMinerSectionProps) {
                           {card.name}
                         </h4>
                       </div>
-                      <div className="mt-3 pt-2 border-t border-white/5">
-                        <span className="text-sm font-mono font-bold text-white block">
+                      <div className="mt-2 sm:mt-3 pt-1.5 sm:pt-2 border-t border-white/5">
+                        <span className="text-xs sm:text-sm font-mono font-bold text-white block">
                           {card.powerTh} TH
                         </span>
-                        <span className="text-[9px] font-mono text-emerald-400 block">
+                        <span className="text-[8px] sm:text-[9px] font-mono text-emerald-400 block">
                           {card.winRate} Win
                         </span>
                       </div>
@@ -225,7 +225,7 @@ export function BattleMinerSection({ onOpenAuth }: BattleMinerSectionProps) {
               </div>
 
               {/* Selected Card HUD & Active Stats */}
-              <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/10 mb-6 space-y-4">
+              <div className="p-3.5 sm:p-6 rounded-2xl bg-white/[0.02] border border-white/10 mb-4 sm:mb-6 space-y-3 sm:space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="text-[9px] font-mono text-white/40 uppercase tracking-widest block">
