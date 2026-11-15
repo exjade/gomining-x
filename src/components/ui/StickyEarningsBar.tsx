@@ -25,16 +25,6 @@ export function StickyEarningsBar({ currentTh = 120, onOpenAuth }: StickyEarning
   const usdPerDay = (currentTh * DAILY_USD_PER_TH).toFixed(2);
   const pearlPerDay = (currentTh * DAILY_PEARL_PER_TH).toFixed(1);
 
-  const navLinks = [
-    { label: '3D', href: '#producto' },
-    { label: 'CALCULADORA', href: '#calculadora' },
-    { label: 'PREVENTA', href: '#preventa' },
-    { label: 'MEMBRESÍAS', href: '#membresias' },
-    { label: 'UNILEVEL', href: '#unilevel' },
-    { label: 'BATTLE MINER', href: '#battle-miner' },
-    { label: 'ROADMAP', href: '#roadmap' },
-  ];
-
   const handleNavClick = (href: string) => {
     const el = document.querySelector(href);
     if (el) {
@@ -46,15 +36,15 @@ export function StickyEarningsBar({ currentTh = 120, onOpenAuth }: StickyEarning
     <AnimatePresence>
       {show && (
         <motion.aside
-          initial={{ y: -80, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: -80, opacity: 0 }}
-          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-          className="fixed top-2.5 sm:top-4 inset-x-2 sm:inset-x-6 max-w-[96vw] sm:max-w-5xl mx-auto z-50 py-1.5 sm:py-2 px-2.5 sm:px-5 rounded-full bg-[#0a0a0a]/92 border border-white/15 backdrop-blur-2xl shadow-2xl shadow-black/95 flex items-center justify-between gap-2 sm:gap-3 text-xs select-none"
-          aria-label="Barra flotante de rendimiento y navegación PouwMiner"
+          initial={{ y: -80, x: '-50%', opacity: 0 }}
+          animate={{ y: 0, x: '-50%', opacity: 1 }}
+          exit={{ y: -80, x: '-50%', opacity: 0 }}
+          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+          className="fixed top-2.5 sm:top-4 left-1/2 z-50 py-1.5 sm:py-2 px-3 sm:px-5 rounded-full bg-[#0a0a0a]/94 border border-white/15 backdrop-blur-2xl shadow-2xl shadow-black/95 flex items-center gap-2.5 sm:gap-4 text-xs select-none max-w-[95vw] w-auto whitespace-nowrap"
+          aria-label="Barra flotante de rendimiento PouwMiner"
         >
-          {/* Left: Active network status & Hashrate without heavy brand text to save width */}
-          <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0">
+          {/* Left: Active network status & Hashrate */}
+          <div className="flex items-center gap-2 flex-shrink-0">
             <span className="flex h-2 w-2 relative">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
@@ -65,29 +55,17 @@ export function StickyEarningsBar({ currentTh = 120, onOpenAuth }: StickyEarning
             >
               <span className="text-white font-mono font-bold text-[11px] sm:text-xs">{currentTh} TH/s</span>
             </a>
+            <span className="text-white/20 hidden sm:inline">·</span>
+            <span className="hidden sm:inline font-mono text-[10px] text-white/50 tracking-wider">
+              CLOUD MINING
+            </span>
           </div>
 
-          {/* Center Navigation Links (Clean Apple style) */}
-          <div className="hidden lg:flex items-center gap-3 font-mono text-[10px] text-white/50 tracking-wider">
-            {navLinks.map((item, idx) => (
-              <span key={item.label} className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => handleNavClick(item.href)}
-                  className="hover:text-white transition-colors cursor-pointer py-1"
-                >
-                  {item.label}
-                </button>
-                {idx < navLinks.length - 1 && <span className="text-white/20">·</span>}
-              </span>
-            ))}
-          </div>
-
-          {/* Realistic Live Earnings Indicator */}
-          <div className="hidden md:flex items-center gap-2 font-mono text-[11px]">
-            <span className="text-white/40">Día:</span>
+          {/* Center: Live Earnings Indicator */}
+          <div className="flex items-center gap-1.5 font-mono text-[11px] sm:text-xs border-x border-white/10 px-2.5 sm:px-3">
+            <span className="text-white/40 hidden sm:inline">Día:</span>
             <strong className="text-emerald-400 font-bold">~${usdPerDay} USD</strong>
-            <span className="text-white/40 text-[10px]">(~{pearlPerDay} PEARL)</span>
+            <span className="text-white/40 text-[10px] hidden md:inline">(~{pearlPerDay} PEARL)</span>
           </div>
 
           {/* Right: 15-day Badge & Actions */}
@@ -98,7 +76,7 @@ export function StickyEarningsBar({ currentTh = 120, onOpenAuth }: StickyEarning
 
             <button
               type="button"
-              onClick={() => onOpenAuth ? onOpenAuth('login') : handleNavClick('#comenzar')}
+              onClick={() => (onOpenAuth ? onOpenAuth('login') : handleNavClick('#comenzar'))}
               className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-white/10 text-white/60 hover:text-white text-[11px] font-mono transition-colors active:scale-[0.97]"
               title="Iniciar Sesión"
             >
@@ -108,8 +86,8 @@ export function StickyEarningsBar({ currentTh = 120, onOpenAuth }: StickyEarning
 
             <button
               type="button"
-              onClick={() => onOpenAuth ? onOpenAuth('register') : handleNavClick('#preventa')}
-              className="px-3.5 py-1.5 sm:px-4 sm:py-1.5 rounded-full bg-white hover:bg-white/90 text-[#050505] font-semibold text-[11px] sm:text-xs flex items-center gap-1 transition-all active:scale-[0.97] shadow-lg shadow-white/5 whitespace-nowrap"
+              onClick={() => (onOpenAuth ? onOpenAuth('register') : handleNavClick('#preventa'))}
+              className="px-3.5 py-1.5 sm:px-4 sm:py-1.5 rounded-full bg-white hover:bg-white/90 text-[#050505] font-semibold text-[11px] sm:text-xs flex items-center gap-1.5 transition-all active:scale-[0.97] shadow-lg shadow-white/5 whitespace-nowrap"
             >
               <span>Pre-ordenar</span>
               <ArrowRight className="w-3 h-3 text-[#050505]" />

@@ -2,7 +2,7 @@ import React from 'react';
 
 interface PowMinerLogoProps {
   className?: string;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'hero';
   showSubtitle?: boolean;
 }
 
@@ -17,6 +17,8 @@ export const PowMinerLogo: React.FC<PowMinerLogoProps> = ({
     md: 'h-8 sm:h-9',
     lg: 'h-11 sm:h-12',
     xl: 'h-14 sm:h-16',
+    '2xl': 'h-16 sm:h-20 md:h-24',
+    hero: 'h-20 sm:h-28 md:h-36 max-w-full',
   };
 
   return (

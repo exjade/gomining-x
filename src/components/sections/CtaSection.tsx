@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
+import { PowMinerLogo } from '../ui/PowMinerLogo';
 import { AuthMode } from '../auth/AuthModal';
 
 const faqs = [
@@ -97,12 +98,15 @@ export function CtaSection({ onOpenAuth }: CtaSectionProps) {
               </span>
             </div>
 
-            <h2 id="cta-title" className="text-4xl sm:text-7xl md:text-8xl font-bold text-white tracking-tighter mb-4 leading-none break-words">
-              PouwMiner.
-            </h2>
-            <p className="text-lg sm:text-2xl font-medium text-white/80 tracking-tight mb-4">
+            {/* Large PouwMiner Aerodynamic Logo Emblem */}
+            <div className="flex justify-center items-center mb-8 relative">
+              <div className="absolute inset-0 bg-purple-600/15 rounded-full blur-3xl pointer-events-none scale-150" />
+              <PowMinerLogo size="hero" showSubtitle={false} className="justify-center relative z-10" />
+            </div>
+
+            <h2 id="cta-title" className="text-3xl sm:text-5xl md:text-6xl font-bold text-white tracking-tighter mb-4 leading-tight">
               Comienza a Minar en la Nube Hoy.
-            </p>
+            </h2>
 
             <p className="text-xs sm:text-base text-white/60 mb-10 max-w-xl mx-auto leading-relaxed px-4">
               Crea tu cuenta en segundos, selecciona tu cuota de hashrate digital y recibe dividendos continuos liquidados directamente en tokens PEARL cada 24 horas.
