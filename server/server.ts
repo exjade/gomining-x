@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { fileURLToPath } from 'url';
 import { VastClient } from './services/vastClient.js';
 import { VastOffersService } from './services/vastOffersService.js';
@@ -35,19 +36,52 @@ if (fs.existsSync(DIST_DIR)) {
   app.use(express.static(DIST_DIR));
 }
 
-const DATA_DIR = path.join(__dirname, 'data');
-const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
-const CYCLES_FILE = path.join(DATA_DIR, 'mining_cycles.json');
-const USERS_FILE = path.join(DATA_DIR, 'users.json');
-const AUDIT_LOGS_FILE = path.join(DATA_DIR, 'audit_logs.json');
-const PACKAGES_FILE = path.join(DATA_DIR, 'commercial_packages.json');
-const CONTRACTS_FILE = path.join(DATA_DIR, 'admin_contracts.json');
-const ORDERS_FILE = path.join(DATA_DIR, 'admin_orders.json');
-const STOREFRONT_SECTIONS_FILE = path.join(DATA_DIR, 'storefront_sections.json');
+function getEphemeralTestDataDir(): string {
+  const testDir = path.join(os.tmpdir(), `minerx-test-${process.pid}`);
+  if (!fs.existsSync(testDir)) {
+    fs.mkdirSync(testDir, { recursive: true });
+    process.once('exit', () => {
+      try {
+        fs.rmSync(testDir, { recursive: true, force: true });
+      } catch {}
+    });
+  }
+  return testDir;
+}
+
+const initialEnvDataDir = process.env.DATA_DIR;
+let customDataDir: string | null = null;
+export function setDataDir(customDir: string | null): void {
+  customDataDir = customDir;
+  if (customDir) {
+    process.env.DATA_DIR = customDir;
+  } else if (initialEnvDataDir) {
+    process.env.DATA_DIR = initialEnvDataDir;
+  } else {
+    delete process.env.DATA_DIR;
+  }
+}
+export function getDataDir(): string {
+  if (customDataDir) return customDataDir;
+  if (process.env.DATA_DIR) return process.env.DATA_DIR;
+  if (process.env.NODE_TEST_CONTEXT || process.env.NODE_ENV === 'test') {
+    return getEphemeralTestDataDir();
+  }
+  return path.join(__dirname, 'data');
+}
+
+export const getConfigFile = () => path.join(getDataDir(), 'config.json');
+export const getCyclesFile = () => path.join(getDataDir(), 'mining_cycles.json');
+export const getAuditLogsFile = () => path.join(getDataDir(), 'audit_logs.json');
+export const getPackagesFile = () => path.join(getDataDir(), 'commercial_packages.json');
+export const getContractsFile = () => path.join(getDataDir(), 'admin_contracts.json');
+export const getOrdersFile = () => path.join(getDataDir(), 'admin_orders.json');
+export const getStorefrontSectionsFile = () => path.join(getDataDir(), 'storefront_sections.json');
+export const getHistoryFile = () => path.join(getDataDir(), 'telemetry_history.json');
 
 // Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+if (!fs.existsSync(getDataDir())) {
+  fs.mkdirSync(getDataDir(), { recursive: true });
 }
 
 export const LEGACY_PACKAGES: any[] = [
@@ -135,8 +169,9 @@ export const LEGACY_PACKAGES: any[] = [
 
 export function readPackages(): any[] {
   try {
-    if (fs.existsSync(PACKAGES_FILE)) {
-      return JSON.parse(fs.readFileSync(PACKAGES_FILE, 'utf-8'));
+    const filePath = getPackagesFile();
+    if (fs.existsSync(filePath)) {
+      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     }
   } catch (err) {
     console.error('Error reading packages file:', err);
@@ -146,7 +181,10 @@ export function readPackages(): any[] {
 
 export function writePackages(packages: any[]): void {
   try {
-    fs.writeFileSync(PACKAGES_FILE, JSON.stringify(packages, null, 2), 'utf-8');
+    const filePath = getPackagesFile();
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(packages, null, 2), 'utf-8');
   } catch (err) {
     console.error('Error writing packages file:', err);
   }
@@ -154,8 +192,9 @@ export function writePackages(packages: any[]): void {
 
 export function readContracts(): any[] {
   try {
-    if (fs.existsSync(CONTRACTS_FILE)) {
-      return JSON.parse(fs.readFileSync(CONTRACTS_FILE, 'utf-8'));
+    const filePath = getContractsFile();
+    if (fs.existsSync(filePath)) {
+      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     }
   } catch (err) {
     console.error('Error reading contracts file:', err);
@@ -165,7 +204,10 @@ export function readContracts(): any[] {
 
 export function writeContracts(contracts: any[]): void {
   try {
-    fs.writeFileSync(CONTRACTS_FILE, JSON.stringify(contracts, null, 2), 'utf-8');
+    const filePath = getContractsFile();
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(contracts, null, 2), 'utf-8');
   } catch (err) {
     console.error('Error writing contracts file:', err);
   }
@@ -173,8 +215,9 @@ export function writeContracts(contracts: any[]): void {
 
 export function readOrders(): any[] {
   try {
-    if (fs.existsSync(ORDERS_FILE)) {
-      return JSON.parse(fs.readFileSync(ORDERS_FILE, 'utf-8'));
+    const filePath = getOrdersFile();
+    if (fs.existsSync(filePath)) {
+      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     }
   } catch (err) {
     console.error('Error reading orders file:', err);
@@ -184,7 +227,10 @@ export function readOrders(): any[] {
 
 export function writeOrders(orders: any[]): void {
   try {
-    fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2), 'utf-8');
+    const filePath = getOrdersFile();
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(orders, null, 2), 'utf-8');
   } catch (err) {
     console.error('Error writing orders file:', err);
   }
@@ -192,8 +238,9 @@ export function writeOrders(orders: any[]): void {
 
 export function readStorefrontSections(): any {
   try {
-    if (fs.existsSync(STOREFRONT_SECTIONS_FILE)) {
-      return JSON.parse(fs.readFileSync(STOREFRONT_SECTIONS_FILE, 'utf-8'));
+    const filePath = getStorefrontSectionsFile();
+    if (fs.existsSync(filePath)) {
+      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     }
   } catch (err) {
     console.error('Error reading storefront sections file:', err);
@@ -209,7 +256,10 @@ export function readStorefrontSections(): any {
 
 export function writeStorefrontSections(data: any): void {
   try {
-    fs.writeFileSync(STOREFRONT_SECTIONS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    const filePath = getStorefrontSectionsFile();
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
   } catch (err) {
     console.error('Error writing storefront sections file:', err);
   }
@@ -245,8 +295,9 @@ export interface AuditRecord {
 
 export function readAuditLogs(): AuditRecord[] {
   try {
-    if (fs.existsSync(AUDIT_LOGS_FILE)) {
-      return JSON.parse(fs.readFileSync(AUDIT_LOGS_FILE, 'utf-8'));
+    const filePath = getAuditLogsFile();
+    if (fs.existsSync(filePath)) {
+      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     }
   } catch (err) {
     console.error('Error reading audit logs file:', err);
@@ -272,7 +323,10 @@ export function writeAuditLog(record: Omit<AuditRecord, 'id' | 'timestamp'> & Pa
     };
     logs.unshift(newLog);
     if (logs.length > 500) logs.length = 500;
-    fs.writeFileSync(AUDIT_LOGS_FILE, JSON.stringify(logs, null, 2), 'utf-8');
+    const filePath = getAuditLogsFile();
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(logs, null, 2), 'utf-8');
     return newLog;
   } catch (err) {
     console.error('Error writing audit log:', err);
@@ -292,7 +346,7 @@ export function setUsersFilePath(customPath: string | null): void {
 }
 
 export function getUsersFilePath(): string {
-  return customUsersFilePath || process.env.USERS_FILE_PATH || USERS_FILE;
+  return customUsersFilePath || process.env.USERS_FILE_PATH || path.join(getDataDir(), 'users.json');
 }
 
 export function readUsers(): { users: UserAccount[] } {
@@ -310,6 +364,8 @@ export function readUsers(): { users: UserAccount[] } {
 export function writeUsers(data: { users: UserAccount[] }) {
   try {
     const targetFile = getUsersFilePath();
+    const dir = path.dirname(targetFile);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(targetFile, JSON.stringify(data, null, 2), 'utf-8');
   } catch (err) {
     console.error('Error writing users file:', err);
@@ -460,8 +516,8 @@ export async function requireAdmin(
   return admin;
 }
 
-function getUserDataDir(userId: string): string {
-  const userDir = path.join(DATA_DIR, 'users', userId);
+export function getUserDataDir(userId: string): string {
+  const userDir = path.join(getDataDir(), 'users', userId);
   if (!fs.existsSync(userDir)) {
     fs.mkdirSync(userDir, { recursive: true });
   }
@@ -537,8 +593,9 @@ const DEFAULT_CONFIG: SavedConfig = {
 
 export function readConfig(_userId: string = 'usr_default_admin'): SavedConfig {
   try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+    const configFile = getConfigFile();
+    if (fs.existsSync(configFile)) {
+      return JSON.parse(fs.readFileSync(configFile, 'utf-8'));
     }
     const defaultConfigFile = path.join(getUserDataDir('usr_default_admin'), 'config.json');
     if (fs.existsSync(defaultConfigFile)) {
@@ -554,7 +611,10 @@ export function writeConfig(cfg: SavedConfig, _userId: string = 'usr_default_adm
   try {
     const defaultConfigFile = path.join(getUserDataDir('usr_default_admin'), 'config.json');
     fs.writeFileSync(defaultConfigFile, JSON.stringify(cfg, null, 2), 'utf-8');
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2), 'utf-8');
+    const configFile = getConfigFile();
+    const dir = path.dirname(configFile);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(configFile, JSON.stringify(cfg, null, 2), 'utf-8');
   } catch (err) {
     console.error('Error writing config file:', err);
   }
@@ -566,8 +626,9 @@ function readMiningCycles(userId: string = 'usr_default_admin'): any {
     if (fs.existsSync(userCyclesFile)) {
       return JSON.parse(fs.readFileSync(userCyclesFile, 'utf-8'));
     }
-    if (fs.existsSync(CYCLES_FILE)) {
-      return JSON.parse(fs.readFileSync(CYCLES_FILE, 'utf-8'));
+    const cyclesFile = getCyclesFile();
+    if (fs.existsSync(cyclesFile)) {
+      return JSON.parse(fs.readFileSync(cyclesFile, 'utf-8'));
     }
   } catch (err) {
     console.error('Error reading mining cycles:', err);
@@ -579,7 +640,10 @@ function writeMiningCycles(data: any, userId: string = 'usr_default_admin') {
   try {
     const userCyclesFile = path.join(getUserDataDir(userId), 'mining_cycles.json');
     fs.writeFileSync(userCyclesFile, JSON.stringify(data, null, 2), 'utf-8');
-    fs.writeFileSync(CYCLES_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    const cyclesFile = getCyclesFile();
+    const dir = path.dirname(cyclesFile);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(cyclesFile, JSON.stringify(data, null, 2), 'utf-8');
   } catch (err) {
     console.error('Error writing mining cycles:', err);
   }
@@ -2224,12 +2288,11 @@ app.post('/api/fleet/autoscale', async (req, res) => {
 });
 
 // 16. Persistent Historical Telemetry (Tarea 4)
-const HISTORY_FILE = path.join(DATA_DIR, 'telemetry_history.json');
-
 function readHistory(): any[] {
   try {
-    if (fs.existsSync(HISTORY_FILE)) {
-      return JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf-8'));
+    const historyFile = getHistoryFile();
+    if (fs.existsSync(historyFile)) {
+      return JSON.parse(fs.readFileSync(historyFile, 'utf-8'));
     }
   } catch {}
   return [];
@@ -2237,7 +2300,10 @@ function readHistory(): any[] {
 
 function writeHistory(points: any[]) {
   try {
-    fs.writeFileSync(HISTORY_FILE, JSON.stringify(points.slice(-720), null, 2), 'utf-8');
+    const historyFile = getHistoryFile();
+    const dir = path.dirname(historyFile);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(historyFile, JSON.stringify(points.slice(-720), null, 2), 'utf-8');
   } catch {}
 }
 

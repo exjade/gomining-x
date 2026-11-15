@@ -52,11 +52,13 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import crypto from 'node:crypto';
 
 import {
   app,
   requireAdmin,
   getAuthenticatedUser,
+  setDataDir,
   setUsersFilePath,
   writeUsers,
   readContracts,
@@ -139,83 +141,60 @@ const PROTECTED_ADMIN_ROUTES: RouteTarget[] = [
   { method: 'GET', path: '/api/fintech/audit' },
 ];
 
-interface StoreSnapshot {
-  files: Map<string, Buffer>;
-  dirs: Set<string>;
-}
-
-function snapshotDataDir(): StoreSnapshot {
-  const files = new Map<string, Buffer>();
-  const dirs = new Set<string>();
-  const dataDir = path.join(process.cwd(), 'server', 'data');
-  if (!fs.existsSync(dataDir)) return { files, dirs };
-
-  function walk(dir: string, base: string) {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
+function computeDataDirHashes(dirPath: string): Map<string, string> {
+  const hashRecord = new Map<string, string>();
+  if (!fs.existsSync(dirPath)) return hashRecord;
+  function walk(currentDir: string, relBase: string) {
+    const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const ent of entries) {
-      const fullPath = path.join(dir, ent.name);
-      const relPath = base ? `${base}/${ent.name}` : ent.name;
+      const fullPath = path.join(currentDir, ent.name);
+      const relPath = relBase ? `${relBase}/${ent.name}` : ent.name;
       if (ent.isDirectory()) {
-        dirs.add(relPath);
         walk(fullPath, relPath);
       } else if (ent.isFile()) {
-        files.set(relPath, fs.readFileSync(fullPath));
+        const hash = crypto.createHash('sha256').update(fs.readFileSync(fullPath)).digest('hex').toUpperCase();
+        hashRecord.set(relPath, hash);
       }
     }
   }
-  walk(dataDir, '');
-  return { files, dirs };
+  walk(dirPath, '');
+  return hashRecord;
 }
 
-function restoreDataDir(snapshot: StoreSnapshot): void {
-  const dataDir = path.join(process.cwd(), 'server', 'data');
-  if (!fs.existsSync(dataDir)) return;
+const FORBIDDEN_TEST_MARKERS = [
+  'Authorized Strategy A',
+  'strat_success_',
+  'admin_uid_scrum237_A',
+  'admin_uid_scrum237_B',
+  'test_contract_scrum237',
+  'test_order_scrum237',
+  'Authorized Admin Package',
+  'ord_spoofed',
+  'ord_decouple',
+  'vast_mock_api_key_valid',
+];
 
-  function clean(dir: string, base: string) {
-    if (!fs.existsSync(dir)) return;
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
+function checkNoMarkersInDataDir(dirPath: string): void {
+  if (!fs.existsSync(dirPath)) return;
+  function walk(currentDir: string) {
+    const entries = fs.readdirSync(currentDir, { withFileTypes: true });
     for (const ent of entries) {
-      const fullPath = path.join(dir, ent.name);
-      const relPath = base ? `${base}/${ent.name}` : ent.name;
+      const fullPath = path.join(currentDir, ent.name);
       if (ent.isDirectory()) {
-        clean(fullPath, relPath);
-        try {
-          if (!snapshot.dirs.has(relPath) && fs.readdirSync(fullPath).length === 0) {
-            fs.rmdirSync(fullPath);
-          }
-        } catch {}
+        walk(fullPath);
       } else if (ent.isFile()) {
-        if (!snapshot.files.has(relPath)) {
-          try { fs.rmSync(fullPath, { force: true }); } catch {}
-        } else {
-          const orig = snapshot.files.get(relPath)!;
-          const current = fs.readFileSync(fullPath);
-          if (!current.equals(orig)) {
-            fs.writeFileSync(fullPath, orig);
-          }
+        const text = fs.readFileSync(fullPath, 'utf-8');
+        for (const marker of FORBIDDEN_TEST_MARKERS) {
+          assert.ok(
+            !text.includes(marker),
+            `Pollution detected in ${fullPath}: contains test marker "${marker}"`
+          );
         }
       }
     }
   }
-  clean(dataDir, '');
-
-  for (const dirRel of snapshot.dirs) {
-    const fullDir = path.join(dataDir, ...dirRel.split('/'));
-    if (!fs.existsSync(fullDir)) {
-      fs.mkdirSync(fullDir, { recursive: true });
-    }
-  }
-
-  for (const [relPath, content] of snapshot.files.entries()) {
-    const fullPath = path.join(dataDir, ...relPath.split('/'));
-    if (!fs.existsSync(fullPath)) {
-      const parentDir = path.dirname(fullPath);
-      if (!fs.existsSync(parentDir)) {
-        fs.mkdirSync(parentDir, { recursive: true });
-      }
-      fs.writeFileSync(fullPath, content);
-    }
-  }
+  walk(dirPath);
 }
 
 describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
@@ -223,26 +202,44 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
   let baseUrl: string;
   let serverPort: number;
   let tempDir: string;
-  let tempUsersFile: string;
   let originalFetch: typeof globalThis.fetch;
-  let initialContractsBackup: any[];
-  let initialOrdersBackup: any[];
-  let suiteInitialSnapshot: StoreSnapshot;
-  let testSnapshot: StoreSnapshot;
+  let preSuiteHashes: Map<string, string>;
+  const dataDir = path.join(process.cwd(), 'server', 'data');
 
-  before(() => {
-    const dataUsersDir = path.join(process.cwd(), 'server', 'data', 'users');
-    const strayProbe = path.join(dataUsersDir, 'probe_admin_test_uid');
-    if (fs.existsSync(strayProbe)) {
-      try { fs.rmSync(strayProbe, { recursive: true, force: true }); } catch {}
-    }
-    suiteInitialSnapshot = snapshotDataDir();
+  before(async () => {
+    // Read-only baseline capture of pre-suite state (strictly zero mutations or stray deletions on server/data)
+    preSuiteHashes = computeDataDirHashes(dataDir);
+
+    server = http.createServer(app);
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', () => {
+        const addr = server.address() as any;
+        serverPort = addr.port;
+        baseUrl = `http://127.0.0.1:${serverPort}`;
+        resolve();
+      });
+    });
   });
 
-  after(() => {
-    if (suiteInitialSnapshot) {
-      restoreDataDir(suiteInitialSnapshot);
+  after(async () => {
+    if (server) {
+      if (typeof (server as any).closeAllConnections === 'function') {
+        (server as any).closeAllConnections();
+      }
+      await new Promise<void>((resolve) => server.close(() => resolve()));
     }
+
+    // Assert server/data is 100% byte-identical to pre-suite state with zero leaked files
+    const postSuiteHashes = computeDataDirHashes(dataDir);
+    assert.equal(postSuiteHashes.size, preSuiteHashes.size, 'Total file count in server/data must match pre-suite count exactly');
+    for (const [relPath, preHash] of preSuiteHashes.entries()) {
+      assert.ok(postSuiteHashes.has(relPath), `File ${relPath} must exist in server/data`);
+      assert.equal(postSuiteHashes.get(relPath), preHash, `File ${relPath} must be byte-identical to pre-suite state`);
+    }
+    for (const relPath of postSuiteHashes.keys()) {
+      assert.ok(preSuiteHashes.has(relPath), `No newly created file may leak in server/data: ${relPath}`);
+    }
+    checkNoMarkersInDataDir(dataDir);
   });
 
   const adminUidA = 'admin_uid_scrum237_A';
@@ -261,15 +258,9 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
   const invalidToken = 'bearer_mock_invalid_token';
 
   beforeEach(async () => {
-    // 0. Snapshot data directory state for hermetic test isolation
-    testSnapshot = snapshotDataDir();
-    initialContractsBackup = JSON.parse(JSON.stringify(readContracts()));
-    initialOrdersBackup = JSON.parse(JSON.stringify(readOrders()));
-
-    // 1. Temporary users.json isolation
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scrum237-auth-'));
-    tempUsersFile = path.join(tempDir, 'users.json');
-    setUsersFilePath(tempUsersFile);
+    // 0. Hermetic test store isolation: redirect all server data stores to ephemeral tempDir
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scrum237-store-'));
+    setDataDir(tempDir);
 
     const initialUsers: UserAccount[] = [
       {
@@ -339,18 +330,7 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
       },
     });
 
-    // 3. Local ephemeral HTTP server binding explicitly on 127.0.0.1
-    server = http.createServer(app);
-    await new Promise<void>((resolve) => {
-      server.listen(0, '127.0.0.1', () => {
-        const addr = server.address() as any;
-        serverPort = addr.port;
-        baseUrl = `http://127.0.0.1:${serverPort}`;
-        resolve();
-      });
-    });
-
-    // 4. Selective Fetch Interceptor (§27 Compliance: zero external side-effects)
+    // 3. Selective Fetch Interceptor (§27 Compliance: zero external side-effects)
     originalFetch = globalThis.fetch;
     globalThis.fetch = async (input: any, init?: any) => {
       const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
@@ -386,38 +366,11 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
   });
 
   afterEach(async () => {
-    // 0. Hermetically restore server/data directory to pre-test state
-    if (testSnapshot) {
-      restoreDataDir(testSnapshot);
-    }
-
-    // Restore contracts and orders disk state
-    if (initialContractsBackup) writeContracts(initialContractsBackup);
-    if (initialOrdersBackup) writeOrders(initialOrdersBackup);
-
     globalThis.fetch = originalFetch;
-    setUsersFilePath(null);
+    setDataDir(null);
     try {
       fs.rmSync(tempDir, { recursive: true, force: true });
     } catch {}
-
-    // Clean up created user directories under data/users/
-    const dataUsersDir = path.join(process.cwd(), 'server', 'data', 'users');
-    for (const testUid of [adminUidA, adminUidB, nonAdminUid, 'attacker_uid', 'victim_admin', 'probe_admin_test_uid']) {
-      try {
-        const uDir = path.join(dataUsersDir, testUid);
-        if (fs.existsSync(uDir)) {
-          fs.rmSync(uDir, { recursive: true, force: true });
-        }
-      } catch {}
-    }
-
-    if (server) {
-      if (typeof (server as any).closeAllConnections === 'function') {
-        (server as any).closeAllConnections();
-      }
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-    }
   });
 
   // ==========================================================================
@@ -1296,16 +1249,16 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
   // ==========================================================================
   describe('Hermetic Store Isolation (SCRUM-237 Isolation Gate)', () => {
     it('verifies server/data is 100% byte-equivalent to pre-test state with zero leaked files', () => {
-      const current = snapshotDataDir();
-      assert.equal(current.files.size, suiteInitialSnapshot.files.size, 'Total file count in server/data must match initial state exactly');
-      for (const [relPath, origBuf] of suiteInitialSnapshot.files.entries()) {
-        assert.ok(current.files.has(relPath), `File ${relPath} must exist in restored state`);
-        const currBuf = current.files.get(relPath)!;
-        assert.ok(currBuf.equals(origBuf), `File ${relPath} must be byte-identical to pre-test state`);
+      const currentHashes = computeDataDirHashes(dataDir);
+      assert.equal(currentHashes.size, preSuiteHashes.size, 'Total file count in server/data must match initial state exactly');
+      for (const [relPath, preHash] of preSuiteHashes.entries()) {
+        assert.ok(currentHashes.has(relPath), `File ${relPath} must exist in server/data`);
+        assert.equal(currentHashes.get(relPath), preHash, `File ${relPath} must be byte-identical to pre-test state`);
       }
-      for (const relPath of current.files.keys()) {
-        assert.ok(suiteInitialSnapshot.files.has(relPath), `No newly created file may leak in server/data: ${relPath}`);
+      for (const relPath of currentHashes.keys()) {
+        assert.ok(preSuiteHashes.has(relPath), `No newly created file may leak in server/data: ${relPath}`);
       }
+      checkNoMarkersInDataDir(dataDir);
     });
   });
 });

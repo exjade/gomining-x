@@ -5,6 +5,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { fileURLToPath } from 'url';
 import type { GpuInstance, MiningMeasurement } from '../../src/types/vast.js';
 import { VastClient } from './vastClient.js';
@@ -12,9 +13,29 @@ import { VastOffersService } from './vastOffersService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DATA_DIR = path.join(__dirname, '..', 'data');
-const INSTANCES_FILE = path.join(DATA_DIR, 'vast_instances.json');
-const MEASUREMENTS_FILE = path.join(DATA_DIR, 'vast_measurements.json');
+
+function getEphemeralTestDataDir(): string {
+  const testDir = path.join(os.tmpdir(), `minerx-test-${process.pid}`);
+  if (!fs.existsSync(testDir)) {
+    fs.mkdirSync(testDir, { recursive: true });
+    process.once('exit', () => {
+      try {
+        fs.rmSync(testDir, { recursive: true, force: true });
+      } catch {}
+    });
+  }
+  return testDir;
+}
+
+const getDataDir = () => {
+  if (process.env.DATA_DIR) return process.env.DATA_DIR;
+  if (process.env.NODE_TEST_CONTEXT || process.env.NODE_ENV === 'test') {
+    return getEphemeralTestDataDir();
+  }
+  return path.join(__dirname, '..', 'data');
+};
+const getInstancesFile = () => path.join(getDataDir(), 'vast_instances.json');
+const getMeasurementsFile = () => path.join(getDataDir(), 'vast_measurements.json');
 
 export class VastInstanceService {
   private vastClient: VastClient;
@@ -25,21 +46,25 @@ export class VastInstanceService {
   }
 
   private ensureDataFiles() {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
+    const dataDir = getDataDir();
+    const instancesFile = getInstancesFile();
+    const measurementsFile = getMeasurementsFile();
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
     }
-    if (!fs.existsSync(INSTANCES_FILE)) {
-      fs.writeFileSync(INSTANCES_FILE, JSON.stringify({ instances: [] }, null, 2), 'utf-8');
+    if (!fs.existsSync(instancesFile)) {
+      fs.writeFileSync(instancesFile, JSON.stringify({ instances: [] }, null, 2), 'utf-8');
     }
-    if (!fs.existsSync(MEASUREMENTS_FILE)) {
-      fs.writeFileSync(MEASUREMENTS_FILE, JSON.stringify({ measurements: [] }, null, 2), 'utf-8');
+    if (!fs.existsSync(measurementsFile)) {
+      fs.writeFileSync(measurementsFile, JSON.stringify({ measurements: [] }, null, 2), 'utf-8');
     }
   }
 
   public getInstances(): GpuInstance[] {
     try {
-      if (fs.existsSync(INSTANCES_FILE)) {
-        const parsed = JSON.parse(fs.readFileSync(INSTANCES_FILE, 'utf-8'));
+      const instancesFile = getInstancesFile();
+      if (fs.existsSync(instancesFile)) {
+        const parsed = JSON.parse(fs.readFileSync(instancesFile, 'utf-8'));
         return Array.isArray(parsed.instances) ? parsed.instances : [];
       }
     } catch (err) {
@@ -50,7 +75,8 @@ export class VastInstanceService {
 
   public saveInstances(instances: GpuInstance[]) {
     try {
-      fs.writeFileSync(INSTANCES_FILE, JSON.stringify({ instances }, null, 2), 'utf-8');
+      this.ensureDataFiles();
+      fs.writeFileSync(getInstancesFile(), JSON.stringify({ instances }, null, 2), 'utf-8');
     } catch (err) {
       console.error('Error saving instances file:', err);
     }
@@ -58,8 +84,9 @@ export class VastInstanceService {
 
   public getMeasurements(instanceId?: string): MiningMeasurement[] {
     try {
-      if (fs.existsSync(MEASUREMENTS_FILE)) {
-        const parsed = JSON.parse(fs.readFileSync(MEASUREMENTS_FILE, 'utf-8'));
+      const measurementsFile = getMeasurementsFile();
+      if (fs.existsSync(measurementsFile)) {
+        const parsed = JSON.parse(fs.readFileSync(measurementsFile, 'utf-8'));
         const all: MiningMeasurement[] = Array.isArray(parsed.measurements) ? parsed.measurements : [];
         if (instanceId) {
           return all.filter((m) => m.instanceId === instanceId);
@@ -74,11 +101,12 @@ export class VastInstanceService {
 
   public recordMeasurement(measurement: MiningMeasurement) {
     try {
+      this.ensureDataFiles();
       const all = this.getMeasurements();
       all.push(measurement);
       // Keep last 1000 measurements
       const trimmed = all.slice(-1000);
-      fs.writeFileSync(MEASUREMENTS_FILE, JSON.stringify({ measurements: trimmed }, null, 2), 'utf-8');
+      fs.writeFileSync(getMeasurementsFile(), JSON.stringify({ measurements: trimmed }, null, 2), 'utf-8');
     } catch (err) {
       console.error('Error recording measurement:', err);
     }

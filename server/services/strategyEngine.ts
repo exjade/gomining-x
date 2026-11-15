@@ -5,6 +5,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { fileURLToPath } from 'url';
 import type {
   RentalStrategy,
@@ -17,9 +18,29 @@ import { VastInstanceService } from './vastInstanceService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DATA_DIR = path.join(__dirname, '..', 'data');
-const STRATEGIES_FILE = path.join(DATA_DIR, 'vast_strategies.json');
-const AUDIT_FILE = path.join(DATA_DIR, 'vast_audit_runs.json');
+
+function getEphemeralTestDataDir(): string {
+  const testDir = path.join(os.tmpdir(), `minerx-test-${process.pid}`);
+  if (!fs.existsSync(testDir)) {
+    fs.mkdirSync(testDir, { recursive: true });
+    process.once('exit', () => {
+      try {
+        fs.rmSync(testDir, { recursive: true, force: true });
+      } catch {}
+    });
+  }
+  return testDir;
+}
+
+const getDataDir = () => {
+  if (process.env.DATA_DIR) return process.env.DATA_DIR;
+  if (process.env.NODE_TEST_CONTEXT || process.env.NODE_ENV === 'test') {
+    return getEphemeralTestDataDir();
+  }
+  return path.join(__dirname, '..', 'data');
+};
+const getStrategiesFile = () => path.join(getDataDir(), 'vast_strategies.json');
+const getAuditFile = () => path.join(getDataDir(), 'vast_audit_runs.json');
 
 export class StrategyEngine {
   private instanceService: VastInstanceService;
@@ -33,21 +54,25 @@ export class StrategyEngine {
   }
 
   private ensureDataFiles() {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
+    const dataDir = getDataDir();
+    const strategiesFile = getStrategiesFile();
+    const auditFile = getAuditFile();
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
     }
-    if (!fs.existsSync(STRATEGIES_FILE)) {
-      fs.writeFileSync(STRATEGIES_FILE, JSON.stringify({ strategies: [] }, null, 2), 'utf-8');
+    if (!fs.existsSync(strategiesFile)) {
+      fs.writeFileSync(strategiesFile, JSON.stringify({ strategies: [] }, null, 2), 'utf-8');
     }
-    if (!fs.existsSync(AUDIT_FILE)) {
-      fs.writeFileSync(AUDIT_FILE, JSON.stringify({ runs: [] }, null, 2), 'utf-8');
+    if (!fs.existsSync(auditFile)) {
+      fs.writeFileSync(auditFile, JSON.stringify({ runs: [] }, null, 2), 'utf-8');
     }
   }
 
   public getStrategies(): RentalStrategy[] {
     try {
-      if (fs.existsSync(STRATEGIES_FILE)) {
-        const parsed = JSON.parse(fs.readFileSync(STRATEGIES_FILE, 'utf-8'));
+      const strategiesFile = getStrategiesFile();
+      if (fs.existsSync(strategiesFile)) {
+        const parsed = JSON.parse(fs.readFileSync(strategiesFile, 'utf-8'));
         return Array.isArray(parsed.strategies) ? parsed.strategies : [];
       }
     } catch (err) {
@@ -58,7 +83,8 @@ export class StrategyEngine {
 
   public saveStrategies(strategies: RentalStrategy[]) {
     try {
-      fs.writeFileSync(STRATEGIES_FILE, JSON.stringify({ strategies }, null, 2), 'utf-8');
+      this.ensureDataFiles();
+      fs.writeFileSync(getStrategiesFile(), JSON.stringify({ strategies }, null, 2), 'utf-8');
     } catch (err) {
       console.error('Error saving strategies:', err);
     }
@@ -66,8 +92,9 @@ export class StrategyEngine {
 
   public getAuditRuns(strategyId?: string): AuditRunEvent[] {
     try {
-      if (fs.existsSync(AUDIT_FILE)) {
-        const parsed = JSON.parse(fs.readFileSync(AUDIT_FILE, 'utf-8'));
+      const auditFile = getAuditFile();
+      if (fs.existsSync(auditFile)) {
+        const parsed = JSON.parse(fs.readFileSync(auditFile, 'utf-8'));
         const all: AuditRunEvent[] = Array.isArray(parsed.runs) ? parsed.runs : [];
         if (strategyId) {
           return all.filter((r) => r.strategyId === strategyId);
@@ -82,6 +109,7 @@ export class StrategyEngine {
 
   public recordAudit(event: Omit<AuditRunEvent, 'id' | 'timestamp'>) {
     try {
+      this.ensureDataFiles();
       const all = this.getAuditRuns();
       const newEvent: AuditRunEvent = {
         ...event,
@@ -91,7 +119,7 @@ export class StrategyEngine {
       all.push(newEvent);
       // Keep last 1000 events
       const trimmed = all.slice(-1000);
-      fs.writeFileSync(AUDIT_FILE, JSON.stringify({ runs: trimmed }, null, 2), 'utf-8');
+      fs.writeFileSync(getAuditFile(), JSON.stringify({ runs: trimmed }, null, 2), 'utf-8');
     } catch (err) {
       console.error('Error recording audit:', err);
     }
