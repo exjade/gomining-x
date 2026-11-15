@@ -535,14 +535,14 @@ const DEFAULT_CONFIG: SavedConfig = {
   }
 };
 
-function readConfig(userId: string = 'usr_default_admin'): SavedConfig {
+export function readConfig(_userId: string = 'usr_default_admin'): SavedConfig {
   try {
-    const userConfigFile = path.join(getUserDataDir(userId), 'config.json');
-    if (fs.existsSync(userConfigFile)) {
-      return JSON.parse(fs.readFileSync(userConfigFile, 'utf-8'));
-    }
-    if (userId === 'usr_default_admin' && fs.existsSync(CONFIG_FILE)) {
+    if (fs.existsSync(CONFIG_FILE)) {
       return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+    }
+    const defaultConfigFile = path.join(getUserDataDir('usr_default_admin'), 'config.json');
+    if (fs.existsSync(defaultConfigFile)) {
+      return JSON.parse(fs.readFileSync(defaultConfigFile, 'utf-8'));
     }
   } catch (err) {
     console.error('Error reading config file:', err);
@@ -550,13 +550,11 @@ function readConfig(userId: string = 'usr_default_admin'): SavedConfig {
   return JSON.parse(JSON.stringify(DEFAULT_CONFIG));
 }
 
-function writeConfig(cfg: SavedConfig, userId: string = 'usr_default_admin') {
+export function writeConfig(cfg: SavedConfig, _userId: string = 'usr_default_admin') {
   try {
-    const userConfigFile = path.join(getUserDataDir(userId), 'config.json');
-    fs.writeFileSync(userConfigFile, JSON.stringify(cfg, null, 2), 'utf-8');
-    if (userId === 'usr_default_admin') {
-      fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2), 'utf-8');
-    }
+    const defaultConfigFile = path.join(getUserDataDir('usr_default_admin'), 'config.json');
+    fs.writeFileSync(defaultConfigFile, JSON.stringify(cfg, null, 2), 'utf-8');
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2), 'utf-8');
   } catch (err) {
     console.error('Error writing config file:', err);
   }
@@ -597,11 +595,11 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// 2. Configuration Read / Write (User-Isolated)
+// 2. Configuration Read / Write (Shared Platform Config)
 app.get('/api/config', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
-  const config = readConfig(admin.id);
+  const config = readConfig();
   res.json(config);
 });
 
@@ -617,8 +615,8 @@ app.post('/api/config', async (req, res) => {
     updatedBy: admin.id,
     updatedAt: new Date().toISOString()
   };
-  writeConfig(configToSave, admin.id);
-  res.json({ success: true, message: 'Configuración guardada para tu usuario', userId: admin.id });
+  writeConfig(configToSave);
+  res.json({ success: true, message: 'Configuración guardada para la plataforma', userId: admin.id, updatedBy: admin.id });
 });
 
 // 2a. Commercial Packages Endpoints (Platform Admin Packages)
@@ -827,8 +825,8 @@ app.post('/api/admin/contracts', async (req, res) => {
     return res.status(400).json({ error: 'ID de contrato requerido' });
   }
 
-  // Strip client authority metadata
-  const { updatedBy: _u, role: _r, adminId: _a, userId: _user, ...safeContract } = contract;
+  // Strip client authority metadata (preserve business data like userId)
+  const { updatedBy: _u, role: _r, adminId: _a, ...safeContract } = contract;
   const now = new Date().toISOString();
   const contracts = readContracts();
   const idx = contracts.findIndex(c => c.id === safeContract.id);
@@ -937,9 +935,6 @@ app.post('/api/admin/storefront-sections', async (req, res) => {
     updatedBy: admin.id,
     updatedAt: new Date().toISOString()
   };
-  delete (updated as any).role;
-  delete (updated as any).adminId;
-  delete (updated as any).userId;
   writeStorefrontSections(updated);
   res.json({ success: true, config: updated });
 });
@@ -1032,7 +1027,7 @@ async function dispatchAlertNotification(
 app.get('/api/vast/config', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
-  const cfg = readConfig(admin.id);
+  const cfg = readConfig();
   const vastCfg = cfg.vastConfig || { apiKey: '', enabled: false, balanceUSD: 0, status: 'untested' };
   const hasKey = !!vastCfg.apiKey;
   const maskedKey = hasKey
@@ -1052,7 +1047,7 @@ app.get('/api/vast/config', async (req, res) => {
 app.post('/api/vast/config', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
-  const cfg = readConfig(admin.id);
+  const cfg = readConfig();
   const { apiKey, enabled } = req.body;
 
   if (!cfg.vastConfig) {
@@ -1066,14 +1061,14 @@ app.post('/api/vast/config', async (req, res) => {
     cfg.vastConfig.enabled = !!enabled;
   }
 
-  writeConfig(cfg, admin.id);
+  writeConfig(cfg);
   res.json({ success: true, message: 'Configuración de Vast.ai guardada.' });
 });
 
 app.post('/api/vast/test-account', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
-  const cfg = readConfig(admin.id);
+  const cfg = readConfig();
   const { apiKey } = req.body;
   const keyToTest = apiKey || cfg.vastConfig?.apiKey || process.env.VAST_API_KEY;
 
@@ -1090,7 +1085,7 @@ app.post('/api/vast/test-account', async (req, res) => {
     cfg.vastConfig.balanceUSD = result.user.balance;
     cfg.vastConfig.status = 'connected';
     cfg.vastConfig.lastTested = new Date().toISOString();
-    writeConfig(cfg, admin.id);
+    writeConfig(cfg);
   }
   res.json(result);
 });
@@ -1131,7 +1126,7 @@ app.get('/api/vast/instances', async (req, res) => {
 app.post('/api/vast/instances', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
-  const cfg = readConfig(admin.id);
+  const cfg = readConfig();
   const { offerId, gpuModel, gpuCount, gpuMemoryGB, hourlyComputeCostUSD, hourlyStorageCostUSD, strategyId } = req.body;
 
   const poolWallet = cfg.kryptexConfig.walletAddress;
@@ -1222,10 +1217,10 @@ app.get('/api/strategies/audit', async (req, res) => {
 app.post('/api/strategies/evaluate', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
-  const cfg = readConfig(admin.id);
+  const cfg = readConfig();
   const wallet = cfg.kryptexConfig.walletAddress;
   const result = await strategyEngine.executeStrategyCycle(wallet, (title, msg, sev) => {
-    dispatchAlertNotification(title, msg, sev, admin.id);
+    dispatchAlertNotification(title, msg, sev);
   });
   res.json({ success: true, result });
 });
@@ -1901,7 +1896,7 @@ app.post('/api/telegram/send-status', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
   try {
-    const cfg = readConfig(admin.id);
+    const cfg = readConfig();
     const token = (req.body.token || cfg.appSettings?.telegramBotToken || '').trim();
     const chatId = (req.body.chatId || cfg.appSettings?.telegramChatId || '').trim();
 
@@ -2018,14 +2013,14 @@ app.post('/api/salad/account-balance', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Falta el parámetro balanceUSD' });
   }
 
-  const cfg = readConfig(admin.id);
+  const cfg = readConfig();
   const acc = accountId 
     ? ((cfg.saladAccounts || []).find((a: any) => a.id === accountId || a.organizationName === accountId) || cfg.saladAccounts?.[0])
     : cfg.saladAccounts?.[0];
 
   if (acc) {
     acc.balanceUSD = Math.max(0, Number(balanceUSD));
-    writeConfig(cfg, admin.id);
+    writeConfig(cfg);
     return res.json({ success: true, message: 'Saldo actualizado correctamente', balanceUSD: acc.balanceUSD });
   }
 
@@ -2036,7 +2031,7 @@ app.post('/api/salad/account-balance', async (req, res) => {
 app.get('/api/salad/balance', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
-  const cfg = readConfig(admin.id);
+  const cfg = readConfig();
   const accounts = cfg.saladAccounts || [];
   let totalBalanceUSD = 0;
   let totalHourlySpendingUSD = 0;
@@ -2106,7 +2101,7 @@ app.get('/api/salad/logs/:org/:proj/:containerGroup/:instanceId', async (req, re
   const admin = await requireAdmin(req, res);
   if (!admin) return;
   const { org, proj, containerGroup, instanceId } = req.params;
-  const cfg = readConfig(admin.id);
+  const cfg = readConfig();
   const acc = (cfg.saladAccounts || []).find((a: any) => a.organizationName?.toLowerCase() === org?.toLowerCase()) || cfg.saladAccounts?.[0];
   const apiKey = acc?.apiKey || '';
 
@@ -2225,9 +2220,6 @@ app.post('/api/fleet/autoscale', async (req, res) => {
     updatedBy: admin.id,
     lastActionTime: new Date().toLocaleTimeString()
   };
-  delete (autoscaleConfig as any).role;
-  delete (autoscaleConfig as any).adminId;
-  delete (autoscaleConfig as any).userId;
   res.json({ success: true, autoscaleConfig });
 });
 
@@ -2283,7 +2275,7 @@ app.get('/api/history', (req, res) => {
 app.get('/api/fintech/audit', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
-  const cfg = readConfig(admin.id);
+  const cfg = readConfig();
   const acc = (cfg.saladAccounts || [])[0];
   const liveBal = acc?.balanceUSD !== undefined ? Number(acc.balanceUSD) : 4.50;
 

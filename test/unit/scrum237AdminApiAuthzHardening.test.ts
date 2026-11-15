@@ -46,7 +46,7 @@ if (typeof (globalThis as any).window === 'undefined') {
   };
 }
 
-import { describe, it, beforeEach, afterEach } from 'node:test';
+import { describe, it, before, after, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -63,6 +63,8 @@ import {
   writeContracts,
   readOrders,
   writeOrders,
+  readConfig,
+  writeConfig,
   type UserAccount,
 } from '../../server/server.js';
 import { firebaseAdminAuthAdapter } from '../../server/services/firebaseAdminAuthAdapter.js';
@@ -137,6 +139,85 @@ const PROTECTED_ADMIN_ROUTES: RouteTarget[] = [
   { method: 'GET', path: '/api/fintech/audit' },
 ];
 
+interface StoreSnapshot {
+  files: Map<string, Buffer>;
+  dirs: Set<string>;
+}
+
+function snapshotDataDir(): StoreSnapshot {
+  const files = new Map<string, Buffer>();
+  const dirs = new Set<string>();
+  const dataDir = path.join(process.cwd(), 'server', 'data');
+  if (!fs.existsSync(dataDir)) return { files, dirs };
+
+  function walk(dir: string, base: string) {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const ent of entries) {
+      const fullPath = path.join(dir, ent.name);
+      const relPath = base ? `${base}/${ent.name}` : ent.name;
+      if (ent.isDirectory()) {
+        dirs.add(relPath);
+        walk(fullPath, relPath);
+      } else if (ent.isFile()) {
+        files.set(relPath, fs.readFileSync(fullPath));
+      }
+    }
+  }
+  walk(dataDir, '');
+  return { files, dirs };
+}
+
+function restoreDataDir(snapshot: StoreSnapshot): void {
+  const dataDir = path.join(process.cwd(), 'server', 'data');
+  if (!fs.existsSync(dataDir)) return;
+
+  function clean(dir: string, base: string) {
+    if (!fs.existsSync(dir)) return;
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const ent of entries) {
+      const fullPath = path.join(dir, ent.name);
+      const relPath = base ? `${base}/${ent.name}` : ent.name;
+      if (ent.isDirectory()) {
+        clean(fullPath, relPath);
+        try {
+          if (!snapshot.dirs.has(relPath) && fs.readdirSync(fullPath).length === 0) {
+            fs.rmdirSync(fullPath);
+          }
+        } catch {}
+      } else if (ent.isFile()) {
+        if (!snapshot.files.has(relPath)) {
+          try { fs.rmSync(fullPath, { force: true }); } catch {}
+        } else {
+          const orig = snapshot.files.get(relPath)!;
+          const current = fs.readFileSync(fullPath);
+          if (!current.equals(orig)) {
+            fs.writeFileSync(fullPath, orig);
+          }
+        }
+      }
+    }
+  }
+  clean(dataDir, '');
+
+  for (const dirRel of snapshot.dirs) {
+    const fullDir = path.join(dataDir, ...dirRel.split('/'));
+    if (!fs.existsSync(fullDir)) {
+      fs.mkdirSync(fullDir, { recursive: true });
+    }
+  }
+
+  for (const [relPath, content] of snapshot.files.entries()) {
+    const fullPath = path.join(dataDir, ...relPath.split('/'));
+    if (!fs.existsSync(fullPath)) {
+      const parentDir = path.dirname(fullPath);
+      if (!fs.existsSync(parentDir)) {
+        fs.mkdirSync(parentDir, { recursive: true });
+      }
+      fs.writeFileSync(fullPath, content);
+    }
+  }
+}
+
 describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
   let server: http.Server;
   let baseUrl: string;
@@ -146,6 +227,23 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
   let originalFetch: typeof globalThis.fetch;
   let initialContractsBackup: any[];
   let initialOrdersBackup: any[];
+  let suiteInitialSnapshot: StoreSnapshot;
+  let testSnapshot: StoreSnapshot;
+
+  before(() => {
+    const dataUsersDir = path.join(process.cwd(), 'server', 'data', 'users');
+    const strayProbe = path.join(dataUsersDir, 'probe_admin_test_uid');
+    if (fs.existsSync(strayProbe)) {
+      try { fs.rmSync(strayProbe, { recursive: true, force: true }); } catch {}
+    }
+    suiteInitialSnapshot = snapshotDataDir();
+  });
+
+  after(() => {
+    if (suiteInitialSnapshot) {
+      restoreDataDir(suiteInitialSnapshot);
+    }
+  });
 
   const adminUidA = 'admin_uid_scrum237_A';
   const adminEmailA = 'adminA@minerx.cloud';
@@ -163,7 +261,8 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
   const invalidToken = 'bearer_mock_invalid_token';
 
   beforeEach(async () => {
-    // 0. Backup contracts and orders disk state for strict test isolation
+    // 0. Snapshot data directory state for hermetic test isolation
+    testSnapshot = snapshotDataDir();
     initialContractsBackup = JSON.parse(JSON.stringify(readContracts()));
     initialOrdersBackup = JSON.parse(JSON.stringify(readOrders()));
 
@@ -287,6 +386,11 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
   });
 
   afterEach(async () => {
+    // 0. Hermetically restore server/data directory to pre-test state
+    if (testSnapshot) {
+      restoreDataDir(testSnapshot);
+    }
+
     // Restore contracts and orders disk state
     if (initialContractsBackup) writeContracts(initialContractsBackup);
     if (initialOrdersBackup) writeOrders(initialOrdersBackup);
@@ -299,7 +403,7 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
 
     // Clean up created user directories under data/users/
     const dataUsersDir = path.join(process.cwd(), 'server', 'data', 'users');
-    for (const testUid of [adminUidA, adminUidB, nonAdminUid, 'attacker_uid', 'victim_admin']) {
+    for (const testUid of [adminUidA, adminUidB, nonAdminUid, 'attacker_uid', 'victim_admin', 'probe_admin_test_uid']) {
       try {
         const uDir = path.join(dataUsersDir, testUid);
         if (fs.existsSync(uDir)) {
@@ -531,11 +635,42 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
   });
 
   // ==========================================================================
-  // Section 5: AC2 & §28 Identity Propagation (admin.id Isolation vs usr_default_admin)
+  // Section 5: Shared Platform Configuration Consistency (AC2, Comment 10260 §B)
   // ==========================================================================
-  describe('AC2 & §28: Identity Propagation and Isolation', () => {
-    it('Admin A config write is stored under Admin A id and isolated from usr_default_admin and Admin B', async () => {
-      // 1. Admin A writes sensitive config
+  describe('Shared Platform Configuration Consistency', () => {
+    it('enforces 401 for unauthenticated or non-admin access to /api/config', async () => {
+      // 1. Anonymous access
+      const anonRes = await fetch(`${baseUrl}/api/config`);
+      assert.equal(anonRes.status, 401, 'Anonymous GET /api/config must return 401');
+
+      // 2. Non-admin client access
+      const nonAdminRes = await fetch(`${baseUrl}/api/config`, {
+        headers: { Authorization: `Bearer ${nonAdminToken}` },
+      });
+      assert.equal(nonAdminRes.status, 401, 'Non-admin GET /api/config must return 401');
+
+      // 3. Anonymous POST
+      const anonPost = await fetch(`${baseUrl}/api/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vastConfig: { enabled: true } }),
+      });
+      assert.equal(anonPost.status, 401, 'Anonymous POST /api/config must return 401');
+
+      // 4. Non-admin POST
+      const nonAdminPost = await fetch(`${baseUrl}/api/config`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${nonAdminToken}`,
+        },
+        body: JSON.stringify({ vastConfig: { enabled: true } }),
+      });
+      assert.equal(nonAdminPost.status, 401, 'Non-admin POST /api/config must return 401');
+    });
+
+    it('Admin A config write updates shared platform config visible to Admin B and background consumers', async () => {
+      // 1. Admin A writes sensitive platform config
       const resA = await fetch(`${baseUrl}/api/config`, {
         method: 'POST',
         headers: {
@@ -543,50 +678,58 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
           Authorization: `Bearer ${adminTokenA}`,
         },
         body: JSON.stringify({
-          vastConfig: { apiKey: 'secret_key_admin_A_999', enabled: true },
-          appSettings: { telegramBotToken: 'token_A' },
-          kryptexConfig: { walletAddress: 'wallet_A_address', coin: 'prl' },
+          vastConfig: { apiKey: 'platform_shared_vast_key_777', enabled: true },
+          appSettings: { telegramBotToken: 'platform_bot_token_777', telegramChatId: 'platform_chat_777' },
+          kryptexConfig: { walletAddress: 'platform_shared_wallet_address', coin: 'prl' },
         }),
       });
       assert.equal(resA.status, 200);
       const dataA = await resA.json() as any;
-      assert.equal(dataA.userId, adminUidA, 'Returned userId must strictly match admin.id');
+      assert.equal(dataA.userId, adminUidA, 'Returned userId reflects authenticated admin identity');
 
-      // 2. Verify file persisted under Admin A directory
-      const dataUsersDir = path.join(process.cwd(), 'server', 'data', 'users');
-      const adminAConfigFile = path.join(dataUsersDir, adminUidA, 'config.json');
-      assert.ok(fs.existsSync(adminAConfigFile), `Config file must exist at ${adminAConfigFile}`);
-      const adminAContent = JSON.parse(fs.readFileSync(adminAConfigFile, 'utf-8'));
-      assert.equal(adminAContent.vastConfig?.apiKey, 'secret_key_admin_A_999');
-
-      // 3. Verify usr_default_admin was NOT mutated with Admin A secrets
-      const defaultAdminConfigFile = path.join(dataUsersDir, 'usr_default_admin', 'config.json');
-      if (fs.existsSync(defaultAdminConfigFile)) {
-        const defaultAdminContent = JSON.parse(fs.readFileSync(defaultAdminConfigFile, 'utf-8'));
-        assert.notEqual(
-          defaultAdminContent.vastConfig?.apiKey,
-          'secret_key_admin_A_999',
-          'usr_default_admin config must never receive Admin A secrets'
-        );
-      }
-
-      // 4. Admin B reads /api/config and does not receive Admin A secrets
+      // 2. Admin B reads /api/config and receives the exact same shared platform configuration
       const resB = await fetch(`${baseUrl}/api/config`, {
-        headers: {
-          Authorization: `Bearer ${adminTokenB}`,
-        },
+        headers: { Authorization: `Bearer ${adminTokenB}` },
       });
       assert.equal(resB.status, 200);
       const dataB = await resB.json() as any;
-      assert.notEqual(
+      assert.equal(
         dataB.vastConfig?.apiKey,
-        'secret_key_admin_A_999',
-        'Admin B must not access Admin A configuration'
+        'platform_shared_vast_key_777',
+        'Admin B must receive shared platform Vast config'
+      );
+      assert.equal(
+        dataB.appSettings?.telegramBotToken,
+        'platform_bot_token_777',
+        'Admin B must receive shared platform Telegram token'
+      );
+      assert.equal(
+        dataB.kryptexConfig?.walletAddress,
+        'platform_shared_wallet_address',
+        'Admin B must receive shared platform Kryptex wallet'
+      );
+
+      // 3. Direct background consumer calling readConfig() without arguments sees the exact same configuration
+      const bgConfig = readConfig();
+      assert.equal(
+        bgConfig.vastConfig?.apiKey,
+        'platform_shared_vast_key_777',
+        'Background consumer readConfig() must receive the shared platform config'
+      );
+      assert.equal(
+        bgConfig.appSettings?.telegramBotToken,
+        'platform_bot_token_777',
+        'Background consumer readConfig() must receive shared platform Telegram token'
+      );
+      assert.equal(
+        bgConfig.kryptexConfig?.walletAddress,
+        'platform_shared_wallet_address',
+        'Background consumer readConfig() must receive shared platform Kryptex wallet'
       );
     });
 
-    it('Vast config GET & POST propagates admin.id without usr_default_admin fallback', async () => {
-      // Admin A sets Vast config
+    it('shared Vast config consistency: Admin A updates Vast config, Admin B sees masked key, and background reads actual key', async () => {
+      // 1. Admin A sets Vast config via /api/vast/config
       const postRes = await fetch(`${baseUrl}/api/vast/config`, {
         method: 'POST',
         headers: {
@@ -594,17 +737,15 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
           Authorization: `Bearer ${adminTokenA}`,
         },
         body: JSON.stringify({
-          apiKey: 'vast_admin_A_12345678',
+          apiKey: 'vast_platform_live_key_9999',
           enabled: true,
         }),
       });
       assert.equal(postRes.status, 200);
 
-      // Admin A reads Vast config -> maskedKey shows proper format
+      // 2. Admin A reads Vast config -> maskedKey shows proper format
       const getResA = await fetch(`${baseUrl}/api/vast/config`, {
-        headers: {
-          Authorization: `Bearer ${adminTokenA}`,
-        },
+        headers: { Authorization: `Bearer ${adminTokenA}` },
       });
       assert.equal(getResA.status, 200);
       const cfgA = await getResA.json() as any;
@@ -612,16 +753,20 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
       assert.equal(cfgA.hasKey, true);
       assert.ok(cfgA.maskedKey.startsWith('vast'));
 
-      // Admin B reads Vast config -> does not have Admin A key
+      // 3. Admin B reads Vast config -> also sees enabled=true and proper maskedKey from shared platform config
       const getResB = await fetch(`${baseUrl}/api/vast/config`, {
-        headers: {
-          Authorization: `Bearer ${adminTokenB}`,
-        },
+        headers: { Authorization: `Bearer ${adminTokenB}` },
       });
       assert.equal(getResB.status, 200);
       const cfgB = await getResB.json() as any;
-      assert.equal(cfgB.hasKey, false);
-      assert.equal(cfgB.maskedKey, 'No configurada');
+      assert.equal(cfgB.enabled, true);
+      assert.equal(cfgB.hasKey, true);
+      assert.ok(cfgB.maskedKey.startsWith('vast'));
+
+      // 4. Background consumer reads the exact unmasked key
+      const bgCfg = readConfig();
+      assert.equal(bgCfg.vastConfig?.apiKey, 'vast_platform_live_key_9999');
+      assert.equal(bgCfg.vastConfig?.enabled, true);
     });
   });
 
@@ -1001,7 +1146,7 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
   // Section 11: AC2, §28 & F2: Contract & Order Authority Spoofing Immunity
   // ==========================================================================
   describe('AC2, §28 & F2: Contract & Order Authority Spoofing Immunity', () => {
-    it('strips authority metadata and derives updatedBy from admin.id when creating a contract (POST /api/admin/contracts)', async () => {
+    it('strips authority metadata, preserves userId as business data, and derives updatedBy from admin.id when creating a contract (POST /api/admin/contracts)', async () => {
       const contractId = `cnt_spoof_new_${Date.now()}`;
       const res = await fetch(`${baseUrl}/api/admin/contracts`, {
         method: 'POST',
@@ -1025,7 +1170,7 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
       assert.equal(data.contract.updatedBy, adminUidA, 'Returned contract updatedBy must derive from admin.id');
       assert.equal(data.contract.role, undefined, 'Returned contract must not have role');
       assert.equal(data.contract.adminId, undefined, 'Returned contract must not have adminId');
-      assert.equal(data.contract.userId, undefined, 'Returned contract must not have userId');
+      assert.equal(data.contract.userId, 'attacker_target_user', 'Returned contract must preserve owner userId as business data');
 
       // Verify stored contract
       const contracts = readContracts();
@@ -1034,24 +1179,25 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
       assert.equal(stored.updatedBy, adminUidA, 'updatedBy must strictly derive from authenticated admin.id');
       assert.equal(stored.role, undefined, 'Client-supplied role must be stripped from stored contract');
       assert.equal(stored.adminId, undefined, 'Client-supplied adminId must be stripped from stored contract');
-      assert.equal(stored.userId, undefined, 'Client-supplied userId must be stripped from stored contract');
+      assert.equal(stored.userId, 'attacker_target_user', 'Contract owner userId must be preserved as business data in stored contract');
       assert.equal(stored.minerModel, 'Antminer S19 Pro+ Hyd');
     });
 
-    it('strips authority metadata and updates updatedBy to admin.id when updating an existing contract', async () => {
+    it('strips authority metadata and updates updatedBy to admin.id while preserving contract owner userId when updating an existing contract', async () => {
       const contractId = `cnt_spoof_exist_${Date.now()}`;
       // 1. Seed contract created by Admin B
       const contracts = readContracts();
       contracts.unshift({
         id: contractId,
         minerModel: 'WhatsMiner M30S',
+        userId: 'legitimate_contract_owner_42',
         status: 'ACTIVE',
         updatedBy: adminUidB,
         createdAt: new Date().toISOString(),
       });
       writeContracts(contracts);
 
-      // 2. Admin A updates contract with spoofed body authority fields
+      // 2. Admin A updates contract with spoofed body authority fields and explicit business userId
       const res = await fetch(`${baseUrl}/api/admin/contracts`, {
         method: 'POST',
         headers: {
@@ -1071,15 +1217,47 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
       const data = await res.json() as any;
       assert.equal(data.contract.updatedBy, adminUidA);
       assert.equal(data.contract.role, undefined);
+      assert.equal(data.contract.userId, 'injected_user_id');
 
-      // 3. Verify stored contract has updatedBy = adminUidA and no spoofed fields
+      // 3. Verify stored contract has updatedBy = adminUidA, userId updated, and no spoofed fields
       const stored = readContracts().find((c: any) => c.id === contractId);
       assert.ok(stored);
       assert.equal(stored.updatedBy, adminUidA, 'updatedBy must be overwritten with current authenticated admin.id');
       assert.equal(stored.role, undefined);
       assert.equal(stored.adminId, undefined);
-      assert.equal(stored.userId, undefined);
+      assert.equal(stored.userId, 'injected_user_id', 'Contract owner userId must be updated as business data');
       assert.equal(stored.minerModel, 'WhatsMiner M30S++');
+
+      // 4. Admin A updates again without passing userId; original/existing userId is preserved
+      const resNoUser = await fetch(`${baseUrl}/api/admin/contracts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminTokenA}`,
+        },
+        body: JSON.stringify({
+          id: contractId,
+          minerModel: 'WhatsMiner M30S+++',
+        }),
+      });
+      assert.equal(resNoUser.status, 200);
+      const storedAfterNoUser = readContracts().find((c: any) => c.id === contractId);
+      assert.ok(storedAfterNoUser);
+      assert.equal(storedAfterNoUser.userId, 'injected_user_id', 'Existing contract userId must remain intact if omitted in update');
+      assert.equal(storedAfterNoUser.minerModel, 'WhatsMiner M30S+++');
+    });
+
+    it('rejects unauthenticated requests to POST /api/admin/contracts with 401 regardless of body.userId', async () => {
+      const res = await fetch(`${baseUrl}/api/admin/contracts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: `cnt_unauth_${Date.now()}`,
+          userId: 'target_victim_user',
+          minerModel: 'Antminer L7',
+        }),
+      });
+      assert.equal(res.status, 401, 'Unauthenticated request must return 401 even if userId is provided');
     });
 
     it('strips authority metadata and derives updatedBy from admin.id for order creation and updates (POST /api/admin/orders)', async () => {
@@ -1110,6 +1288,24 @@ describe('SCRUM-237: Admin API AuthZ Hardening Suite', () => {
       assert.equal(stored.updatedBy, adminUidA, 'Order updatedBy must derive from admin.id');
       assert.equal(stored.role, undefined, 'Spoofed role must be stripped from order');
       assert.equal(stored.adminId, undefined, 'Spoofed adminId must be stripped from order');
+    });
+  });
+
+  // ==========================================================================
+  // Section 12: Hermetic Test Store Isolation Verification (AC, Comment 10260 §C)
+  // ==========================================================================
+  describe('Hermetic Store Isolation (SCRUM-237 Isolation Gate)', () => {
+    it('verifies server/data is 100% byte-equivalent to pre-test state with zero leaked files', () => {
+      const current = snapshotDataDir();
+      assert.equal(current.files.size, suiteInitialSnapshot.files.size, 'Total file count in server/data must match initial state exactly');
+      for (const [relPath, origBuf] of suiteInitialSnapshot.files.entries()) {
+        assert.ok(current.files.has(relPath), `File ${relPath} must exist in restored state`);
+        const currBuf = current.files.get(relPath)!;
+        assert.ok(currBuf.equals(origBuf), `File ${relPath} must be byte-identical to pre-test state`);
+      }
+      for (const relPath of current.files.keys()) {
+        assert.ok(suiteInitialSnapshot.files.has(relPath), `No newly created file may leak in server/data: ${relPath}`);
+      }
     });
   });
 });
