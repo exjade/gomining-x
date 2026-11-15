@@ -95,25 +95,20 @@ let memoryUsers = [
   }
 ];
 
-const ADMIN_ROLES = new Set(['admin', 'super_admin', 'finance', 'operator']);
+const ADMIN_ROLES = new Set([
+  'admin',
+  'super_admin',
+  'finance_admin',
+  'mining_operator',
+  'marketing_admin',
+  'auditor_viewer'
+]);
 
 function isLocalDevSessionAllowed() {
-  if (process.env.NODE_ENV === 'production') {
-    return false;
-  }
-  if (process.env.ALLOW_DEV_LOCAL_SESSION_TOKEN === 'false') {
-    return false;
-  }
-  if (process.env.ALLOW_DEV_LOCAL_SESSION_TOKEN === 'true') {
-    return true;
-  }
   return Boolean(
     process.env.NODE_ENV === 'test' ||
-    process.env.NODE_ENV === 'development' ||
-    process.env.NODE_TEST_CONTEXT ||
-    process.execArgv.includes('--test') ||
-    process.argv.some((arg) => arg.includes('test') || arg.includes('--test') || arg.includes('node:test')) ||
-    process.env.FIREBASE_AUTH_EMULATOR_HOST
+    process.env.FIREBASE_AUTH_EMULATOR_HOST ||
+    process.env.FUNCTIONS_EMULATOR === 'true'
   );
 }
 
