@@ -516,6 +516,36 @@ export async function requireAdmin(
   return admin;
 }
 
+/**
+ * User authentication for user-owned mining-cycle routes (SCRUM-268).
+ * Unlike the Admin contract above, any valid Firebase UID is accepted.
+ */
+export async function getFirebaseUserIdFromReq(req: express.Request): Promise<string | null> {
+  const authHeader = req.headers.authorization || '';
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  const token = match?.[1]?.trim();
+  if (!token || !firebaseAdminAuthAdapter.isInitialized()) return null;
+
+  try {
+    const decoded = await firebaseAdminAuthAdapter.verifyIdToken(token);
+    return decoded?.uid || null;
+  } catch {
+    return null;
+  }
+}
+
+async function requireFirebaseUserId(
+  req: express.Request,
+  res: express.Response
+): Promise<string | null> {
+  const userId = await getFirebaseUserIdFromReq(req);
+  if (!userId) {
+    res.status(401).json({ error: 'Unauthorized: valid Firebase authentication required' });
+    return null;
+  }
+  return userId;
+}
+
 export function getUserDataDir(userId: string): string {
   const userDir = path.join(getDataDir(), 'users', userId);
   if (!fs.existsSync(userDir)) {
@@ -646,6 +676,27 @@ function writeMiningCycles(data: any, userId: string = 'usr_default_admin') {
     fs.writeFileSync(cyclesFile, JSON.stringify(data, null, 2), 'utf-8');
   } catch (err) {
     console.error('Error writing mining cycles:', err);
+  }
+}
+
+function readAuthenticatedMiningCycles(firebaseUid: string): any {
+  try {
+    const userCyclesFile = path.join(getUserDataDir(firebaseUid), 'mining_cycles.json');
+    if (fs.existsSync(userCyclesFile)) {
+      return JSON.parse(fs.readFileSync(userCyclesFile, 'utf-8'));
+    }
+  } catch (err) {
+    console.error('Error reading authenticated mining cycles:', err);
+  }
+  return { activeCycle: null, closedCycles: [] };
+}
+
+function writeAuthenticatedMiningCycles(data: any, firebaseUid: string): void {
+  try {
+    const userCyclesFile = path.join(getUserDataDir(firebaseUid), 'mining_cycles.json');
+    fs.writeFileSync(userCyclesFile, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error writing authenticated mining cycles:', err);
   }
 }
 
@@ -2384,14 +2435,16 @@ app.get('/api/fintech/audit', async (req, res) => {
 });
 
 // 17b. Persistent Mining Cycles Manager (User-Isolated)
-app.get('/api/mining/cycles', (req, res) => {
-  const userId = getUserIdFromReq(req);
-  const data = readMiningCycles(userId);
+app.get('/api/mining/cycles', async (req, res) => {
+  const userId = await requireFirebaseUserId(req, res);
+  if (!userId) return;
+  const data = readAuthenticatedMiningCycles(userId);
   res.json({ success: true, ...data });
 });
 
-app.post('/api/mining/cycles/start', (req, res) => {
-  const userId = getUserIdFromReq(req);
+app.post('/api/mining/cycles/start', async (req, res) => {
+  const userId = await requireFirebaseUserId(req, res);
+  if (!userId) return;
   const { 
     containerGroupName, 
     organizationName, 
@@ -2403,7 +2456,7 @@ app.post('/api/mining/cycles/start', (req, res) => {
     cryptoCurrency
   } = req.body;
 
-  const data = readMiningCycles(userId);
+  const data = readAuthenticatedMiningCycles(userId);
   const now = Date.now();
   const cycleNumber = (data.closedCycles?.length || 0) + 1;
   const cycleId = `CICLO-${String(cycleNumber).padStart(3, '0')}`;
@@ -2437,13 +2490,14 @@ app.post('/api/mining/cycles/start', (req, res) => {
   };
 
   data.activeCycle = activeCycle;
-  writeMiningCycles(data, userId);
+  writeAuthenticatedMiningCycles(data, userId);
   res.json({ success: true, activeCycle });
 });
 
-app.post('/api/mining/cycles/close', (req, res) => {
-  const userId = getUserIdFromReq(req);
-  const data = readMiningCycles(userId);
+app.post('/api/mining/cycles/close', async (req, res) => {
+  const userId = await requireFirebaseUserId(req, res);
+  if (!userId) return;
+  const data = readAuthenticatedMiningCycles(userId);
   const cycleToClose = req.body.cycle || data.activeCycle;
   if (!cycleToClose) {
     return res.status(400).json({ success: false, message: 'No hay ciclo activo para cerrar' });
@@ -2476,19 +2530,20 @@ app.post('/api/mining/cycles/close', (req, res) => {
 
   data.closedCycles = [closedCycle, ...(data.closedCycles || [])];
   data.activeCycle = null;
-  writeMiningCycles(data, userId);
+  writeAuthenticatedMiningCycles(data, userId);
 
   res.json({ success: true, closedCycle, closedCycles: data.closedCycles });
 });
 
-app.post('/api/mining/cycles/save', (req, res) => {
-  const userId = getUserIdFromReq(req);
+app.post('/api/mining/cycles/save', async (req, res) => {
+  const userId = await requireFirebaseUserId(req, res);
+  if (!userId) return;
   const { activeCycle, closedCycles } = req.body;
   const data = {
     activeCycle: activeCycle || null,
     closedCycles: closedCycles || []
   };
-  writeMiningCycles(data, userId);
+  writeAuthenticatedMiningCycles(data, userId);
   res.json({ success: true, message: 'Ciclos sincronizados y guardados correctamente' });
 });
 
