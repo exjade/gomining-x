@@ -145,6 +145,7 @@ export const App: React.FC = () => {
 
   // User Authentication & Session State - Requiere autenticación verificada para entrar al dashboard
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [authInfrastructureError, setAuthInfrastructureError] = useState<string | null>(null);
   const [isSessionChecking, setIsSessionChecking] = useState<boolean>(() => {
     return typeof localStorage !== 'undefined' && Boolean(localStorage.getItem('minerx_auth_token'));
   });
@@ -194,6 +195,7 @@ export const App: React.FC = () => {
       localStorage.removeItem('minerx_auth_user');
     }
     setCurrentUser(null);
+    setAuthInfrastructureError(null);
     setSaladBalance(null);
   }, []);
 
@@ -207,11 +209,16 @@ export const App: React.FC = () => {
     }
 
     apiFetch('/api/auth/me')
-      .then((res) => {
+      .then(async (res) => {
         if (!res.ok) {
+          if (res.status === 503) {
+            setAuthInfrastructureError('La autoridad de autorización administrativa no está disponible.');
+            return null;
+          }
           handleLogout();
           return null;
         }
+        setAuthInfrastructureError(null);
         return res.json();
       })
       .then((data) => {
@@ -251,6 +258,9 @@ export const App: React.FC = () => {
       // 2. Pre-dashboard authorization check: solo permitir entrar con 200 y rol admin aprobado
       const res = await apiFetch('/api/auth/me');
       if (!res.ok) {
+        if (res.status === 503) {
+          throw new Error('La autoridad de autorización administrativa no está disponible.');
+        }
         throw new Error('Sesión no autorizada para el panel de administración.');
       }
       const data = await res.json();
@@ -1438,6 +1448,11 @@ export const App: React.FC = () => {
   if (!currentUser) {
     return (
       <div className={`min-h-screen font-sans ${themeMode === 'light' ? 'bg-[#EDEFF8]' : 'bg-[#07090F]'}`}>
+        {authInfrastructureError && (
+          <div role="alert" className="mx-auto max-w-xl px-4 pt-6 text-center text-sm text-amber-700">
+            {authInfrastructureError}
+          </div>
+        )}
         <AuthScreen
           onLogin={handleLogin}
           onOpenLanding={() => setViewMode('landing')}

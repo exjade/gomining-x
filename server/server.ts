@@ -11,6 +11,7 @@ import { StrategyEngine } from './services/strategyEngine.js';
 import { CatalogService, VALID_SECTIONS, VALID_STATUSES, type CatalogSection } from '../src/services/catalogService.js';
 import { FirebaseAdminCatalogStoreAdapter } from './services/firebaseAdminCatalogAdapter.js';
 import { firebaseAdminAuthAdapter } from './services/firebaseAdminAuthAdapter.js';
+import { firebaseAdminAllowlistAdapter } from './services/firebaseAdminAllowlistAdapter.js';
 import { platformBalancePurchaseService } from './services/platformBalancePurchaseService.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -411,92 +412,145 @@ export function isLocalDevSessionAllowed(): boolean {
   );
 }
 
-/**
- * Authoritative session verification for MinerX Admin & catalog management (SCRUM-212 / SCRUM-222).
- * Verifies Firebase ID token when Firebase Admin Auth is configured and enforces server-side admin allowlist in users.json.
- * Falls back to local users.json sessionToken ONLY for authorized dev/test environments and approved admin records.
- * NEVER falls back to default identities such as 'usr_default_admin'.
- * Returns null if token is missing, invalid, expired, or non-admin (fail-closed).
- */
-export async function getAuthenticatedUser(req: express.Request): Promise<UserAccount | null> {
+export type AdminAllowlistSource = 'firestore' | 'file' | 'invalid';
+
+function isTestAuthHarness(): boolean {
+  return Boolean(
+    process.env.NODE_ENV === 'test' ||
+    process.env.NODE_TEST_CONTEXT ||
+    process.execArgv.includes('--test') ||
+    process.argv.some((arg) => arg.includes('node:test') || arg.includes('--test'))
+  );
+}
+
+export function getAdminAllowlistSource(): AdminAllowlistSource {
+  const configured = process.env.ADMIN_ALLOWLIST_SOURCE?.trim().toLowerCase();
+  if (!configured) return isTestAuthHarness() ? 'file' : 'firestore';
+  if (configured === 'firestore') return 'firestore';
+  if (
+    configured === 'file' &&
+    isLocalDevSessionAllowed() &&
+    (isTestAuthHarness() || Boolean(customUsersFilePath || process.env.USERS_FILE_PATH))
+  ) {
+    return 'file';
+  }
+  return 'invalid';
+}
+
+type AdminAuthFailure = 'invalid-token' | 'not-allowlisted' | 'allowlist-unavailable';
+
+export interface AdminAuthResolution {
+  user: UserAccount | null;
+  failure: AdminAuthFailure;
+}
+
+async function resolveAdminAuthentication(req: express.Request): Promise<AdminAuthResolution> {
   const authHeader = (req.headers && req.headers.authorization) || '';
   let token = authHeader.replace(/^Bearer\s+/i, '').trim();
   if (!token && req.query && typeof req.query.token === 'string') {
     token = req.query.token.trim();
   }
-  if (!token) return null;
+  if (!token) return { user: null, failure: 'invalid-token' };
 
-  // 1. Verify via Firebase Admin Auth if initialized
   if (firebaseAdminAuthAdapter.isInitialized()) {
-    try {
-      const decoded = await firebaseAdminAuthAdapter.verifyIdToken(token);
-      if (decoded && decoded.uid) {
+    const decoded = await firebaseAdminAuthAdapter.verifyIdToken(token);
+    if (decoded?.uid) {
+      const source = getAdminAllowlistSource();
+      if (source === 'firestore') {
+        const decision = await firebaseAdminAllowlistAdapter.resolve(decoded);
+        if (decision.status === 'unavailable') {
+          return { user: null, failure: 'allowlist-unavailable' };
+        }
+        if (decision.status === 'approved') return { user: decision.user, failure: 'invalid-token' };
+        return { user: null, failure: 'not-allowlisted' };
+      }
+
+      if (source === 'file') {
         const db = readUsers();
         const adminUsers = db.users.filter((u) => u.role?.toLowerCase() === 'admin');
-
-        // 1. Exact UID match takes precedence (SCRUM-243 / B1)
         const uidMatch = adminUsers.find(
           (u) => Boolean(u.firebaseAuthUid && u.firebaseAuthUid.trim()) && u.firebaseAuthUid === decoded.uid
         );
         if (uidMatch) {
           return {
-            ...uidMatch,
-            id: uidMatch.id || decoded.uid,
-            firebaseAuthUid: decoded.uid,
-            email: decoded.email || uidMatch.email,
+            user: {
+              ...uidMatch,
+              id: uidMatch.id || decoded.uid,
+              firebaseAuthUid: decoded.uid,
+              email: decoded.email || uidMatch.email,
+            },
+            failure: 'invalid-token',
           };
         }
 
-        // 2. Fallback to email match ONLY for legacy records without firebaseAuthUid (disallows UID mismatch bypass)
         const tokenEmail = decoded.email?.trim().toLowerCase();
         if (tokenEmail) {
           const recordsWithEmail = adminUsers.filter(
             (u) => Boolean(u.email && u.email.trim().toLowerCase() === tokenEmail)
           );
-
-          // If an allowlist record for this email already has a populated UID, exact UID match was required -> reject UID mismatch
-          const recordWithUid = recordsWithEmail.find(
-            (u) => Boolean(u.firebaseAuthUid && u.firebaseAuthUid.trim())
-          );
-          if (recordWithUid) {
-            console.warn(
-              `[Auth] UID mismatch for admin allowlist record '${tokenEmail}': record UID '${recordWithUid.firebaseAuthUid}' !== token UID '${decoded.uid}'. Rejecting authorization.`
-            );
-            return null;
+          if (recordsWithEmail.some((u) => Boolean(u.firebaseAuthUid && u.firebaseAuthUid.trim()))) {
+            console.warn('[Auth] Admin allowlist UID mismatch; authorization rejected.');
+            return { user: null, failure: 'not-allowlisted' };
           }
-
-          // Legacy un-migrated record without Firebase UID: allow email fallback
-          const legacyRecord = recordsWithEmail.find(
-            (u) => !u.firebaseAuthUid || !u.firebaseAuthUid.trim()
-          );
+          const legacyRecord = recordsWithEmail.find((u) => !u.firebaseAuthUid || !u.firebaseAuthUid.trim());
           if (legacyRecord) {
             return {
-              ...legacyRecord,
-              id: legacyRecord.id || decoded.uid,
-              firebaseAuthUid: decoded.uid,
-              email: decoded.email || legacyRecord.email,
+              user: {
+                ...legacyRecord,
+                id: legacyRecord.id || decoded.uid,
+                firebaseAuthUid: decoded.uid,
+                email: decoded.email || legacyRecord.email,
+              },
+              failure: 'invalid-token',
             };
           }
         }
-
-        // Fail closed: valid Firebase token, but user is NOT on server-side admin allowlist (privilege escalation protection)
-        return null;
+      } else {
+        return { user: null, failure: 'allowlist-unavailable' };
       }
-    } catch {
-      // Verification failed
+
+      return { user: null, failure: 'not-allowlisted' };
     }
   }
 
-  // 2. Dev / test fallback: exact sessionToken match in users.json for approved admin (strictly gated)
-  if (isLocalDevSessionAllowed()) {
+  if (getAdminAllowlistSource() === 'file' && isLocalDevSessionAllowed()) {
     const db = readUsers();
     const localUser = db.users.find(
       (u) => Boolean(u.sessionToken) && u.sessionToken === token && u.role?.toLowerCase() === 'admin'
     );
-    return localUser || null;
+    if (localUser) return { user: localUser, failure: 'invalid-token' };
   }
 
+  return { user: null, failure: 'invalid-token' };
+}
+
+function sendAdminAuthFailure(
+  res: express.Response,
+  resolution: AdminAuthResolution,
+  message: string,
+  unauthorizedBody?: Record<string, unknown>
+): null {
+  if (resolution.failure === 'allowlist-unavailable') {
+    res.status(503).json({
+      success: false,
+      code: 'ADMIN_ALLOWLIST_UNAVAILABLE',
+      message: 'La autoridad de autorización administrativa no está disponible.',
+    });
+  } else {
+    res.status(401).json(unauthorizedBody || { success: false, message });
+  }
   return null;
+}
+
+/**
+ * Authoritative session verification for MinerX Admin & catalog management (SCRUM-212 / SCRUM-222).
+ * Verifies Firebase ID token when Firebase Admin Auth is configured and enforces the selected server-side admin allowlist.
+ * File-backed allowlists and sessionToken fallback are restricted to authorized dev/test environments.
+ * NEVER falls back to default identities such as 'usr_default_admin'.
+ * Returns null if token is missing, invalid, expired, or non-admin (fail-closed).
+ */
+export async function getAuthenticatedUser(req: express.Request): Promise<UserAccount | null> {
+  return (await resolveAdminAuthentication(req)).user;
 }
 
 /**
@@ -506,14 +560,15 @@ export async function getAuthenticatedUser(req: express.Request): Promise<UserAc
  */
 export async function requireAdmin(
   req: express.Request,
-  res: express.Response
+  res: express.Response,
+  unauthorizedBody?: Record<string, unknown>
 ): Promise<UserAccount | null> {
-  const admin = await getAuthenticatedUser(req);
-  if (!admin) {
-    res.status(401).json({ error: 'Unauthorized: valid admin authentication required' });
+  const resolution = await resolveAdminAuthentication(req);
+  if (!resolution.user) {
+    sendAdminAuthFailure(res, resolution, 'Unauthorized: valid admin authentication required', unauthorizedBody);
     return null;
   }
-  return admin;
+  return resolution.user;
 }
 
 /**
@@ -770,12 +825,10 @@ app.get('/api/catalog/storefront', async (req, res) => {
 // Requires a valid authenticated session. Backing store is commercial_packages via CatalogService.
 // Exposes new canonical catalog (ACTIVE, DRAFT, ARCHIVED) and physically preserved legacy separated.
 app.get('/api/catalog/admin', async (req, res) => {
-  const user = await getAuthenticatedUser(req);
-  if (!user) {
-    return res.status(401).json({
-      error: 'Unauthorized: valid authenticated session required'
-    });
-  }
+  const user = await requireAdmin(req, res, {
+    error: 'Unauthorized: valid authenticated session required',
+  });
+  if (!user) return;
 
   const section = req.query.section as string | undefined;
   const status = req.query.status as string | undefined;
@@ -809,12 +862,10 @@ app.get('/api/catalog/admin', async (req, res) => {
 // Canonical CREATE explicitly requires status and isPublished (no default publishing).
 // Strictly delegates to CatalogService. Backing store is commercial_packages.
 app.post('/api/catalog/packages', async (req, res) => {
-  const user = await getAuthenticatedUser(req);
-  if (!user) {
-    return res.status(401).json({
-      error: 'Unauthorized: valid authenticated session required for catalog mutations'
-    });
-  }
+  const user = await requireAdmin(req, res, {
+    error: 'Unauthorized: valid authenticated session required for catalog mutations',
+  });
+  if (!user) return;
 
   const pkg = req.body;
   if (!pkg || typeof pkg !== 'object' || Array.isArray(pkg)) {
@@ -837,12 +888,10 @@ app.post('/api/catalog/packages', async (req, res) => {
 // Strictly delegates to CatalogService. Backing store is commercial_packages.
 // Sets status = ARCHIVED, isPublished = false, preserves document physically.
 app.post('/api/catalog/packages/:id/archive', async (req, res) => {
-  const user = await getAuthenticatedUser(req);
-  if (!user) {
-    return res.status(401).json({
-      error: 'Unauthorized: valid authenticated session required for catalog archive'
-    });
-  }
+  const user = await requireAdmin(req, res, {
+    error: 'Unauthorized: valid authenticated session required for catalog archive',
+  });
+  if (!user) return;
 
   const { id } = req.params;
   if (!id || typeof id !== 'string' || !id.trim()) {
@@ -2691,10 +2740,8 @@ app.post('/api/auth/login', (req, res) => {
 
 // User registration audit endpoint: Authoritatively check all users against Firebase Authentication (SCRUM-243)
 app.get('/api/auth/audit', async (req, res) => {
-  const admin = await getAuthenticatedUser(req);
-  if (!admin || admin.role?.toLowerCase() !== 'admin') {
-    return res.status(401).json({ success: false, message: 'No autorizado para auditar usuarios.' });
-  }
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
 
   const db = readUsers();
   const logs = readAuditLogs();
@@ -2779,10 +2826,8 @@ app.get('/api/auth/audit', async (req, res) => {
 
 // Auto-repair & sync users into Firebase Authenticator (SCRUM-243: Never synthesizes fake fb_auth_*)
 app.post('/api/auth/audit-repair', async (req, res) => {
-  const admin = await getAuthenticatedUser(req);
-  if (!admin || admin.role?.toLowerCase() !== 'admin') {
-    return res.status(401).json({ success: false, message: 'No autorizado para reparar usuarios.' });
-  }
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
 
   if (!firebaseAdminAuthAdapter.isInitialized()) {
     return res.status(503).json({
@@ -2841,10 +2886,11 @@ app.post('/api/auth/audit-repair', async (req, res) => {
 
 // Current User Session verification (SCRUM-222)
 app.get('/api/auth/me', async (req, res) => {
-  const user = await getAuthenticatedUser(req);
-  if (!user) {
-    return res.status(401).json({ success: false, message: 'Sesión expirada o inválida.' });
+  const resolution = await resolveAdminAuthentication(req);
+  if (!resolution.user) {
+    return sendAdminAuthFailure(res, resolution, 'Sesión expirada o inválida.');
   }
+  const user = resolution.user;
 
   res.json({
     success: true,

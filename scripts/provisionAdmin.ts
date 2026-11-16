@@ -14,6 +14,7 @@ export interface ProvisionAdminOptions {
   email?: string;
   uid?: string;
   role?: string;
+  authority?: 'firestore' | 'file';
   dryRun?: boolean;
   skipFirestore?: boolean;
   authAdapter?: FirebaseAdminAuthAdapter;
@@ -39,9 +40,20 @@ export async function provisionAdmin(options: ProvisionAdminOptions): Promise<Pr
   const email = options.email?.trim().toLowerCase();
   const uid = options.uid?.trim();
   const role = options.role?.trim().toLowerCase() || 'admin';
+  const authority = options.authority || 'file';
   const dryRun = Boolean(options.dryRun);
   const skipFirestore = Boolean(options.skipFirestore);
   const authAdapter = options.authAdapter || firebaseAdminAuthAdapter;
+
+  if (authority !== 'firestore' && authority !== 'file') {
+    throw new Error('La autoridad de aprovisionamiento debe ser firestore o file.');
+  }
+  if (authority === 'firestore' && skipFirestore) {
+    throw new Error('La autoridad firestore no puede combinarse con --skip-firestore.');
+  }
+  if (authority === 'firestore' && role !== 'admin') {
+    throw new Error('La autoridad firestore requiere role=admin.');
+  }
 
   if (!email && !uid) {
     throw new Error('Debes proporcionar un --email o --uid para aprovisionar como administrador.');
@@ -67,6 +79,57 @@ export async function provisionAdmin(options: ProvisionAdminOptions): Promise<Pr
   const realUid = firebaseUser.uid;
   const realEmail = firebaseUser.email || email || '';
   const displayName = firebaseUser.displayName || realEmail.split('@')[0] || 'admin';
+
+  if (authority === 'firestore') {
+    let firestoreProjected = false;
+    if (!dryRun) {
+      let firestore = options.firestoreInstance;
+      if (!firestore) {
+        const app = authAdapter.getApp();
+        if (app) firestore = getFirestore(app);
+      }
+      if (!firestore) {
+        throw new Error('La autoridad Firestore no está disponible.');
+      }
+      try {
+        await firestore.collection('admin_users').doc(realUid).set(
+          {
+            uid: realUid,
+            email: realEmail,
+            role,
+            displayName,
+            updatedAt: new Date().toISOString(),
+            provisionedBy: 'cli',
+          },
+          { merge: true }
+        );
+        firestoreProjected = true;
+      } catch {
+        throw new Error('No se pudo actualizar la autoridad Firestore.');
+      }
+    }
+
+    return {
+      success: dryRun || firestoreProjected,
+      dryRun,
+      message: dryRun
+        ? '[DRY-RUN] Identidad Firebase validada; autoridad Firestore no modificada.'
+        : 'Administrador aprovisionado en la autoridad Firestore /admin_users.',
+      user: {
+        id: realUid,
+        firebaseAuthUid: realUid,
+        username: displayName,
+        email: realEmail,
+        fullName: displayName,
+        role,
+        passwordHash: '',
+        createdAt: new Date().toISOString(),
+        isStoredInFirebaseAuth: true,
+        isPublishedToFirestore: firestoreProjected,
+      },
+      firestoreProjected,
+    };
+  }
 
   // 2. Read users.json and upsert
   const db = readUsers();
@@ -198,6 +261,12 @@ export function parseCliArgs(argv: string[] = process.argv.slice(2)): ProvisionA
       options.dryRun = true;
     } else if (arg === '--skip-firestore') {
       options.skipFirestore = true;
+    } else if (arg.startsWith('--authority=')) {
+      const authority = arg.slice('--authority='.length).toLowerCase();
+      options.authority = authority as ProvisionAdminOptions['authority'];
+    } else if (arg === '--authority' && argv[i + 1]) {
+      const authority = argv[++i].toLowerCase();
+      options.authority = authority as ProvisionAdminOptions['authority'];
     }
   }
 
@@ -205,20 +274,24 @@ export function parseCliArgs(argv: string[] = process.argv.slice(2)): ProvisionA
 }
 
 export async function runCli(argv: string[] = process.argv.slice(2)): Promise<{ exitCode: number; result?: ProvisionAdminResult }> {
+  const opts = parseCliArgs(argv);
   try {
-    const opts = parseCliArgs(argv);
     const result = await provisionAdmin(opts);
     if (result.success) {
       console.log(result.message);
-      console.log(JSON.stringify(result.user, null, 2));
+      if (opts.authority !== 'firestore') console.log(JSON.stringify(result.user, null, 2));
       return { exitCode: 0, result };
     } else {
       console.error(result.message);
-      console.error(JSON.stringify(result.user, null, 2));
+      if (opts.authority !== 'firestore') console.error(JSON.stringify(result.user, null, 2));
       return { exitCode: 1, result };
     }
   } catch (err: any) {
-    console.error('Error de aprovisionamiento:', err?.message || err);
+    if (opts.authority === 'firestore') {
+      console.error('Error de aprovisionamiento: no se pudo validar o actualizar la autoridad Firestore.');
+    } else {
+      console.error('Error de aprovisionamiento:', err?.message || err);
+    }
     return { exitCode: 1 };
   }
 }
