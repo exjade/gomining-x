@@ -452,10 +452,12 @@ async function resolveAdminAuthentication(req: express.Request): Promise<AdminAu
   }
   if (!token) return { user: null, failure: 'invalid-token' };
 
-  if (firebaseAdminAuthAdapter.isInitialized()) {
+  const source = getAdminAllowlistSource();
+  if (!firebaseAdminAuthAdapter.isInitialized()) {
+    if (source === 'firestore') return { user: null, failure: 'allowlist-unavailable' };
+  } else {
     const decoded = await firebaseAdminAuthAdapter.verifyIdToken(token);
     if (decoded?.uid) {
-      const source = getAdminAllowlistSource();
       if (source === 'firestore') {
         const decision = await firebaseAdminAllowlistAdapter.resolve(decoded);
         if (decision.status === 'unavailable') {

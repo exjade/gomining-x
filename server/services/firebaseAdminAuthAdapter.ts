@@ -88,6 +88,10 @@ function safeFirebaseErrorCode(error: unknown): string | undefined {
   return typeof code === 'string' && /^[A-Za-z0-9._/-]{1,64}$/.test(code) ? code : undefined;
 }
 
+function isManagedGoogleRuntime(getEnv: (name: string) => string | undefined): boolean {
+  return Boolean(getEnv('K_SERVICE')?.trim() || getEnv('K_REVISION')?.trim());
+}
+
 /**
  * Server-side Firebase Admin Auth adapter.
  * Runs strictly in backend Node runtime (never bundled in Vite/Client).
@@ -158,6 +162,16 @@ export class FirebaseAdminAuthAdapter {
         this.dependencies.getEnv('FIRESTORE_EMULATOR_HOST')
       );
       const serviceAccountBase64 = this.dependencies.getEnv('FIREBASE_SERVICE_ACCOUNT_BASE64');
+      const hasExplicitApplicationDefaultCredentials = Boolean(
+        this.dependencies.getEnv('GOOGLE_APPLICATION_CREDENTIALS')?.trim()
+      );
+      const hasManagedRuntime = isManagedGoogleRuntime(this.dependencies.getEnv);
+      if (!hasEmulator && serviceAccountBase64 === undefined && !hasExplicitApplicationDefaultCredentials && !hasManagedRuntime) {
+        this.initializationFailed = true;
+        this.reportDiagnostic('initialization_unavailable');
+        return false;
+      }
+
       const appOptions = hasEmulator
         ? { projectId: this.projectId }
         : {
@@ -190,7 +204,7 @@ export class FirebaseAdminAuthAdapter {
         Boolean(
           this.dependencies.getEnv('FIREBASE_AUTH_EMULATOR_HOST') ||
             this.dependencies.getEnv('FIRESTORE_EMULATOR_HOST')
-        );
+          ) || isManagedGoogleRuntime(this.dependencies.getEnv);
       this.reportDiagnostic(hasConfiguredCredentialSource ? 'initialization_failure' : 'initialization_unavailable', error);
       return false;
     }

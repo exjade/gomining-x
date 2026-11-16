@@ -89,9 +89,22 @@ describe('SCRUM-274 Firebase Admin credential bootstrap', () => {
     assert.equal(fixture.certCalls, 0);
   });
 
-  it('uses Application Default Credentials without GOOGLE_APPLICATION_CREDENTIALS', () => {
+  it('does not probe ADC or initialize Firebase locally without a credential source', () => {
+    const fixture = createFixture({
+      environment: { GOOGLE_CLOUD_PROJECT: projectId },
+      applicationDefault: { kind: 'must-not-be-used' },
+    });
+
+    assert.equal(fixture.adapter.isInitialized(), false);
+    assert.equal(fixture.applicationDefaultCalls, 0);
+    assert.equal(fixture.initializeCalls, 0);
+    assert.deepEqual(fixture.diagnostics, [{ category: 'initialization_unavailable' }]);
+  });
+
+  it('uses Application Default Credentials only in a managed Google runtime without GOOGLE_APPLICATION_CREDENTIALS', () => {
     const credential = { kind: 'managed-adc' };
     const fixture = createFixture({
+      environment: { K_SERVICE: 'fixture-service', K_REVISION: 'fixture-revision' },
       applicationDefault: credential,
     });
 
@@ -176,7 +189,10 @@ describe('SCRUM-274 Firebase Admin credential bootstrap', () => {
   });
 
   it('fails closed when ADC itself is unavailable', () => {
-    const fixture = createFixture({ applicationDefaultError: new Error('ADC unavailable') });
+    const fixture = createFixture({
+      environment: { K_SERVICE: 'fixture-service' },
+      applicationDefaultError: new Error('ADC unavailable'),
+    });
 
     assert.equal(fixture.adapter.isInitialized(), false);
     assert.equal(fixture.initializeCalls, 0);

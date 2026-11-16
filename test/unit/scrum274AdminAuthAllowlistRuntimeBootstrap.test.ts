@@ -178,6 +178,18 @@ describe('SCRUM-274 admin allowlist authority', () => {
     assert.equal(firebaseAdminAllowlistAdapter.getLastDiagnostic(), 'firestore-read-failed');
   });
 
+  it('returns 503 for a candidate token when Firebase Admin is unavailable, while missing auth remains 401', async () => {
+    firebaseAdminAuthAdapter.setAuthInstance(null);
+    firebaseAdminAllowlistAdapter.setFirestoreInstance(null);
+
+    const missing = await requestMe();
+    const unavailable = await requestMe('valid-token');
+
+    assert.equal(missing.status, 401);
+    assert.equal(unavailable.status, 503);
+    assert.equal(unavailable.body.code, 'ADMIN_ALLOWLIST_UNAVAILABLE');
+  });
+
   it('does not use email fallback after an exact UID binding conflict', async () => {
     const firestore = createFirestore({
       data: { uid: adminToken.uid, firebaseAuthUid: 'different-uid', email: adminToken.email, role: 'admin' },
