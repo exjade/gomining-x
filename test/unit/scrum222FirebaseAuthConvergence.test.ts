@@ -122,24 +122,18 @@ describe('SCRUM-222: Firebase Auth & Backend Session Convergence Tests (AC 1 - A
   });
 
   describe('1. FirebaseAdminAuthAdapter Fail-Closed & Verification Unit Tests', () => {
-    it('fails closed when Google credentials and emulator host are absent', () => {
-      const savedCreds = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-      const savedAuthEmulator = process.env.FIREBASE_AUTH_EMULATOR_HOST;
-      const savedFirestoreEmulator = process.env.FIRESTORE_EMULATOR_HOST;
+    it('fails closed when ADC is unavailable and emulator host is absent', () => {
+      const adapter = new FirebaseAdminAuthAdapter({
+        dependencies: {
+          getApps: (() => []) as FirebaseAdminAuthAdapterDependencies['getApps'],
+          applicationDefault: () => {
+            throw new Error('ADC unavailable');
+          },
+        },
+      });
 
-      delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
-      delete process.env.FIREBASE_AUTH_EMULATOR_HOST;
-      delete process.env.FIRESTORE_EMULATOR_HOST;
-
-      try {
-        const adapter = new FirebaseAdminAuthAdapter();
-        assert.equal(adapter.isInitialized(), false, 'Adapter must not initialize without credentials');
-        assert.equal(adapter.getAuthInstance(), null);
-      } finally {
-        if (savedCreds) process.env.GOOGLE_APPLICATION_CREDENTIALS = savedCreds;
-        if (savedAuthEmulator) process.env.FIREBASE_AUTH_EMULATOR_HOST = savedAuthEmulator;
-        if (savedFirestoreEmulator) process.env.FIRESTORE_EMULATOR_HOST = savedFirestoreEmulator;
-      }
+      assert.equal(adapter.isInitialized(), false, 'Adapter must not initialize when ADC is unavailable');
+      assert.equal(adapter.getAuthInstance(), null);
     });
 
     it('returns null from verifyIdToken when uninitialized or when token is empty', async () => {

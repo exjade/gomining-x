@@ -92,7 +92,6 @@ describe('SCRUM-274 Firebase Admin credential bootstrap', () => {
   it('uses Application Default Credentials without GOOGLE_APPLICATION_CREDENTIALS', () => {
     const credential = { kind: 'managed-adc' };
     const fixture = createFixture({
-      environment: { GOOGLE_CLOUD_PROJECT: projectId },
       applicationDefault: credential,
     });
 
@@ -177,10 +176,7 @@ describe('SCRUM-274 Firebase Admin credential bootstrap', () => {
   });
 
   it('fails closed when ADC itself is unavailable', () => {
-    const fixture = createFixture({
-      environment: { GOOGLE_CLOUD_PROJECT: projectId },
-      applicationDefaultError: new Error('ADC unavailable'),
-    });
+    const fixture = createFixture({ applicationDefaultError: new Error('ADC unavailable') });
 
     assert.equal(fixture.adapter.isInitialized(), false);
     assert.equal(fixture.initializeCalls, 0);

@@ -114,7 +114,6 @@ export class FirebaseAdminAuthAdapter {
       return;
     }
 
-    this.ensureInitialized();
   }
 
   private reportDiagnostic(category: FirebaseAdminAuthDiagnosticCategory, error?: unknown): void {
@@ -159,25 +158,6 @@ export class FirebaseAdminAuthAdapter {
         this.dependencies.getEnv('FIRESTORE_EMULATOR_HOST')
       );
       const serviceAccountBase64 = this.dependencies.getEnv('FIREBASE_SERVICE_ACCOUNT_BASE64');
-      const hasManagedRuntime = Boolean(
-        this.dependencies.getEnv('K_SERVICE') ||
-          this.dependencies.getEnv('FUNCTION_TARGET') ||
-          this.dependencies.getEnv('GAE_ENV') ||
-          this.dependencies.getEnv('GOOGLE_CLOUD_PROJECT') ||
-          this.dependencies.getEnv('GCLOUD_PROJECT')
-      );
-      if (
-        !hasEmulator &&
-        serviceAccountBase64 === undefined &&
-        !this.dependencies.getEnv('GOOGLE_APPLICATION_CREDENTIALS') &&
-        !hasManagedRuntime
-      ) {
-        this.auth = null;
-        this.app = null;
-        this.initializationFailed = true;
-        this.reportDiagnostic('initialization_unavailable');
-        return false;
-      }
       const appOptions = hasEmulator
         ? { projectId: this.projectId }
         : {
