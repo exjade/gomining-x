@@ -13,7 +13,6 @@ describe('SCRUM-244: Firebase Admin Auth lazy recovery', () => {
     const validToken = 'fixture-valid-token';
     const expiredToken = 'fixture-expired-token';
     const environment = new Map<string, string>();
-    const existingFiles = new Set<string>();
     const apps: Array<{ name: string }> = [];
     const diagnostics: FirebaseAdminAuthDiagnostic[] = [];
     const lookedUpUids: string[] = [];
@@ -37,7 +36,6 @@ describe('SCRUM-244: Firebase Admin Auth lazy recovery', () => {
     };
 
     const dependencies: Partial<FirebaseAdminAuthAdapterDependencies> = {
-      fileExists: (path) => existingFiles.has(path),
       getEnv: (name) => environment.get(name),
       getApps: (() => apps as any) as FirebaseAdminAuthAdapterDependencies['getApps'],
       initializeApp: ((_: unknown, name: string) => {
@@ -46,7 +44,12 @@ describe('SCRUM-244: Firebase Admin Auth lazy recovery', () => {
         apps.push(app);
         return app as any;
       }) as FirebaseAdminAuthAdapterDependencies['initializeApp'],
-      applicationDefault: (() => ({}) as any) as FirebaseAdminAuthAdapterDependencies['applicationDefault'],
+      applicationDefault: (() => {
+        if (!environment.has('GOOGLE_APPLICATION_CREDENTIALS')) {
+          throw new Error('fixture ADC unavailable');
+        }
+        return {} as any;
+      }) as FirebaseAdminAuthAdapterDependencies['applicationDefault'],
       getAuth: (() => auth as any) as FirebaseAdminAuthAdapterDependencies['getAuth'],
       warn: (diagnostic) => diagnostics.push(diagnostic),
     };
@@ -58,7 +61,6 @@ describe('SCRUM-244: Firebase Admin Auth lazy recovery', () => {
     assert.equal(diagnostics.filter(({ category }) => category === 'initialization_unavailable').length, 1);
 
     environment.set('GOOGLE_APPLICATION_CREDENTIALS', credentialPath);
-    existingFiles.add(credentialPath);
 
     assert.deepEqual(await adapter.verifyIdToken(validToken), decoded);
     assert.equal(adapter.isInitialized(), true);

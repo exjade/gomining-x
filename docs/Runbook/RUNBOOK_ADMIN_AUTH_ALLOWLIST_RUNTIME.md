@@ -19,6 +19,40 @@ absent, one and only one unbound admin document with the normalized verified
 email may authorize. Ambiguous, bound, malformed, or non-admin records deny
 authorization. The backend never writes during authentication.
 
+## Firebase Admin credentials
+
+Choose one server-side credential mode for the runtime. The named Firebase
+Admin app is `minerx-backend-admin` and the default project is `salad-miners`.
+
+### Managed Google runtime
+
+Cloud Run, Google Cloud, and Firebase-managed runtimes should use the runtime
+service identity with Application Default Credentials (ADC). No credential
+file or `GOOGLE_APPLICATION_CREDENTIALS` path is required. The service
+identity must have the minimum IAM permissions needed for Firebase Auth and
+Firestore.
+
+### Generic hosting
+
+Configure the provider's secret manager once with a server-only secret:
+
+```text
+FIREBASE_SERVICE_ACCOUNT_BASE64=<secret>
+```
+
+The backend decodes and parses this value in memory and uses it only in the
+Node runtime. Subsequent automatic deploys reuse the provider secret; no
+PowerShell environment assignment is required.
+
+### Local development
+
+For local development, `GOOGLE_APPLICATION_CREDENTIALS` may point to an
+external service-account file. The file must remain outside source control.
+
+Never commit service-account JSON, bake it into a Docker image, or put any
+credential in a `VITE_*` variable. Credentials must not be returned in HTTP
+responses or printed in logs.
+
 ## Provisioning
 
 Use the supported external Firebase credential mechanism for the environment.
