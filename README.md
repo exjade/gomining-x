@@ -100,8 +100,11 @@ VITE_FIREBASE_APP_ID=<your-firebase-web-app-id>
 
 #### Operational Notes for Backend & Admin Runtime:
 
-- `FirebaseAdminAuthAdapter` initializes once at process startup. If `GOOGLE_APPLICATION_CREDENTIALS` (or `FIREBASE_SERVICE_ACCOUNT_BASE64`) is missing when the Backend starts, `/api/auth/me` will fail closed with HTTP 401 or HTTP 503 (`ADMIN_ALLOWLIST_UNAVAILABLE`).
-- A direct manual browser `GET /api/auth/me` in the address bar may return `401 Unauthorized` simply because the browser request does not include the `Authorization: Bearer <Firebase ID token>` header; this is normal API behavior and does not indicate a server defect.
+- `FirebaseAdminAuthAdapter` (`server/services/firebaseAdminAuthAdapter.ts`) uses lazy initialization via `ensureInitialized()` and supports same-process recovery (`initialization_recovered`) once credentials or the Firestore allowlist authority become available, without weakening fail-closed behavior.
+- Under `ADMIN_ALLOWLIST_SOURCE=firestore`, runtime outcomes for `/api/auth/me` and protected admin endpoints follow `RUNBOOK_ADMIN_AUTH_ALLOWLIST_RUNTIME.md`:
+  - `200`: The Firebase ID token is valid and the user is an approved Firestore admin in `/admin_users/{firebaseUid}`.
+  - `401`: The token is missing, invalid, expired, not allowlisted, has a role other than `admin`, has a conflicting UID binding, or has no unique legacy email match. (A direct browser navigation to `GET /api/auth/me` without an `Authorization: Bearer <Firebase ID token>` header returns 401 as expected.)
+  - `503` (`ADMIN_ALLOWLIST_UNAVAILABLE`): Firebase Admin Auth or the Firestore allowlist authority is unavailable (infrastructure failure; the Admin frontend retains the candidate session during a mount-time 503 so requests can succeed on retry once the authority recovers).
 - Ensure `FIREBASE_AUTH_EMULATOR_HOST` and `FIRESTORE_EMULATOR_HOST` are unset when verifying real Firebase ID tokens against Firebase Auth.
 - Never place service-account JSON credentials inside a Git worktree or commit them to source control.
 
@@ -109,22 +112,34 @@ VITE_FIREBASE_APP_ID=<your-firebase-web-app-id>
 
 ## 3. Running the Local Stack
 
+### 3.1 Initial Dependency Setup (First Time / After package-lock.json Changes)
+
+Install dependencies once per worktree on initial setup or after lockfile changes (do not run `npm ci` on every routine server start):
+
+```powershell
+npm --prefix "Y:\ChatGPT\go-minning\_worktrees\current-admin-backend" ci
+npm --prefix "Y:\ChatGPT\go-minning\_worktrees\current-client" ci
+```
+
+### 3.2 Daily Service Startup (Three Terminals)
+
 Start the three services across three separate PowerShell terminals so that `/api/*` proxies resolve cleanly.
 
-### Terminal 1 — Backend API (`http://127.0.0.1:3001`)
+#### Terminal 1 — Backend API (`http://127.0.0.1:3001`)
 
 ```powershell
 cd "Y:\ChatGPT\go-minning\_worktrees\current-admin-backend"
-npm ci
 $env:PORT = "3001"
 $env:ADMIN_ALLOWLIST_SOURCE = "firestore"
 $env:GOOGLE_APPLICATION_CREDENTIALS = "<external-path-outside-repo>\firebase-adminsdk.json"
 Remove-Item Env:FIREBASE_AUTH_EMULATOR_HOST -ErrorAction SilentlyContinue
 Remove-Item Env:FIRESTORE_EMULATOR_HOST -ErrorAction SilentlyContinue
 
-# Verified startup command (SCRUM-294):
+# API-only local startup (starts Express API on 127.0.0.1:3001 without isMainModule background/Telegram intervals):
 node --env-file-if-exists=.env.local --import tsx --input-type=module -e "import('./server/server.ts').then(m => m.app.listen(3001,'127.0.0.1',() => console.log('Backend: http://127.0.0.1:3001')))"
 ```
+
+> **API-only vs. Full Runtime**: Importing `server/server.ts` and calling `m.app.listen(...)` keeps `isMainModule` false, starting the Express HTTP API cleanly for local Client/Admin development without launching the 60-second autonomous surveillance loop or 8-second Telegram command poller. Use `npm start` (`tsx server/server.ts`) only when you explicitly want the full background-watcher runtime.
 
 Expected output:
 ```text
@@ -136,7 +151,7 @@ Verify that the storefront catalog endpoint responds:
 Invoke-RestMethod -Uri "http://127.0.0.1:3001/api/catalog/storefront?section=packages"
 ```
 
-### Terminal 2 — Admin Dashboard (`http://127.0.0.1:5174`)
+#### Terminal 2 — Admin Dashboard (`http://127.0.0.1:5174`)
 
 ```powershell
 cd "Y:\ChatGPT\go-minning\_worktrees\current-admin-backend"
@@ -145,11 +160,10 @@ npx vite --host 127.0.0.1 --port 5174 --strictPort
 
 Open `http://127.0.0.1:5174/` in your browser. Vite proxies `/api` requests to `http://127.0.0.1:3001`.
 
-### Terminal 3 — Client Storefront (`http://127.0.0.1:5175`)
+#### Terminal 3 — Client Storefront (`http://127.0.0.1:5175`)
 
 ```powershell
 cd "Y:\ChatGPT\go-minning\_worktrees\current-client"
-npm ci
 npx vite --host 127.0.0.1 --port 5175 --strictPort
 ```
 
@@ -199,7 +213,7 @@ Each task (`TASK_ID` / Jira key) must use its own isolated branch and worktree u
 
 Run inside `_worktrees/current-client` (or an active Client task worktree):
 
-- `npm run dev -- --port 5175` / `npx vite --host 127.0.0.1 --port 5175 --strictPort` — Start the Vite development server on `http://127.0.0.1:5175`.
+- `npm run dev -- --port 5175 --strictPort` / `npx vite --host 127.0.0.1 --port 5175 --strictPort` — Start the Vite development server strictly on `http://127.0.0.1:5175`.
 - `npm run build` — Type-check (`tsc -b`) and build the production bundle (`vite build`).
 - `npm run preview` — Preview the production build locally (`http://127.0.0.1:4174`).
 - `npm test` — Execute the Node.js unit and integration test suite (`test/**/*.test.ts`).
