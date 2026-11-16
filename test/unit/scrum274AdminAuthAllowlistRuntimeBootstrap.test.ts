@@ -11,11 +11,13 @@ import {
 import { firebaseAdminAuthAdapter } from '../../server/services/firebaseAdminAuthAdapter.js';
 import { provisionAdmin, runCli } from '../../scripts/provisionAdmin.js';
 
-const adminToken = { uid: 'uid-admin-274', email: 'admin-274@example.com' };
+const adminToken = { uid: 'uid-admin-274', email: 'admin-274@example.com', email_verified: true };
 
-function useAuthToken(): void {
+function useAuthToken(
+  token: { uid: string; email?: string | null; email_verified?: boolean } = adminToken
+): void {
   firebaseAdminAuthAdapter.setAuthInstance({
-    verifyIdToken: async (token: string) => (token === 'valid-token' ? adminToken : null),
+    verifyIdToken: async (value: string) => (value === 'valid-token' ? token : null),
   } as any);
 }
 
@@ -211,6 +213,40 @@ describe('SCRUM-274 admin allowlist authority', () => {
     );
     const bound = await requestMe('valid-token');
     assert.equal(bound.status, 401);
+  });
+
+  it('requires a verified Firebase email for legacy fallback but not exact UID authorization', async () => {
+    for (const token of [
+      { uid: adminToken.uid, email: adminToken.email, email_verified: false },
+      { uid: adminToken.uid, email: adminToken.email },
+    ]) {
+      useAuthToken(token);
+      const firestore = createFirestore({
+        data: {
+          uid: adminToken.uid,
+          firebaseAuthUid: adminToken.uid,
+          email: adminToken.email,
+          role: 'admin',
+        },
+        legacyData: [{ email: adminToken.email, role: 'admin' }],
+      });
+      firebaseAdminAllowlistAdapter.setFirestoreInstance(firestore);
+      const exactUid = await requestMe('valid-token');
+      assert.equal(exactUid.status, 200);
+      assert.equal(firestore.getCalls, 0);
+    }
+
+    for (const token of [
+      { uid: adminToken.uid, email: adminToken.email, email_verified: false },
+      { uid: adminToken.uid, email: adminToken.email },
+    ]) {
+      useAuthToken(token);
+      const firestore = createFirestore({ legacyData: [{ email: adminToken.email, role: 'admin' }] });
+      firebaseAdminAllowlistAdapter.setFirestoreInstance(firestore);
+      const legacy = await requestMe('valid-token');
+      assert.equal(legacy.status, 401);
+      assert.equal(firestore.getCalls, 0);
+    }
   });
 
   it('denies ambiguous or unavailable legacy Firestore email lookup', async () => {

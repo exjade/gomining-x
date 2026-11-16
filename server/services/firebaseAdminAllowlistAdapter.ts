@@ -29,6 +29,7 @@ export interface FirestoreLike {
 export interface VerifiedFirebaseTokenLike {
   uid: string;
   email?: string | null;
+  email_verified?: boolean;
 }
 
 export interface AdminAllowlistUser {
@@ -92,6 +93,8 @@ export class FirebaseAdminAllowlistAdapter {
       if (exactSnapshot.exists) {
         return this.resolveDocument(token, exactSnapshot.data() || {}, false);
       }
+
+      if (token.email_verified !== true) return { status: 'denied' };
 
       const tokenEmail = typeof token.email === 'string' ? token.email.trim().toLowerCase() : '';
       if (!tokenEmail) return { status: 'denied' };
