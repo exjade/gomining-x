@@ -311,9 +311,9 @@ function AppContent() {
       <div className="workspace">
         <header className="topbar">
           <div className="header-navigation">
-            <Link to={user ? "/home" : "/"} className="brand" aria-label="GoMining inicio">
-              <span className="brand-mark">G</span>
-              <span className="brand-word">gomining</span>
+            <Link to={user ? "/home" : "/"} className="brand" aria-label={user ? 'GoMining inicio' : 'PouwMiner inicio'}>
+              <span className="brand-mark">{user ? 'G' : 'P'}</span>
+              <span className="brand-word">{user ? 'gomining' : 'PouwMiner'}</span>
             </Link>
             <nav className="primary-nav" aria-label="Navegación principal">
               {user ? (
@@ -495,7 +495,7 @@ function AppContent() {
           )}
           </div>
           <footer className="page-footer">
-            <span>{t('replica.footer_replica')}</span>
+            <span>{user ? t('replica.footer_replica') : t('replica.footer_public')}</span>
             <span>{t('replica.external_services_note')}</span>
           </footer>
         </main>

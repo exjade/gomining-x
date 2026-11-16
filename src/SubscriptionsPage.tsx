@@ -268,8 +268,8 @@ export function SubscriptionsPage({
             </div>
             <p className="subscription-disclaimer">
               {language === 'en'
-                ? 'By subscribing you accept the GoMining Terms of Service and Privacy Policy.'
-                : 'Al suscribirte aceptas los Términos de Servicio y la Política de Privacidad de GoMining.'}
+                ? 'Applicable legal documents will be shown after approval.'
+                : 'Los documentos legales aplicables se mostrarán después de su aprobación.'}
             </p>
           </div>
         )}

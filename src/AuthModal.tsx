@@ -45,6 +45,15 @@ export function AuthModal() {
   }, [authMode, authModalOpen])
 
   useEffect(() => {
+    if (!authModalOpen) return
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeAuthModal()
+    }
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [authModalOpen, closeAuthModal])
+
+  useEffect(() => {
     if (referralCodeFromUrl && !referralCode) {
       setReferralCode(referralCodeFromUrl)
     }
@@ -217,7 +226,7 @@ export function AuthModal() {
     try {
       const verified = await checkVerification()
       if (verified) {
-        setInfo(language === 'en' ? 'Email verified successfully! Welcome to GoMining.' : '¡Correo verificado con éxito! Bienvenido a GoMining.')
+        setInfo(language === 'en' ? 'Email verified successfully! Welcome to PouwMiner.' : '¡Correo verificado con éxito! Bienvenido a PouwMiner.')
         setTimeout(() => closeAuthModal(), 1000)
       } else {
         setError(
@@ -254,7 +263,13 @@ export function AuthModal() {
 
   return (
     <div className="auth-modal-overlay" onClick={closeAuthModal}>
-      <div className="auth-modal-card" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="auth-modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-label={language === 'en' ? 'PouwMiner account access' : 'Acceso a cuenta PouwMiner'}
+        onClick={(e) => e.stopPropagation()}
+      >
         <button
           type="button"
           className="auth-modal-close"
@@ -311,8 +326,8 @@ export function AuthModal() {
               <p>{t('auth.email_verification_desc')}</p>
             </div>
 
-            {error && <div className="auth-error-banner">{error}</div>}
-            {info && <div className="auth-success-banner">{info}</div>}
+            {error && <div className="auth-error-banner" role="alert">{error}</div>}
+            {info && <div className="auth-success-banner" role="status" aria-live="polite">{info}</div>}
 
             <div className="auth-button-group">
               <button
@@ -352,7 +367,7 @@ export function AuthModal() {
             <h2 className="auth-title">{t('auth.register_title')}</h2>
             <p className="auth-subtitle">{t('auth.register_desc')}</p>
 
-            {error && <div className="auth-error-banner">{error}</div>}
+            {error && <div className="auth-error-banner" role="alert">{error}</div>}
 
             <form onSubmit={handleStep1Submit} className="auth-form">
               <div className="auth-field">
@@ -431,7 +446,7 @@ export function AuthModal() {
               {language === 'en' ? 'For ' : 'Para '} <strong>{email}</strong>
             </p>
 
-            {error && <div className="auth-error-banner">{error}</div>}
+            {error && <div className="auth-error-banner" role="alert">{error}</div>}
 
             <form onSubmit={handleRegisterSubmit} className="auth-form">
               <div className="auth-field">
@@ -504,7 +519,7 @@ export function AuthModal() {
                 )}
                 {refStatus === 'valid' && (
                   <span className="auth-ref-hint auth-ref-hint-valid" style={{ color: '#22c55e' }}>
-                    ✓ {t('auth.sponsor_found')} <strong>{sponsorDetails || referralCode}</strong> (10% Bonus)
+                    ✓ {t('auth.sponsor_found')} <strong>{sponsorDetails || referralCode}</strong>
                   </span>
                 )}
                 {refStatus === 'invalid' && (
@@ -514,11 +529,7 @@ export function AuthModal() {
                 )}
               </div>
 
-              <p className="auth-legal-text">
-                {language === 'en'
-                  ? 'By registering you accept our Terms of Service and Privacy Policy.'
-                  : 'Al registrarte aceptas nuestros Términos de Servicio y Política de Privacidad.'}
-              </p>
+              <p className="auth-legal-text">{t('auth.legal_pending')}</p>
 
               <button
                 type="submit"
@@ -551,8 +562,8 @@ export function AuthModal() {
             <h2 className="auth-title">{t('auth.login_title')}</h2>
             <p className="auth-subtitle">{t('auth.login_desc')}</p>
 
-            {error && <div className="auth-error-banner">{error}</div>}
-            {info && <div className="auth-success-banner">{info}</div>}
+            {error && <div className="auth-error-banner" role="alert">{error}</div>}
+            {info && <div className="auth-success-banner" role="status" aria-live="polite">{info}</div>}
 
             <form onSubmit={handleLoginSubmit} className="auth-form">
               <div className="auth-field">
@@ -677,8 +688,8 @@ export function AuthModal() {
                 : 'Ingresa tu correo y te enviaremos un enlace para restablecer tu contraseña.'}
             </p>
 
-            {error && <div className="auth-error-banner">{error}</div>}
-            {info && <div className="auth-success-banner">{info}</div>}
+            {error && <div className="auth-error-banner" role="alert">{error}</div>}
+            {info && <div className="auth-success-banner" role="status" aria-live="polite">{info}</div>}
 
             <form onSubmit={handleForgotPassword} className="auth-form">
               <div className="auth-field">

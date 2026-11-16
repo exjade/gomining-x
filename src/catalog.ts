@@ -90,7 +90,7 @@ const definition = (
 ): ScreenDefinition => ({ title, eyebrow, description, icon, group, mode, action, observed, columns })
 
 export const screens: Record<string, ScreenDefinition> = {
-  '/': definition('GoMining', 'MINERÍA DIGITAL DE BITCOIN', 'Mina Bitcoin todos los días con mineros digitales respaldados por potencia real.', '✦', 'Inicio', 'generic', 'Crear cuenta', false),
+  '/': definition('PouwMiner.com', 'MINERÍA DE POTENCIA', 'Consulta el catálogo de potencia de minado y el contexto operativo disponible.', '✦', 'Inicio', 'generic', 'Crear cuenta', false),
   '/home': definition('Panel', 'TU ESPACIO GOMINING', 'Resumen de tu actividad y accesos frecuentes.', '⌂', 'Panel', 'dashboard', undefined, true),
   '/nft-miners': definition('Mineros', 'MINEROS DIGITALES', 'Administra y explora tus mineros digitales.', '▦', 'Panel', 'collection', 'Crear minero', true),
   '/nft-rewards': definition('Recompensas', 'MINERÍA', 'Consulta la actividad y las recompensas de minería.', '✦', 'Panel', 'table', 'Reclamar recompensas'),

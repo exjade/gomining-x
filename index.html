@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0d18" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="description" content="Réplica local de navegación de GoMining para uso privado." />
+    <meta name="description" content="Réplica local de navegación de GoMining para uso privado." id="page-description" />
     <title>GoMining · réplica local</title>
     <style>
       html,body{min-width:320px;min-height:100%;margin:0;background:#090b14;color:#f7f6fc;color-scheme:dark;font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
@@ -13,6 +13,7 @@
       .initial-loading{min-height:100vh;box-sizing:border-box;background:radial-gradient(ellipse at 78% 0%,rgba(120,68,226,.17),transparent 43%),#090b14;color:#f7f6fc}
       .initial-topbar{height:68px;display:flex;align-items:center;justify-content:space-between;padding:0 max(22px,calc((100vw - 1240px)/2));border-bottom:1px solid rgba(255,255,255,.08);background:rgba(11,12,20,.86)}
       .initial-brand{display:flex;align-items:center;gap:10px;color:#fff;font-weight:800;letter-spacing:-.04em}
+      .initial-brand-public{display:none}html[data-public-shell="true"] .initial-brand-internal{display:none}html[data-public-shell="true"] .initial-brand-public{display:flex}
       .initial-mark{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:linear-gradient(145deg,#a36bff,#7033df);font-weight:800}
       .initial-top-actions{display:flex;align-items:center;gap:9px}
       .initial-content{width:min(1240px,100%);margin:0 auto;padding:24px 22px 48px}
@@ -54,6 +55,7 @@
       (() => {
         const path = window.location.pathname;
         const query = new URLSearchParams(window.location.search);
+        const publicShell = path === '/' || path === '/mining-calculator' || path === '/academy' || path.startsWith('/academy/');
         let kind = 'generic';
         if (path === '/home' && query.get('modal') === 'paywall-create') kind = 'miner';
         else if (path === '/home') kind = 'home';
@@ -62,13 +64,18 @@
         else if (path.includes('/transactions') || path.includes('/leaderboard') || path.includes('/rewards') || path.includes('/friends') || path.includes('/overview') || path.includes('/ve-voting') || path.includes('/ve-my-lock')) kind = 'table';
         else if (['/marketplace','/gominers-collection','/travel','/shop','/launchpad','/buy','/buy/GOMINING','/liquidity','/ve-tokenomics','/finance/simple-earn','/finance/instant-funds','/finance/banking-cards','/promos','/raffles','/offers','/goboxes','/bonus-miner-v3','/subscriptions','/academy'].includes(path)) kind = 'catalog';
         document.documentElement.dataset.bootKind = kind;
+        document.documentElement.dataset.publicShell = publicShell ? 'true' : 'false';
+        if (publicShell) {
+          document.title = 'PouwMiner.com · experiencia pública';
+          document.getElementById('page-description').setAttribute('content', 'PouwMiner.com · PEARL Research Lab · experiencia pública.');
+        }
       })();
     </script>
   </head>
   <body>
     <div id="root">
       <div class="initial-loading" role="status" aria-live="polite" aria-label="Preparando la plataforma">
-        <header class="initial-topbar"><div class="initial-brand"><span class="initial-mark">G</span><span>gomining</span></div><div class="initial-top-actions"><span class="initial-skeleton initial-pill"></span><span class="initial-skeleton initial-icon"></span><span class="initial-skeleton initial-pill"></span><span class="initial-skeleton initial-icon"></span></div></header>
+        <header class="initial-topbar"><div class="initial-brand initial-brand-internal"><span class="initial-mark">G</span><span>gomining</span></div><div class="initial-brand initial-brand-public"><span class="initial-mark">P</span><span>PouwMiner</span></div><div class="initial-top-actions"><span class="initial-skeleton initial-pill"></span><span class="initial-skeleton initial-icon"></span><span class="initial-skeleton initial-pill"></span><span class="initial-skeleton initial-icon"></span></div></header>
         <main class="initial-content" aria-hidden="true">
           <div class="initial-template initial-home">
           <div class="initial-note"><span class="initial-skeleton initial-icon"></span><span class="initial-skeleton initial-line initial-skeleton-mid"></span></div>

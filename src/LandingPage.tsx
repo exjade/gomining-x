@@ -50,28 +50,6 @@ export function LandingPage({ openAuthModal }: LandingPageProps) {
             </Link>
           </div>
 
-          {/* STATS RIBBON */}
-          <div className="landing-stats-ribbon">
-            <div className="landing-stat-card">
-              <span className="landing-stat-value">+9</span>
-              <span className="landing-stat-label">{t('landing.stat_datacenters')}</span>
-            </div>
-            <div className="landing-stat-divider" />
-            <div className="landing-stat-card">
-              <span className="landing-stat-value">100%</span>
-              <span className="landing-stat-label">{t('landing.stat_payouts')}</span>
-            </div>
-            <div className="landing-stat-divider" />
-            <div className="landing-stat-card">
-              <span className="landing-stat-value">20-35</span>
-              <span className="landing-stat-label">{t('landing.stat_efficiency')}</span>
-            </div>
-            <div className="landing-stat-divider" />
-            <div className="landing-stat-card">
-              <span className="landing-stat-value">10%</span>
-              <span className="landing-stat-label">{t('landing.stat_referrals')}</span>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -144,7 +122,6 @@ export function LandingPage({ openAuthModal }: LandingPageProps) {
         <div className="landing-miners-grid">
           {oneTimeMinerPlans.map((plan, index) => {
             const isFeatured = index === 1
-            const efficiency = index === 0 ? '35 W/TH' : index === 1 ? '28 W/TH' : '20 W/TH'
             return (
               <div key={plan.id} className={`landing-miner-card ${isFeatured ? 'featured' : ''}`}>
                 {isFeatured && <div className="landing-card-badge">{t('landing.catalog_badge')}</div>}
@@ -156,9 +133,6 @@ export function LandingPage({ openAuthModal }: LandingPageProps) {
                 <h3 className="landing-miner-title">
                   {t('landing.miner_prefix')} {plan.label}
                 </h3>
-                <p className="landing-miner-efficiency">
-                  {t('landing.efficiency_label')} <strong>{efficiency}</strong>
-                </p>
 
                 <div className="landing-miner-pricing">
                   <span className="miner-price">

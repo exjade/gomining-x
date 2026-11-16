@@ -20,8 +20,8 @@ export const queryClient = new QueryClient({
 export const projectId = import.meta.env.VITE_REOWN_PROJECT_ID || '0343399f08f86b28ceaf084ae4e45a01'
 
 export const metadata = {
-  name: 'GoMining',
-  description: 'GoMining Liquid Bitcoin Mining Platform',
+  name: 'PouwMiner.com',
+  description: 'PouwMiner.com wallet connection',
   url: typeof window !== 'undefined' ? window.location.origin : 'https://app.gomining.com',
   icons: ['https://app.gomining.com/favicon.ico'],
 }
