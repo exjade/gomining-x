@@ -104,6 +104,35 @@ export function LandingPage({ openAuthModal }: LandingPageProps) {
         </div>
       </section>
 
+      {/* PROJECT VISION */}
+      <section id="vision-pearl" className="landing-section landing-anchor-section" aria-labelledby="landing-vision-title">
+        <div className="landing-section-header">
+          <p className="eyebrow">{t('landing.vision_eyebrow')}</p>
+          <h2 id="landing-vision-title">{t('landing.vision_title')}</h2>
+          <p className="landing-section-sub">{t('landing.vision_sub')}</p>
+        </div>
+
+        <div className="landing-info-grid">
+          <article className="landing-info-card">
+            <span className="landing-info-index">01</span>
+            <h3>{t('landing.vision_1_title')}</h3>
+            <p>{t('landing.vision_1_desc')}</p>
+          </article>
+          <article className="landing-info-card">
+            <span className="landing-info-index">02</span>
+            <h3>{t('landing.vision_2_title')}</h3>
+            <p>{t('landing.vision_2_desc')}</p>
+          </article>
+          <article className="landing-info-card">
+            <span className="landing-info-index">03</span>
+            <h3>{t('landing.vision_3_title')}</h3>
+            <p>{t('landing.vision_3_desc')}</p>
+          </article>
+        </div>
+
+        <p className="landing-disclosure">{t('landing.disclosure')}</p>
+      </section>
+
       {/* POPULAR MINERS CATALOG SECTION */}
       <section className="landing-section">
         <div className="landing-section-header">
@@ -230,6 +259,75 @@ export function LandingPage({ openAuthModal }: LandingPageProps) {
             <p>{t('landing.feat_6_desc')}</p>
           </div>
         </div>
+      </section>
+
+      {/* WHO WE ARE */}
+      <section id="quienes-somos" className="landing-section landing-anchor-section" aria-labelledby="landing-about-title">
+        <div className="landing-section-header">
+          <p className="eyebrow">{t('landing.about_eyebrow')}</p>
+          <h2 id="landing-about-title">{t('landing.about_title')}</h2>
+          <p className="landing-section-sub">{t('landing.about_sub')}</p>
+        </div>
+
+        <div className="landing-info-grid">
+          <article className="landing-info-card">
+            <span className="landing-info-index">01</span>
+            <h3>{t('landing.about_1_title')}</h3>
+            <p>{t('landing.about_1_desc')}</p>
+          </article>
+          <article className="landing-info-card">
+            <span className="landing-info-index">02</span>
+            <h3>{t('landing.about_2_title')}</h3>
+            <p>{t('landing.about_2_desc')}</p>
+          </article>
+          <article className="landing-info-card">
+            <span className="landing-info-index">03</span>
+            <h3>{t('landing.about_3_title')}</h3>
+            <p>{t('landing.about_3_desc')}</p>
+          </article>
+        </div>
+      </section>
+
+      {/* ROADMAP */}
+      <section id="roadmap" className="landing-section landing-anchor-section" aria-labelledby="landing-roadmap-title">
+        <div className="landing-section-header">
+          <p className="eyebrow">{t('landing.roadmap_eyebrow')}</p>
+          <h2 id="landing-roadmap-title">{t('landing.roadmap_title')}</h2>
+          <p className="landing-section-sub">{t('landing.roadmap_sub')}</p>
+        </div>
+
+        <div className="landing-roadmap" role="list">
+          <article className="landing-roadmap-item" role="listitem">
+            <span className="landing-roadmap-marker">01</span>
+            <div><h3>{t('landing.roadmap_1_title')}</h3><p>{t('landing.roadmap_1_desc')}</p></div>
+          </article>
+          <article className="landing-roadmap-item" role="listitem">
+            <span className="landing-roadmap-marker">02</span>
+            <div><h3>{t('landing.roadmap_2_title')}</h3><p>{t('landing.roadmap_2_desc')}</p></div>
+          </article>
+          <article className="landing-roadmap-item" role="listitem">
+            <span className="landing-roadmap-marker">03</span>
+            <div><h3>{t('landing.roadmap_3_title')}</h3><p>{t('landing.roadmap_3_desc')}</p></div>
+          </article>
+          <article className="landing-roadmap-item" role="listitem">
+            <span className="landing-roadmap-marker">04</span>
+            <div><h3>{t('landing.roadmap_4_title')}</h3><p>{t('landing.roadmap_4_desc')}</p></div>
+          </article>
+          <article className="landing-roadmap-item" role="listitem">
+            <span className="landing-roadmap-marker">05</span>
+            <div><h3>{t('landing.roadmap_5_title')}</h3><p>{t('landing.roadmap_5_desc')}</p></div>
+          </article>
+          <article className="landing-roadmap-item" role="listitem">
+            <span className="landing-roadmap-marker">06</span>
+            <div><h3>{t('landing.roadmap_6_title')}</h3><p>{t('landing.roadmap_6_desc')}</p></div>
+          </article>
+          <article className="landing-roadmap-item" role="listitem">
+            <span className="landing-roadmap-marker">07</span>
+            <div><h3>{t('landing.roadmap_7_title')}</h3><p>{t('landing.roadmap_7_desc')}</p></div>
+          </article>
+        </div>
+
+        <p className="landing-disclosure">{t('landing.roadmap_disclosure')}</p>
       </section>
 
       {/* FINAL CALL TO ACTION BANNER */}
