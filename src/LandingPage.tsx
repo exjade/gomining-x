@@ -1,334 +1,123 @@
+import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Link } from 'react-router-dom'
-import { oneTimeMinerPlans } from './minerCatalog'
-import { usePersonalization } from './personalization'
+import './landing.css'
+import { useLenisScroll } from './hooks/useLenisScroll'
+import { ScrollProgressBar } from './components/ui/ScrollProgressBar'
+import { SideScrollTracker } from './components/ui/SideScrollTracker'
+import { IntroPreloader } from './components/ui/IntroPreloader'
+import { Navbar } from './components/ui/Navbar'
+import { StickyEarningsBar } from './components/ui/StickyEarningsBar'
+import { HeroSection } from './components/sections/HeroSection'
+import { HowItWorksSection } from './components/sections/HowItWorksSection'
+import { MiningAiSection } from './components/sections/MiningAiSection'
+import { ProductSection } from './components/sections/ProductSection'
+import { CalculatorSection } from './components/sections/CalculatorSection'
+import { PresaleSection } from './components/sections/PresaleSection'
+import { MembershipsSection } from './components/sections/MembershipsSection'
+import { Web3CheckoutSection } from './components/sections/Web3CheckoutSection'
+import { UnilevelSection } from './components/sections/UnilevelSection'
+import { BattleMinerSection } from './components/sections/BattleMinerSection'
+import { TransparencySection } from './components/sections/TransparencySection'
+import { AboutSection } from './components/sections/AboutSection'
+import { RoadmapSection } from './components/sections/RoadmapSection'
+import { CtaSection } from './components/sections/CtaSection'
+import { Footer } from './components/sections/Footer'
+import type { AuthMode } from './components/ui/Navbar'
 
 interface LandingPageProps {
   openAuthModal: (mode?: 'login' | 'register' | 'verify-email') => void
 }
 
 export function LandingPage({ openAuthModal }: LandingPageProps) {
-  const { t } = usePersonalization()
+  useLenisScroll()
+
+  // Intro Preloader State
+  const [introFinished, setIntroFinished] = useState(false)
+
+  // Lock scroll during intro
+  useEffect(() => {
+    if (!introFinished) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [introFinished])
+
+  // Set document language
+  useEffect(() => {
+    document.documentElement.lang = 'es'
+  }, [])
+
+  const handleOpenAuth = (mode?: AuthMode) => {
+    if (mode === 'login') {
+      openAuthModal('login')
+    } else {
+      openAuthModal('register')
+    }
+  }
 
   return (
-    <div className="landing-container">
-      {/* HERO SECTION */}
-      <section className="landing-hero">
-        <div className="landing-hero-content">
-          <div className="landing-hero-badge">
-            <span className="landing-badge-pulse" />
-            <span>{t('landing.hero_badge')}</span>
+    <div className="pouw-landing-root w-full relative bg-[#050505] text-white">
+      {/* 3D Exploded Miner Intro Preloader */}
+      <AnimatePresence>
+        {!introFinished && (
+          <IntroPreloader onComplete={() => setIntroFinished(true)} />
+        )}
+      </AnimatePresence>
+
+      {/* Skip to main content & accessible direct links */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-white focus:text-[#050505] focus:rounded-lg focus:font-medium"
+      >
+        Ir al contenido principal
+      </a>
+      <Link to="/mining-calculator" className="sr-only focus:not-sr-only focus:fixed focus:top-14 focus:left-4 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-white focus:text-[#050505] focus:rounded-lg focus:font-medium">
+        Calculadora de Minería
+      </Link>
+
+      {/* Viewport-fixed elements */}
+      <ScrollProgressBar />
+      <SideScrollTracker />
+      <Navbar onOpenAuth={handleOpenAuth} />
+      <StickyEarningsBar onOpenAuth={handleOpenAuth} />
+
+      {/* Landing Page Content with Smooth Fade-in once Intro Completes */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: introFinished ? 1 : 0 }}
+        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+        className="w-full relative"
+      >
+        <main id="main-content">
+          <HeroSection onOpenAuth={handleOpenAuth} />
+          <HowItWorksSection />
+          <div id="vision-pearl">
+            <MiningAiSection />
           </div>
-
-          <h1 className="landing-hero-title">
-            {t('landing.hero_title_1')}{' '}
-            <span className="text-gradient">{t('landing.hero_title_gradient')}</span>{' '}
-            {t('landing.hero_title_2')}
-          </h1>
-
-          <p className="landing-hero-subtitle">{t('landing.hero_subtitle')}</p>
-
-          <div className="landing-hero-actions">
-            <button
-              type="button"
-              className="landing-btn landing-btn-primary"
-              onClick={() => openAuthModal('register')}
-            >
-              <span>{t('landing.cta_register')}</span>
-              <span className="landing-btn-arrow">→</span>
-            </button>
-
-            <button
-              type="button"
-              className="landing-btn landing-btn-secondary"
-              onClick={() => openAuthModal('login')}
-            >
-              {t('landing.cta_login')}
-            </button>
-
-            <Link to="/mining-calculator" className="landing-btn landing-btn-outline">
-              {t('landing.cta_calculator')}
-            </Link>
+          <ProductSection />
+          <CalculatorSection onOpenAuth={handleOpenAuth} />
+          <PresaleSection onOpenAuth={handleOpenAuth} />
+          <MembershipsSection onOpenAuth={handleOpenAuth} />
+          <Web3CheckoutSection onOpenAuth={handleOpenAuth} />
+          <UnilevelSection onOpenAuth={handleOpenAuth} />
+          <BattleMinerSection onOpenAuth={handleOpenAuth} />
+          <TransparencySection />
+          <div id="quienes-somos">
+            <AboutSection />
           </div>
-
-        </div>
-      </section>
-
-      {/* HOW IT WORKS SECTION */}
-      <section className="landing-section">
-        <div className="landing-section-header">
-          <p className="eyebrow">{t('landing.how_it_works_eyebrow')}</p>
-          <h2>{t('landing.how_it_works_title')}</h2>
-          <p className="landing-section-sub">{t('landing.how_it_works_sub')}</p>
-        </div>
-
-        <div className="landing-steps-grid">
-          <div className="landing-step-card">
-            <div className="landing-step-num">01</div>
-            <h3>{t('landing.step_1_title')}</h3>
-            <p>{t('landing.step_1_desc')}</p>
+          <div id="roadmap">
+            <RoadmapSection />
           </div>
+          <CtaSection onOpenAuth={handleOpenAuth} />
+        </main>
 
-          <div className="landing-step-card">
-            <div className="landing-step-num">02</div>
-            <h3>{t('landing.step_2_title')}</h3>
-            <p>{t('landing.step_2_desc')}</p>
-          </div>
-
-          <div className="landing-step-card">
-            <div className="landing-step-num">03</div>
-            <h3>{t('landing.step_3_title')}</h3>
-            <p>{t('landing.step_3_desc')}</p>
-          </div>
-        </div>
-      </section>
-
-      {/* PROJECT VISION */}
-      <section id="vision-pearl" className="landing-section landing-anchor-section" aria-labelledby="landing-vision-title">
-        <div className="landing-section-header">
-          <p className="eyebrow">{t('landing.vision_eyebrow')}</p>
-          <h2 id="landing-vision-title">{t('landing.vision_title')}</h2>
-          <p className="landing-section-sub">{t('landing.vision_sub')}</p>
-        </div>
-
-        <div className="landing-info-grid">
-          <article className="landing-info-card">
-            <span className="landing-info-index">01</span>
-            <h3>{t('landing.vision_1_title')}</h3>
-            <p>{t('landing.vision_1_desc')}</p>
-          </article>
-          <article className="landing-info-card">
-            <span className="landing-info-index">02</span>
-            <h3>{t('landing.vision_2_title')}</h3>
-            <p>{t('landing.vision_2_desc')}</p>
-          </article>
-          <article className="landing-info-card">
-            <span className="landing-info-index">03</span>
-            <h3>{t('landing.vision_3_title')}</h3>
-            <p>{t('landing.vision_3_desc')}</p>
-          </article>
-        </div>
-
-        <p className="landing-disclosure">{t('landing.disclosure')}</p>
-      </section>
-
-      {/* POPULAR MINERS CATALOG SECTION */}
-      <section className="landing-section">
-        <div className="landing-section-header">
-          <p className="eyebrow">{t('landing.catalog_eyebrow')}</p>
-          <h2>{t('landing.catalog_title')}</h2>
-          <p className="landing-section-sub">{t('landing.catalog_sub')}</p>
-        </div>
-
-        <div className="landing-miners-grid">
-          {oneTimeMinerPlans.map((plan, index) => {
-            const isFeatured = index === 1
-            return (
-              <div key={plan.id} className={`landing-miner-card ${isFeatured ? 'featured' : ''}`}>
-                {isFeatured && <div className="landing-card-badge">{t('landing.catalog_badge')}</div>}
-                <div className="landing-miner-visual">
-                  <div className="miner-cube-icon">▦</div>
-                  <div className="miner-power-tag">{plan.powerTh.toFixed(2)} TH/s</div>
-                </div>
-
-                <h3 className="landing-miner-title">
-                  {t('landing.miner_prefix')} {plan.label}
-                </h3>
-
-                <div className="landing-miner-pricing">
-                  <span className="miner-price">
-                    ${plan.price.toFixed(2)} {plan.currency}
-                  </span>
-                  <span className="miner-cadence">{t('landing.one_time_payment')}</span>
-                </div>
-
-                <ul className="landing-miner-perks">
-                  <li>
-                    <span>✓</span> {t('landing.perk_hardware')}
-                  </li>
-                  <li>
-                    <span>✓</span> {t('landing.perk_daily_btc')}
-                  </li>
-                  <li>
-                    <span>✓</span> {t('landing.perk_liquid_nft')}
-                  </li>
-                  <li>
-                    <span>✓</span> {t('landing.perk_maintenance')}
-                  </li>
-                </ul>
-
-                <button
-                  type="button"
-                  className={`landing-btn ${
-                    isFeatured ? 'landing-btn-primary' : 'landing-btn-secondary'
-                  } full-width`}
-                  onClick={() => openAuthModal('register')}
-                >
-                  {t('landing.start_miner_btn')}
-                </button>
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-      {/* PROFITABILITY CALCULATOR TEASER */}
-      <section className="landing-section">
-        <div className="landing-calc-banner">
-          <div className="landing-calc-info">
-            <span className="landing-calc-icon">∑</span>
-            <div>
-              <p className="eyebrow">{t('landing.calc_eyebrow')}</p>
-              <h2>{t('landing.calc_title')}</h2>
-              <p>{t('landing.calc_desc')}</p>
-            </div>
-          </div>
-          <Link to="/mining-calculator" className="landing-btn landing-btn-primary">
-            {t('landing.calc_btn')}
-          </Link>
-        </div>
-      </section>
-
-      {/* VALUE PROPOSITION GRID */}
-      <section className="landing-section">
-        <div className="landing-section-header">
-          <p className="eyebrow">{t('landing.feat_eyebrow')}</p>
-          <h2>{t('landing.feat_title')}</h2>
-          <p className="landing-section-sub">{t('landing.feat_sub')}</p>
-        </div>
-
-        <div className="landing-features-grid">
-          <div className="landing-feature-card">
-            <div className="landing-feat-icon">⚡</div>
-            <h3>{t('landing.feat_1_title')}</h3>
-            <p>{t('landing.feat_1_desc')}</p>
-          </div>
-
-          <div className="landing-feature-card">
-            <div className="landing-feat-icon">♧</div>
-            <h3>{t('landing.feat_2_title')}</h3>
-            <p>{t('landing.feat_2_desc')}</p>
-          </div>
-
-          <div className="landing-feature-card">
-            <div className="landing-feat-icon">🌐</div>
-            <h3>{t('landing.feat_3_title')}</h3>
-            <p>{t('landing.feat_3_desc')}</p>
-          </div>
-
-          <div className="landing-feature-card">
-            <div className="landing-feat-icon">💎</div>
-            <h3>{t('landing.feat_4_title')}</h3>
-            <p>{t('landing.feat_4_desc')}</p>
-          </div>
-
-          <div className="landing-feature-card">
-            <div className="landing-feat-icon">🛡️</div>
-            <h3>{t('landing.feat_5_title')}</h3>
-            <p>{t('landing.feat_5_desc')}</p>
-          </div>
-
-          <div className="landing-feature-card">
-            <div className="landing-feat-icon">✧</div>
-            <h3>{t('landing.feat_6_title')}</h3>
-            <p>{t('landing.feat_6_desc')}</p>
-          </div>
-        </div>
-      </section>
-
-      {/* WHO WE ARE */}
-      <section id="quienes-somos" className="landing-section landing-anchor-section" aria-labelledby="landing-about-title">
-        <div className="landing-section-header">
-          <p className="eyebrow">{t('landing.about_eyebrow')}</p>
-          <h2 id="landing-about-title">{t('landing.about_title')}</h2>
-          <p className="landing-section-sub">{t('landing.about_sub')}</p>
-        </div>
-
-        <div className="landing-info-grid">
-          <article className="landing-info-card">
-            <span className="landing-info-index">01</span>
-            <h3>{t('landing.about_1_title')}</h3>
-            <p>{t('landing.about_1_desc')}</p>
-          </article>
-          <article className="landing-info-card">
-            <span className="landing-info-index">02</span>
-            <h3>{t('landing.about_2_title')}</h3>
-            <p>{t('landing.about_2_desc')}</p>
-          </article>
-          <article className="landing-info-card">
-            <span className="landing-info-index">03</span>
-            <h3>{t('landing.about_3_title')}</h3>
-            <p>{t('landing.about_3_desc')}</p>
-          </article>
-        </div>
-      </section>
-
-      {/* ROADMAP */}
-      <section id="roadmap" className="landing-section landing-anchor-section" aria-labelledby="landing-roadmap-title">
-        <div className="landing-section-header">
-          <p className="eyebrow">{t('landing.roadmap_eyebrow')}</p>
-          <h2 id="landing-roadmap-title">{t('landing.roadmap_title')}</h2>
-          <p className="landing-section-sub">{t('landing.roadmap_sub')}</p>
-        </div>
-
-        <div className="landing-roadmap" role="list">
-          <article className="landing-roadmap-item" role="listitem">
-            <span className="landing-roadmap-marker">01</span>
-            <div><h3>{t('landing.roadmap_1_title')}</h3><p>{t('landing.roadmap_1_desc')}</p></div>
-          </article>
-          <article className="landing-roadmap-item" role="listitem">
-            <span className="landing-roadmap-marker">02</span>
-            <div><h3>{t('landing.roadmap_2_title')}</h3><p>{t('landing.roadmap_2_desc')}</p></div>
-          </article>
-          <article className="landing-roadmap-item" role="listitem">
-            <span className="landing-roadmap-marker">03</span>
-            <div><h3>{t('landing.roadmap_3_title')}</h3><p>{t('landing.roadmap_3_desc')}</p></div>
-          </article>
-          <article className="landing-roadmap-item" role="listitem">
-            <span className="landing-roadmap-marker">04</span>
-            <div><h3>{t('landing.roadmap_4_title')}</h3><p>{t('landing.roadmap_4_desc')}</p></div>
-          </article>
-          <article className="landing-roadmap-item" role="listitem">
-            <span className="landing-roadmap-marker">05</span>
-            <div><h3>{t('landing.roadmap_5_title')}</h3><p>{t('landing.roadmap_5_desc')}</p></div>
-          </article>
-          <article className="landing-roadmap-item" role="listitem">
-            <span className="landing-roadmap-marker">06</span>
-            <div><h3>{t('landing.roadmap_6_title')}</h3><p>{t('landing.roadmap_6_desc')}</p></div>
-          </article>
-          <article className="landing-roadmap-item" role="listitem">
-            <span className="landing-roadmap-marker">07</span>
-            <div><h3>{t('landing.roadmap_7_title')}</h3><p>{t('landing.roadmap_7_desc')}</p></div>
-          </article>
-        </div>
-
-        <p className="landing-disclosure">{t('landing.roadmap_disclosure')}</p>
-      </section>
-
-      {/* FINAL CALL TO ACTION BANNER */}
-      <section className="landing-cta-section">
-        <div className="landing-cta-card">
-          <div className="landing-cta-content">
-            <h2>{t('landing.cta_title')}</h2>
-            <p>{t('landing.cta_desc')}</p>
-            <div className="landing-cta-buttons">
-              <button
-                type="button"
-                className="landing-btn landing-btn-primary"
-                onClick={() => openAuthModal('register')}
-              >
-                {t('landing.cta_btn_primary')}
-              </button>
-              <button
-                type="button"
-                className="landing-btn landing-btn-secondary"
-                onClick={() => openAuthModal('login')}
-              >
-                {t('landing.cta_btn_secondary')}
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
+        <Footer />
+      </motion.div>
     </div>
   )
 }

@@ -305,10 +305,12 @@ function AppContent() {
   }
 
   const activeLabel = findActiveLabel(location.pathname, isAuthenticated)
+  const isSourceLanding = location.pathname === '/'
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${isSourceLanding ? ' app-shell-source-landing' : ''}`}>
       <div className="workspace">
+        {!isSourceLanding && (
         <header className="topbar">
           <div className="header-navigation">
             <Link to={user ? "/home" : "/"} className="brand" aria-label={user ? 'GoMining inicio' : 'PouwMiner inicio'}>
@@ -437,9 +439,10 @@ function AppContent() {
             )}
           </div>
         </header>
+        )}
 
-        <main className="page-wrap" aria-label={activeLabel}>
-          {user && !isAuthenticated && (
+        <main className={isSourceLanding ? 'source-landing-page' : 'page-wrap'} aria-label={activeLabel}>
+          {!isSourceLanding && user && !isAuthenticated && (
             <div className="replica-note">
               <span className="note-icon">i</span>
               <span>{t('replica.connected_wallet_note')}</span>
@@ -453,7 +456,7 @@ function AppContent() {
               <span>{t('replica.external_services_note')}</span>
             </div>
           )}
-          {user && !isEmailVerified && (
+          {!isSourceLanding && user && !isEmailVerified && (
             <div className="unverified-email-banner">
               <div className="unverified-email-content">
                 <span className="unverified-email-icon">✉</span>
@@ -494,10 +497,12 @@ function AppContent() {
             <UnknownRoute pathname={location.pathname} />
           )}
           </div>
-          <footer className="page-footer">
-            <span>{user ? t('replica.footer_replica') : t('replica.footer_public')}</span>
-            <span>{t('replica.external_services_note')}</span>
-          </footer>
+          {!isSourceLanding && (
+            <footer className="page-footer">
+              <span>{user ? t('replica.footer_replica') : t('replica.footer_public')}</span>
+              <span>{t('replica.external_services_note')}</span>
+            </footer>
+          )}
         </main>
       </div>
 

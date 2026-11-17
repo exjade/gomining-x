@@ -20,7 +20,7 @@ test('SCRUM-265 keeps authenticated and demo UI state separate', () => {
   assert.doesNotMatch(appSource, /badge="LOCAL" onClick=\{openMinerBuilder\}/)
   assert.match(appSource, /isAuth \? \(isEn \? 'PLATFORM BALANCE' : 'SALDO DE PLATAFORMA'\) : \(isEn \? 'LOCAL BALANCE' : 'SALDO LOCAL'\)/)
   assert.match(appSource, /<h1>\{isAuth \? \(profile \? formatWalletBalance\(profile\.balance\) : '—'\) : formatWalletBalance\(demo\.balance\)\}<\/h1>/)
-  assert.match(appSource, /\{user && !isAuthenticated && \(\s*<div className="replica-note">/)
+  assert.match(appSource, /\{(?:!isSourceLanding && )?user && !isAuthenticated && \(\s*<div className="replica-note">/)
   assert.match(appSource, /<SessionActivity isAuth=\{isAuthenticated\} items=\{sessionEvents\} \/>/)
   assert.match(appSource, /isAuth \? 'Actividad de esta sesión' : 'Actividad simulada en esta sesión'/)
   assert.match(appSource, /isAuth \? 'Acciones recientes registradas durante esta sesión\.' : 'Se borra al recargar la página\.'/)
