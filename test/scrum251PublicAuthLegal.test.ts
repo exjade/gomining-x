@@ -33,13 +33,15 @@ test('SCRUM-251 public copy removes unsupported inherited claims', () => {
   }
 
   assert.doesNotMatch(landingSource, /\+9|100%|20-35|35 W\/TH|28 W\/TH|20 W\/TH|10%/)
-  assert.doesNotMatch(landingSource, /landing-stats-ribbon|\/terms|\/privacy|LegalModal/i)
+  assert.doesNotMatch(landingSource, /landing-stats-ribbon|\/terms|\/privacy/i)
   assert.match(appSource, /aria-label=\{user \? 'GoMining inicio' : 'PouwMiner inicio'\}/)
   assert.match(appSource, /user \? t\('replica\.footer_replica'\) : t\('replica\.footer_public'\)/)
   assert.match(catalogSource, /definition\('PouwMiner\.com'/)
   assert.match(appKitSource, /name: 'PouwMiner\.com'/)
   assert.match(appKitSource, /description: 'PouwMiner\.com wallet connection'/)
-  assert.match(indexSource, /publicShell = path === '\/' \\|\\| path === '\/mining-calculator' \\|\\| path === '\/academy'/)
+  assert.match(indexSource, /const publicShell = path === '\/';/)
+  assert.doesNotMatch(indexSource, /publicShell = [^\n]*\/mining-calculator/)
+  assert.doesNotMatch(indexSource, /publicShell = [^\n]*\/academy/)
   assert.match(indexSource, /document\.title = 'PouwMiner\.com · experiencia pública'/)
   assert.match(indexSource, /initial-brand-public.*PouwMiner/)
   assert.match(indexSource, /initial-brand-internal.*gomining/)

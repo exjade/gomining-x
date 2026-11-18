@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Link } from 'react-router-dom'
 import './landing.css'
 import { useLenisScroll } from './hooks/useLenisScroll'
 import { ScrollProgressBar } from './components/ui/ScrollProgressBar'
@@ -23,6 +22,7 @@ import { AboutSection } from './components/sections/AboutSection'
 import { RoadmapSection } from './components/sections/RoadmapSection'
 import { CtaSection } from './components/sections/CtaSection'
 import { Footer } from './components/sections/Footer'
+import { LegalModal, type LegalMode } from './components/legal/LegalModal'
 import type { AuthMode } from './components/ui/Navbar'
 
 interface LandingPageProps {
@@ -50,6 +50,8 @@ export function LandingPage({ openAuthModal }: LandingPageProps) {
   // Set document language
   useEffect(() => {
     document.documentElement.lang = 'es'
+    document.documentElement.dataset.publicShell = 'true'
+    document.title = 'PouwMiner.com · experiencia pública'
   }, [])
 
   const handleOpenAuth = (mode?: AuthMode) => {
@@ -58,6 +60,12 @@ export function LandingPage({ openAuthModal }: LandingPageProps) {
     } else {
       openAuthModal('register')
     }
+  }
+
+  const [legalMode, setLegalMode] = useState<LegalMode>(null)
+
+  const handleOpenLegal = (mode: LegalMode = 'terms') => {
+    setLegalMode(mode)
   }
 
   return (
@@ -76,14 +84,14 @@ export function LandingPage({ openAuthModal }: LandingPageProps) {
       >
         Ir al contenido principal
       </a>
-      <Link to="/mining-calculator" className="sr-only focus:not-sr-only focus:fixed focus:top-14 focus:left-4 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-white focus:text-[#050505] focus:rounded-lg focus:font-medium">
+      <a href="#calculadora" className="sr-only focus:not-sr-only focus:fixed focus:top-14 focus:left-4 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-white focus:text-[#050505] focus:rounded-lg focus:font-medium">
         Calculadora de Minería
-      </Link>
+      </a>
 
       {/* Viewport-fixed elements */}
       <ScrollProgressBar />
       <SideScrollTracker />
-      <Navbar onOpenAuth={handleOpenAuth} />
+      <Navbar onOpenAuth={handleOpenAuth} onOpenLegal={handleOpenLegal} />
       <StickyEarningsBar onOpenAuth={handleOpenAuth} />
 
       {/* Landing Page Content with Smooth Fade-in once Intro Completes */}
@@ -116,8 +124,9 @@ export function LandingPage({ openAuthModal }: LandingPageProps) {
           <CtaSection onOpenAuth={handleOpenAuth} />
         </main>
 
-        <Footer />
+        <Footer onOpenLegal={handleOpenLegal} />
       </motion.div>
+      <LegalModal mode={legalMode} onClose={() => setLegalMode(null)} />
     </div>
   )
 }

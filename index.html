@@ -14,6 +14,8 @@
       .initial-topbar{height:68px;display:flex;align-items:center;justify-content:space-between;padding:0 max(22px,calc((100vw - 1240px)/2));border-bottom:1px solid rgba(255,255,255,.08);background:rgba(11,12,20,.86)}
       .initial-brand{display:flex;align-items:center;gap:10px;color:#fff;font-weight:800;letter-spacing:-.04em}
       .initial-brand-public{display:none}html[data-public-shell="true"] .initial-brand-internal{display:none}html[data-public-shell="true"] .initial-brand-public{display:flex}
+      html[data-public-shell="true"] body,html[data-boot-skeleton="hidden"] body,html[data-public-shell="true"] #root,html[data-boot-skeleton="hidden"] #root,html[data-public-shell="true"] .initial-loading,html[data-boot-skeleton="hidden"] .initial-loading{background:#050505}
+      html[data-public-shell="true"] .initial-topbar,html[data-public-shell="true"] .initial-content,html[data-public-shell="true"] .initial-status,html[data-public-shell="true"] .ui-skeleton-app,html[data-boot-skeleton="hidden"] .initial-topbar,html[data-boot-skeleton="hidden"] .initial-content,html[data-boot-skeleton="hidden"] .initial-status,html[data-boot-skeleton="hidden"] .ui-skeleton-app{display:none}
       .initial-mark{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:linear-gradient(145deg,#a36bff,#7033df);font-weight:800}
       .initial-top-actions{display:flex;align-items:center;gap:9px}
       .initial-content{width:min(1240px,100%);margin:0 auto;padding:24px 22px 48px}
@@ -55,7 +57,25 @@
       (() => {
         const path = window.location.pathname;
         const query = new URLSearchParams(window.location.search);
-        const publicShell = path === '/' || path === '/mining-calculator' || path === '/academy' || path.startsWith('/academy/');
+        const publicShell = path === '/';
+        const hasStoredAuthUser = (() => {
+          try {
+            return [window.localStorage, window.sessionStorage].some((store) => {
+              if (!store) return false;
+              for (let i = 0; i < store.length; i += 1) {
+                const key = store.key(i) || '';
+                if (key.startsWith('firebase:authUser:')) {
+                  const raw = store.getItem(key) || '';
+                  if (raw && !raw.includes('"isAnonymous":true')) return true;
+                }
+              }
+              return false;
+            });
+          } catch {
+            return false;
+          }
+        })();
+        const suppressBootSkeleton = publicShell || !hasStoredAuthUser;
         let kind = 'generic';
         if (path === '/home' && query.get('modal') === 'paywall-create') kind = 'miner';
         else if (path === '/home') kind = 'home';
@@ -65,6 +85,7 @@
         else if (['/marketplace','/gominers-collection','/travel','/shop','/launchpad','/buy','/buy/GOMINING','/liquidity','/ve-tokenomics','/finance/simple-earn','/finance/instant-funds','/finance/banking-cards','/promos','/raffles','/offers','/goboxes','/bonus-miner-v3','/subscriptions','/academy'].includes(path)) kind = 'catalog';
         document.documentElement.dataset.bootKind = kind;
         document.documentElement.dataset.publicShell = publicShell ? 'true' : 'false';
+        document.documentElement.dataset.bootSkeleton = suppressBootSkeleton ? 'hidden' : 'visible';
         if (publicShell) {
           document.title = 'PouwMiner.com · experiencia pública';
           document.getElementById('page-description').setAttribute('content', 'PouwMiner.com · PEARL Research Lab · experiencia pública.');

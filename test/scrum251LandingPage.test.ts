@@ -20,8 +20,9 @@ test('SCRUM-251 keeps landing scope bilingual and preserves current routes', () 
   assert.match(landingSource, /id="roadmap"/)
   assert.match(landingSource, /openAuthModal\('register'\)/)
   assert.match(landingSource, /openAuthModal\('login'\)/)
-  assert.match(landingSource, /to="\/mining-calculator"/)
-  assert.match(appSource, /if \(user && location\.pathname === '\/'\)/)
+  assert.match(landingSource, /href="#calculadora"/)
+  assert.doesNotMatch(landingSource, /to="\/mining-calculator"/)
+  assert.match(appSource, /const authRedirect = getAuthRouteRedirect\(location\.pathname, isAuthenticated\)/)
   assert.match(appSource, /const isSourceLanding = location\.pathname === '\/'/)
   assert.match(appSource, /!isSourceLanding && \(\s*<header className="topbar">/)
   assert.match(appSource, /className=\{isSourceLanding \? 'source-landing-page' : 'page-wrap'\}/)
@@ -91,7 +92,13 @@ test('SCRUM-251 keeps Landing source parity and isolates its CSS pipeline', () =
 
   assert.equal(fs.existsSync(path.join(projectRoot, 'src/data/catalog.ts')), false)
   assert.equal(fs.existsSync(path.join(projectRoot, 'src/components/auth/AuthModal.tsx')), false)
-  assert.equal(fs.existsSync(path.join(projectRoot, 'src/components/legal/LegalModal.tsx')), false)
+  const legalModalPath = 'src/components/legal/LegalModal.tsx'
+  const legalModalSourceRef = '56863bf6ec0be8150c55aaf3b32df11beef5addd'
+  assert.equal(
+    execFileSync('git', ['hash-object', legalModalPath], { cwd: projectRoot, encoding: 'utf8' }).trim(),
+    execFileSync('git', ['rev-parse', legalModalSourceRef + ':' + legalModalPath], { cwd: projectRoot, encoding: 'utf8' }).trim(),
+    'LegalModal.tsx must match the Landing source blob exactly',
+  )
   assert.doesNotMatch(landingStyleSource, /(^|\n)(html|body|\*|:root)\s*\{/)
   assert.match(landingStyleSource, /\.pouw-landing-root/)
   assert.match(landingStyleSource, /\.app-shell-source-landing \.workspace \{ margin-left: 0; \}/)

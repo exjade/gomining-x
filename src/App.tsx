@@ -3,6 +3,7 @@ import { Link, Navigate, NavLink, useLocation, useNavigate } from 'react-router-
 import { useAccount, useDisconnect as useWagmiDisconnect } from 'wagmi'
 import { useAppKit, useAppKitAccount } from '@reown/appkit/react'
 import { getScreen, isDisabledRoute, navGroups, routeAliases, type NavItem, type ScreenDefinition } from './catalog'
+import { getAuthRouteRedirect, isPublicAppRoute } from './authRoutePolicy'
 import { getSessionSnapshot } from './readAdapter'
 import { getPrimaryPurchaseProduct, getProductById, getProductsForRoute, type CartLine, type DemoOrder, type DemoProduct } from './purchase'
 import { WalletPanel } from './WalletPanel'
@@ -216,7 +217,16 @@ function AppContent() {
   }, [location.pathname, location.search, user, loading])
 
   if (loading) {
+    if (isPublicAppRoute(location.pathname) || !isAuthenticated) {
+      return <div className="min-h-screen bg-[#050505]" style={{ minHeight: '100vh', background: '#050505' }} aria-busy="true" />
+    }
     return <AppRouteSkeleton pathname={location.pathname} search={location.search} />
+  }
+
+  const authRedirect = getAuthRouteRedirect(location.pathname, isAuthenticated)
+  if (authRedirect) {
+    const query = authRedirect === '/home' ? location.search : ''
+    return <Navigate to={`${authRedirect}${query}`} replace />
   }
 
   const cleanPath = location.pathname.split('?')[0].split('#')[0].replace(/\/+$/, '').toLowerCase() || '/'
@@ -228,14 +238,10 @@ function AppContent() {
   }
 
   if (location.pathname === '/operator-economics') return <Navigate to="/mining-calculator" replace />
+
   if (location.pathname === '/finance/simple-earn/overview') return <Navigate to="/finance/earn-summary" replace />
   if (isDisabledRoute(location.pathname)) return <Navigate to="/home" replace />
   if (location.pathname === '/nft-rewards') return <Navigate to="/nft-rewards/solo" replace />
-
-  // Authenticated users accessing landing (/) are redirected to dashboard (/home)
-  if (user && location.pathname === '/') {
-    return <Navigate to={`/home${location.search}`} replace />
-  }
 
   const openAction = (title: string, detail?: string) => {
     setPendingAction({
@@ -330,12 +336,6 @@ function AppContent() {
                   <NavLink to="/" className={({ isActive }) => isActive ? 'primary-nav-link primary-nav-link-active' : 'primary-nav-link'}>
                     {language === 'en' ? 'Home' : 'Inicio'}
                   </NavLink>
-                  <NavLink to="/mining-calculator" className={({ isActive }) => isActive ? 'primary-nav-link primary-nav-link-active' : 'primary-nav-link'}>
-                    {language === 'en' ? 'Calculator' : 'Calculadora'}
-                  </NavLink>
-                  <NavLink to="/academy" className={({ isActive }) => isActive ? 'primary-nav-link primary-nav-link-active' : 'primary-nav-link'}>
-                    {language === 'en' ? 'Academy' : 'Academia'}
-                  </NavLink>
                 </>
               )}
             </nav>
@@ -377,6 +377,10 @@ function AppContent() {
                 type="button"
                 className="wallet-topbar-button wallet-topbar-connected"
                 onClick={() => {
+                  if (!isAuthenticated) {
+                    openAuthModal('login')
+                    return
+                  }
                   if (isWagmiConnected || isAppKitConnected) {
                     openAppKit({ view: 'Account' })
                   } else {
@@ -393,6 +397,10 @@ function AppContent() {
                 type="button"
                 className="wallet-topbar-button"
                 onClick={() => {
+                  if (!isAuthenticated) {
+                    openAuthModal('login')
+                    return
+                  }
                   if (openAppKit) {
                     openAppKit()
                   }
