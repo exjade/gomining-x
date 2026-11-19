@@ -20,31 +20,78 @@ import { HashrateAllocationService } from '../../services/admin/hashrateAllocati
 import { CommercialPackageService } from '../../services/admin/commercialPackageService';
 import { UserManagementService } from '../../services/admin/userManagementService';
 import { PackagePaymentsService } from '../../services/admin/packagePaymentsService';
-import { ClientWithdrawalsService } from '../../services/admin/clientWithdrawalsService';
+import { hasWithdrawalPermission } from '../../types/withdrawal';
+import {
+  fetchAdminWithdrawals,
+  type AdminWithdrawalSession,
+  type AdminWithdrawalsApiClientOptions,
+} from '../../services/admin/adminWithdrawalsClient';
 import type { ProfitEngineGlobalConfig, AllocationSummary } from '../../types/admin';
 
 interface AdminOverviewProps {
   onNavigateTab: (tabId: string) => void;
   isDarkTheme?: boolean;
+  withdrawalSession?: AdminWithdrawalSession | null;
+  withdrawalApiOptions?: AdminWithdrawalsApiClientOptions;
 }
 
 export const AdminOverview: React.FC<AdminOverviewProps> = ({
   onNavigateTab,
-  isDarkTheme = true
+  isDarkTheme = true,
+  withdrawalSession = null,
+  withdrawalApiOptions,
 }) => {
   const engine = MinerxProfitEngine.getInstance();
   const allocationService = HashrateAllocationService.getInstance();
   const packageService = CommercialPackageService.getInstance();
   const userService = UserManagementService.getInstance();
   const paymentsService = PackagePaymentsService.getInstance();
-  const withdrawalsService = ClientWithdrawalsService.getInstance();
 
   const [globalConfig, setGlobalConfig] = useState<ProfitEngineGlobalConfig>(engine.getGlobalConfig());
   const [allocation, setAllocation] = useState<AllocationSummary>(allocationService.getAllocationSummary(1200));
   const [usersCount, setUsersCount] = useState<number>(userService.getUsers().length);
   const [packagesCount, setPackagesCount] = useState<number>(packageService.getPackages().length);
   const [paymentsSummary] = useState(paymentsService.getSummary());
-  const [withdrawalsSummary] = useState(withdrawalsService.getSummary());
+  const [pendingWithdrawalsCount, setPendingWithdrawalsCount] = useState<number>(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (
+      !withdrawalSession?.uid ||
+      !withdrawalSession?.idToken ||
+      !hasWithdrawalPermission(withdrawalSession.permissions, 'withdrawals.read')
+    ) {
+      setPendingWithdrawalsCount(0);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    fetchAdminWithdrawals(
+      withdrawalSession,
+      { tab: 'queue', limit: 1 },
+      withdrawalApiOptions,
+    )
+      .then((res) => {
+        if (!cancelled) {
+          setPendingWithdrawalsCount(res.kpis.pendingReviewCount);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPendingWithdrawalsCount(0);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    withdrawalSession?.uid,
+    withdrawalSession?.idToken,
+    withdrawalSession?.permissions,
+    withdrawalApiOptions?.baseUrl,
+  ]);
 
   useEffect(() => {
     setGlobalConfig(engine.getGlobalConfig());
@@ -341,9 +388,9 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
                     <span>Solicitudes de Retiro</span>
                   </span>
                   <div className="flex items-center gap-1.5">
-                    {withdrawalsSummary.pendingCount > 0 && (
+                    {pendingWithdrawalsCount > 0 && (
                       <span className="admin-badge text-xs px-1.5 py-0.2 admin-radius-control admin-bg-warning admin-text-warning font-mono font-semibold">
-                        {withdrawalsSummary.pendingCount} pend.
+                        {pendingWithdrawalsCount} pend.
                       </span>
                     )}
                     <ArrowUpRight className={`h-3.5 w-3.5 ${isDarkTheme ? ' admin-text-secondary' : ' admin-text-secondary'}`} />

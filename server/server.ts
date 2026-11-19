@@ -13,6 +13,16 @@ import { FirebaseAdminCatalogStoreAdapter } from './services/firebaseAdminCatalo
 import { firebaseAdminAuthAdapter } from './services/firebaseAdminAuthAdapter.js';
 import { firebaseAdminAllowlistAdapter } from './services/firebaseAdminAllowlistAdapter.js';
 import { platformBalancePurchaseService } from './services/platformBalancePurchaseService.js';
+import { createWithdrawalConfigQuoteRouter } from './services/withdrawalConfigQuoteRouter.js';
+import { createAdminWithdrawalsRouter } from './services/adminWithdrawalsRouter.js';
+import { createAdminWithdrawalWorkflowRouter } from './services/adminWithdrawalWorkflowRouter.js';
+import { createAdminWithdrawalAuditRouter } from './services/adminWithdrawalAuditRouter.js';
+import { createAdminWithdrawalSettlementRouter } from './services/adminWithdrawalSettlementRouter.js';
+import {
+  ADMIN_USERS_COLLECTION,
+  WITHDRAWAL_ADMIN_PERMISSIONS,
+  type WithdrawalAdminPermission,
+} from '../src/types/withdrawal.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1138,6 +1148,13 @@ app.post('/api/purchases/platform-balance', async (req, res) => {
     res.status(500).json({ error: 'Error interno al procesar la compra' });
   }
 });
+
+// 2f. Canonical USDT Withdrawal Domain Routers (W03..W11 — Single Production Authority, SCRUM-287)
+app.use('/api/withdrawals', createWithdrawalConfigQuoteRouter());
+app.use('/api/admin/withdrawals', createAdminWithdrawalsRouter());
+app.use('/api/admin/withdrawals', createAdminWithdrawalWorkflowRouter());
+app.use('/api/admin/withdrawals', createAdminWithdrawalAuditRouter());
+app.use('/api/admin/withdrawals', createAdminWithdrawalSettlementRouter());
 
 // 2b. Resilient Alert Dispatcher (Discord & Telegram)
 async function dispatchAlertNotification(
@@ -2886,22 +2903,68 @@ app.post('/api/auth/audit-repair', async (req, res) => {
   });
 });
 
-// Current User Session verification (SCRUM-222)
+async function resolveExplicitAdminWithdrawalPermissions(
+  uid: string,
+): Promise<WithdrawalAdminPermission[]> {
+  const cleanUid = typeof uid === 'string' ? uid.trim() : '';
+  if (!cleanUid || !firebaseAdminAuthAdapter.isInitialized()) {
+    return [];
+  }
+  const appInstance = firebaseAdminAuthAdapter.getApp();
+  if (!appInstance) {
+    return [];
+  }
+  try {
+    const firestoreMod = await import('firebase-admin/firestore');
+    const snap = await firestoreMod
+      .getFirestore(appInstance)
+      .collection(ADMIN_USERS_COLLECTION)
+      .doc(cleanUid)
+      .get();
+    if (!snap.exists) {
+      return [];
+    }
+    const data = snap.data() || {};
+    const rawPerms = Array.isArray(data.permissions)
+      ? data.permissions
+      : Array.isArray(data.withdrawalPermissions)
+        ? data.withdrawalPermissions
+        : [];
+    const allowed = new Set<WithdrawalAdminPermission>();
+    for (const item of rawPerms) {
+      if (
+        typeof item === 'string' &&
+        (WITHDRAWAL_ADMIN_PERMISSIONS as readonly string[]).includes(item.trim())
+      ) {
+        allowed.add(item.trim() as WithdrawalAdminPermission);
+      }
+    }
+    return Array.from(allowed);
+  } catch {
+    return [];
+  }
+}
+
+// Current User Session verification (SCRUM-222 + SCRUM-287 explicit W02 permissions)
 app.get('/api/auth/me', async (req, res) => {
   const resolution = await resolveAdminAuthentication(req);
   if (!resolution.user) {
     return sendAdminAuthFailure(res, resolution, 'Sesión expirada o inválida.');
   }
   const user = resolution.user;
+  const uidForAllowlist = (user.firebaseAuthUid && user.firebaseAuthUid.trim()) || user.id;
+  const permissions = await resolveExplicitAdminWithdrawalPermissions(uidForAllowlist);
 
   res.json({
     success: true,
     user: {
       id: user.id,
+      firebaseAuthUid: uidForAllowlist,
       username: user.username,
       email: user.email,
       fullName: user.fullName,
       role: user.role || 'admin',
+      permissions,
       createdAt: user.createdAt
     }
   });
