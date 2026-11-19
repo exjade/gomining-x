@@ -339,32 +339,69 @@ export function generateReferralCode(email: string): string {
   return `${prefix || 'GM'}${random}`
 }
 
-/** Finds a user by their referral code (case-insensitive fallback) */
+/**
+ * Publishes a minimal public referral-code lookup doc under /publicReferralCodes/{CODE}
+ * (uid + referralCode only — zero balance or PII exposure, F-HIGH-01).
+ */
+async function publishPublicReferralCode(uid: string, referralCode: string): Promise<void> {
+  const cleanCode = referralCode.trim().toUpperCase()
+  if (!uid || !cleanCode) return
+  try {
+    await setDoc(doc(db, 'publicReferralCodes', cleanCode), {
+      uid,
+      referralCode: cleanCode,
+      createdAt: serverTimestamp(),
+    })
+  } catch {
+    // Non-fatal: code doc may already exist or user may not be authenticated yet
+  }
+}
+
+/** Finds a user by their referral code via minimal /publicReferralCodes/{CODE} index (F-HIGH-01) */
 export async function findUserByReferralCode(code: string): Promise<{ uid: string; email: string; referralCode: string } | null> {
   const cleanCode = code.trim()
   if (!cleanCode) return null
+  const upperCode = cleanCode.toUpperCase()
   try {
-    let q = query(collection(db, 'users'), where('referral.referralCode', '==', cleanCode.toUpperCase()))
-    let snap = await getDocs(q)
-    if (snap.empty && cleanCode.toLowerCase() !== cleanCode.toUpperCase()) {
-      q = query(collection(db, 'users'), where('referral.referralCode', '==', cleanCode.toLowerCase()))
-      snap = await getDocs(q)
-    }
-    if (snap.empty) {
-      q = query(collection(db, 'users'), where('referral.referralCode', '==', cleanCode))
-      snap = await getDocs(q)
-    }
-    if (snap.empty) return null
-    const docData = snap.docs[0].data() as UserProfile
-    return {
-      uid: snap.docs[0].id,
-      email: docData.email,
-      referralCode: docData.referral?.referralCode || cleanCode.toUpperCase(),
+    // 1. Primary O(1) lookup via /publicReferralCodes/{CODE} (no public /users read)
+    const pubSnap = await getDoc(doc(db, 'publicReferralCodes', upperCode))
+    if (pubSnap.exists()) {
+      const pubData = pubSnap.data() as { uid?: string; referralCode?: string }
+      if (typeof pubData.uid === 'string' && pubData.uid.trim()) {
+        return {
+          uid: pubData.uid.trim(),
+          email: '',
+          referralCode: pubData.referralCode || upperCode,
+        }
+      }
     }
   } catch (error) {
-    console.error('Error looking up referral code:', error)
-    return null
+    console.warn('Public referral index lookup failed, attempting authenticated fallback:', error)
   }
+
+  // 2. Authenticated fallback via /referrals (for legacy accounts not yet mirrored in /publicReferralCodes)
+  if (auth.currentUser) {
+    try {
+      let q = query(collection(db, 'referrals'), where('referralCode', '==', upperCode))
+      let snap = await getDocs(q)
+      if (snap.empty && cleanCode.toLowerCase() !== upperCode) {
+        q = query(collection(db, 'referrals'), where('referralCode', '==', cleanCode.toLowerCase()))
+        snap = await getDocs(q)
+      }
+      if (!snap.empty) {
+        const refData = snap.docs[0].data() as ReferralAccount
+        return {
+          uid: refData.uid || snap.docs[0].id,
+          email: '',
+          referralCode: refData.referralCode || upperCode,
+        }
+      }
+    } catch (error) {
+      console.error('Error looking up referral code in /referrals:', error)
+    }
+  }
+
+  return null
 }
 
 /** Registers a new user with email and password, creates profile with referral code */
@@ -436,6 +473,9 @@ export async function registerWithEmail(email: string, password: string, referra
   // Save detected country to dedicated /countries/{uid} collection
   await saveDetectedCountry(user.uid, geo.country, geo.ip).catch(() => {})
 
+  // Publish minimal public referral code index (/publicReferralCodes/{CODE})
+  await publishPublicReferralCode(user.uid, myReferralCode)
+
   // Ensure dedicated referral document in /referrals/{uid}
   try {
     await ensureReferralAccount(user.uid, myReferralCode, validReferrerCode)
@@ -484,9 +524,11 @@ export async function ensureUserProfile(user: User): Promise<UserProfile | null>
         }
       }
     })
-    // Also ensure /referrals/{uid} and /unilevel/{uid} exist
-    await ensureReferralAccount(user.uid, existing.referral?.referralCode || generateReferralCode(user.email || ''), existing.referral?.referrerBy || '').catch(() => {})
-    await ensureUnilevelAccount(user.uid, user.email || '', existing.referral?.referralCode || generateReferralCode(user.email || ''), existing.referral?.referrerBy || '', existing.sponsorId || '').catch(() => {})
+    // Also ensure /referrals/{uid}, /unilevel/{uid}, and /publicReferralCodes/{CODE} exist
+    const existingCode = existing.referral?.referralCode || generateReferralCode(user.email || '')
+    await publishPublicReferralCode(user.uid, existingCode)
+    await ensureReferralAccount(user.uid, existingCode, existing.referral?.referrerBy || '').catch(() => {})
+    await ensureUnilevelAccount(user.uid, user.email || '', existingCode, existing.referral?.referrerBy || '', existing.sponsorId || '').catch(() => {})
     return existing
   }
 
@@ -520,6 +562,7 @@ export async function ensureUserProfile(user: User): Promise<UserProfile | null>
   try {
     await setDoc(doc(db, 'users', user.uid), userDoc, { merge: true })
     await saveDetectedCountry(user.uid, geo.country, geo.ip).catch(() => {})
+    await publishPublicReferralCode(user.uid, myReferralCode)
     await ensureReferralAccount(user.uid, myReferralCode, '')
     await ensureUnilevelAccount(user.uid, cleanEmail, myReferralCode, '', '')
   } catch (err) {
@@ -676,69 +719,6 @@ export async function getReferralTransactions(uid: string): Promise<ReferralTran
   } catch (error) {
     console.error('Error fetching referral transactions:', error)
     return []
-  }
-}
-
-/**
- * Executes a withdrawal from the user's withdrawable commission balance in /referrals/{uid}.
- * Records transaction with type 'withdrawal' in /referrals/{uid}/transactions subcollection.
- * Decrements withdrawableBalance and increments totalWithdrawn.
- */
-export async function executeReferralWithdrawal(
-  uid: string,
-  amount: number,
-  destinationWallet?: string,
-): Promise<{ success: boolean; tx?: ReferralTransaction; error?: string }> {
-  const cleanAmount = Number(amount.toFixed(2))
-  if (!cleanAmount || cleanAmount <= 0) {
-    return { success: false, error: 'El monto de retiro debe ser mayor a 0 USD.' }
-  }
-
-  try {
-    const account = await getReferralAccount(uid)
-    const available = account?.withdrawableBalance ?? 0
-    if (cleanAmount > available) {
-      return {
-        success: false,
-        error: `Saldo insuficiente. Saldo retirable disponible: $${available.toFixed(2)} USD.`,
-      }
-    }
-
-    const txId = `WD-${uid.slice(0, 6)}-${Date.now()}`
-    const txDoc: ReferralTransaction = {
-      id: txId,
-      referralUid: uid,
-      type: 'withdrawal',
-      amount: -cleanAmount,
-      currency: 'USD',
-      source: 'miner_purchase',
-      description: destinationWallet
-        ? `Retiro de comisiones a wallet ${destinationWallet.slice(0, 6)}...${destinationWallet.slice(-4)}`
-        : 'Retiro de comisiones acumuladas',
-      status: 'completed',
-      timestamp: serverTimestamp(),
-    }
-
-    // 1. Record transaction in /referrals/{uid}/transactions/{txId}
-    await setDoc(doc(db, 'referrals', uid, 'transactions', txId), txDoc)
-
-    // 2. Decrement withdrawableBalance and increment totalWithdrawn in /referrals/{uid}
-    await updateDoc(doc(db, 'referrals', uid), {
-      withdrawableBalance: increment(-cleanAmount),
-      totalWithdrawn: increment(cleanAmount),
-      updatedAt: serverTimestamp(),
-    })
-
-    // 3. Keep user profile balance in sync
-    await updateDoc(doc(db, 'users', uid), {
-      commissionBalance: increment(-cleanAmount),
-      balance: increment(-cleanAmount),
-    }).catch(() => {})
-
-    return { success: true, tx: txDoc }
-  } catch (err: any) {
-    console.error('Error processing referral withdrawal:', err)
-    return { success: false, error: err?.message || 'Error al procesar el retiro.' }
   }
 }
 

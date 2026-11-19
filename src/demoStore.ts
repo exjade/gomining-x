@@ -703,22 +703,6 @@ export function cancelDemoSubscription() {
   notify()
 }
 
-export function simulateDemoWithdrawal(amount: number, networkCost: number): OperationResult {
-  if (![amount, networkCost].every(Number.isFinite) || amount <= 0 || networkCost < 0 || amount <= networkCost) {
-    return { ok: false, required: amount, available: state.balance, message: 'El importe debe ser mayor que la comisión estimada.' }
-  }
-  const gross = roundCurrency(amount)
-  const fee = roundCurrency(networkCost)
-  if (state.balance + 0.000001 < gross) return resultForInsufficient(gross)
-  const net = roundCurrency(gross - fee)
-  const balance = roundCurrency(Math.max(0, state.balance - gross))
-  const subscriptionActive = Boolean(state.subscription && Date.parse(state.subscription.endsAt) > Date.now())
-  const receipt = makeReceipt('withdrawal', 'Solicitud de retiro local', gross, `Comisión estimada ${fee.toFixed(2)} USD · recibiría ${net.toFixed(2)} USD · ${subscriptionActive ? 'sin cola diaria con suscripción' : 'cola diaria simulada'}`, balance)
-  state = { ...state, balance, receipts: [receipt, ...state.receipts].slice(0, 50) }
-  notify()
-  return { ok: true, receipt }
-}
-
 export function simulateDemoPresale(tokens: number, pricePerToken: number): OperationResult {
   if (![tokens, pricePerToken].every(Number.isFinite) || tokens <= 0 || pricePerToken < 0) {
     return { ok: false, required: tokens * pricePerToken, available: state.balance, message: 'Ingresa una cantidad válida de tokens y un precio configurable.' }

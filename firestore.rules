@@ -1,6 +1,9 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // =========================================================================
+    // Helper Security Functions (SCRUM-210 & SCRUM-277 / W02)
+    // =========================================================================
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -10,7 +13,70 @@ service cloud.firestore {
     }
 
     function isOwner(uid) {
-      return request.auth != null && request.auth.uid == uid;
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function adminUserDoc() {
+      return get(/databases/$(database)/documents/admin_users/$(request.auth.uid));
+    }
+
+    function hasExplicitAdminPermissions(data) {
+      return (
+        ('permissions' in data && data.permissions is list && data.permissions.size() > 0) ||
+        ('withdrawalPermissions' in data && data.withdrawalPermissions is list && data.withdrawalPermissions.size() > 0)
+      );
+    }
+
+    // F-CRIT-02: Active admin requires non-anonymous auth, /admin_users/{uid} doc with
+    // role == 'admin', status == 'ACTIVE', and non-empty explicit permissions array.
+    // Single get() via `let` keeps rule evaluation well under Firestore's 10-get limit.
+    function isAdmin() {
+      return isNonAnonymous()
+        && exists(/databases/$(database)/documents/admin_users/$(request.auth.uid))
+        && isActiveAdminData(adminUserDoc().data);
+    }
+
+    function isActiveAdminData(data) {
+      return data != null
+        && 'role' in data && data.role == 'admin'
+        && 'status' in data && data.status == 'ACTIVE'
+        && hasExplicitAdminPermissions(data);
+    }
+
+    function hasAdminPermission(perm) {
+      return isNonAnonymous()
+        && exists(/databases/$(database)/documents/admin_users/$(request.auth.uid))
+        && adminDataHasPermission(adminUserDoc().data, perm);
+    }
+
+    function adminDataHasPermission(data, perm) {
+      return isActiveAdminData(data) && (
+        ('permissions' in data && data.permissions is list && perm in data.permissions) ||
+        ('withdrawalPermissions' in data && data.withdrawalPermissions is list && perm in data.withdrawalPermissions)
+      );
+    }
+
+    // SCRUM-277 (W02) / Decision 1: Financial fields cannot be mutated by client SDKs
+    function touchesProtectedFinancialFields() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'balance',
+        'commissionBalance',
+        'totalCommissionsEarned',
+        'availableBalanceMicros',
+        'lockedBalanceMicros',
+        'totalWithdrawnMicros',
+        'withdrawableBalance',
+        'totalWithdrawn'
+      ]);
+    }
+
+    function validInitialUserFinancialFields() {
+      return (!('balance' in request.resource.data) || request.resource.data.balance == 0)
+        && (!('commissionBalance' in request.resource.data) || request.resource.data.commissionBalance == 0)
+        && (!('totalCommissionsEarned' in request.resource.data) || request.resource.data.totalCommissionsEarned == 0)
+        && (!('availableBalanceMicros' in request.resource.data) || request.resource.data.availableBalanceMicros == 0)
+        && (!('lockedBalanceMicros' in request.resource.data) || request.resource.data.lockedBalanceMicros == 0)
+        && (!('totalWithdrawnMicros' in request.resource.data) || request.resource.data.totalWithdrawnMicros == 0);
     }
 
     function validDemoSnapshot() {
@@ -44,33 +110,101 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
     }
 
-    // User document for authentication, profile, wallet linking, and referral tree
-    match /users/{uid} {
-      // Public read to allow sponsor referral code lookup before and during signup
-      allow read: if true;
-      // Authenticated users can only create their own user document
-      allow create: if isAuthenticated() && request.auth.uid == uid;
-      // Authenticated users can update their own profile, or update referral/commission fields on a sponsor document
-      allow update: if isAuthenticated() && (
-        request.auth.uid == uid ||
+    // =========================================================================
+    // SCRUM-277 (W02) — Private Financial Balances & Canonical Withdrawal Engine
+    // Server-authoritative only (Admin SDK bypasses security rules in transactions).
+    // =========================================================================
+
+    // Decision 1 (Option A): Isolated private balance document per UID in micro-USDT
+    match /userBalances/{uid} {
+      allow read: if isOwner(uid) || hasAdminPermission('withdrawals.read');
+      allow create, update, delete: if false;
+    }
+
+    // Dynamic USDT withdrawal networks configuration
+    match /withdrawalNetworks/{networkId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if false;
+    }
+
+    // Canonical withdrawal requests (F-CRIT-04: zero direct client SDK read to prevent
+    // 11-field internal metadata leak; clients read strictly via sanitized Express /api/withdrawals/me*)
+    match /withdrawalRequests/{withdrawalId} {
+      allow read: if hasAdminPermission('withdrawals.read');
+      allow create, update, delete: if false;
+    }
+
+    // Immutable financial ledger entries (strict UID isolation on read; zero client writes)
+    match /financialLedger/{ledgerEntryId} {
+      allow read: if hasAdminPermission('withdrawals.audit') || (isNonAnonymous() && resource != null && resource.data.userId == request.auth.uid);
+      allow create, update, delete: if false;
+    }
+
+    // Immutable administrative withdrawal audit trail (admin audit permission only; zero client writes)
+    match /withdrawalAuditEvents/{eventId} {
+      allow read: if hasAdminPermission('withdrawals.audit');
+      allow create, update, delete: if false;
+    }
+
+    // =========================================================================
+    // Platform Administrators & Operators (/admin_users) — F-CRIT-02 Hardening
+    // Only active admins with explicit 'admin.users.manage' permission may write.
+    // =========================================================================
+    match /admin_users/{userId} {
+      allow read: if isAdmin() || (isNonAnonymous() && request.auth.uid == userId);
+      allow create, update: if hasAdminPermission('admin.users.manage');
+      allow delete: if false;
+      match /{subcollection}/{docId=**} {
+        allow read: if isAdmin();
+        allow write: if hasAdminPermission('admin.users.manage');
+      }
+    }
+
+    // =========================================================================
+    // Public Referral Code Lookup Index (/publicReferralCodes/{code}) — F-HIGH-01
+    // Exact-key lookup only (no list, zero balance/PII exposure) so /users stays private.
+    // =========================================================================
+    match /publicReferralCodes/{code} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if isNonAnonymous()
+        && request.resource.data.keys().hasOnly(['uid', 'referralCode', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.referralCode == code;
+      allow update, delete: if false;
+    }
+
+    // =========================================================================
+    // Platform Users (/users/{userId}) — F-HIGH-01: Private read (owner/admin only),
+    // zero public balance exposure, zero client balance mutation.
+    // =========================================================================
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && request.auth.uid == userId && validInitialUserFinancialFields();
+      allow update: if isAuthenticated() && !touchesProtectedFinancialFields() && (
+        request.auth.uid == userId ||
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'referral', 'commissionBalance', 'balance', 'totalCommissionsEarned',
-          'purchasesCount', 'lastPurchaseAt', 'firstPurchaseAt', 'sponsorId'
+          'referral', 'purchasesCount', 'lastPurchaseAt', 'firstPurchaseAt', 'sponsorId'
         ])
       );
       allow delete: if false;
 
-      // Demo state per browser/session
       match /demoState/{docId} {
-        allow read: if isOwner(uid) && docId == 'current';
-        allow create, update: if isOwner(uid) && docId == 'current' && validDemoSnapshot();
+        allow read: if isOwner(userId) && docId == 'current';
+        allow create, update: if isOwner(userId) && docId == 'current' && validDemoSnapshot();
         allow delete: if false;
+      }
+
+      match /{subcollection}/{docId=**} {
+        allow read, write: if subcollection != 'demoState' && isAuthenticated() && request.auth.uid == userId;
       }
     }
 
-    // Isolated miner storage per authenticated user
+    // Instancias de mineros comprados por usuarios (/miners/{uid}/miner/{minerId})
     match /miners/{uid}/miner/{minerId} {
-      allow read, write: if isOwner(uid);
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid) || isAdmin();
+      allow update: if isOwner(uid) || isAdmin();
       allow delete: if false;
     }
 
@@ -80,25 +214,32 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // Dedicated referrals collection for financial accounting (1nvezt pattern)
+    // Dedicated referrals collection (hardened in SCRUM-277: blocks direct client withdrawal/balance mutation)
     match /referrals/{uid} {
       allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && (!('withdrawableBalance' in request.resource.data) || request.resource.data.withdrawableBalance == 0)
+        && (!('totalWithdrawn' in request.resource.data) || request.resource.data.totalWithdrawn == 0);
+      allow update: if isAuthenticated()
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'withdrawableBalance', 'totalWithdrawn'
+        ]);
       allow delete: if false;
 
       match /transactions/{txId} {
-        allow read, create: if isAuthenticated();
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated() && request.resource.data.type != 'withdrawal';
         allow update, delete: if false;
       }
     }
 
-    // Dedicated unilevel network collection per user (tree node & upline chain)
+    // Dedicated unilevel network collection per user
     match /unilevel/{uid} {
       allow read: if isNonAnonymous();
       allow create, update: if isNonAnonymous();
       allow delete: if false;
 
-      match /{subcol=**} {
+      match /{subcollection}/{docId=**} {
         allow read, write: if isNonAnonymous();
       }
     }
@@ -109,7 +250,7 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // Unilevel 20-levels distribution records (Notion Technical Plan)
+    // Unilevel 20-levels distribution records
     match /unilevel_distributions/{distributionId} {
       allow read, create: if isAuthenticated();
       allow update, delete: if false;
@@ -120,39 +261,64 @@ service cloud.firestore {
       allow read, write: if isAuthenticated() && request.auth.uid == uid;
     }
 
-    // Dedicated isolated collections for platform administration (MinerX)
-    // Completely separated from client-facing GoMining collections
-    match /admin_users/{userId} {
-      allow read, write: if isNonAnonymous();
+    // Flota de Workers y Racks
+    match /admin_workers/{workerId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Contratos y Asignaciones Administrativas
+    match /admin_contracts/{contractId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create: if isAdmin() || (isAuthenticated() && request.resource.data.userId == request.auth.uid);
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // Registro de Auditoría de la Plataforma
+    match /admin_audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    // Ajustes y Configuración de MinerX
+    match /admin_settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Paquetes comerciales de minería disponibles para la plataforma (commercial_packages/{packageId})
+    match /commercial_packages/{packageId} {
+      allow read: if (resource != null && resource.data.isPublished == true) || isAdmin();
+      allow create, update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // Órdenes y pagos de paquetes (admin_orders/{orderId})
+    match /admin_orders/{orderId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // Compatibilidad retroactiva con minerx_*
+    match /minerx_users/{userId} {
+      allow read, write: if isAdmin();
       match /{allSubcollections=**} {
-        allow read, write: if isNonAnonymous();
+        allow read, write: if isAdmin();
       }
     }
 
-    match /admin_workers/{workerId} {
-      allow read, write: if isNonAnonymous();
+    match /minerx_audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
     }
 
-    match /admin_contracts/{contractId} {
-      allow read, write: if isNonAnonymous();
-    }
-
-    match /admin_audit_logs/{logId} {
-      allow read, write: if isNonAnonymous();
-    }
-
-    match /admin_settings/{settingId} {
-      allow read, write: if isNonAnonymous();
-    }
-
-    // Commercial packages created by platform admins for client purchase
-    match /commercial_packages/{packageId} {
-      allow read, write: if isNonAnonymous();
-    }
-
-    // Client package orders and payments recorded for administration
-    match /admin_orders/{orderId} {
-      allow read, write: if isNonAnonymous();
+    match /minerx_app_data/{docId} {
+      allow read, write: if isAdmin();
     }
 
     // Default deny all other paths
