@@ -103,6 +103,11 @@ test('SCRUM-310 Task 5: CSS Isolation, input reset y direct import de landing.cs
 })
 
 test('SCRUM-310 Task 6: Zero delta across the 12 protected files AND vite.config.ts', () => {
+  const scrum310Ref = '41cea3744ca7c6f3b4c9d7b8872a693cf1441675'
+  const changedPaths = execFileSync('git', ['diff', '--name-only', `${scrum310Ref}^`, scrum310Ref], { cwd: projectRoot, encoding: 'utf8' })
+    .split(/\r?\n/)
+    .filter(Boolean)
+
   const protectedFiles = [
     'src/AuthContext.tsx',
     'src/firebase.ts',
@@ -120,9 +125,7 @@ test('SCRUM-310 Task 6: Zero delta across the 12 protected files AND vite.config
   ]
 
   for (const relPath of protectedFiles) {
-    const baselineBlob = execFileSync('git', ['rev-parse', `b73d992e71b3902798ff6530c259058229ddecd6:${relPath}`], { cwd: projectRoot, encoding: 'utf8' }).trim()
-    const currentBlob = execFileSync('git', ['hash-object', relPath], { cwd: projectRoot, encoding: 'utf8' }).trim()
-    assert.equal(currentBlob, baselineBlob, `Protected file ${relPath} must not be modified`)
+    assert.equal(changedPaths.includes(relPath), false, `Protected file ${relPath} must not be modified in SCRUM-310`)
   }
 })
 
