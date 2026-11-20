@@ -3,12 +3,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, User } from 'lucide-react';
 import type { AuthMode } from './Navbar';
 
+const DAILY_USD_PER_TH = 2.30 / 120; // 0.01916667 USD per TH per day (Benchmark: 120 TH/s = ~$2.30 USD/d)
+const PEARL_PRICE_USD = 0.10; // $0.10 USD per PEARL
+const DAILY_PEARL_PER_TH = DAILY_USD_PER_TH / PEARL_PRICE_USD; // ~0.191667 PEARL per TH per day
+
 interface StickyEarningsBarProps {
   currentTh?: number;
   onOpenAuth?: (mode?: AuthMode) => void;
 }
 
-export function StickyEarningsBar({ currentTh, onOpenAuth }: StickyEarningsBarProps) {
+export function StickyEarningsBar({ currentTh = 120, onOpenAuth }: StickyEarningsBarProps) {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
@@ -20,6 +24,9 @@ export function StickyEarningsBar({ currentTh, onOpenAuth }: StickyEarningsBarPr
     handleScroll();
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  const usdPerDay = (currentTh * DAILY_USD_PER_TH).toFixed(2);
+  const pearlPerDay = (currentTh * DAILY_PEARL_PER_TH).toFixed(1);
 
   const handleNavClick = (href: string) => {
     const el = document.querySelector(href);
@@ -49,7 +56,7 @@ export function StickyEarningsBar({ currentTh, onOpenAuth }: StickyEarningsBarPr
               href="#hero"
               className="font-bold text-white tracking-tight text-[11px] sm:text-xs hover:text-white/80 transition-colors flex items-center gap-1.5"
             >
-              <span className="text-white font-mono font-bold text-[11px] sm:text-xs">{currentTh ? `${currentTh} TH/s` : 'CATÁLOGO'}</span>
+              <span className="text-white font-mono font-bold text-[11px] sm:text-xs">{currentTh} TH/s</span>
             </a>
             <span className="text-white/20 hidden sm:inline">·</span>
             <span className="hidden sm:inline font-mono text-[10px] text-white/50 tracking-wider">
@@ -60,14 +67,14 @@ export function StickyEarningsBar({ currentTh, onOpenAuth }: StickyEarningsBarPr
           {/* Center: Live Earnings Indicator */}
           <div className="flex items-center gap-1.5 font-mono text-[11px] sm:text-xs border-x border-white/10 px-2.5 sm:px-3">
             <span className="text-white/40 hidden sm:inline">Día:</span>
-            <strong className="text-emerald-400 font-bold">RECOMPENSAS VARIABLES</strong>
-            <span className="text-white/40 text-[10px] hidden md:inline">DATOS INFORMATIVOS</span>
+            <strong className="text-emerald-400 font-bold">~${usdPerDay} USD</strong>
+            <span className="text-white/40 text-[10px] hidden md:inline">(~{pearlPerDay} PEARL)</span>
           </div>
 
           {/* Right: 15-day Badge & Actions */}
           <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0">
             <span className="hidden sm:inline-flex text-[9px] sm:text-[10px] font-mono text-white/70 uppercase tracking-widest border border-white/15 bg-white/[0.03] px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full whitespace-nowrap">
-              CATÁLOGO MAIN
+              15 Días
             </span>
 
             <button

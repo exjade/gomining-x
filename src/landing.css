@@ -29,6 +29,65 @@
 .pouw-landing-root *::before,
 .pouw-landing-root *::after {
   box-sizing: border-box;
+  border: 0 solid currentColor;
+}
+
+.pouw-landing-root h1,
+.pouw-landing-root h2,
+.pouw-landing-root h3,
+.pouw-landing-root h4,
+.pouw-landing-root h5,
+.pouw-landing-root h6 {
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  margin: 0;
+}
+
+.pouw-landing-root p {
+  margin: 0;
+}
+
+.pouw-landing-root ul,
+.pouw-landing-root ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pouw-landing-root button {
+  font-family: inherit;
+  font-feature-settings: inherit;
+  font-variation-settings: inherit;
+  font-size: 100%;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  margin: 0;
+  padding: 0;
+  text-transform: none;
+  background-color: transparent;
+  background-image: none;
+  cursor: pointer;
+}
+
+.pouw-landing-root img,
+.pouw-landing-root svg,
+.pouw-landing-root video,
+.pouw-landing-root canvas,
+.pouw-landing-root audio,
+.pouw-landing-root iframe,
+.pouw-landing-root embed,
+.pouw-landing-root object {
+  display: block;
+  vertical-align: middle;
+}
+
+.pouw-landing-root img,
+.pouw-landing-root video {
+  max-width: 100%;
+  height: auto;
 }
 
 html.lenis:has(.pouw-landing-root) { height: auto; }
