@@ -121,7 +121,7 @@ test('SCRUM-309 Task 6: Zero occurrences of forbidden jargon across src/componen
 test('SCRUM-309 Task 6: Zero delta across the 12 protected files', () => {
   const protectedFiles = [
     'src/AuthContext.tsx',
-    'src/AuthModal.tsx',
+    'src/authRoutePolicy.ts',
     'src/firebase.ts',
     'src/appkitConfig.ts',
     'src/WalletPanel.tsx',

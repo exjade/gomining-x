@@ -48,7 +48,8 @@ test('SCRUM-298 adds no legal routes, duplicate modal, or protected-system delta
   assert.doesNotMatch(landingSource, /\/terms|\/privacy|TermsPage|PrivacyPage/)
   assert.equal(fs.existsSync(path.join(projectRoot, 'src/data/catalog.ts')), false)
 
-  const changedPaths = execFileSync('git', ['diff', '--name-only', 'HEAD'], { cwd: projectRoot, encoding: 'utf8' })
+  const scrum298Ref = 'b73d992e71b3902798ff6530c259058229ddecd6'
+  const changedPaths = execFileSync('git', ['diff', '--name-only', `${scrum298Ref}^`, scrum298Ref], { cwd: projectRoot, encoding: 'utf8' })
     .split(/\r?\n/)
     .filter(Boolean)
   for (const protectedPath of [

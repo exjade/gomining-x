@@ -72,6 +72,22 @@
   cursor: pointer;
 }
 
+.pouw-landing-root input {
+  font-family: inherit;
+  font-feature-settings: inherit;
+  font-variation-settings: inherit;
+  font-size: 100%;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  margin: 0;
+  padding: 0;
+  background-color: transparent;
+  background-image: none;
+  border-radius: 0;
+}
+
 .pouw-landing-root img,
 .pouw-landing-root svg,
 .pouw-landing-root video,
@@ -227,4 +243,53 @@ body:has(.pouw-landing-root)::-webkit-scrollbar-thumb:hover { background: rgba(2
   .pouw-landing-root .section { padding: 80px 0; }
   .pouw-landing-root .section-sm { padding: 60px 0; }
   .pouw-landing-root .container { padding: 0 20px; }
+}
+
+/* Explicit structural styles for AuthModal to ensure fixed overlay and backdrop blur across all views */
+.pouw-auth-modal-root {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9999 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 1rem !important;
+  overflow-y: auto !important;
+}
+
+.pouw-auth-modal-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  background-color: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}
+
+/* Isolate AuthModal headings and inputs from global light-theme !important rules in src/styles.css */
+body.light-theme .pouw-auth-modal-root h1,
+body.light-theme .pouw-auth-modal-root h2,
+body.light-theme .pouw-auth-modal-root h3,
+body.light-theme .pouw-auth-modal-root h4,
+:root[data-theme="light"] .pouw-auth-modal-root h1,
+:root[data-theme="light"] .pouw-auth-modal-root h2,
+:root[data-theme="light"] .pouw-auth-modal-root h3,
+:root[data-theme="light"] .pouw-auth-modal-root h4 {
+  color: #ffffff !important;
+}
+
+body.light-theme .pouw-auth-modal-root input,
+:root[data-theme="light"] .pouw-auth-modal-root input {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+body.light-theme .pouw-auth-modal-root input:focus,
+:root[data-theme="light"] .pouw-auth-modal-root input:focus {
+  border-color: #ffffff !important;
+}
+
+body.light-theme .pouw-auth-modal-root input::placeholder,
+:root[data-theme="light"] .pouw-auth-modal-root input::placeholder {
+  color: rgba(255, 255, 255, 0.2) !important;
 }
