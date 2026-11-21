@@ -7,9 +7,7 @@ import {
   getUserCommissions,
   getUnilevelAccount,
   getUnilevelDistributions,
-  executeUnilevelDistribution,
   assignSponsorToUser,
-  useRealtimeUserMiners,
   type ReferralAccount,
   type ReferralTransaction,
   type ReferralCommission,
@@ -29,7 +27,6 @@ export function ReferralPage({ pathname = '/nft-referral' }: { pathname?: string
   const [commissions, setCommissions] = useState<ReferralCommission[]>([])
   const [unilevelAccount, setUnilevelAccount] = useState<UnilevelAccount | null>(null)
   const [unilevelHistory, setUnilevelHistory] = useState<UnilevelDistributionDoc[]>([])
-  const { miners } = useRealtimeUserMiners(user?.uid)
 
   const [copyFeedback, setCopyFeedback] = useState('')
   const [sponsorInput, setSponsorInput] = useState('')
@@ -44,7 +41,6 @@ export function ReferralPage({ pathname = '/nft-referral' }: { pathname?: string
   const [withdrawFeedback, setWithdrawFeedback] = useState('')
 
   // Unilevel modal state
-  const [simulatingUnilevel, setSimulatingUnilevel] = useState(false)
   const [activeUnilevelView, setActiveUnilevelView] = useState<UnilevelDistributionDoc | null>(null)
   const [showUnilevelModal, setShowUnilevelModal] = useState(false)
 
@@ -180,25 +176,6 @@ export function ReferralPage({ pathname = '/nft-referral' }: { pathname?: string
       setSponsorFeedback(err?.message || t('referral.invalid_sponsor_code'))
     } finally {
       setSettingSponsor(false)
-    }
-  }
-
-  const handleTriggerUnilevel = async () => {
-    if (!user) return
-    setSimulatingUnilevel(true)
-    try {
-      const targetMinerId = miners[0]?.id || 'MINER-SAMPLE-20L'
-      const grossDaily = 120 // $120 USD daily gross mining profit
-      const dailyCosts = 20 // $20 USD operating costs
-      const distDoc = await executeUnilevelDistribution(user.uid, targetMinerId, grossDaily, dailyCosts)
-      setActiveUnilevelView(distDoc)
-      setShowUnilevelModal(true)
-      const updatedDists = await getUnilevelDistributions(user.uid)
-      setUnilevelHistory(updatedDists)
-    } catch (err) {
-      console.error('Error running unilevel distribution:', err)
-    } finally {
-      setSimulatingUnilevel(false)
     }
   }
 
@@ -343,14 +320,6 @@ export function ReferralPage({ pathname = '/nft-referral' }: { pathname?: string
               {t('referral.tree_structure_sub')}
             </p>
           </div>
-          <button
-            type="button"
-            className="button button-primary button-small"
-            onClick={handleTriggerUnilevel}
-            disabled={simulatingUnilevel}
-          >
-            {simulatingUnilevel ? t('referral.calculating') : t('referral.run_unilevel_btn')}
-          </button>
         </div>
 
         <div
