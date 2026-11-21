@@ -1218,3 +1218,20 @@ app.post('/api/telegram/send-status', requireAdmin, async (req, res) => {
 
 // Export Cloud Function
 exports.api = onRequest({ cors: true, maxInstances: 10 }, app);
+
+const { validateReferralCode, onPurchaseSettled } = require('./src/referrals');
+const {
+  finalizeDailyMiningProfit,
+  onMiningProfitFinalized,
+  getUnilevelStats,
+  getUnilevelTree,
+  getUnilevelHistory
+} = require('./src/unilevel');
+
+exports.validateReferralCode = validateReferralCode;
+exports.onPurchaseSettled = onPurchaseSettled;
+exports.finalizeDailyMiningProfit = finalizeDailyMiningProfit;
+exports.onMiningProfitFinalized = onMiningProfitFinalized;
+exports.getUnilevelStats = getUnilevelStats;
+exports.getUnilevelTree = getUnilevelTree;
+exports.getUnilevelHistory = getUnilevelHistory;
