@@ -24,6 +24,7 @@ import { CtaSection } from './components/sections/CtaSection'
 import { Footer } from './components/sections/Footer'
 import { LegalModal, type LegalMode } from './components/legal/LegalModal'
 import type { AuthMode } from './components/ui/Navbar'
+import { clearEmbudoF1State, startEmbudoF1Registration } from './components/embudo-f1'
 
 interface LandingPageProps {
   openAuthModal: (mode?: 'login' | 'register' | 'verify-email') => void
@@ -56,8 +57,10 @@ export function LandingPage({ openAuthModal }: LandingPageProps) {
 
   const handleOpenAuth = (mode?: AuthMode) => {
     if (mode === 'login') {
+      clearEmbudoF1State()
       openAuthModal('login')
     } else {
+      startEmbudoF1Registration('landing')
       openAuthModal('register')
     }
   }
