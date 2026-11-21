@@ -35,6 +35,16 @@ import { fetchPrlDailyRevenue, formatUsd, KRYPTEX_PRL_STATS_URL, PEARL_PRL_EXPLO
 import { fetchPoolPayouts, getPoolPayoutStatus, type PoolPayoutPage } from './poolPayouts'
 import { AuthProvider, useAuth } from './AuthContext'
 import { AuthModal } from './AuthModal'
+import {
+  EmbudoFunnelProgress,
+  EmbudoPresaleSkinNotice,
+  advanceEmbudoF1Stage,
+  clearEmbudoF1State,
+  hasEmbudoF1QueryFlag,
+  readEmbudoF1State,
+  resolvePostPaymentTransition,
+  startEmbudoF1Registration,
+} from './components/embudo-f1'
 import { ProfilePage } from './ProfilePage'
 import { SubscriptionsPage } from './SubscriptionsPage'
 import { LandingPage } from './LandingPage'
@@ -218,6 +228,19 @@ function AppContent() {
     }
   }, [location.pathname, location.search, user, loading])
 
+  useEffect(() => {
+    if (!isAuthenticated || loading || walletCheckout) return
+    const funnelState = readEmbudoF1State()
+    if (funnelState.stage === 'configuring' && location.pathname === '/home') {
+      const params = new URLSearchParams(location.search)
+      if (params.get('modal') !== 'paywall-create') {
+        params.set('modal', 'paywall-create')
+        params.set('embudo', 'f1')
+        navigate({ pathname: '/home', search: `?${params.toString()}` }, { replace: true })
+      }
+    }
+  }, [isAuthenticated, loading, location.pathname, location.search, walletCheckout, navigate])
+
   if (loading) {
     if (isPublicAppRoute(location.pathname) || !isAuthenticated) {
       return <div className="min-h-screen bg-[#050505]" style={{ minHeight: '100vh', background: '#050505' }} aria-busy="true" />
@@ -265,12 +288,18 @@ function AppContent() {
   const openMinerBuilder = () => {
     if (!user) {
       setToast('Inicia sesión o crea una cuenta para personalizar mineros.')
+      startEmbudoF1Registration('app')
       openAuthModal('register')
       return
     }
     navigate('/home?modal=paywall-create')
   }
-  const closeMinerBuilder = () => navigate(location.pathname === '/home' ? '/home' : location.pathname, { replace: true })
+  const closeMinerBuilder = () => {
+    if (readEmbudoF1State().stage === 'configuring') {
+      clearEmbudoF1State()
+    }
+    navigate(location.pathname === '/home' ? '/home' : location.pathname, { replace: true })
+  }
   const closeWalletCheckout = (requestPending?: boolean, notice?: string) => {
     setWalletCheckout(null)
     const params = new URLSearchParams(location.search)
@@ -547,6 +576,13 @@ function AppContent() {
       {minerBuilderOpen && <MinerBuilderDialog
         balance={user && !user.isAnonymous ? (profile?.balance ?? 0) : demo.balance}
         isAuth={Boolean(user && !user.isAnonymous)}
+        isEmbudoF1={hasEmbudoF1QueryFlag(location.search) || readEmbudoF1State().active}
+        isEmailVerified={isEmailVerified}
+        onPostPaymentVerifyEmail={() => {
+          advanceEmbudoF1Stage('verify-email')
+          navigate('/home', { replace: true })
+          openAuthModal('verify-email')
+        }}
         walletSession={effectiveWalletSession}
         onClose={closeMinerBuilder}
         onPayWithWallet={(productName, amount, currency, packageId, purchaseMode) => {
@@ -555,6 +591,9 @@ function AppContent() {
           setMinerBuilderOpen(false)
           openAuthModal('register')
           return
+        }
+        if (hasEmbudoF1QueryFlag(location.search) || readEmbudoF1State().active) {
+          advanceEmbudoF1Stage('paying')
         }
         closeMinerBuilder()
         setMinerBuilderOpen(false)
@@ -630,8 +669,27 @@ function AppContent() {
         setPaymentReceipts((items) => [receipt, ...items].slice(0, 20))
         const receiptEvent = `${receipt.id} · ${receipt.quote.networkName} · ${receipt.transactionHash.slice(0, 14)}…`
         setSessionEvents((items) => [receiptEvent, ...items].slice(0, 5))
-        setToast('¡Pago verificado y enviado on-chain! Redirigiendo a customización...')
-        if (receipt.minerId) {
+        const postPayment = resolvePostPaymentTransition({
+          isFunnelActive: readEmbudoF1State().active,
+          isAuthenticated,
+          isEmailVerified,
+          minerId: receipt.minerId,
+        })
+        setToast(postPayment.toastMessage)
+        if (postPayment.openVerifyEmailModal) {
+          advanceEmbudoF1Stage('verify-email', undefined, { lastMinerId: receipt.minerId })
+          window.setTimeout(() => {
+            setWalletCheckout(null)
+            navigate('/home', { replace: true })
+            openAuthModal('verify-email')
+          }, 1400)
+        } else if (postPayment.destination === '/home') {
+          clearEmbudoF1State()
+          window.setTimeout(() => {
+            setWalletCheckout(null)
+            navigate('/home', { replace: true })
+          }, 1400)
+        } else if (receipt.minerId) {
           window.setTimeout(() => {
             setWalletCheckout(null)
             navigate(`/miners/${receipt.minerId}/customize`)
@@ -1727,9 +1785,23 @@ function DemoProductGrid({ products, addProduct }: { products: DemoProduct[]; ad
   </div>
 }
 
-function MinerBuilderDialog({ balance, isAuth = false, walletSession, onClose, onPayWithWallet, onComplete, onDefer }: {
+function MinerBuilderDialog({
+  balance,
+  isAuth = false,
+  isEmbudoF1 = false,
+  isEmailVerified = true,
+  onPostPaymentVerifyEmail,
+  walletSession,
+  onClose,
+  onPayWithWallet,
+  onComplete,
+  onDefer,
+}: {
   balance: number
   isAuth?: boolean
+  isEmbudoF1?: boolean
+  isEmailVerified?: boolean
+  onPostPaymentVerifyEmail?: () => void
   walletSession: ReturnType<typeof useWalletSession>
   onClose: () => void
   onPayWithWallet: (productName: string, amount: number, currency: PaymentCurrency, packageId?: string, purchaseMode?: 'once' | 'monthly') => void
@@ -1739,8 +1811,8 @@ function MinerBuilderDialog({ balance, isAuth = false, walletSession, onClose, o
   const [storefrontSections, setStorefrontSections] = useState<StorefrontSectionsConfig>(DEFAULT_STOREFRONT_SECTIONS)
   const [stablePurchaseId] = useState(() => `pb_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`)
   const [categoryTab, setCategoryTab] = useState<MinerCategoryTab>('packages')
-  const [presetId, setPresetId] = useState<string>('presale-1')
-  const [isCustomEditorOpen, setIsCustomEditorOpen] = useState(false)
+  const [presetId, setPresetId] = useState<string>(isEmbudoF1 ? 'custom' : 'presale-1')
+  const [isCustomEditorOpen, setIsCustomEditorOpen] = useState(Boolean(isEmbudoF1))
   const [customPowerIndex, setCustomPowerIndex] = useState(0)
   const [maintenanceToken, setMaintenanceToken] = useState<MaintenanceToken>('PEARL')
   const [roiPeriod, setRoiPeriod] = useState<RewardPeriod>('monthly')
@@ -1919,6 +1991,12 @@ function MinerBuilderDialog({ balance, isAuth = false, walletSession, onClose, o
 
   return (
     <CreateMinerModal variant={modalVariant} onClose={onClose}>
+      {isEmbudoF1 && (
+        <EmbudoFunnelProgress
+          currentStep={stage === 'review' ? 'paying' : stage === 'receipt' ? (isEmailVerified ? 'dashboard' : 'verify-email') : 'configuring'}
+          variant="builder"
+        />
+      )}
 
         {stage === 'receipt' && receipt ? (
           <>
@@ -1935,7 +2013,17 @@ function MinerBuilderDialog({ balance, isAuth = false, walletSession, onClose, o
               <div className="simulation-warning"><span>i</span><span>Esta acción afecta tu sesión local y activa el worker correspondiente en tu panel de minería.</span></div>
             )}
             <div className="purchase-modal-actions">
-              <button className="button button-primary" onClick={onClose}>Listo <span>✓</span></button>
+              <button
+                className="button button-primary"
+                onClick={() => {
+                  onClose()
+                  if (isEmbudoF1 && !isEmailVerified && onPostPaymentVerifyEmail) {
+                    onPostPaymentVerifyEmail()
+                  }
+                }}
+              >
+                Listo <span>✓</span>
+              </button>
             </div>
           </>
         ) : stage === 'review' ? (
@@ -1999,6 +2087,7 @@ function MinerBuilderDialog({ balance, isAuth = false, walletSession, onClose, o
           <>
             {isCustomEditor ? (
               <MinerCreationScreen customMode onBack={() => setIsCustomEditorOpen(false)}>
+                <EmbudoPresaleSkinNotice />
                 <div className="miner-custom-card-list">
                   <section className="miner-custom-card miner-custom-power-card">
                   <div className="panel-toolbar">

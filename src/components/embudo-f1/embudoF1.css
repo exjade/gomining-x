@@ -1,0 +1,175 @@
+.embudo-f1-progress {
+  width: 100%;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.embudo-f1-progress-modal {
+  position: relative;
+  z-index: 10;
+  margin-bottom: 16px;
+}
+
+.embudo-f1-progress-builder {
+  margin: 0 0 14px;
+  border-color: var(--line, rgba(148, 163, 184, 0.24));
+  background: var(--surface-2, rgba(15, 23, 42, 0.4));
+}
+
+.embudo-f1-step-list {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.embudo-f1-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 6px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  transition:
+    background-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.embudo-f1-step-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.embudo-f1-step-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.embudo-f1-step-current {
+  border-color: rgba(16, 185, 129, 0.42);
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.embudo-f1-step-current .embudo-f1-step-index {
+  border-color: #10b981;
+  background: #10b981;
+  color: #04130d;
+}
+
+.embudo-f1-step-current .embudo-f1-step-label {
+  color: #ffffff;
+}
+
+.embudo-f1-step-done .embudo-f1-step-index {
+  border-color: rgba(16, 185, 129, 0.5);
+  background: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+}
+
+.embudo-f1-step-done .embudo-f1-step-label {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.embudo-f1-presale-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(16, 185, 129, 0.34);
+  background: rgba(16, 185, 129, 0.08);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.embudo-f1-presale-tag {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #10b981;
+  color: #04130d;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.embudo-f1-presale-copy {
+  color: var(--ink, #f8fafc);
+  font-weight: 500;
+}
+
+body.light-theme .embudo-f1-progress-builder .embudo-f1-step-index,
+:root[data-theme="light"] .embudo-f1-progress-builder .embudo-f1-step-index {
+  border-color: rgba(15, 23, 42, 0.2);
+  color: #475569;
+}
+
+body.light-theme .embudo-f1-progress-builder .embudo-f1-step-label,
+:root[data-theme="light"] .embudo-f1-progress-builder .embudo-f1-step-label {
+  color: #475569;
+}
+
+body.light-theme .embudo-f1-progress-builder .embudo-f1-step-current .embudo-f1-step-label,
+:root[data-theme="light"] .embudo-f1-progress-builder .embudo-f1-step-current .embudo-f1-step-label {
+  color: #064e3b;
+}
+
+body.light-theme .embudo-f1-progress-builder .embudo-f1-step-done .embudo-f1-step-index,
+:root[data-theme="light"] .embudo-f1-progress-builder .embudo-f1-step-done .embudo-f1-step-index {
+  color: #047857;
+}
+
+body.light-theme .embudo-f1-presale-copy,
+:root[data-theme="light"] .embudo-f1-presale-copy {
+  color: #0f172a;
+}
+
+@media (max-width: 640px) {
+  .embudo-f1-step-list {
+    gap: 4px;
+  }
+
+  .embudo-f1-step {
+    flex-direction: column;
+    justify-content: center;
+    padding: 5px 2px;
+    gap: 3px;
+  }
+
+  .embudo-f1-step-label {
+    font-size: 9.5px;
+    text-align: center;
+  }
+
+  .embudo-f1-presale-notice {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+}

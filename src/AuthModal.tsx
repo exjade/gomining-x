@@ -23,6 +23,13 @@ import {
   validateRegisterStep2,
   validateStep1Email,
 } from './authModalValidation'
+import {
+  EmbudoFunnelProgress,
+  advanceEmbudoF1Stage,
+  clearEmbudoF1State,
+  readEmbudoF1State,
+  resolvePostRegisterTransition,
+} from './components/embudo-f1'
 import './landing.css'
 
 export type AuthMode = 'login' | 'register' | 'forgot-password' | 'verify-email' | 'email-verified'
@@ -60,6 +67,7 @@ export function AuthModal() {
   const [info, setInfo] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [resendCooldown, setResendCooldown] = useState(0)
+  const [embudoF1Active, setEmbudoF1Active] = useState(false)
 
   // Live FOMO countdown matching Landing_Page official design
   const [fomoTime, setFomoTime] = useState({ d: 14, h: 23, m: 48, s: 35 })
@@ -84,6 +92,10 @@ export function AuthModal() {
     setError('')
     setInfo('')
     if (authMode === 'register') setStep(1)
+    setEmbudoF1Active(authModalOpen && readEmbudoF1State().active)
+    if (!authModalOpen && readEmbudoF1State().stage === 'verify-email') {
+      clearEmbudoF1State()
+    }
   }, [authMode, authModalOpen])
 
   useEffect(() => {
@@ -183,9 +195,19 @@ export function AuthModal() {
 
     setSubmitting(true)
     try {
+      const funnelActive = readEmbudoF1State().active
+      const postRegister = resolvePostRegisterTransition({
+        isFunnelActive: funnelActive,
+        isAuthenticated: true,
+      })
       await register(email, password, referralCode)
-      setMode('verify-email')
-      setResendCooldown(30)
+      if (postRegister.deferEmailVerification) {
+        advanceEmbudoF1Stage('configuring')
+        closeAuthModal()
+      } else {
+        setMode('verify-email')
+        setResendCooldown(30)
+      }
     } catch (err: any) {
       setError(err?.message || (language === 'en' ? 'Error processing registration.' : 'Error al procesar el registro.'))
     } finally {
@@ -355,6 +377,15 @@ export function AuthModal() {
                   24 Cupos
                 </span>
               </div>
+
+              {/* Embudo F1 Step Progress Indicator */}
+              {embudoF1Active && (mode === 'register' || mode === 'verify-email') && (
+                <EmbudoFunnelProgress
+                  currentStep={mode === 'verify-email' ? 'verify-email' : 'registering'}
+                  language={language}
+                  variant="modal"
+                />
+              )}
 
               {/* Feedback banners */}
               {error && (
@@ -531,6 +562,8 @@ export function AuthModal() {
                     <button
                       type="button"
                       onClick={() => {
+                        clearEmbudoF1State()
+                        setEmbudoF1Active(false)
                         setMode('login')
                         setError('')
                         setInfo('')
@@ -708,6 +741,8 @@ export function AuthModal() {
                     <button
                       type="button"
                       onClick={() => {
+                        clearEmbudoF1State()
+                        setEmbudoF1Active(false)
                         setMode('login')
                         setError('')
                         setInfo('')
@@ -776,6 +811,8 @@ export function AuthModal() {
                     <button
                       type="button"
                       onClick={() => {
+                        clearEmbudoF1State()
+                        setEmbudoF1Active(false)
                         logout()
                         setMode('login')
                         setError('')
