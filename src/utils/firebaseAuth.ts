@@ -57,7 +57,7 @@ export const firebaseConfig = {
   appId: getEnvVar('VITE_FIREBASE_APP_ID', "1:402055553257:web:bfd9ebd33083e3f54f1078")
 };
 
-let app: FirebaseApp;
+let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
 
@@ -70,12 +70,10 @@ try {
     db = getFirestore(app);
   } else {
     // In Node.js (test runner/CLI), keep null to prevent unmocked browser gRPC background network streams
-    // @ts-expect-error fallback
     app = null;
   }
 } catch (err) {
   console.warn('[MinerX Firebase] Client SDK initialization notice (fallback active):', err);
-  // @ts-expect-error fallback
   app = null;
 }
 

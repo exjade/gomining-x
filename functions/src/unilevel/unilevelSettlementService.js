@@ -262,6 +262,7 @@ async function settleUnilevelDistribution({
     // 2. Owner net mining payout (80% + undistributedAmount)
     if (ownerRounded.microUsdt > 0n) {
       const ownerDeltaUsdt = microUsdtToNumber(ownerRounded.microUsdt);
+      const ownerDeltaMicro = Number(ownerRounded.microUsdt);
       tx.set(
         db.collection('userBalances').doc(sourceUid),
         {
@@ -270,6 +271,7 @@ async function settleUnilevelDistribution({
           usdtAvailable: FieldValue.increment(ownerDeltaUsdt),
           balance: FieldValue.increment(ownerDeltaUsdt),
           miningBalance: FieldValue.increment(ownerDeltaUsdt),
+          availableBalanceMicros: FieldValue.increment(ownerDeltaMicro),
           updatedAt: nowTs
         },
         { merge: true }
@@ -321,6 +323,7 @@ async function settleUnilevelDistribution({
         continue;
       }
       const lvlDeltaUsdt = microUsdtToNumber(lvlRounded.microUsdt);
+      const lvlDeltaMicro = Number(lvlRounded.microUsdt);
       const ledgerId = `${distributionId}_L${lvl.level}`;
 
       tx.set(db.collection('unilevel_ledger').doc(ledgerId), {
@@ -350,6 +353,7 @@ async function settleUnilevelDistribution({
           usdtAvailable: FieldValue.increment(lvlDeltaUsdt),
           balance: FieldValue.increment(lvlDeltaUsdt),
           unilevelBalance: FieldValue.increment(lvlDeltaUsdt),
+          availableBalanceMicros: FieldValue.increment(lvlDeltaMicro),
           updatedAt: nowTs
         },
         { merge: true }
@@ -527,6 +531,7 @@ async function reverseUnilevelDistribution({
     // 3. Reverse owner payout
     if (ownerRounded.microUsdt > 0n) {
       const negOwnerUsdt = -microUsdtToNumber(ownerRounded.microUsdt);
+      const negOwnerMicro = -Number(ownerRounded.microUsdt);
       tx.set(db.collection('unilevel_ledger').doc(`${cleanReversalId}_OWNER`), {
         id: `${cleanReversalId}_OWNER`,
         reversalId: cleanReversalId,
@@ -546,6 +551,7 @@ async function reverseUnilevelDistribution({
           usdtAvailable: FieldValue.increment(negOwnerUsdt),
           balance: FieldValue.increment(negOwnerUsdt),
           miningBalance: FieldValue.increment(negOwnerUsdt),
+          availableBalanceMicros: FieldValue.increment(negOwnerMicro),
           updatedAt: nowTs
         },
         { merge: true }
@@ -572,6 +578,7 @@ async function reverseUnilevelDistribution({
     // 4. Reverse each credited upline
     for (const item of creditedLevels) {
       const negLvlUsdt = -microUsdtToNumber(item.rounded.microUsdt);
+      const negLvlMicro = -Number(item.rounded.microUsdt);
       tx.set(db.collection('unilevel_ledger').doc(`${cleanReversalId}_L${item.level}`), {
         id: `${cleanReversalId}_L${item.level}`,
         reversalId: cleanReversalId,
@@ -592,6 +599,7 @@ async function reverseUnilevelDistribution({
           usdtAvailable: FieldValue.increment(negLvlUsdt),
           balance: FieldValue.increment(negLvlUsdt),
           unilevelBalance: FieldValue.increment(negLvlUsdt),
+          availableBalanceMicros: FieldValue.increment(negLvlMicro),
           updatedAt: nowTs
         },
         { merge: true }

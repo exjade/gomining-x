@@ -22,8 +22,10 @@ import { UserManagementView } from './components/admin/UserManagementView';
 import { PromotionsManagerView } from './components/admin/PromotionsManagerView';
 import { AuditLogsView } from './components/admin/AuditLogsView';
 import { ReferralsView } from './components/admin/ReferralsView';
-import { WithdrawalsView } from './components/admin/WithdrawalsView';
+import { AdminWithdrawalsControlCenter } from './components/admin/AdminWithdrawalsControlCenter';
 import { PackagePaymentsView } from './components/admin/PackagePaymentsView';
+import { CANONICAL_USDT_NETWORKS } from './types/withdrawal';
+import type { AdminWithdrawalSession } from './services/admin/adminWithdrawalsClient';
 import { MinerxProfitEngine } from './services/admin/minerxProfitEngine';
 
 import { 
@@ -40,7 +42,7 @@ import {
 } from './data/mockFleetData';
 
 import { BASELINE_USD_PER_THS_HOUR, resolveGpuBenchmark } from './data/gpuBenchmarks';
-import { apiFetch } from './utils/apiConfig';
+import { apiFetch, getApiBaseUrl } from './utils/apiConfig';
 import { logoutFirebase } from './utils/firebaseAuth';
 import type { 
   SaladAccountConfig, 
@@ -149,6 +151,23 @@ export const App: React.FC = () => {
   const [isSessionChecking, setIsSessionChecking] = useState<boolean>(() => {
     return typeof localStorage !== 'undefined' && Boolean(localStorage.getItem('minerx_auth_token'));
   });
+
+  const adminWithdrawalSession = useMemo<AdminWithdrawalSession | null>(() => {
+    const token =
+      typeof localStorage !== 'undefined' ? localStorage.getItem('minerx_auth_token') : null;
+    if (!currentUser?.id || !token?.trim()) {
+      return null;
+    }
+    const rawPerms = Array.isArray(currentUser.permissions)
+      ? currentUser.permissions.filter((p: unknown): p is string => typeof p === 'string')
+      : [];
+    return {
+      uid: String(currentUser.firebaseAuthUid || currentUser.id),
+      email: String(currentUser.email || ''),
+      idToken: token.trim(),
+      permissions: rawPerms,
+    };
+  }, [currentUser]);
 
   // UI View Mode (Landing Page vs Dashboard)
   const [viewMode, setViewMode] = useState<'dashboard' | 'landing'>(() => {
@@ -1628,6 +1647,8 @@ export const App: React.FC = () => {
             <AdminOverview
               onNavigateTab={(tabId) => setActiveTab(tabId)}
               isDarkTheme={themeMode === 'dark'}
+              withdrawalSession={adminWithdrawalSession}
+              withdrawalApiOptions={{ baseUrl: getApiBaseUrl() }}
             />
           )}
 
@@ -1658,8 +1679,10 @@ export const App: React.FC = () => {
           )}
 
           {activeTab === 'admin_withdrawals' && (
-            <WithdrawalsView
-              isDarkTheme={themeMode === 'dark'}
+            <AdminWithdrawalsControlCenter
+              session={adminWithdrawalSession}
+              apiOptions={{ baseUrl: getApiBaseUrl() }}
+              networksCatalog={CANONICAL_USDT_NETWORKS}
             />
           )}
 

@@ -304,7 +304,11 @@ test('SCRUM-235 E2E chain: SCRUM-229 purchase settlement -> SCRUM-327 daily mini
   // 4. SCRUM-349: Validate firestore.indexes.json COLLECTION_GROUP fieldOverride for miner.status
   const indexesPath = path.join(__dirname, '..', '..', 'firestore.indexes.json');
   const idxJson = JSON.parse(fs.readFileSync(indexesPath, 'utf8'));
-  assert.equal(idxJson.indexes.length, 12);
+  assert.ok(idxJson.indexes.length >= 12, `Expected at least 12 indexes, got ${idxJson.indexes.length}`);
+  assert.equal(
+    idxJson.indexes.filter((entry) => ['commercial_packages', 'admin_users', 'users'].includes(entry.collectionGroup)).length,
+    12
+  );
   const minerStatusOverride = idxJson.fieldOverrides.find(
     (entry) => entry.collectionGroup === 'miner' && entry.fieldPath === 'status'
   );

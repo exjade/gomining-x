@@ -361,31 +361,6 @@ export interface PromotionItem {
   conversionsCount: number;
 }
 
-// Client Withdrawal Request
-export type WithdrawalStatus = 'PENDING' | 'APPROVED' | 'PROCESSING' | 'COMPLETED' | 'REJECTED';
-
-export interface ClientWithdrawalRequest {
-  id: string;
-  createdAt: string;
-  userId: string;
-  userEmail: string;
-  userName: string;
-  amount: number;
-  currency: 'USDT' | 'PRL' | 'BTC' | 'SOL';
-  network: 'TRC20' | 'ERC20' | 'PEARL' | 'BITCOIN' | 'SOLANA';
-  destinationAddress: string;
-  fee: number;
-  netAmount: number;
-  status: WithdrawalStatus;
-  txHash?: string;
-  processedAt?: string;
-  processedBy?: string;
-  riskScore: 'LOW' | 'MEDIUM' | 'HIGH';
-  kycVerified: boolean;
-  rejectionReason?: string;
-  source: 'MINING_YIELD' | 'REFERRAL_COMMISSIONS' | 'BALANCE';
-}
-
 // Package Order & Payment Attempt
 export type OrderPaymentStatus = 'SETTLED' | 'CONFIRMED' | 'PENDING' | 'UNDERPAID' | 'EXPIRED' | 'REVERSED';
 

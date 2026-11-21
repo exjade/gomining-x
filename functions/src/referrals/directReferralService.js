@@ -303,6 +303,7 @@ async function settleDirectReferralCommission({ db, FieldValue, purchase }) {
         usdtAvailable: FieldValue.increment(deltaUsdt),
         balance: FieldValue.increment(deltaUsdt),
         commissionBalance: FieldValue.increment(deltaUsdt),
+        availableBalanceMicros: FieldValue.increment(deltaMicro),
         updatedAt: nowTs
       },
       { merge: true }
@@ -503,6 +504,7 @@ async function reverseDirectReferralCommission({
         usdtAvailable: FieldValue.increment(negativeUsdt),
         balance: FieldValue.increment(negativeUsdt),
         commissionBalance: FieldValue.increment(negativeUsdt),
+        availableBalanceMicros: FieldValue.increment(negativeMicro),
         updatedAt: nowTs
       },
       { merge: true }
