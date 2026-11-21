@@ -28,6 +28,13 @@ import { PowerSlider } from './components/miner-builder/PowerSlider'
 import { RewardsCalculator, type RewardPeriod } from './components/miner-builder/RewardsCalculator'
 import { PaymentTimingOptions, type MaintenanceToken } from './components/miner-builder/PaymentOptions'
 import { customMinerEconomics } from './components/miner-builder/customMinerEconomics'
+import {
+  PRESALE_CUSTOM_ONLY_MODE,
+  PRESALE_FREE_SKIN_COPY,
+  resolveInitialMinerBuilderConfig,
+  resolvePresaleReviewModalityLabel,
+  resolvePresaleStorefrontSections,
+} from './components/miner-builder/presaleCustomOnlyPolicy'
 import { BitcoinMiningCalculator } from './BitcoinMiningCalculator'
 import { calculateMiningSettlement, REFERRAL_LEVEL_WEIGHTS } from './miningEconomics'
 import { resetMiningConfig, updateMiningConfig, useMiningConfig } from './miningConfig'
@@ -1808,11 +1815,17 @@ function MinerBuilderDialog({
   onComplete: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; packageId?: string; durationDays?: number; purchaseId?: string }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
   onDefer: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; packageId?: string; durationDays?: number; purchaseId?: string }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
 }) {
-  const [storefrontSections, setStorefrontSections] = useState<StorefrontSectionsConfig>(DEFAULT_STOREFRONT_SECTIONS)
+  const initialBuilderConfig = resolveInitialMinerBuilderConfig({
+    customOnly: PRESALE_CUSTOM_ONLY_MODE,
+    isEmbudoF1,
+  })
+  const [storefrontSections, setStorefrontSections] = useState<StorefrontSectionsConfig>(() =>
+    resolvePresaleStorefrontSections(DEFAULT_STOREFRONT_SECTIONS),
+  )
   const [stablePurchaseId] = useState(() => `pb_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`)
-  const [categoryTab, setCategoryTab] = useState<MinerCategoryTab>('packages')
-  const [presetId, setPresetId] = useState<string>(isEmbudoF1 ? 'custom' : 'presale-1')
-  const [isCustomEditorOpen, setIsCustomEditorOpen] = useState(Boolean(isEmbudoF1))
+  const [categoryTab, setCategoryTab] = useState<MinerCategoryTab>(initialBuilderConfig.categoryTab)
+  const [presetId, setPresetId] = useState<string>(initialBuilderConfig.presetId)
+  const [isCustomEditorOpen, setIsCustomEditorOpen] = useState(initialBuilderConfig.isCustomEditorOpen)
   const [customPowerIndex, setCustomPowerIndex] = useState(0)
   const [maintenanceToken, setMaintenanceToken] = useState<MaintenanceToken>('PEARL')
   const [roiPeriod, setRoiPeriod] = useState<RewardPeriod>('monthly')
@@ -1849,7 +1862,7 @@ function MinerBuilderDialog({
 
   useEffect(() => {
     const unsubscribe = subscribeToStorefrontSections((cfg) => {
-      if (cfg) setStorefrontSections(cfg)
+      if (cfg) setStorefrontSections(resolvePresaleStorefrontSections(cfg))
     })
     return () => {
       if (unsubscribe) unsubscribe()
@@ -2033,8 +2046,11 @@ function MinerBuilderDialog({
             <div className="builder-review-grid">
               <div><span>Potencia</span><strong>{powerTh.toFixed(2)} TH</strong></div>
               <div><span>Eficiencia</span><strong>15 W/TH</strong></div>
-              <div><span>Modalidad</span><strong>{categoryTab === 'presale' ? 'Preventa (Edición limitada)' : categoryTab === 'monthly' ? 'Mensual · 30 días' : categoryTab === 'packages' ? 'Paquetes MinerX' : 'Lanzamiento · Propiedad'}</strong></div>
+              <div><span>Modalidad</span><strong>{resolvePresaleReviewModalityLabel(isCustom, categoryTab)}</strong></div>
               <div><span>Token de mantenimiento</span><strong>{maintenanceToken} {maintenanceToken === 'PEARL' ? '(-20% dto)' : ''}</strong></div>
+              {isCustom && (
+                <div><span>{PRESALE_FREE_SKIN_COPY.reviewSkinLabel}</span><strong>{PRESALE_FREE_SKIN_COPY.reviewSkinValue}</strong></div>
+              )}
             </div>
             <div className="purchase-total">
               <span>Precio total</span>
@@ -2086,7 +2102,12 @@ function MinerBuilderDialog({
         ) : (
           <>
             {isCustomEditor ? (
-              <MinerCreationScreen customMode onBack={() => setIsCustomEditorOpen(false)}>
+              <MinerCreationScreen
+                customMode
+                hideBackButton={PRESALE_CUSTOM_ONLY_MODE}
+                eyebrow={PRESALE_CUSTOM_ONLY_MODE ? PRESALE_FREE_SKIN_COPY.eyebrow : undefined}
+                onBack={() => setIsCustomEditorOpen(false)}
+              >
                 <EmbudoPresaleSkinNotice />
                 <div className="miner-custom-card-list">
                   <section className="miner-custom-card miner-custom-power-card">
@@ -2140,11 +2161,11 @@ function MinerBuilderDialog({
                   />
                   </section>
 
-                  <div className="miner-custom-card miner-custom-traits-row" aria-label="Rasgos del minero">
+                  <div className="miner-custom-card miner-custom-traits-row" aria-label={PRESALE_FREE_SKIN_COPY.skinTitle}>
                     <span className="miner-traits-thumbnail" aria-hidden="true" />
                     <span className="miner-custom-traits-copy">
-                      <strong>Rasgos del minero</strong>
-                      <small>{customTier.powerTh.toFixed(2)} TH · 15 W/TH</small>
+                      <strong>{PRESALE_FREE_SKIN_COPY.skinTitle}</strong>
+                      <small>{PRESALE_FREE_SKIN_COPY.skinSubtitlePrefix} · {customTier.powerTh.toFixed(2)} TH · 15 W/TH</small>
                     </span>
                     <span className="miner-custom-traits-chevron" aria-hidden="true">›</span>
                   </div>

@@ -1,16 +1,27 @@
 import type { ReactNode } from 'react'
 
-export function MinerCreationScreen({ children, customMode = false, onBack }: {
+export function MinerCreationScreen({
+  children,
+  customMode = false,
+  hideBackButton = false,
+  eyebrow,
+  onBack,
+}: {
   children: ReactNode
   customMode?: boolean
+  hideBackButton?: boolean
+  eyebrow?: string
   onBack?: () => void
 }) {
   if (customMode) {
     return (
       <div className="miner-creation-screen miner-creation-screen-custom">
         <header className="miner-custom-header">
-          <button type="button" className="miner-custom-back" aria-label="Volver a los paquetes" onClick={onBack}>‹</button>
+          {!hideBackButton && (
+            <button type="button" className="miner-custom-back" aria-label="Volver a los paquetes" onClick={onBack}>‹</button>
+          )}
           <div>
+            {eyebrow && <p className="eyebrow">{eyebrow}</p>}
             <h2 id="miner-builder-title">Crear minero personalizado</h2>
           </div>
         </header>
