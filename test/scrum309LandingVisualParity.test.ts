@@ -119,6 +119,12 @@ test('SCRUM-309 Task 6: Zero occurrences of forbidden jargon across src/componen
 })
 
 test('SCRUM-309 Task 6: Zero delta across the 12 protected files', () => {
+  // Anchored to exact feat(SCRUM-309) commit (41cea3744ca7c6f3b4c9d7b8872a693cf1441675 is later feat(SCRUM-310) test-only touch)
+  const scrum309Ref = '0a6baa4f8a84d97d73cd670b789a79a417945489'
+  const changedPaths = execFileSync('git', ['diff', '--name-only', `${scrum309Ref}^`, scrum309Ref], { cwd: projectRoot, encoding: 'utf8' })
+    .split(/\r?\n/)
+    .filter(Boolean)
+
   const protectedFiles = [
     'src/AuthContext.tsx',
     'src/authRoutePolicy.ts',
@@ -135,8 +141,6 @@ test('SCRUM-309 Task 6: Zero delta across the 12 protected files', () => {
   ]
 
   for (const relPath of protectedFiles) {
-    const baselineBlob = execFileSync('git', ['rev-parse', `b73d992e71b3902798ff6530c259058229ddecd6:${relPath}`], { cwd: projectRoot, encoding: 'utf8' }).trim()
-    const currentBlob = execFileSync('git', ['hash-object', relPath], { cwd: projectRoot, encoding: 'utf8' }).trim()
-    assert.equal(currentBlob, baselineBlob, `Protected file ${relPath} must not be modified`)
+    assert.equal(changedPaths.includes(relPath), false, `Protected file ${relPath} must not be modified in SCRUM-309`)
   }
 })

@@ -1,0 +1,563 @@
+/**
+ * SCRUM-275 / SCRUM-289 / SCRUM-280 (W05)
+ * Isolated Stylesheet for `WithdrawalForm.tsx` (Client Branch `main` @ 62e5cb3)
+ *
+ * Design Engineering Standards (`design-taste-frontend` + `emil-design-eng`):
+ * 1. Asymmetric 2-Column Split Grid (`1.38fr / 0.92fr`) on desktop, collapsing cleanly to 1 column on `< 860px`.
+ * 2. High-contrast neutral dark surfaces (`#0a0d14` / `#101521` / `#151b2b`) with Emerald/Teal financial accent (`#34d399`).
+ *    Strictly avoids generic AI purple glows.
+ * 3. Tabular monospace numerals (`font-variant-numeric: tabular-nums`) on all USDT figures, fees, balances, and addresses to guarantee zero layout shift (CLS = 0).
+ * 4. Explicit property transitions with custom `cubic-bezier(0.23, 1, 0.32, 1)` ease-out curve (< 200ms).
+ *    Strictly forbids catch-all property transitions and sluggish start curves.
+ * 5. Tactile physical feedback (`transform: scale(0.97)`) on `:active` for all interactive buttons.
+ */
+
+.wth-form-shell {
+  --wth-bg-base: #0a0d14;
+  --wth-bg-surface: #101521;
+  --wth-bg-elevated: #151b2b;
+  --wth-bg-input: #0c101a;
+  --wth-border-subtle: rgba(255, 255, 255, 0.08);
+  --wth-border-strong: rgba(255, 255, 255, 0.15);
+  --wth-border-accent: rgba(52, 211, 153, 0.42);
+  --wth-text-primary: #f3f5fa;
+  --wth-text-secondary: #9ba3b8;
+  --wth-text-muted: #667089;
+  --wth-accent-emerald: #34d399;
+  --wth-accent-emerald-strong: #10b981;
+  --wth-accent-emerald-tint: rgba(52, 211, 153, 0.11);
+  --wth-warning-amber: #f59e0b;
+  --wth-warning-tint: rgba(245, 158, 11, 0.12);
+  --wth-danger-rose: #f43f5e;
+  --wth-danger-tint: rgba(244, 63, 94, 0.12);
+  --wth-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --wth-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --wth-font-sans: 'Geist', 'Satoshi', 'DM Sans', system-ui, -apple-system, sans-serif;
+  --wth-font-mono: 'JetBrains Mono', 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  color: var(--wth-text-primary);
+  font-family: var(--wth-font-sans);
+}
+
+.wth-tabular-mono {
+  font-family: var(--wth-font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.015em;
+}
+
+/* Top Balance & SLA Strip */
+.wth-header-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+  background: var(--wth-bg-surface);
+  border: 1px solid var(--wth-border-subtle);
+  border-radius: 16px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.wth-header-brand {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+}
+
+.wth-kicker-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wth-asset-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--wth-accent-emerald-tint);
+  border: 1px solid var(--wth-border-accent);
+  color: var(--wth-accent-emerald);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.wth-sla-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--wth-border-subtle);
+  color: var(--wth-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.wth-header-title {
+  margin: 0;
+  font-size: clamp(20px, 2.2vw, 26px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--wth-text-primary);
+}
+
+.wth-header-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--wth-text-secondary);
+  max-width: 58ch;
+}
+
+.wth-balance-metrics {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.wth-balance-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 156px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--wth-bg-input);
+  border: 1px solid var(--wth-border-subtle);
+}
+
+.wth-balance-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--wth-text-muted);
+}
+
+.wth-balance-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--wth-text-primary);
+}
+
+.wth-balance-value--available {
+  color: var(--wth-accent-emerald);
+}
+
+.wth-balance-unit {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--wth-text-secondary);
+  margin-left: 4px;
+}
+
+/* Asymmetric 2-Column Main Grid */
+.wth-split-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.38fr) minmax(320px, 0.92fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .wth-split-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.wth-panel {
+  padding: 24px;
+  background: var(--wth-bg-surface);
+  border: 1px solid var(--wth-border-subtle);
+  border-radius: 16px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.wth-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.wth-section-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--wth-text-primary);
+}
+
+/* Field Blocks (`Rule 6: Label above input, helper text, error below`) */
+.wth-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.wth-field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.wth-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--wth-text-primary);
+}
+
+.wth-field-hint {
+  font-size: 12px;
+  color: var(--wth-text-secondary);
+  margin: 0;
+}
+
+.wth-field-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--wth-danger-tint);
+  border: 1px solid rgba(244, 63, 94, 0.32);
+  color: #fda4af;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.wth-fault-code-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.65);
+  color: #fecdd3;
+  font-family: var(--wth-font-mono);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* Dynamic Network Selector Grid */
+.wth-network-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+  gap: 10px;
+}
+
+.wth-network-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px 14px;
+  text-align: left;
+  background: var(--wth-bg-input);
+  border: 1px solid var(--wth-border-subtle);
+  border-radius: 12px;
+  color: var(--wth-text-primary);
+  cursor: pointer;
+  transform-origin: var(--transform-origin, center);
+  transition:
+    transform 140ms var(--wth-ease-out),
+    border-color 160ms var(--wth-ease-out),
+    background-color 160ms var(--wth-ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .wth-network-pill:hover:not(:disabled) {
+    border-color: var(--wth-border-strong);
+    background: var(--wth-bg-elevated);
+  }
+
+  .wth-btn-max:hover:not(:disabled) {
+    background: rgba(52, 211, 153, 0.2);
+  }
+
+  .wth-btn-prefill:hover:not(:disabled),
+  .wth-btn-refresh:hover:not(:disabled) {
+    border-color: var(--wth-border-strong);
+    color: var(--wth-text-primary);
+  }
+
+  .wth-btn-submit:hover:not(:disabled) {
+    background: var(--wth-accent-emerald);
+  }
+}
+
+.wth-network-pill:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.wth-network-pill--selected {
+  background: var(--wth-accent-emerald-tint);
+  border-color: var(--wth-border-accent);
+}
+
+.wth-network-pill-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 6px;
+}
+
+.wth-network-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--wth-text-primary);
+}
+
+.wth-network-standard {
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--wth-text-secondary);
+  font-family: var(--wth-font-mono);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.wth-network-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  font-size: 11px;
+  color: var(--wth-text-secondary);
+}
+
+/* Inputs & Action Controls */
+.wth-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: var(--wth-bg-input);
+  border: 1px solid var(--wth-border-subtle);
+  border-radius: 12px;
+  transition: border-color 160ms var(--wth-ease-out);
+}
+
+.wth-input-wrapper:focus-within {
+  border-color: var(--wth-border-accent);
+}
+
+.wth-input-wrapper--invalid {
+  border-color: rgba(244, 63, 94, 0.55);
+}
+
+.wth-input {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  color: var(--wth-text-primary);
+  font-size: 14px;
+  outline: none;
+}
+
+.wth-input--amount {
+  font-size: 18px;
+  font-weight: 700;
+  padding-right: 118px;
+}
+
+.wth-input-suffix-group {
+  position: absolute;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wth-asset-inline-tag {
+  font-family: var(--wth-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--wth-text-secondary);
+  padding: 0 4px;
+}
+
+/* Interactive Buttons (`emil-design-eng`: scale(0.97) on :active, explicit transitions) */
+.wth-btn-max,
+.wth-btn-prefill,
+.wth-btn-refresh,
+.wth-btn-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transform-origin: var(--transform-origin, center);
+  transition:
+    transform 140ms var(--wth-ease-out),
+    background-color 160ms var(--wth-ease-out),
+    border-color 160ms var(--wth-ease-out),
+    opacity 160ms var(--wth-ease-out);
+}
+
+.wth-btn-max:active:not(:disabled),
+.wth-btn-prefill:active:not(:disabled),
+.wth-btn-refresh:active:not(:disabled),
+.wth-btn-submit:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.wth-btn-max {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--wth-accent-emerald-tint);
+  border: 1px solid var(--wth-border-accent);
+  color: var(--wth-accent-emerald);
+  font-family: var(--wth-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.wth-btn-prefill,
+.wth-btn-refresh {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--wth-border-subtle);
+  color: var(--wth-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.wth-btn-submit {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 18px;
+  margin-top: 16px;
+  border-radius: 12px;
+  background: var(--wth-accent-emerald-strong);
+  border: 1px solid rgba(52, 211, 153, 0.5);
+  color: #04130d;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.wth-btn-submit:disabled,
+.wth-btn-max:disabled,
+.wth-btn-prefill:disabled,
+.wth-btn-refresh:disabled,
+.wth-network-pill:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+/* Right Column: Authoritative Quote Breakdown Ledger */
+.wth-quote-ledger {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--wth-bg-input);
+  border: 1px solid var(--wth-border-subtle);
+}
+
+.wth-quote-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.wth-quote-label {
+  color: var(--wth-text-secondary);
+}
+
+.wth-quote-value {
+  color: var(--wth-text-primary);
+  font-weight: 600;
+}
+
+.wth-quote-divider {
+  height: 1px;
+  background: var(--wth-border-subtle);
+  margin: 4px 0;
+}
+
+.wth-quote-row--highlight {
+  padding-top: 4px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.wth-quote-value--net {
+  color: var(--wth-accent-emerald);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* Status Banners (Skeleton, Error, Success Receipt) */
+.wth-banner {
+  padding: 14px 16px;
+  border-radius: 12px;
+  margin-top: 14px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.wth-banner--error {
+  background: var(--wth-danger-tint);
+  border: 1px solid rgba(244, 63, 94, 0.35);
+  color: #fecdd3;
+}
+
+.wth-banner--success {
+  background: var(--wth-accent-emerald-tint);
+  border: 1px solid var(--wth-border-accent);
+  color: #d1fae5;
+}
+
+.wth-skeleton-line {
+  height: 16px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wth-network-pill,
+  .wth-btn-max,
+  .wth-btn-prefill,
+  .wth-btn-refresh,
+  .wth-btn-submit {
+    transition:
+      background-color 160ms ease,
+      border-color 160ms ease,
+      opacity 160ms ease;
+  }
+
+  .wth-network-pill:active:not(:disabled),
+  .wth-btn-max:active:not(:disabled),
+  .wth-btn-prefill:active:not(:disabled),
+  .wth-btn-refresh:active:not(:disabled),
+  .wth-btn-submit:active:not(:disabled) {
+    transform: none;
+  }
+}

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from './AuthContext'
 import {
   getReferralAccount,
   getReferralTransactions,
-  executeReferralWithdrawal,
   getUserCommissions,
   getUnilevelAccount,
   getUnilevelDistributions,
@@ -32,13 +32,6 @@ export function ReferralPage({ pathname = '/nft-referral' }: { pathname?: string
   const [sponsorInput, setSponsorInput] = useState('')
   const [sponsorFeedback, setSponsorFeedback] = useState('')
   const [settingSponsor, setSettingSponsor] = useState(false)
-
-  // Withdrawal modal state
-  const [withdrawalModalOpen, setWithdrawalModalOpen] = useState(false)
-  const [withdrawAmount, setWithdrawAmount] = useState('')
-  const [withdrawWallet, setWithdrawWallet] = useState('')
-  const [withdrawing, setWithdrawing] = useState(false)
-  const [withdrawFeedback, setWithdrawFeedback] = useState('')
 
   // Unilevel modal state
   const [activeUnilevelView, setActiveUnilevelView] = useState<UnilevelDistributionDoc | null>(null)
@@ -111,50 +104,6 @@ export function ReferralPage({ pathname = '/nft-referral' }: { pathname?: string
   const withdrawableBalance =
     referralAccount?.withdrawableBalance ?? profile?.commissionBalance ?? 0
   const totalWithdrawn = referralAccount?.totalWithdrawn ?? 0
-
-  const handleExecuteWithdrawal = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!user) return
-    const numAmount = parseFloat(withdrawAmount)
-    if (!numAmount || numAmount <= 0) {
-      setWithdrawFeedback(t('referral.enter_valid_amount'))
-      return
-    }
-    const currentAvailable = withdrawableBalance
-    if (numAmount > currentAvailable) {
-      setWithdrawFeedback(
-        `${t('referral.insufficient_balance')} (max: $${currentAvailable.toFixed(2)} USD).`
-      )
-      return
-    }
-
-    setWithdrawing(true)
-    setWithdrawFeedback('')
-    try {
-      const destWallet = withdrawWallet.trim() || profile?.walletAddress || undefined
-      const res = await executeReferralWithdrawal(user.uid, numAmount, destWallet)
-      if (!res.success) {
-        setWithdrawFeedback(res.error || t('referral.withdrawal_error'))
-        return
-      }
-      await refreshProfile()
-      const acc = await getReferralAccount(user.uid)
-      setReferralAccount(acc)
-      const txs = await getReferralTransactions(user.uid)
-      setReferralTransactions(txs)
-      setWithdrawalModalOpen(false)
-      setWithdrawAmount('')
-      setWithdrawFeedback('')
-      setCopyFeedback(
-        `${t('referral.withdrawal_success')} ($${numAmount.toFixed(2)} USD)`
-      )
-      setTimeout(() => setCopyFeedback(''), 3000)
-    } catch (err: any) {
-      setWithdrawFeedback(err?.message || t('referral.withdrawal_error'))
-    } finally {
-      setWithdrawing(false)
-    }
-  }
 
   const handleAddSponsor = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -269,13 +218,13 @@ export function ReferralPage({ pathname = '/nft-referral' }: { pathname?: string
               ${withdrawableBalance.toFixed(2)} USD
             </strong>
             {withdrawableBalance > 0 && (
-              <button
-                type="button"
+              <Link
+                to="/withdraw/GOMINING"
                 className="button button-primary button-small"
-                onClick={() => setWithdrawalModalOpen(true)}
+                data-testid="referral-unified-withdraw-link"
               >
-                💸 {t('referral.withdraw_btn')}
-              </button>
+                {t('referral.withdraw_btn')} ↗
+              </Link>
             )}
           </div>
         </div>
@@ -532,13 +481,12 @@ export function ReferralPage({ pathname = '/nft-referral' }: { pathname?: string
             {t('referral.ledger_title')}
           </h3>
           {withdrawableBalance > 0 && (
-            <button
-              type="button"
+            <Link
+              to="/withdraw/GOMINING"
               className="button button-primary button-small"
-              onClick={() => setWithdrawalModalOpen(true)}
             >
-              {t('referral.request_withdrawal')}
-            </button>
+              {t('referral.withdraw_btn')} ↗
+            </Link>
           )}
         </div>
 
@@ -634,105 +582,10 @@ export function ReferralPage({ pathname = '/nft-referral' }: { pathname?: string
       </div>
       )}
 
-      {/* WITHDRAWAL MODAL */}
-      {withdrawalModalOpen && renderWithdrawalModal()}
-
       {/* UNILEVEL 20 LEVELS MODAL */}
       {showUnilevelModal && activeUnilevelView && renderUnilevelModal()}
     </div>
   )
-
-  function renderWithdrawalModal() {
-    const available = withdrawableBalance
-
-    return (
-      <div className="profile-modal-overlay" onClick={() => setWithdrawalModalOpen(false)}>
-        <div className="profile-modal-card" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
-          <h3 className="profile-modal-title">{t('referral.withdrawal_modal_title')}</h3>
-          <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 14px' }}>
-            {t('referral.withdrawal_modal_desc')}
-          </p>
-
-          <form onSubmit={handleExecuteWithdrawal} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div
-              style={{
-                padding: '12px 14px',
-                background: 'rgba(99, 102, 241, 0.12)',
-                border: '1px solid rgba(99, 102, 241, 0.25)',
-                borderRadius: 12,
-              }}
-            >
-              <span style={{ fontSize: 11, color: '#a78bfa', display: 'block' }}>
-                {t('referral.withdrawable_balance')}
-              </span>
-              <strong style={{ fontSize: 18, color: '#818cf8' }}>${available.toFixed(2)} USD</strong>
-            </div>
-
-            <div className="profile-field-group">
-              <label className="profile-field-label">{t('referral.withdraw_amount')}</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  max={available}
-                  className="profile-field-input"
-                  style={{ flex: 1 }}
-                  placeholder="0.00"
-                  value={withdrawAmount}
-                  onChange={(e) => setWithdrawAmount(e.target.value)}
-                  required
-                />
-                <button
-                  type="button"
-                  className="button button-secondary button-small"
-                  onClick={() => setWithdrawAmount(available.toString())}
-                >
-                  {t('referral.max_btn')}
-                </button>
-              </div>
-            </div>
-
-            <div className="profile-field-group">
-              <label className="profile-field-label">{t('referral.dest_wallet')}</label>
-              <input
-                type="text"
-                className="profile-field-input"
-                placeholder={profile?.walletAddress || '0x... o dirección compatible'}
-                value={withdrawWallet}
-                onChange={(e) => setWithdrawWallet(e.target.value)}
-              />
-              <span style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-                {t('referral.default_wallet_note')}
-              </span>
-            </div>
-
-            {withdrawFeedback && (
-              <p style={{ color: '#ef4444', fontSize: 12, margin: 0 }}>{withdrawFeedback}</p>
-            )}
-
-            <div className="profile-modal-actions">
-              <button
-                type="button"
-                className="button button-quiet"
-                onClick={() => setWithdrawalModalOpen(false)}
-                disabled={withdrawing}
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                type="submit"
-                className="button button-primary"
-                disabled={withdrawing || available <= 0}
-              >
-                {withdrawing ? t('referral.processing') : t('referral.confirm_withdrawal')}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    )
-  }
 
   function renderUnilevelModal() {
     if (!activeUnilevelView) return null

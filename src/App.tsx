@@ -72,11 +72,13 @@ import {
   formatWalletBalance,
   getDemoMiningPower,
   simulateDemoPresale,
-  simulateDemoWithdrawal,
   setDemoWorkerActivationMode,
   useDemoSession,
   type DemoReceipt,
 } from './demoStore'
+import { WithdrawalForm } from './components/withdrawals/WithdrawalForm'
+import { WithdrawalHistoryPanel } from './components/withdrawals/WithdrawalHistoryPanel'
+import type { ClientWithdrawalAuthSession } from './services/withdrawals/withdrawalAuthGuard'
 
 type PendingAction = { title: string; detail: string; productId?: string }
 
@@ -1461,13 +1463,10 @@ function RewardsPanel({ pathname, openAction }: { pathname: string; openAction: 
 function FormPanel({ screen, pathname, openAction, addProduct, onPayWithWallet, walletSession }: { screen: ScreenDefinition; pathname: string; openAction: (title: string, detail?: string) => void; addProduct: (product: DemoProduct) => void; onPayWithWallet: (productName: string, amount: number, currency?: PaymentCurrency) => void; walletSession: ReturnType<typeof useWalletSession> }) {
   const demo = useDemoSession()
   const [amount, setAmount] = useState('')
-  const [networkCost, setNetworkCost] = useState('')
   const [feedback, setFeedback] = useState('')
   const [depositTab, setDepositTab] = useState<'balance' | 'maintenance'>('balance')
   const [maintToken, setMaintToken] = useState<'PEARL' | 'USDT'>('PEARL')
   const [maintAmount, setMaintAmount] = useState('')
-  const [withdrawalDestination, setWithdrawalDestination] = useState(walletSession.connection?.address ?? '')
-  useEffect(() => setWithdrawalDestination(walletSession.connection?.address ?? ''), [walletSession.connection?.address])
   const purchaseProduct = getPrimaryPurchaseProduct(pathname)
   if (pathname === '/deposit') {
     const value = Number(amount)
@@ -1566,18 +1565,11 @@ function FormPanel({ screen, pathname, openAction, addProduct, onPayWithWallet, 
     </div>
   }
   if (pathname === '/withdraw/GOMINING') {
-    const value = Number(amount)
-    const fee = Number(networkCost)
-    const valid = Boolean(walletSession.connection && withdrawalDestination) && amount !== '' && networkCost !== '' && Number.isFinite(value) && Number.isFinite(fee) && value > fee && fee >= 0
-    const power = getDemoMiningPower(demo)
-    return <div className="form-layout"><section className="content-panel form-panel"><div className="panel-toolbar"><div><h2>Retirar GOMINING</h2><p>El destino se toma de la wallet conectada y se muestra antes de registrar la solicitud.</p></div><span className="form-step">LOCAL</span></div>
-      {walletSession.connection ? <div className="withdrawal-destination"><span>Wallet de destino · {walletSession.connection.name}</span><code>{withdrawalDestination}</code><small>{walletSession.connection.network}</small></div> : <div className="form-callout"><span>i</span><p>Conecta una wallet para usarla como destino predeterminado del retiro.</p><Link className="button button-secondary" to="/gmt-wallets">Conectar wallet <span>↗</span></Link></div>}
-      <label className="field-label">Importe bruto · USD<input type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Importe a retirar" /></label>
-      <label className="field-label">Costo de red estimado · USD<input type="number" min="0" step="0.01" value={networkCost} onChange={(event) => setNetworkCost(event.target.value)} placeholder="Configura un costo" /></label>
-      <div className="withdrawal-summary"><div><span>Comisión estimada</span><strong>{networkCost === '' ? 'Pendiente' : formatDemoCurrency(fee)}</strong></div><div><span>Importe neto</span><strong>{valid ? formatDemoCurrency(value - fee) : '—'}</strong></div><div><span>Cola diaria</span><strong>{power.hasSubscription ? 'Sin cola diaria' : 'Aplicada'}</strong></div></div>
-      <div className="form-callout"><span>i</span><p>La tarifa es editable y no se cotiza automáticamente. Esta réplica solo registra una solicitud local: no firma ni transmite fondos de salida porque no hay un servicio de pagos conectado.</p></div>
-      <button className="button button-primary" disabled={!valid} onClick={() => { const result = simulateDemoWithdrawal(value, fee); if (!result.ok) { setFeedback(result.message); return } setFeedback(`Solicitud local ${result.receipt.id} registrada para ${walletSession.connection?.shortAddress ?? 'la wallet conectada'}. No se envió una transacción.`) }}>Registrar solicitud local <span>↗</span></button>{feedback && <p className="inline-feedback" role="status">{feedback}</p>}</section>
-      <aside className="side-info-card"><span className="side-info-icon">↑</span><h3>Saldo local</h3><p>Importe disponible en este navegador.</p><div className="info-divider"/><small>Balance</small><strong>{formatDemoCurrency(demo.balance)}</strong></aside></div>
+    return (
+      <AuthorizedWithdrawalView
+        connectedWalletAddress={walletSession.connection?.address ?? null}
+      />
+    )
   }
   if (pathname === '/buy/GOMINING') {
     return <div className="form-layout"><section className="content-panel form-panel"><div className="panel-toolbar"><div><h2>Comprar GOMINING</h2><p>Acceso conservado desde tokenómica para el futuro MVP.</p></div><span className="form-step">TOKENÓMICA</span></div><div className="form-callout"><span>i</span><p>La réplica aún no tiene contrato, cotizador ni entrega de tokens verificados. El paquete que antes alimentaba el carrito era un producto ficticio; se retiró del flujo para no confundirlo con una compra real.</p></div><button className="button button-primary" type="button" onClick={() => openAction('Comprar GOMINING', 'Vista conservada. La compra real se habilitará cuando exista una cotización verificable y un mecanismo confirmado de entrega del token.')}>Ver estado de compra <span>↗</span></button></section><aside className="side-info-card"><span className="side-info-icon">◉</span><h3>Tokenómica</h3><p>La sección sigue en la navegación y no utiliza carrito.</p></aside></div>
@@ -1605,6 +1597,93 @@ function FormPanel({ screen, pathname, openAction, addProduct, onPayWithWallet, 
         <button className="button button-primary" onClick={() => openAction(screen.action ?? 'Continuar', actionDetail(screen.action ?? 'Continuar'))}>{screen.action ?? 'Continuar'} <span>↗</span></button>
       </section>
       <aside className="side-info-card"><span className="side-info-icon">{screen.icon}</span><h3>Proceso de simulación</h3><p>El siguiente paso muestra un diálogo local. No se conecta a proveedores ni confirma transacciones.</p><div className="info-divider" /><small>Estado de datos</small><strong>Sin conexión</strong></aside>
+    </div>
+  )
+}
+
+const WITHDRAWAL_API_OPTIONS = {
+  baseUrl:
+    (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_API_BASE_URL?.trim() ||
+    undefined,
+}
+
+function AuthorizedWithdrawalView({
+  connectedWalletAddress,
+}: {
+  connectedWalletAddress: string | null
+}) {
+  const { user, openAuthModal } = useAuth()
+  const [idToken, setIdToken] = useState<string | null>(null)
+  const [historyRefreshTick, setHistoryRefreshTick] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    if (!user || user.isAnonymous) {
+      setIdToken(null)
+      return () => {
+        cancelled = true
+      }
+    }
+    user
+      .getIdToken()
+      .then((tok) => {
+        if (!cancelled) setIdToken(tok)
+      })
+      .catch(() => {
+        if (!cancelled) setIdToken(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [user])
+
+  const session = useMemo<ClientWithdrawalAuthSession | null>(
+    () =>
+      user && !user.isAnonymous && idToken
+        ? {
+            uid: user.uid,
+            email: user.email,
+            isAnonymous: user.isAnonymous,
+            idToken,
+          }
+        : null,
+    [user, idToken],
+  )
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }} data-testid="client-unified-withdrawal-view">
+      {!user || user.isAnonymous ? (
+        <section className="content-panel form-panel" data-testid="withdrawal-auth-gate">
+          <div className="panel-toolbar">
+            <div>
+              <h2>Retiros USDT</h2>
+              <p>Inicia sesión con tu cuenta verificada para consultar redes, cotizar fees y solicitar retiros.</p>
+            </div>
+            <span className="form-step">AUTH</span>
+          </div>
+          <button
+            type="button"
+            className="button button-primary"
+            onClick={() => openAuthModal('login')}
+          >
+            Iniciar sesión para retirar <span>↗</span>
+          </button>
+        </section>
+      ) : (
+        <>
+          <WithdrawalForm
+            session={session}
+            apiOptions={WITHDRAWAL_API_OPTIONS}
+            connectedWalletAddress={connectedWalletAddress}
+            onWithdrawalSuccess={() => setHistoryRefreshTick((tick) => tick + 1)}
+          />
+          <WithdrawalHistoryPanel
+            session={session}
+            apiOptions={WITHDRAWAL_API_OPTIONS}
+            refreshTrigger={historyRefreshTick}
+          />
+        </>
+      )}
     </div>
   )
 }

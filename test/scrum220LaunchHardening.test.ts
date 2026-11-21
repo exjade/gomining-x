@@ -43,6 +43,7 @@ interface RequestAuth {
 
 interface RuleRequestContext {
   auth: RequestAuth | null
+  isAdmin?: boolean
   time?: number
   resource?: { data?: Record<string, unknown> }
 }
@@ -150,24 +151,77 @@ class FirestoreRulesEvaluator {
     return { matches: pIdx === pathParts.length, vars }
   }
 
+  private splitTopLevel(expr: string, op: '||' | '&&'): string[] {
+    const parts: string[] = []
+    let depth = 0
+    let start = 0
+    for (let i = 0; i < expr.length; i++) {
+      const ch = expr[i]
+      if (ch === '(') depth++
+      else if (ch === ')') depth--
+      else if (depth === 0 && expr.slice(i, i + op.length) === op) {
+        parts.push(expr.slice(start, i).trim())
+        i += op.length - 1
+        start = i + 1
+      }
+    }
+    parts.push(expr.slice(start).trim())
+    return parts
+  }
+
+  private stripOuterParens(expr: string): string {
+    let trimmed = expr.trim()
+    while (trimmed.startsWith('(') && trimmed.endsWith(')')) {
+      let depth = 0
+      let balanced = true
+      for (let i = 0; i < trimmed.length - 1; i++) {
+        if (trimmed[i] === '(') depth++
+        else if (trimmed[i] === ')') depth--
+        if (depth === 0) {
+          balanced = false
+          break
+        }
+      }
+      if (!balanced) break
+      trimmed = trimmed.slice(1, -1).trim()
+    }
+    return trimmed
+  }
+
   private evalCondition(condition: string, context: RuleRequestContext, vars: Record<string, string>): boolean {
+    const expr = this.stripOuterParens(condition)
+
+    const orParts = this.splitTopLevel(expr, '||')
+    if (orParts.length > 1) {
+      return orParts.some((part) => this.evalCondition(part, context, vars))
+    }
+
+    const andParts = this.splitTopLevel(expr, '&&')
+    if (andParts.length > 1) {
+      return andParts.every((part) => this.evalCondition(part, context, vars))
+    }
+
     const { auth } = context
     const isAuthenticated = () => auth !== null
     const isNonAnonymous = () => auth !== null && auth.token?.firebase?.sign_in_provider !== 'anonymous'
     const isOwner = (uid: string) => auth !== null && auth.uid === uid
+    const isAdmin = () => isNonAnonymous() && context.isAdmin === true
 
-    if (condition === 'true') return true
-    if (condition === 'false') return false
-    if (condition === 'isNonAnonymous()') return isNonAnonymous()
-    if (condition === 'isAuthenticated()') return isAuthenticated()
-    if (condition.startsWith('isOwner(')) {
-      const match = condition.match(/isOwner\(([^)]+)\)/)
-      if (match) return isOwner(vars[match[1]])
-    }
+    if (expr === 'true') return true
+    if (expr === 'false') return false
+    if (expr === 'isNonAnonymous()') return isNonAnonymous()
+    if (expr === 'isAuthenticated()') return isAuthenticated()
+    if (expr === 'isAdmin()') return isAdmin()
+    if (/^hasAdminPermission\([^)]+\)$/.test(expr)) return isAdmin()
 
-    if (condition === 'isAuthenticated() && request.auth.uid == uid') {
-      return isAuthenticated() && auth?.uid === vars['uid']
-    }
+    const ownerMatch = expr.match(/^isOwner\(([^)]+)\)$/)
+    if (ownerMatch) return isOwner(vars[ownerMatch[1].trim()])
+
+    const uidEqMatch = expr.match(/^request\.auth\.uid\s*==\s*([A-Za-z_]\w*)$/)
+    if (uidEqMatch) return auth !== null && auth.uid === vars[uidEqMatch[1]]
+
+    const paramEqMatch = expr.match(/^([A-Za-z_]\w*)\s*==\s*'([^']+)'$/)
+    if (paramEqMatch) return vars[paramEqMatch[1]] === paramEqMatch[2]
 
     return false
   }
@@ -695,17 +749,22 @@ describe('SCRUM-220 Pre-launch Hardening Suite (POUW-1.8*LAUNCH*HARDENING)', () 
   // R5.7: Firestore Rules Hardening Contract & Behavioral Verification
   // =========================================================================
   describe('R5.7: Firestore Rules hardening contract and behavioral verification', () => {
-    it('firestore.rules defines isNonAnonymous predicate and protects scoped collections and unilevel tree', () => {
+    it('firestore.rules defines isNonAnonymous predicate and enforces SCRUM-210/SCRUM-275/SCRUM-358 hardened rules', () => {
       const rulesSource = fs.readFileSync(path.resolve(projectRoot, 'firestore.rules'), 'utf8')
 
-      // 1. isNonAnonymous predicate exists
+      // 1. isNonAnonymous predicate exists and isAdmin() enforces non-anonymous + active /admin_users RBAC
       assert.match(
         rulesSource,
         /function isNonAnonymous\(\)\s*\{[\s\S]*?request\.auth\s*!=\s*null[\s\S]*?request\.auth\.token\.firebase\.sign_in_provider\s*!=\s*'anonymous'/,
         'Must define isNonAnonymous predicate rejecting unauthenticated and anonymous users'
       )
+      assert.match(
+        rulesSource,
+        /function isAdmin\(\)\s*\{[\s\S]*?isNonAnonymous\(\)[\s\S]*?admin_users\/\$\(request\.auth\.uid\)[\s\S]*?isActiveAdminData\(/,
+        'isAdmin() must require isNonAnonymous() and active /admin_users/{uid} record'
+      )
 
-      // 2. Scoped admin collections and unilevel tree use isNonAnonymous
+      // 2. Scoped admin & catalog collections require isAdmin()/hasAdminPermission() for writes (never public or regular user writes)
       const scopedCollections = [
         'admin_users',
         'admin_workers',
@@ -717,28 +776,30 @@ describe('SCRUM-220 Pre-launch Hardening Suite (POUW-1.8*LAUNCH*HARDENING)', () 
       ]
 
       for (const col of scopedCollections) {
-        const regex = new RegExp(`match /${col}/\\{[^}]+\\}\\s*\\{[^}]*?allow read, write:\\s*if isNonAnonymous\\(\\);`)
-        assert.match(rulesSource, regex, `Collection /${col} must be protected with isNonAnonymous()`)
-      }
-
-      // Unilevel node and catch-all subcollections must require isNonAnonymous()
-      assert.match(
-        rulesSource,
-        /match \/unilevel\/\{uid\}\s*\{[\s\S]*?allow read:\s*if isNonAnonymous\(\);[\s\S]*?allow create, update:\s*if isNonAnonymous\(\);[\s\S]*?match \/\{subcol=\*\*\}\s*\{\s*allow read, write:\s*if isNonAnonymous\(\);/,
-        'Unilevel node and recursive subcollections must require isNonAnonymous()'
-      )
-
-      // 3. Negative check: public allow read, write: if true; must NOT be present on scoped collections
-      for (const col of scopedCollections) {
+        const blockRegex = new RegExp(`match /${col}/\\{[^}]+\\}\\s*\\{([^}]+)\\}`)
+        const match = rulesSource.match(blockRegex)
+        assert.ok(match, `Collection /${col} must be declared in firestore.rules`)
+        assert.match(
+          match[1],
+          /(?:isAdmin\(\)|hasAdminPermission\('admin\.users\.manage'\))/,
+          `Collection /${col} must enforce isAdmin() or hasAdminPermission(...)`
+        )
         const publicRegex = new RegExp(`match /${col}/\\{[^}]+\\}\\s*\\{[^}]*?allow read, write:\\s*if true;`)
         assert.doesNotMatch(rulesSource, publicRegex, `Collection /${col} must NOT have public allow read, write: if true;`)
       }
 
-      // 4. Preserves /miners/{uid}/miner/{minerId} rule
+      // 3. Unilevel node and subcollections enforce owner/admin read-only and block all client writes (SCRUM-358)
       assert.match(
         rulesSource,
-        /match \/miners\/\{uid\}\/miner\/\{minerId\}\s*\{[\s\S]*?allow read, write:\s*if isOwner\(uid\);/,
-        'Must preserve owner rule for /miners/{uid}/miner/{minerId}'
+        /match \/unilevel\/\{uid\}\s*\{[\s\S]*?allow read:\s*if isOwner\(uid\) \|\| isAdmin\(\);[\s\S]*?allow create, update, delete:\s*if false;[\s\S]*?match \/\{subcollection\}\/\{docId=\*\*\}\s*\{\s*allow read:\s*if isOwner\(uid\) \|\| isAdmin\(\);\s*allow write:\s*if false;/,
+        'Unilevel node and subcollections must enforce owner/admin read and deny all client writes'
+      )
+
+      // 4. Preserves hardened /miners/{uid}/miner/{minerId} rule (SCRUM-210: explicit read/create/update, delete: false)
+      assert.match(
+        rulesSource,
+        /match \/miners\/\{uid\}\/miner\/\{minerId\}\s*\{[\s\S]*?allow read:\s*if isOwner\(uid\) \|\| isAdmin\(\);[\s\S]*?allow create:\s*if isOwner\(uid\) \|\| isAdmin\(\);[\s\S]*?allow update:\s*if isOwner\(uid\) \|\| isAdmin\(\);[\s\S]*?allow delete:\s*if false;/,
+        'Must preserve owner/admin read/create/update and delete: false on /miners/{uid}/miner/{minerId}'
       )
     })
 
@@ -759,31 +820,80 @@ describe('SCRUM-220 Pre-launch Hardening Suite (POUW-1.8*LAUNCH*HARDENING)', () 
         token: { firebase: { sign_in_provider: 'password' } },
       },
     }
+    const ownerCtx: RuleRequestContext = {
+      auth: {
+        uid: 'usr_01',
+        token: { firebase: { sign_in_provider: 'password' } },
+      },
+    }
+    const adminCtx: RuleRequestContext = {
+      auth: {
+        uid: 'adm_01',
+        token: { firebase: { sign_in_provider: 'password' } },
+      },
+      isAdmin: true,
+    }
+    const anonymousAdminCtx: RuleRequestContext = {
+      auth: {
+        uid: 'adm_anon_01',
+        token: { firebase: { sign_in_provider: 'anonymous' } },
+      },
+      isAdmin: true,
+    }
 
-    const scopedSurfaces = [
-      { name: 'admin_users root', path: '/admin_users/usr_01' },
-      { name: 'admin_users subcollection', path: '/admin_users/usr_01/roles/super_admin' },
-      { name: 'admin_workers', path: '/admin_workers/worker_01' },
-      { name: 'admin_contracts', path: '/admin_contracts/contract_01' },
-      { name: 'admin_audit_logs', path: '/admin_audit_logs/log_01' },
-      { name: 'admin_settings', path: '/admin_settings/setting_01' },
-      { name: 'commercial_packages', path: '/commercial_packages/pkg_01' },
-      { name: 'admin_orders', path: '/admin_orders/order_01' },
-      { name: 'unilevel node', path: '/unilevel/usr_01' },
-      { name: 'unilevel recursive catch-all subcollection', path: '/unilevel/usr_01/downline/node_01' },
+    const scopedSurfaces: Array<{
+      name: string
+      path: string
+      expectedRegisteredRead: boolean
+      expectedAnonymousRead: boolean
+      expectedOwnerRead: boolean
+      expectedAdminRead: boolean
+      expectedAdminWrite: boolean
+      expectedAdminCreate?: boolean
+      expectedAdminUpdate?: boolean
+      expectedAdminDelete?: boolean
+    }> = [
+      { name: 'admin_users root', path: '/admin_users/usr_01', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: true, expectedAdminRead: true, expectedAdminWrite: false, expectedAdminCreate: true, expectedAdminUpdate: true, expectedAdminDelete: false },
+      { name: 'admin_users subcollection', path: '/admin_users/usr_01/roles/super_admin', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: false, expectedAdminRead: true, expectedAdminWrite: true },
+      { name: 'admin_workers', path: '/admin_workers/worker_01', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: false, expectedAdminRead: true, expectedAdminWrite: true },
+      { name: 'admin_contracts', path: '/admin_contracts/contract_01', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: false, expectedAdminRead: true, expectedAdminWrite: false, expectedAdminUpdate: true, expectedAdminDelete: false },
+      { name: 'admin_audit_logs', path: '/admin_audit_logs/log_01', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: false, expectedAdminRead: true, expectedAdminWrite: false, expectedAdminUpdate: false, expectedAdminDelete: false },
+      { name: 'admin_settings internal', path: '/admin_settings/setting_01', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: false, expectedAdminRead: true, expectedAdminWrite: true },
+      { name: 'admin_settings storefront_sections', path: '/admin_settings/storefront_sections', expectedRegisteredRead: true, expectedAnonymousRead: false, expectedOwnerRead: true, expectedAdminRead: true, expectedAdminWrite: true },
+      { name: 'commercial_packages', path: '/commercial_packages/pkg_01', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: false, expectedAdminRead: true, expectedAdminWrite: false, expectedAdminCreate: true, expectedAdminUpdate: true, expectedAdminDelete: false },
+      { name: 'admin_orders', path: '/admin_orders/order_01', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: false, expectedAdminRead: true, expectedAdminWrite: false, expectedAdminUpdate: true, expectedAdminDelete: false },
+      { name: 'unilevel node', path: '/unilevel/usr_01', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: true, expectedAdminRead: true, expectedAdminWrite: false, expectedAdminCreate: false, expectedAdminUpdate: false, expectedAdminDelete: false },
+      { name: 'unilevel recursive catch-all subcollection', path: '/unilevel/usr_01/downline/node_01', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: true, expectedAdminRead: true, expectedAdminWrite: false },
     ]
 
     for (const surface of scopedSurfaces) {
-      it(`Behavioral rule evaluation for ${surface.name} (${surface.path}): unauthenticated -> DENY, anonymous -> DENY, registered -> ALLOW`, () => {
+      it(`Behavioral rule evaluation for ${surface.name} (${surface.path}): enforces hardened SCRUM-275/SCRUM-358/SCRUM-361 read/write boundaries`, () => {
         // Read assertions
         assert.equal(evaluator.evaluate('read', surface.path, unauthenticatedCtx), false, `Unauthenticated read on ${surface.path} must be DENIED`)
-        assert.equal(evaluator.evaluate('read', surface.path, anonymousCtx), false, `Anonymous read on ${surface.path} must be DENIED`)
-        assert.equal(evaluator.evaluate('read', surface.path, registeredCtx), true, `Registered read on ${surface.path} must be ALLOWED`)
+        assert.equal(evaluator.evaluate('read', surface.path, anonymousCtx), surface.expectedAnonymousRead, `Anonymous read on ${surface.path} must match contract`)
+        assert.equal(evaluator.evaluate('read', surface.path, anonymousAdminCtx), false, `Anonymous session with isAdmin=true on ${surface.path} must be DENIED`)
+        assert.equal(evaluator.evaluate('read', surface.path, registeredCtx), surface.expectedRegisteredRead, `Registered non-admin read on ${surface.path} must match contract`)
+        assert.equal(evaluator.evaluate('read', surface.path, ownerCtx), surface.expectedOwnerRead, `Owner read on ${surface.path} must match contract`)
+        assert.equal(evaluator.evaluate('read', surface.path, adminCtx), surface.expectedAdminRead, `Admin read on ${surface.path} must match contract`)
 
-        // Write assertions
+        // Write assertions (zero unauthenticated, anonymous, or regular non-admin client writes)
         assert.equal(evaluator.evaluate('write', surface.path, unauthenticatedCtx), false, `Unauthenticated write on ${surface.path} must be DENIED`)
         assert.equal(evaluator.evaluate('write', surface.path, anonymousCtx), false, `Anonymous write on ${surface.path} must be DENIED`)
-        assert.equal(evaluator.evaluate('write', surface.path, registeredCtx), true, `Registered write on ${surface.path} must be ALLOWED`)
+        assert.equal(evaluator.evaluate('write', surface.path, anonymousAdminCtx), false, `Anonymous admin write on ${surface.path} must be DENIED`)
+        assert.equal(evaluator.evaluate('write', surface.path, registeredCtx), false, `Registered non-admin write on ${surface.path} must be DENIED`)
+        assert.equal(evaluator.evaluate('write', surface.path, ownerCtx), false, `Owner write on ${surface.path} must be DENIED`)
+
+        // Admin write assertions (allowed only where isAdmin()/hasAdminPermission authorizes; denied on /unilevel)
+        assert.equal(evaluator.evaluate('write', surface.path, adminCtx), surface.expectedAdminWrite, `Admin write on ${surface.path} must match contract`)
+        if (surface.expectedAdminCreate !== undefined) {
+          assert.equal(evaluator.evaluate('create', surface.path, adminCtx), surface.expectedAdminCreate, `Admin create on ${surface.path} must match contract`)
+        }
+        if (surface.expectedAdminUpdate !== undefined) {
+          assert.equal(evaluator.evaluate('update', surface.path, adminCtx), surface.expectedAdminUpdate, `Admin update on ${surface.path} must match contract`)
+        }
+        if (surface.expectedAdminDelete !== undefined) {
+          assert.equal(evaluator.evaluate('delete', surface.path, adminCtx), surface.expectedAdminDelete, `Admin delete on ${surface.path} must match contract`)
+        }
       })
     }
 
