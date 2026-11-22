@@ -8,8 +8,13 @@ const {
 } = require('./calculateDirectReferral');
 
 const CANONICAL_MINER_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
+const SAFE_SPONSOR_DOC_ID_PATTERN = /^[a-zA-Z0-9_.:@-]+$/;
 const INACTIVE_SPONSOR_STATUSES = new Set(['blocked', 'inactive']);
 const UNSIGNED_INT_PATTERN = /^\d+$/;
+
+function isValidSponsorDocId(value) {
+  return typeof value === 'string' && value.length > 0 && value !== '.' && value !== '..' && SAFE_SPONSOR_DOC_ID_PATTERN.test(value);
+}
 
 function assertTxDeps(db, FieldValue) {
   if (!db || typeof db.runTransaction !== 'function' || typeof db.collection !== 'function') {
@@ -139,25 +144,36 @@ async function settleDirectReferralCommission({ db, FieldValue, purchase }) {
     const purchaseNumber = currentPurchasesCount + 1;
     const hasFirstPurchaseAt = Boolean(buyerData.firstPurchaseAt);
 
-    let resolvedSponsorUid = extractDirectSponsorId(buyerData);
+    let resolvedSponsorUid = null;
     let sponsorData = null;
 
-    if (resolvedSponsorUid && resolvedSponsorUid !== cleanBuyerUid) {
-      const sponsorSnap = await tx.get(db.collection('users').doc(resolvedSponsorUid));
-      sponsorData = sponsorSnap.exists ? sponsorSnap.data() : null;
-    } else if (!resolvedSponsorUid) {
-      const referrerCode = extractReferrerCode(buyerData);
-      if (referrerCode) {
-        const normalizedCode = referrerCode.toUpperCase();
-        const usersCol = db.collection('users');
-        let codeSnap = await tx.get(usersCol.where('referral.referralCode', '==', normalizedCode).limit(1));
-        if (codeSnap.empty && referrerCode !== normalizedCode) {
-          codeSnap = await tx.get(usersCol.where('referral.referralCode', '==', referrerCode).limit(1));
-        }
-        if (!codeSnap.empty) {
-          const sponsorDoc = codeSnap.docs[0];
-          resolvedSponsorUid = sponsorDoc.id;
-          sponsorData = sponsorDoc.data();
+    if (purchase.referralSnapshotLocked === true) {
+      const rawLocked = typeof purchase.lockedSponsorUid === 'string' ? purchase.lockedSponsorUid.trim() : '';
+      if (isValidSponsorDocId(rawLocked) && rawLocked !== cleanBuyerUid) {
+        resolvedSponsorUid = rawLocked;
+        const sponsorSnap = await tx.get(db.collection('users').doc(resolvedSponsorUid));
+        sponsorData = sponsorSnap.exists ? sponsorSnap.data() : null;
+      }
+    } else {
+      resolvedSponsorUid = extractDirectSponsorId(buyerData);
+
+      if (resolvedSponsorUid && resolvedSponsorUid !== cleanBuyerUid) {
+        const sponsorSnap = await tx.get(db.collection('users').doc(resolvedSponsorUid));
+        sponsorData = sponsorSnap.exists ? sponsorSnap.data() : null;
+      } else if (!resolvedSponsorUid) {
+        const referrerCode = extractReferrerCode(buyerData);
+        if (referrerCode) {
+          const normalizedCode = referrerCode.toUpperCase();
+          const usersCol = db.collection('users');
+          let codeSnap = await tx.get(usersCol.where('referral.referralCode', '==', normalizedCode).limit(1));
+          if (codeSnap.empty && referrerCode !== normalizedCode) {
+            codeSnap = await tx.get(usersCol.where('referral.referralCode', '==', referrerCode).limit(1));
+          }
+          if (!codeSnap.empty) {
+            const sponsorDoc = codeSnap.docs[0];
+            resolvedSponsorUid = sponsorDoc.id;
+            sponsorData = sponsorDoc.data();
+          }
         }
       }
     }

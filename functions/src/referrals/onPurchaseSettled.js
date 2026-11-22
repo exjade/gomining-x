@@ -59,6 +59,8 @@ async function handlePurchaseSettledEvent({ beforeData, afterData, orderId, db, 
         ? 'miner'
         : undefined;
 
+  const referralSnapshotLocked = afterData.referralSnapshotLocked === true;
+
   const purchase = {
     orderId: orderId || afterData.orderId || null,
     minerId: afterData.minerId ?? afterData.activatedMinerId ?? null,
@@ -67,7 +69,9 @@ async function handlePurchaseSettledEvent({ beforeData, afterData, orderId, db, 
     buyerUid: afterData.buyerUid ?? afterData.userId ?? afterData.uid ?? null,
     isTestOrGuest: afterData.isTestOrGuest === undefined ? false : afterData.isTestOrGuest,
     paymentMethod,
-    settledAt: afterData.settledAt || null
+    settledAt: afterData.settledAt || null,
+    referralSnapshotLocked,
+    lockedSponsorUid: referralSnapshotLocked ? (afterData.sponsorUid ?? null) : undefined
   };
 
   return settleDirectReferralCommission({ db, FieldValue, purchase });
