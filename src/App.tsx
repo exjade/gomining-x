@@ -783,7 +783,7 @@ function Page({
                   <p className="page-description">{localizedDescription}</p>
                 </div>
               </div>
-              {screen.action && screen.action !== 'Filtros' && pathname !== '/nft-miners' && !pathname.startsWith('/nft-rewards/') && !pathname.startsWith('/nft-referral') && <button className="button button-primary" onClick={() => {
+              {screen.action && screen.action !== 'Filtros' && pathname !== '/nft-miners' && !pathname.startsWith('/nft-rewards/') && !pathname.startsWith('/nft-referral') && pathname !== '/withdraw/GOMINING' && <button className="button button-primary" onClick={() => {
                 if (pathname === '/finance/wallets/virtual' && screen.action === 'Recargar') { openTopUp(); return }
                 openAction(screen.action!, pathname === '/buy/GOMINING' ? 'La ruta de compra de GOMINING se conserva para la tokenómica. El inventario y la cotización de este token aún no están conectados; esta acción no abre un carrito ni envía fondos.' : actionDetail(screen.action!))
               }}>{screen.action}<span>↗</span></button>}
