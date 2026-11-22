@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // =========================================================================
-    // Helper Security Functions (SCRUM-210 & SCRUM-277 / W02)
+    // Helper Security Functions (SCRUM-210, SCRUM-277 / W02, SCRUM-346 / PG-04)
     // =========================================================================
     function isAuthenticated() {
       return request.auth != null;
@@ -54,6 +54,17 @@ service cloud.firestore {
         ('permissions' in data && data.permissions is list && perm in data.permissions) ||
         ('withdrawalPermissions' in data && data.withdrawalPermissions is list && perm in data.withdrawalPermissions)
       );
+    }
+
+    // SCRUM-346 (PG-04): Allow owner-only cosmetic updates on /miners/{uid}/miner/{minerId}
+    // while strictly blocking financial/operational fields (status, hashrate, powerTh, price, etc.).
+    function isValidCosmeticMinerUpdate() {
+      let affected = request.resource.data.diff(resource.data).affectedKeys();
+      return affected.size() > 0
+        && affected.hasOnly(['appearance', 'visualTraits', 'customization', 'updatedAt'])
+        && (!('appearance' in request.resource.data) || request.resource.data.appearance is map)
+        && (!('visualTraits' in request.resource.data) || request.resource.data.visualTraits is map)
+        && (!('customization' in request.resource.data) || request.resource.data.customization is map);
     }
 
     // SCRUM-277 (W02) / Decision 1 + SCRUM-358: Financial & server-owned aggregate fields cannot be mutated by client SDKs
@@ -204,12 +215,12 @@ service cloud.firestore {
       }
     }
 
-    // Instancias de mineros comprados por usuarios (/miners/{uid}/miner/{minerId})
+    // Instancias de mineros comprados por usuarios (/miners/{uid}/miner/{minerId}) — SCRUM-346 (PG-04)
+    // Creación y borrado exclusivos del servidor (Admin SDK); update cliente solo cosmético.
     match /miners/{uid}/miner/{minerId} {
       allow read: if isOwner(uid) || isAdmin();
-      allow create: if isOwner(uid) || isAdmin();
-      allow update: if isOwner(uid) || isAdmin();
-      allow delete: if false;
+      allow create, delete: if false;
+      allow update: if isOwner(uid) && isNonAnonymous() && isValidCosmeticMinerUpdate();
     }
 
     // Referral commission records (server-authoritative only — SCRUM-358)
@@ -218,22 +229,15 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
-    // Dedicated referrals collection (hardened in SCRUM-277: blocks direct client withdrawal/balance mutation)
+    // Dedicated referrals collection (server-authoritative only — SCRUM-346)
     match /referrals/{uid} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated()
-        && (!('withdrawableBalance' in request.resource.data) || request.resource.data.withdrawableBalance == 0)
-        && (!('totalWithdrawn' in request.resource.data) || request.resource.data.totalWithdrawn == 0);
-      allow update: if isAuthenticated()
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'withdrawableBalance', 'totalWithdrawn'
-        ]);
-      allow delete: if false;
+      allow read: if isOwner(uid) || isAdmin();
+      allow create, update, delete: if false;
 
+      // Supersedes legacy request.resource.data.type != 'withdrawal' by denying all client writes
       match /transactions/{txId} {
-        allow read: if isAuthenticated();
-        allow create: if isAuthenticated() && request.resource.data.type != 'withdrawal';
-        allow update, delete: if false;
+        allow read: if isOwner(uid) || isAdmin();
+        allow create, update, delete: if false;
       }
     }
 
@@ -270,12 +274,10 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // Contratos y Asignaciones Administrativas
+    // Contratos y Asignaciones Administrativas (server-authoritative — SCRUM-346)
     match /admin_contracts/{contractId} {
-      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
-      allow create: if isAdmin() || (isAuthenticated() && request.resource.data.userId == request.auth.uid);
-      allow update: if isAdmin();
-      allow delete: if false;
+      allow read: if isAdmin() || (isNonAnonymous() && resource != null && (resource.data.uid == request.auth.uid || resource.data.userId == request.auth.uid));
+      allow create, update, delete: if false;
     }
 
     // Registro de Auditoría de la Plataforma
@@ -298,12 +300,22 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Órdenes y pagos de paquetes (admin_orders/{orderId})
+    // Órdenes y pagos de paquetes (server-authoritative — SCRUM-346)
     match /admin_orders/{orderId} {
-      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update: if isAdmin();
-      allow delete: if false;
+      allow read: if isAdmin() || (isNonAnonymous() && resource != null && (resource.data.buyerUid == request.auth.uid || resource.data.userId == request.auth.uid));
+      allow create, update, delete: if false;
+    }
+
+    // Payment intents autoritativos (SCRUM-343 / SCRUM-345 / SCRUM-346)
+    match /payment_intents/{intentId} {
+      allow read: if isAdmin() || (isNonAnonymous() && resource != null && resource.data.buyerUid == request.auth.uid);
+      allow create, update, delete: if false;
+    }
+
+    // Registro anti-replay de txHash usados (SCRUM-345 / SCRUM-346)
+    match /usedTxHashes/{txKey} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
     }
 
     // Compatibilidad retroactiva con minerx_*

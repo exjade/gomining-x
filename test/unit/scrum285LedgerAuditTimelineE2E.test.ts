@@ -744,7 +744,7 @@ describe('SCRUM-285 (W10): Immutable Financial Ledger & Forensic Audit Timeline 
 
     const immutableHashes: Record<string, string> = {
       'firestore.rules':
-        '02FB0892E381A8AD42C89910A610FFCFD37B708FF978E6CC3862020EE36460CD',
+        '3422F1E051904328C791377B6BE4DB34269AFC9AA7D3FF0E00C59677503F6C8C',
       'firestore.indexes.json':
         '39990B1AA0F47F15652DCC6AA3BE6DC844C78EE4D1D9C9A86925F28CEBE33E9D',
       'server/services/withdrawalRequestLockService.ts':
