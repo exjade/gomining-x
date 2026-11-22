@@ -124,6 +124,18 @@ function parseNonNegativeAtomic(raw, label) {
   throw new SolanaVerifierError('RPC_REQUEST_FAILED', `Invalid atomic integer for ${label}: ${raw}`, 502);
 }
 
+function parseTimestampMs(raw) {
+  if (raw === null || raw === undefined) return Number.NaN;
+  if (raw instanceof Date) return raw.getTime();
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : Number.NaN;
+  if (typeof raw === 'string' && raw.trim() !== '') return Date.parse(raw);
+  if (typeof raw === 'object' && typeof raw.toDate === 'function') {
+    const date = raw.toDate();
+    return date instanceof Date ? date.getTime() : Number.NaN;
+  }
+  return Number.NaN;
+}
+
 function normalizeSolanaIntent(intent) {
   if (!intent || typeof intent !== 'object' || Array.isArray(intent)) {
     throw new SolanaVerifierError('INVALID_INTENT', 'intent must be a plain object', 400);
@@ -256,42 +268,86 @@ function computeSplReceivedAmount(meta, tokenMint, treasuryAddress) {
   return netDelta > 0n ? netDelta : 0n;
 }
 
-function transactionMatchesSender(tx, accountKeys, spec) {
-  if (!spec.senderWallet) return true;
-  if (accountKeys[0] === spec.senderWallet) return true;
+function computeSplSenderNetDebits(meta, tokenMint, treasuryAddress) {
+  const preList = Array.isArray(meta.preTokenBalances) ? meta.preTokenBalances : [];
+  const postList = Array.isArray(meta.postTokenBalances) ? meta.postTokenBalances : [];
+
+  const preByOwnerAndIndex = new Map();
+  for (const entry of preList) {
+    if (!entry || entry.mint !== tokenMint || !entry.owner || entry.owner === treasuryAddress) continue;
+    if (!Number.isInteger(entry.accountIndex)) continue;
+    const raw = entry.uiTokenAmount && entry.uiTokenAmount.amount !== undefined ? entry.uiTokenAmount.amount : '0';
+    let ownerMap = preByOwnerAndIndex.get(entry.owner);
+    if (!ownerMap) {
+      ownerMap = new Map();
+      preByOwnerAndIndex.set(entry.owner, ownerMap);
+    }
+    ownerMap.set(entry.accountIndex, parseNonNegativeAtomic(raw, 'preTokenBalances.amount'));
+  }
+
+  const postByOwnerAndIndex = new Map();
+  for (const entry of postList) {
+    if (!entry || entry.mint !== tokenMint || !entry.owner || entry.owner === treasuryAddress) continue;
+    if (!Number.isInteger(entry.accountIndex)) continue;
+    const raw = entry.uiTokenAmount && entry.uiTokenAmount.amount !== undefined ? entry.uiTokenAmount.amount : '0';
+    let ownerMap = postByOwnerAndIndex.get(entry.owner);
+    if (!ownerMap) {
+      ownerMap = new Map();
+      postByOwnerAndIndex.set(entry.owner, ownerMap);
+    }
+    ownerMap.set(entry.accountIndex, parseNonNegativeAtomic(raw, 'postTokenBalances.amount'));
+  }
+
+  const debitsByOwner = new Map();
+  const owners = new Set([...preByOwnerAndIndex.keys(), ...postByOwnerAndIndex.keys()]);
+  for (const owner of owners) {
+    const preMap = preByOwnerAndIndex.get(owner) || new Map();
+    const postMap = postByOwnerAndIndex.get(owner) || new Map();
+    const indices = new Set([...preMap.keys(), ...postMap.keys()]);
+    let netDebit = 0n;
+    for (const idx of indices) {
+      const pre = preMap.get(idx) ?? 0n;
+      const post = postMap.get(idx) ?? 0n;
+      netDebit += pre - post;
+    }
+    if (netDebit > 0n) {
+      debitsByOwner.set(owner, netDebit);
+    }
+  }
+  return debitsByOwner;
+}
+
+function resolveSenderAttributedAmount(tx, accountKeys, spec, treasuryReceivedAtomic) {
+  if (!spec.senderWallet) return treasuryReceivedAtomic;
 
   if (spec.isNative) {
     const idx = accountKeys.indexOf(spec.senderWallet);
-    if (idx < 0 || !tx.meta) return false;
+    if (idx < 0 || !tx.meta) return 0n;
     const preBalances = Array.isArray(tx.meta.preBalances) ? tx.meta.preBalances : [];
     const postBalances = Array.isArray(tx.meta.postBalances) ? tx.meta.postBalances : [];
-    if (preBalances[idx] === undefined || postBalances[idx] === undefined) return false;
-    return parseNonNegativeAtomic(postBalances[idx], 'meta.postBalances') <
-      parseNonNegativeAtomic(preBalances[idx], 'meta.preBalances');
+    if (preBalances[idx] === undefined || postBalances[idx] === undefined) return 0n;
+    const pre = parseNonNegativeAtomic(preBalances[idx], 'meta.preBalances');
+    const post = parseNonNegativeAtomic(postBalances[idx], 'meta.postBalances');
+    const rawDebit = pre > post ? pre - post : 0n;
+    const fee =
+      idx === 0 && tx.meta.fee !== undefined && tx.meta.fee !== null
+        ? parseNonNegativeAtomic(tx.meta.fee, 'meta.fee')
+        : 0n;
+    const senderDebit = rawDebit > fee ? rawDebit - fee : 0n;
+    if (senderDebit === 0n) return 0n;
+    return treasuryReceivedAtomic < senderDebit ? treasuryReceivedAtomic : senderDebit;
   }
 
-  if (!tx.meta) return false;
-  const preList = Array.isArray(tx.meta.preTokenBalances) ? tx.meta.preTokenBalances : [];
-  const postList = Array.isArray(tx.meta.postTokenBalances) ? tx.meta.postTokenBalances : [];
-  const postByIndex = new Map();
-  for (const entry of postList) {
-    if (entry && entry.mint === spec.tokenMint && entry.owner === spec.senderWallet && Number.isInteger(entry.accountIndex)) {
-      const raw = entry.uiTokenAmount && entry.uiTokenAmount.amount !== undefined ? entry.uiTokenAmount.amount : '0';
-      postByIndex.set(entry.accountIndex, parseNonNegativeAtomic(raw, 'postTokenBalances.amount'));
-    }
+  if (!tx.meta) return 0n;
+  const debitsByOwner = computeSplSenderNetDebits(tx.meta, spec.tokenMint, spec.treasuryAddress);
+  if (debitsByOwner.size > 0) {
+    const senderDebit = debitsByOwner.get(spec.senderWallet) ?? 0n;
+    if (senderDebit === 0n) return 0n;
+    return treasuryReceivedAtomic < senderDebit ? treasuryReceivedAtomic : senderDebit;
   }
-  for (const entry of preList) {
-    if (!entry || entry.mint !== spec.tokenMint || entry.owner !== spec.senderWallet || !Number.isInteger(entry.accountIndex)) {
-      continue;
-    }
-    const pre = parseNonNegativeAtomic(
-      entry.uiTokenAmount && entry.uiTokenAmount.amount !== undefined ? entry.uiTokenAmount.amount : '0',
-      'preTokenBalances.amount'
-    );
-    const post = postByIndex.get(entry.accountIndex) ?? 0n;
-    if (post < pre) return true;
-  }
-  return false;
+
+  // Fallback only when token balances omit non-treasury source accounts (e.g. minimal fixtures or atomic swaps).
+  return accountKeys[0] === spec.senderWallet ? treasuryReceivedAtomic : 0n;
 }
 
 function computeNativeSolReceivedAmount(tx, accountKeys, treasuryAddress) {
@@ -311,7 +367,7 @@ async function verifySolanaTransactionInternal({
   signature,
   rpcUrl,
   fetchImpl,
-  enforceSender = false
+  enforceSender = Boolean(spec.senderWallet)
 }) {
   const fetchFinalizedTx = () =>
     callSolanaRpc({
@@ -411,13 +467,27 @@ async function verifySolanaTransactionInternal({
     };
   }
 
-  if (enforceSender && !transactionMatchesSender(tx, accountKeys, spec)) {
-    return null;
-  }
-
-  const receivedAmountAtomic = spec.isNative
+  const treasuryReceivedAtomic = spec.isNative
     ? computeNativeSolReceivedAmount(tx, accountKeys, spec.treasuryAddress)
     : computeSplReceivedAmount(tx.meta, spec.tokenMint, spec.treasuryAddress);
+
+  if (treasuryReceivedAtomic === 0n) {
+    return {
+      verificationStatus: 'FAILED',
+      confirmations: 1,
+      requiredConfirmations: spec.requiredConfirmations,
+      txHash: signature,
+      receivedAmountAtomic: '0',
+      expectedAmountAtomic: spec.expectedAmountAtomic.toString(),
+      fromAddress,
+      slot,
+      reason: 'WRONG_RECIPIENT_OR_TOKEN'
+    };
+  }
+
+  const receivedAmountAtomic = enforceSender && spec.senderWallet
+    ? resolveSenderAttributedAmount(tx, accountKeys, spec, treasuryReceivedAtomic)
+    : treasuryReceivedAtomic;
 
   if (receivedAmountAtomic === 0n) {
     return {
@@ -429,7 +499,7 @@ async function verifySolanaTransactionInternal({
       expectedAmountAtomic: spec.expectedAmountAtomic.toString(),
       fromAddress,
       slot,
-      reason: 'WRONG_RECIPIENT_OR_TOKEN'
+      reason: 'SENDER_MISMATCH'
     };
   }
 
@@ -476,7 +546,13 @@ async function verifySolanaTransaction({
   const spec = normalizeSolanaIntent(intent);
   const rpcUrl = resolveSolanaRpcUrl(spec.networkMode, env);
 
-  return verifySolanaTransactionInternal({ spec, signature, rpcUrl, fetchImpl, enforceSender: false });
+  return verifySolanaTransactionInternal({
+    spec,
+    signature,
+    rpcUrl,
+    fetchImpl,
+    enforceSender: Boolean(spec.senderWallet)
+  });
 }
 
 async function findIncomingSolanaTransfer({
@@ -492,7 +568,7 @@ async function findIncomingSolanaTransfer({
     ? Math.min(MAX_SCAN_LIMIT, Math.max(MIN_SCAN_LIMIT, limit))
     : DEFAULT_SCAN_LIMIT;
 
-  const createdAtMs = intent.createdAt ? Date.parse(intent.createdAt) : Number.NaN;
+  const createdAtMs = parseTimestampMs(intent.createdAt);
   const seenSignatures = new Set();
 
   async function scanAddress(address) {
@@ -511,7 +587,7 @@ async function findIncomingSolanaTransfer({
       if (!SOLANA_SIGNATURE_PATTERN.test(sig) || seenSignatures.has(sig)) continue;
       seenSignatures.add(sig);
 
-      if (!Number.isNaN(createdAtMs) && typeof item.blockTime === 'number' && Number.isFinite(item.blockTime)) {
+      if (Number.isFinite(createdAtMs) && typeof item.blockTime === 'number' && Number.isFinite(item.blockTime)) {
         if (item.blockTime * 1000 < createdAtMs - SCAN_CLOCK_SKEW_MS) continue;
       }
 

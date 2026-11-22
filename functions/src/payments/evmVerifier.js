@@ -356,10 +356,12 @@ async function verifyEvmTransaction({
 
   let receivedAmountAtomic = 0n;
   let fromAddress = extractFallbackFromAddress(receipt, tx);
+  let hasOtherSenderTransfer = false;
 
   if (!spec.isNative) {
     const logs = Array.isArray(receipt.logs) ? receipt.logs : [];
     let matchedFrom = null;
+    let otherSenderFrom = null;
     for (const log of logs) {
       if (!log || log.removed === true) continue;
       if (typeof log.address !== 'string' || log.address.toLowerCase() !== spec.tokenContractLower) continue;
@@ -373,10 +375,20 @@ async function verifyEvmTransaction({
       const amount = parseTransferDataBigInt(log.data);
       if (amount === null || amount <= 0n) continue;
 
+      if (spec.senderLower && decodedFrom !== spec.senderLower) {
+        hasOtherSenderTransfer = true;
+        if (!otherSenderFrom) otherSenderFrom = decodedFrom;
+        continue;
+      }
+
       receivedAmountAtomic += amount;
       if (!matchedFrom) matchedFrom = decodedFrom;
     }
-    if (matchedFrom) fromAddress = matchedFrom;
+    if (matchedFrom) {
+      fromAddress = matchedFrom;
+    } else if (otherSenderFrom) {
+      fromAddress = otherSenderFrom;
+    }
   } else {
     if (tx === null || tx === undefined) {
       throw new EvmVerifierError(
@@ -386,9 +398,17 @@ async function verifyEvmTransaction({
       );
     }
     if (typeof tx.to === 'string' && tx.to.toLowerCase() === spec.treasuryLower) {
-      receivedAmountAtomic = parseHexBigInt(tx.value || '0x0', 'tx.value');
-      if (typeof tx.from === 'string' && isValidEvmAddress(tx.from)) {
-        fromAddress = tx.from.toLowerCase();
+      const valueAtomic = parseHexBigInt(tx.value || '0x0', 'tx.value');
+      const txFromLower = typeof tx.from === 'string' && isValidEvmAddress(tx.from) ? tx.from.toLowerCase() : null;
+      if (txFromLower) {
+        fromAddress = txFromLower;
+      }
+      if (valueAtomic > 0n) {
+        if (spec.senderLower && txFromLower !== spec.senderLower) {
+          hasOtherSenderTransfer = true;
+        } else {
+          receivedAmountAtomic = valueAtomic;
+        }
       }
     }
   }
@@ -403,7 +423,7 @@ async function verifyEvmTransaction({
       expectedAmountAtomic: spec.expectedAmountAtomic.toString(),
       fromAddress,
       blockNumber,
-      reason: 'WRONG_RECIPIENT_OR_TOKEN'
+      reason: hasOtherSenderTransfer ? 'SENDER_MISMATCH' : 'WRONG_RECIPIENT_OR_TOKEN'
     };
   }
 

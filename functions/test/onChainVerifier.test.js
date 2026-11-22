@@ -1818,3 +1818,446 @@ test('coverage [IMPORTANT-4]: RPC transport errors, split EVM logs, Solana statu
   assert.equal(emptySolExpired.verificationStatus, 'EXPIRED');
   assert.equal(emptySolExpired.txHash, null);
 });
+
+// ============================================================================
+// 5. ITERATION 1 HARDENING — DIRECT-VERIFY SENDER_MISMATCH & FIRESTORE TIMESTAMP
+// ============================================================================
+
+test('evmVerifier & onChainVerifier [ITER-1]: blocks EVM USDT and native front-running with SENDER_MISMATCH while preserving matching and null senderWallet', async () => {
+  const walletA = SENDER_EVM;
+  const walletAMixedCase = '0xAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAa';
+  const walletB = OTHER_WALLET_EVM;
+
+  const usdtFetch = createJsonRpcFetchMock({
+    eth_chainId: '0x38',
+    eth_getTransactionReceipt: {
+      transactionHash: TX_HASH_1,
+      blockNumber: '0x64',
+      status: '0x1',
+      from: walletA,
+      logs: [
+        {
+          address: BSC_USDT_MAINNET,
+          removed: false,
+          topics: [ERC20_TRANSFER_TOPIC, padTopicAddress(walletA), padTopicAddress(TREASURY_EVM)],
+          data: encodeUint256Hex(100000000000000000000n)
+        }
+      ]
+    },
+    eth_getTransactionByHash: { hash: TX_HASH_1, from: walletA, to: BSC_USDT_MAINNET, value: '0x0' },
+    eth_blockNumber: '0x80'
+  });
+
+  const usdtVerifier = createOnChainVerifier({
+    db: createInMemoryUsedTxDb(),
+    env: buildRpcEnv(),
+    now: () => Date.parse('2026-11-22T00:05:00.000Z'),
+    fetchImpl: usdtFetch
+  });
+
+  // 1) USDT front-running: intent bound to WalletB receives WalletA's txHash -> FAILED / SENDER_MISMATCH
+  const usdtHijack = await usdtVerifier.verifyIntentPayment({
+    intent: buildEvmIntent({ intentId: 'pi_evm_usdt_hijack', senderWallet: walletB }),
+    txHash: TX_HASH_1
+  });
+  assert.equal(usdtHijack.verificationStatus, 'FAILED');
+  assert.equal(usdtHijack.reason, 'SENDER_MISMATCH');
+  assert.equal(usdtHijack.receivedAmountAtomic, '0');
+  assert.equal(usdtHijack.fromAddress, walletA);
+  assert.notEqual(usdtHijack.verificationStatus, 'CONFIRMED');
+
+  // 2) USDT matching senderWallet (including mixed-case EIP-55) -> READY_TO_SETTLE
+  const usdtMatched = await usdtVerifier.verifyIntentPayment({
+    intent: buildEvmIntent({ intentId: 'pi_evm_usdt_match', senderWallet: walletAMixedCase }),
+    txHash: TX_HASH_1
+  });
+  assert.equal(usdtMatched.verificationStatus, 'READY_TO_SETTLE');
+  assert.equal(usdtMatched.receivedAmountAtomic, '100000000000000000000');
+  assert.equal(usdtMatched.reason, null);
+
+  // 3) USDT senderWallet = null -> READY_TO_SETTLE (accepts any sender)
+  const usdtOpen = await usdtVerifier.verifyIntentPayment({
+    intent: buildEvmIntent({ intentId: 'pi_evm_usdt_null', senderWallet: null }),
+    txHash: TX_HASH_1
+  });
+  assert.equal(usdtOpen.verificationStatus, 'READY_TO_SETTLE');
+  assert.equal(usdtOpen.receivedAmountAtomic, '100000000000000000000');
+
+  // 4) Mixed-sender batched ERC-20 tx: never credits WalletA's 90 USDT toward WalletB's intent (UNDERPAID 10/100)
+  const batchedVerifier = createOnChainVerifier({
+    db: createInMemoryUsedTxDb(),
+    env: buildRpcEnv(),
+    now: () => Date.parse('2026-11-22T00:05:00.000Z'),
+    fetchImpl: createJsonRpcFetchMock({
+      eth_chainId: '0x38',
+      eth_getTransactionReceipt: {
+        transactionHash: TX_HASH_2,
+        blockNumber: '0x64',
+        status: '0x1',
+        from: walletA,
+        logs: [
+          {
+            address: BSC_USDT_MAINNET,
+            topics: [ERC20_TRANSFER_TOPIC, padTopicAddress(walletA), padTopicAddress(TREASURY_EVM)],
+            data: encodeUint256Hex(90000000000000000000n)
+          },
+          {
+            address: BSC_USDT_MAINNET,
+            topics: [ERC20_TRANSFER_TOPIC, padTopicAddress(walletB), padTopicAddress(TREASURY_EVM)],
+            data: encodeUint256Hex(10000000000000000000n)
+          }
+        ]
+      },
+      eth_getTransactionByHash: { hash: TX_HASH_2, from: walletA, to: BSC_USDT_MAINNET, value: '0x0' },
+      eth_blockNumber: '0x80'
+    })
+  });
+  const batchedRes = await batchedVerifier.verifyIntentPayment({
+    intent: buildEvmIntent({ intentId: 'pi_evm_usdt_batch', senderWallet: walletB }),
+    txHash: TX_HASH_2
+  });
+  assert.equal(batchedRes.verificationStatus, 'UNDERPAID');
+  assert.equal(batchedRes.receivedAmountAtomic, '10000000000000000000');
+  assert.equal(batchedRes.shortfallAtomic, '90000000000000000000');
+  assert.equal(batchedRes.fromAddress, walletB);
+
+  // 5) Native EVM (ETH) front-running: WalletB intent receiving WalletA's ETH tx -> FAILED / SENDER_MISMATCH
+  const nativeVerifier = createOnChainVerifier({
+    db: createInMemoryUsedTxDb(),
+    env: buildRpcEnv(),
+    now: () => Date.parse('2026-11-22T00:05:00.000Z'),
+    fetchImpl: createJsonRpcFetchMock({
+      eth_chainId: '0xaa36a7', // 11155111
+      eth_getTransactionReceipt: { transactionHash: TX_HASH_1, blockNumber: '0x10', status: '0x1', from: walletA, logs: [] },
+      eth_getTransactionByHash: {
+        hash: TX_HASH_1,
+        from: walletA,
+        to: TREASURY_EVM,
+        value: '0x6f05b59d3b20000' // 0.5 ETH
+      },
+      eth_blockNumber: '0x30'
+    })
+  });
+  const baseEthIntent = {
+    paymentNetwork: 'ethereum',
+    networkMode: 'testnet',
+    chainId: 11155111,
+    paymentAsset: 'ETH',
+    tokenContractAddress: null,
+    expectedAmountAtomic: '500000000000000000',
+    requiredConfirmations: 12
+  };
+
+  const nativeHijack = await nativeVerifier.verifyIntentPayment({
+    intent: buildEvmIntent({ ...baseEthIntent, intentId: 'pi_evm_eth_hijack', senderWallet: walletB }),
+    txHash: TX_HASH_1
+  });
+  assert.equal(nativeHijack.verificationStatus, 'FAILED');
+  assert.equal(nativeHijack.reason, 'SENDER_MISMATCH');
+  assert.equal(nativeHijack.receivedAmountAtomic, '0');
+  assert.equal(nativeHijack.fromAddress, walletA);
+
+  const nativeMatched = await nativeVerifier.verifyIntentPayment({
+    intent: buildEvmIntent({ ...baseEthIntent, intentId: 'pi_evm_eth_match', senderWallet: walletAMixedCase }),
+    txHash: TX_HASH_1
+  });
+  assert.equal(nativeMatched.verificationStatus, 'READY_TO_SETTLE');
+  assert.equal(nativeMatched.receivedAmountAtomic, '500000000000000000');
+
+  const nativeOpen = await nativeVerifier.verifyIntentPayment({
+    intent: buildEvmIntent({ ...baseEthIntent, intentId: 'pi_evm_eth_null', senderWallet: null }),
+    txHash: TX_HASH_1
+  });
+  assert.equal(nativeOpen.verificationStatus, 'READY_TO_SETTLE');
+  assert.equal(nativeOpen.receivedAmountAtomic, '500000000000000000');
+});
+
+test('solanaVerifier & onChainVerifier [ITER-1]: blocks Solana SPL USDT and native SOL front-running with SENDER_MISMATCH while preserving matching, relayer-sponsored, and null senderWallet', async () => {
+  const walletA = SENDER_SOL;
+  const walletB = OTHER_SOL;
+  const relayerSol = 'BPFLoaderUpgradeab1e11111111111111111111111';
+
+  // 1) SPL USDT paid by WalletA
+  const splVerifier = createOnChainVerifier({
+    db: createInMemoryUsedTxDb(),
+    env: buildRpcEnv(),
+    now: () => Date.parse('2026-11-22T00:05:00.000Z'),
+    fetchImpl: createJsonRpcFetchMock({
+      getTransaction: {
+        slot: 950001,
+        transaction: { message: { accountKeys: [{ pubkey: walletA }, { pubkey: TREASURY_SOL }] } },
+        meta: {
+          err: null,
+          preTokenBalances: [
+            { accountIndex: 2, mint: SOL_USDT_MINT, owner: walletA, uiTokenAmount: { amount: '250000000', decimals: 6 } },
+            { accountIndex: 3, mint: SOL_USDT_MINT, owner: TREASURY_SOL, uiTokenAmount: { amount: '0', decimals: 6 } }
+          ],
+          postTokenBalances: [
+            { accountIndex: 2, mint: SOL_USDT_MINT, owner: walletA, uiTokenAmount: { amount: '150000000', decimals: 6 } },
+            { accountIndex: 3, mint: SOL_USDT_MINT, owner: TREASURY_SOL, uiTokenAmount: { amount: '100000000', decimals: 6 } }
+          ]
+        }
+      }
+    })
+  });
+
+  const splHijack = await splVerifier.verifyIntentPayment({
+    intent: buildSolanaIntent({ intentId: 'pi_sol_usdt_hijack', senderWallet: walletB }),
+    txHash: SOL_SIG_UPPER
+  });
+  assert.equal(splHijack.verificationStatus, 'FAILED');
+  assert.equal(splHijack.reason, 'SENDER_MISMATCH');
+  assert.equal(splHijack.receivedAmountAtomic, '0');
+  assert.notEqual(splHijack.verificationStatus, 'CONFIRMED');
+
+  const splMatched = await splVerifier.verifyIntentPayment({
+    intent: buildSolanaIntent({ intentId: 'pi_sol_usdt_match', senderWallet: walletA }),
+    txHash: SOL_SIG_UPPER
+  });
+  assert.equal(splMatched.verificationStatus, 'READY_TO_SETTLE');
+  assert.equal(splMatched.receivedAmountAtomic, '100000000');
+
+  const splOpen = await splVerifier.verifyIntentPayment({
+    intent: buildSolanaIntent({ intentId: 'pi_sol_usdt_null', senderWallet: null }),
+    txHash: SOL_SIG_UPPER
+  });
+  assert.equal(splOpen.verificationStatus, 'READY_TO_SETTLE');
+  assert.equal(splOpen.receivedAmountAtomic, '100000000');
+
+  // 2) Relayer-sponsored SPL USDT transfer (fee payer != SPL source owner WalletA)
+  const sponsoredVerifier = createOnChainVerifier({
+    db: createInMemoryUsedTxDb(),
+    env: buildRpcEnv(),
+    now: () => Date.parse('2026-11-22T00:05:00.000Z'),
+    fetchImpl: createJsonRpcFetchMock({
+      getTransaction: {
+        slot: 950002,
+        transaction: { message: { accountKeys: [{ pubkey: relayerSol }, { pubkey: TREASURY_SOL }] } },
+        meta: {
+          err: null,
+          preTokenBalances: [
+            { accountIndex: 2, mint: SOL_USDT_MINT, owner: walletA, uiTokenAmount: { amount: '200000000', decimals: 6 } },
+            { accountIndex: 3, mint: SOL_USDT_MINT, owner: TREASURY_SOL, uiTokenAmount: { amount: '0', decimals: 6 } }
+          ],
+          postTokenBalances: [
+            { accountIndex: 2, mint: SOL_USDT_MINT, owner: walletA, uiTokenAmount: { amount: '100000000', decimals: 6 } },
+            { accountIndex: 3, mint: SOL_USDT_MINT, owner: TREASURY_SOL, uiTokenAmount: { amount: '100000000', decimals: 6 } }
+          ]
+        }
+      }
+    })
+  });
+  const sponsoredOk = await sponsoredVerifier.verifyIntentPayment({
+    intent: buildSolanaIntent({ intentId: 'pi_sol_relayer_ok', senderWallet: walletA }),
+    txHash: SOL_SIG_UPPER
+  });
+  assert.equal(sponsoredOk.verificationStatus, 'READY_TO_SETTLE');
+
+  const sponsoredHijack = await sponsoredVerifier.verifyIntentPayment({
+    intent: buildSolanaIntent({ intentId: 'pi_sol_relayer_hijack', senderWallet: walletB }),
+    txHash: SOL_SIG_UPPER
+  });
+  assert.equal(sponsoredHijack.verificationStatus, 'FAILED');
+  assert.equal(sponsoredHijack.reason, 'SENDER_MISMATCH');
+
+  // Relayer itself (accountKeys[0]) cannot hijack WalletA's SPL deposit even though relayer paid SOL tx fee
+  const relayerSelfHijack = await sponsoredVerifier.verifyIntentPayment({
+    intent: buildSolanaIntent({ intentId: 'pi_sol_relayer_self_hijack', senderWallet: relayerSol }),
+    txHash: SOL_SIG_UPPER
+  });
+  assert.equal(relayerSelfHijack.verificationStatus, 'FAILED');
+  assert.equal(relayerSelfHijack.reason, 'SENDER_MISMATCH');
+  assert.equal(relayerSelfHijack.receivedAmountAtomic, '0');
+
+  // Mixed-sender SPL batch (WalletA 90 USDT + WalletB 10 USDT -> Treasury 100 USDT):
+  // WalletB intent expecting 100 USDT must NOT credit WalletA's 90 USDT (UNDERPAID 10/100)
+  const splBatchVerifier = createOnChainVerifier({
+    db: createInMemoryUsedTxDb(),
+    env: buildRpcEnv(),
+    now: () => Date.parse('2026-11-22T00:05:00.000Z'),
+    fetchImpl: createJsonRpcFetchMock({
+      getTransaction: {
+        slot: 950002,
+        transaction: { message: { accountKeys: [{ pubkey: walletB }, { pubkey: walletA }, { pubkey: TREASURY_SOL }] } },
+        meta: {
+          err: null,
+          preTokenBalances: [
+            { accountIndex: 3, mint: SOL_USDT_MINT, owner: walletA, uiTokenAmount: { amount: '100000000', decimals: 6 } },
+            { accountIndex: 4, mint: SOL_USDT_MINT, owner: walletB, uiTokenAmount: { amount: '50000000', decimals: 6 } },
+            { accountIndex: 5, mint: SOL_USDT_MINT, owner: TREASURY_SOL, uiTokenAmount: { amount: '0', decimals: 6 } }
+          ],
+          postTokenBalances: [
+            { accountIndex: 3, mint: SOL_USDT_MINT, owner: walletA, uiTokenAmount: { amount: '10000000', decimals: 6 } },
+            { accountIndex: 4, mint: SOL_USDT_MINT, owner: walletB, uiTokenAmount: { amount: '40000000', decimals: 6 } },
+            { accountIndex: 5, mint: SOL_USDT_MINT, owner: TREASURY_SOL, uiTokenAmount: { amount: '100000000', decimals: 6 } }
+          ]
+        }
+      }
+    })
+  });
+  const splBatchRes = await splBatchVerifier.verifyIntentPayment({
+    intent: buildSolanaIntent({ intentId: 'pi_sol_spl_batch', senderWallet: walletB }),
+    txHash: SOL_SIG_UPPER
+  });
+  assert.equal(splBatchRes.verificationStatus, 'UNDERPAID');
+  assert.equal(splBatchRes.receivedAmountAtomic, '10000000');
+  assert.equal(splBatchRes.shortfallAtomic, '90000000');
+
+  // Solana Base58 case-sensitivity on senderWallet: flipping a single letter case -> SENDER_MISMATCH
+  const walletAWrongCase = `${walletA.slice(0, 1)}${walletA[1] === 'x' ? 'X' : 'x'}${walletA.slice(2)}`;
+  assert.notEqual(walletAWrongCase, walletA);
+  const caseMismatch = await splVerifier.verifyIntentPayment({
+    intent: buildSolanaIntent({ intentId: 'pi_sol_case_mismatch', senderWallet: walletAWrongCase }),
+    txHash: SOL_SIG_UPPER
+  });
+  assert.equal(caseMismatch.verificationStatus, 'FAILED');
+  assert.equal(caseMismatch.reason, 'SENDER_MISMATCH');
+
+  // 3) Native SOL paid by WalletA
+  const solVerifier = createOnChainVerifier({
+    db: createInMemoryUsedTxDb(),
+    env: buildRpcEnv(),
+    now: () => Date.parse('2026-11-22T00:05:00.000Z'),
+    fetchImpl: createJsonRpcFetchMock({
+      getTransaction: {
+        slot: 950003,
+        transaction: { message: { accountKeys: [{ pubkey: walletA }, { pubkey: TREASURY_SOL }] } },
+        meta: { err: null, fee: 5000, preBalances: [5000000000, 1000000000], postBalances: [3499995000, 2500000000] }
+      }
+    })
+  });
+  const baseSolIntent = {
+    networkMode: 'testnet',
+    chainId: 'solana-devnet',
+    paymentAsset: 'SOL',
+    tokenContractAddress: null,
+    expectedAmountAtomic: '1500000000'
+  };
+
+  const solHijack = await solVerifier.verifyIntentPayment({
+    intent: buildSolanaIntent({ ...baseSolIntent, intentId: 'pi_sol_native_hijack', senderWallet: walletB }),
+    txHash: SOL_SIG_UPPER
+  });
+  assert.equal(solHijack.verificationStatus, 'FAILED');
+  assert.equal(solHijack.reason, 'SENDER_MISMATCH');
+  assert.equal(solHijack.receivedAmountAtomic, '0');
+
+  // Native SOL fee-payer hijack: WalletB pays 5000 lamports fee only while WalletA transfers 1.5 SOL -> SENDER_MISMATCH
+  const solRelayerHijackVerifier = createOnChainVerifier({
+    db: createInMemoryUsedTxDb(),
+    env: buildRpcEnv(),
+    now: () => Date.parse('2026-11-22T00:05:00.000Z'),
+    fetchImpl: createJsonRpcFetchMock({
+      getTransaction: {
+        slot: 950004,
+        transaction: { message: { accountKeys: [{ pubkey: walletB }, { pubkey: walletA }, { pubkey: TREASURY_SOL }] } },
+        meta: {
+          err: null,
+          fee: 5000,
+          preBalances: [1000000, 5000000000, 1000000000],
+          postBalances: [995000, 3500000000, 2500000000]
+        }
+      }
+    })
+  });
+  const solFeeOnlyHijack = await solRelayerHijackVerifier.verifyIntentPayment({
+    intent: buildSolanaIntent({ ...baseSolIntent, intentId: 'pi_sol_native_fee_hijack', senderWallet: walletB }),
+    txHash: SOL_SIG_UPPER
+  });
+  assert.equal(solFeeOnlyHijack.verificationStatus, 'FAILED');
+  assert.equal(solFeeOnlyHijack.reason, 'SENDER_MISMATCH');
+  assert.equal(solFeeOnlyHijack.receivedAmountAtomic, '0');
+
+  const solMatched = await solVerifier.verifyIntentPayment({
+    intent: buildSolanaIntent({ ...baseSolIntent, intentId: 'pi_sol_native_match', senderWallet: walletA }),
+    txHash: SOL_SIG_UPPER
+  });
+  assert.equal(solMatched.verificationStatus, 'READY_TO_SETTLE');
+  assert.equal(solMatched.receivedAmountAtomic, '1500000000');
+
+  const solOpen = await solVerifier.verifyIntentPayment({
+    intent: buildSolanaIntent({ ...baseSolIntent, intentId: 'pi_sol_native_null', senderWallet: null }),
+    txHash: SOL_SIG_UPPER
+  });
+  assert.equal(solOpen.verificationStatus, 'READY_TO_SETTLE');
+  assert.equal(solOpen.receivedAmountAtomic, '1500000000');
+});
+
+test('solanaVerifier & onChainVerifier [ITER-1]: supports Firestore Timestamp, Date, and epoch ms in intent.createdAt to filter historical deposits', async () => {
+  const createdAtIso = '2026-11-22T00:10:00.000Z';
+  const createdAtMs = Date.parse(createdAtIso);
+  const createdAtSec = Math.floor(createdAtMs / 1000);
+  const firestoreTimestamp = { toDate: () => new Date(createdAtIso) };
+
+  // 1) discoverAndVerifyIncomingPayment with Firestore Timestamp skips blockTime < createdAt - 60s
+  const fetchedSigs = [];
+  const verifier = createOnChainVerifier({
+    db: createInMemoryUsedTxDb(),
+    env: buildRpcEnv(),
+    now: () => Date.parse('2026-11-22T00:12:00.000Z'),
+    fetchImpl: createJsonRpcFetchMock({
+      getSignaturesForAddress: [
+        { signature: SOL_SIG_OLD, err: null, blockTime: createdAtSec - 61 }, // historical (outside 60s skew) -> must skip
+        { signature: SOL_SIG_2, err: null, blockTime: createdAtSec + 10 } // in-window -> must accept
+      ],
+      getTransaction: (params) => {
+        fetchedSigs.push(params[0]);
+        return {
+          slot: 960001,
+          transaction: { message: { accountKeys: [{ pubkey: SENDER_SOL }, { pubkey: TREASURY_SOL }] } },
+          meta: {
+            err: null,
+            preTokenBalances: [],
+            postTokenBalances: [
+              { accountIndex: 2, mint: SOL_USDT_MINT, owner: TREASURY_SOL, uiTokenAmount: { amount: '100000000', decimals: 6 } }
+            ]
+          }
+        };
+      }
+    })
+  });
+
+  const discovered = await verifier.discoverAndVerifyIncomingPayment({
+    intent: buildSolanaIntent({
+      intentId: 'pi_sol_ts_firestore',
+      txHash: null,
+      createdAt: firestoreTimestamp,
+      expiresAt: { toDate: () => new Date('2026-11-22T00:25:00.000Z') }
+    })
+  });
+  assert.equal(discovered.verificationStatus, 'READY_TO_SETTLE');
+  assert.equal(discovered.txHash, SOL_SIG_2);
+  assert.deepEqual(fetchedSigs, [SOL_SIG_2]);
+
+  // 2) findIncomingSolanaTransfer directly with Date and epoch ms number rejects old deposits and accepts boundary (createdAt - 60s)
+  for (const createdAtInput of [new Date(createdAtIso), createdAtMs, firestoreTimestamp]) {
+    const queried = [];
+    const found = await findIncomingSolanaTransfer({
+      intent: buildSolanaIntent({ createdAt: createdAtInput }),
+      env: buildRpcEnv(),
+      fetchImpl: createJsonRpcFetchMock({
+        getSignaturesForAddress: [
+          { signature: SOL_SIG_OLD, err: null, blockTime: createdAtSec - 61 }, // skipped
+          { signature: SOL_SIG_UPPER, err: null, blockTime: createdAtSec - 60 } // exact boundary -> accepted
+        ],
+        getTransaction: (params) => {
+          queried.push(params[0]);
+          return {
+            slot: 960002,
+            transaction: { message: { accountKeys: [{ pubkey: SENDER_SOL }, { pubkey: TREASURY_SOL }] } },
+            meta: {
+              err: null,
+              preTokenBalances: [],
+              postTokenBalances: [
+                { accountIndex: 2, mint: SOL_USDT_MINT, owner: TREASURY_SOL, uiTokenAmount: { amount: '100000000', decimals: 6 } }
+              ]
+            }
+          };
+        }
+      })
+    });
+    assert.ok(found);
+    assert.equal(found.txHash, SOL_SIG_UPPER);
+    assert.deepEqual(queried, [SOL_SIG_UPPER]);
+  }
+});
