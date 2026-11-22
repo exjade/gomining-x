@@ -1235,3 +1235,19 @@ exports.onMiningProfitFinalized = onMiningProfitFinalized;
 exports.getUnilevelStats = getUnilevelStats;
 exports.getUnilevelTree = getUnilevelTree;
 exports.getUnilevelHistory = getUnilevelHistory;
+
+const {
+  createPaymentIntent,
+  selectPaymentMethod,
+  getPaymentIntent,
+  cancelPaymentIntent,
+  confirmPaymentIntent,
+  reconcilePendingPayments
+} = require('./src/payments');
+
+exports.createPaymentIntent = createPaymentIntent;
+exports.selectPaymentMethod = selectPaymentMethod;
+exports.getPaymentIntent = getPaymentIntent;
+exports.cancelPaymentIntent = cancelPaymentIntent;
+exports.confirmPaymentIntent = confirmPaymentIntent;
+exports.reconcilePendingPayments = reconcilePendingPayments;
