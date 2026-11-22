@@ -9,12 +9,12 @@ import { getPrimaryPurchaseProduct, getProductById, getProductsForRoute, type Ca
 import { WalletPanel } from './WalletPanel'
 import { useWalletSession, type WalletId } from './walletSession'
 import { useDemoFirestorePersistence } from './firestoreDemoSync'
-import { WalletPaymentCheckout, initialWallet, networkForConnection, networks, walletOptions, type PaymentReceipt } from './WalletPaymentCheckout'
+import { WalletPaymentCheckout, networkForConnection, networks, type PaymentReceipt } from './WalletPaymentCheckout'
 import { MinerCustomizer } from './MinerCustomizer'
 import { MinerFarm } from './nft-miners/MinerFarm'
 import { DEV_PARITY_UID, getDevParityMiners } from './nft-miners/dev-parity-miners'
 import { CryptoIcon } from './CryptoIcon'
-import { isPaymentNetworkId, type PaymentNetworkId } from './paymentDestinations'
+import { type PaymentNetworkId } from './paymentDestinations'
 import { AppRouteSkeleton, MetricValueSkeleton, PoolTableSkeleton, Skeleton, WalletIdentitySkeleton } from './Skeletons'
 import { convertCatalogPriceToUsd, formatAssetAmount, formatCatalogPrice, type PaymentCurrency } from './paymentQuote'
 import { customMinerPriceTiers, MINER_CATALOG_OBSERVED_AT, getSectionFallbackPlans, type MinerPlan } from './minerCatalog'
@@ -53,7 +53,6 @@ import {
 } from './minerPurchaseFlow'
 import {
   subscribeToStorefrontSections,
-  recordMinerPurchaseToAdmin,
   savePurchasedMiner,
   type StorefrontSectionsConfig,
   DEFAULT_STOREFRONT_SECTIONS,
@@ -102,7 +101,7 @@ function AppContent() {
   const [purchaseOpen, setPurchaseOpen] = useState(false)
   const [topUpOpen, setTopUpOpen] = useState(false)
   const [minerBuilderOpen, setMinerBuilderOpen] = useState(false)
-  const [walletCheckout, setWalletCheckout] = useState<{ productName: string; amount: number; currency: PaymentCurrency; packageId?: string; purchaseMode?: 'once' | 'monthly'; networkId?: PaymentNetworkId; walletId?: WalletId; minerId?: string } | null>(null)
+  const [walletCheckout, setWalletCheckout] = useState<{ productName: string; amount: number; currency: PaymentCurrency; packageId?: string; purchaseMode?: 'once' | 'monthly'; networkId?: PaymentNetworkId; walletId?: WalletId; minerId?: string; intentId?: string } | null>(null)
 
   // Blocker 6: Restore pending post-tx recovery modal after application reload
   useEffect(() => {
@@ -179,43 +178,20 @@ function AppContent() {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search)
-    const mobileCheckout = params.get('gmPay') === '1'
-    setMinerBuilderOpen(location.pathname === '/home' && params.get('modal') === 'paywall-create' && !mobileCheckout)
-    if (!mobileCheckout) return
-    if (loading) return
-    const amount = Number(params.get('gmPayAmount'))
-    const productName = params.get('gmPayProduct')
-    const currency = params.get('gmPayCurrency')
-    const networkValue = params.get('gmPayNetwork')
-    const networkId = isPaymentNetworkId(networkValue) ? networkValue : null
-    const requestedWallet = params.get('gmPayWallet')
-    const packageId = params.get('gmPayPackageId') || params.get('packageId') || undefined
-    const purchaseMode = params.get('purchaseMode') === 'monthly' ? 'monthly' : 'once'
-    const walletIds: WalletId[] = ['solflare', 'phantom', 'metamask', 'coinbase', 'trustwallet', 'tronlink', 'unisat']
-    if (productName && Number.isFinite(amount) && amount > 0 && currency === 'USD') {
-      if (!user || user.isAnonymous) {
-        openAuthModal('register')
-        return
-      }
-      const prep = prepareWalletMinerPurchase({
-        name: productName,
-        powerTh: parseMinerPowerTh(productName, amount),
-        efficiency: 15,
-        price: amount,
-        purchaseMode,
-        packageId,
-      })
-      setWalletCheckout({
-        productName: productName.slice(0, 120),
-        amount,
-        currency: 'USD',
-        packageId,
-        purchaseMode,
-        networkId: networkId ?? undefined,
-        walletId: walletIds.find((id) => id === requestedWallet),
-        minerId: prep.id,
-      })
+    const intentId = params.get('gmPayIntentId')?.trim() || ''
+    const resumeCheckout = params.get('gmPay') === '1' || Boolean(intentId)
+    setMinerBuilderOpen(location.pathname === '/home' && params.get('modal') === 'paywall-create' && !resumeCheckout)
+    if (!intentId || loading) return
+    if (!user || user.isAnonymous) {
+      openAuthModal('register')
+      return
     }
+    setWalletCheckout((current) => current?.intentId === intentId ? current : {
+      productName: 'Pago en curso',
+      amount: 0,
+      currency: 'USD',
+      intentId,
+    })
   }, [location.pathname, location.search, user, loading])
 
   if (loading) {
@@ -274,8 +250,8 @@ function AppContent() {
   const closeWalletCheckout = (requestPending?: boolean, notice?: string) => {
     setWalletCheckout(null)
     const params = new URLSearchParams(location.search)
-    if (params.get('gmPay') === '1') {
-      for (const key of ['gmPay', 'gmPayProduct', 'gmPayAmount', 'gmPayCurrency', 'gmPayNetwork', 'gmPayWallet']) params.delete(key)
+    if (params.get('gmPay') === '1' || params.has('gmPayIntentId')) {
+      for (const key of ['gmPay', 'gmPayIntentId', 'gmPayCurrency', 'gmPayNetwork', 'gmPayWallet']) params.delete(key)
       if (params.get('modal') === 'paywall-create') params.delete('modal')
     }
     for (const key of ['gmWalletConnect', 'gmSolflareCallback', 'gmSolflareState', 'gmPhantomCallback', 'gmPhantomState', 'data', 'nonce', 'solflare_encryption_public_key', 'phantom_encryption_public_key', 'errorCode', 'errorMessage']) params.delete(key)
@@ -596,7 +572,6 @@ function AppContent() {
         const result = await completeLocalMinerPurchase(demoInput, {
           user,
           saveMinerToFirestore: user ? savePurchasedMiner : undefined,
-          recordPurchaseToAdmin: user ? recordMinerPurchaseToAdmin : undefined,
         })
         if (result.ok) {
           setSessionEvents((items) => [`${input.name} · ${input.powerTh.toFixed(2)} TH añadidos a la granja`, ...items].slice(0, 5))
@@ -623,7 +598,7 @@ function AppContent() {
         setToast("Pedido local registrado; el saldo se descuenta al pagarlo desde Mis mineros")
         return { ok: true, receipt: result.receipt }
       }} />}
-      {walletCheckout && <WalletPaymentCheckout productName={walletCheckout.productName} amount={walletCheckout.amount} currency={walletCheckout.currency} packageId={walletCheckout.packageId} purchaseMode={walletCheckout.purchaseMode} minerId={walletCheckout.minerId} initialNetworkId={walletCheckout.networkId} initialWalletId={walletCheckout.walletId} session={effectiveWalletSession} onClose={closeWalletCheckout} onResumeWalletConnect={(url) => {
+      {walletCheckout && <WalletPaymentCheckout productName={walletCheckout.productName} amount={walletCheckout.amount} currency={walletCheckout.currency} packageId={walletCheckout.packageId} purchaseMode={walletCheckout.purchaseMode} minerId={walletCheckout.minerId} initialNetworkId={walletCheckout.networkId} initialWalletId={walletCheckout.walletId} initialIntentId={walletCheckout.intentId} session={effectiveWalletSession} onClose={closeWalletCheckout} onResumeWalletConnect={(url) => {
         const resume = new URL(url, window.location.origin)
         navigate({ pathname: resume.pathname, search: resume.search, hash: resume.hash }, { replace: true })
       }} onPaid={(receipt: PaymentReceipt) => {
@@ -1387,7 +1362,6 @@ function LegacyMinerPanel({ openMinerBuilder, openTopUp }: { openMinerBuilder: (
           <div className="pending-miner-actions"><button className="button button-primary button-small" type="button" onClick={async () => {
             const result = await payPendingMinerOrderAndRecordToAdmin(order, {
               user,
-              recordPurchaseToAdmin: user ? recordMinerPurchaseToAdmin : undefined,
               saveMinerToFirestore: user ? savePurchasedMiner : undefined,
             })
             if (!result.ok) {
@@ -2170,26 +2144,8 @@ function MinerBuilderDialog({ balance, isAuth = false, walletSession, onClose, o
 function DemoTopUpDialog({ walletSession, onClose, onPayWithWallet, onConfirm }: { walletSession: ReturnType<typeof useWalletSession>; onClose: () => void; onPayWithWallet: (amount: number, networkId: PaymentNetworkId, walletId: WalletId) => void; onConfirm: (amount: number) => void }) {
   const [amount, setAmount] = useState('500')
   const [networkId, setNetworkId] = useState<PaymentNetworkId>(() => networkForConnection(walletSession.connection))
-  const [walletId, setWalletId] = useState<WalletId>(() => {
-    const network = networkForConnection(walletSession.connection)
-    const connectedWallet = walletSession.connection?.id
-    return connectedWallet && walletOptions[network].some((wallet) => wallet.id === connectedWallet) ? connectedWallet : initialWallet[network]
-  })
   const value = Number(amount)
   const valid = Number.isFinite(value) && value > 0
-  useEffect(() => {
-    if (!walletOptions[networkId].some((wallet) => wallet.id === walletId)) setWalletId(initialWallet[networkId])
-  }, [networkId, walletId])
-  useEffect(() => {
-    const connected = walletSession.connection
-    if (!connected) return
-    const connectedNetwork = networkForConnection(connected)
-    setNetworkId(connectedNetwork)
-    if (walletOptions[connectedNetwork].some((wallet) => wallet.id === connected.id)) setWalletId(connected.id)
-  }, [walletSession.connection])
-  const selectedWallet = walletOptions[networkId].find((wallet) => wallet.id === walletId)
-  const compatibleWallets = walletOptions[networkId]
-  const networkLabel = networks.find((network) => network.id === networkId)?.label ?? networkId
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
       <section className="action-modal demo-topup-modal" role="dialog" aria-modal="true" aria-labelledby="topup-title">
@@ -2197,7 +2153,7 @@ function DemoTopUpDialog({ walletSession, onClose, onPayWithWallet, onConfirm }:
         <div className="modal-mark">↓</div>
         <p className="eyebrow">RECARGA</p>
         <h2 id="topup-title">Recargar saldo</h2>
-        <p className="modal-description">Elige la red y wallet; el checkout usará esta selección para pagar.</p>
+        <p className="modal-description">Elige la red; el checkout usará Reown AppKit para conectar y firmar el pago.</p>
         {walletSession.connection && <div className="topup-connected-wallet"><strong>Wallet conectada · {walletSession.connection.name}</strong><code>{walletSession.connection.shortAddress}</code></div>}
         <div className="topup-wallet-selection">
           <label className="field-label">Red
@@ -2205,20 +2161,12 @@ function DemoTopUpDialog({ walletSession, onClose, onPayWithWallet, onConfirm }:
               {networks.map((network) => <option value={network.id} key={network.id}>{network.label}</option>)}
             </select>
           </label>
-          <label className="field-label">Wallet para esta red
-            <select value={walletId} onChange={(event) => setWalletId(event.target.value as WalletId)}>
-              {compatibleWallets.map((wallet) => <option value={wallet.id} key={wallet.id}>{wallet.name}</option>)}
-            </select>
-          </label>
         </div>
-        <p className="purchase-muted topup-wallet-availability" role="status">
-          {compatibleWallets.length} {compatibleWallets.length === 1 ? 'wallet compatible' : 'wallets compatibles'} con {networkLabel}. Cambia la red para ver otras carteras.
-        </p>
         <label className="field-label">Importe · USD<input type="number" min="1" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} /></label>
         <div className="quick-topup-options">{[100, 500, 1000].map((preset) => <button className="filter-chip" type="button" onClick={() => setAmount(String(preset))} key={preset}>{formatDemoCurrency(preset)}</button>)}</div>
         <div className="simulation-warning"><span>i</span><span>La transferencia envía fondos al destino configurado, pero no acredita el saldo local hasta que exista una verificación de depósitos.</span></div>
         <div className="topup-modal-actions">
-          <button className="button button-primary" disabled={!valid} onClick={() => onPayWithWallet(value, networkId, walletId)}>{walletSession.connection?.id === walletId ? `Pagar con ${walletSession.connection.name}` : `Elegir ${selectedWallet?.name ?? 'wallet'} y pagar`} <span>↗</span></button>
+          <button className="button button-primary" disabled={!valid} onClick={() => onPayWithWallet(value, networkId, 'reown')}>{walletSession.connection ? `Pagar con ${walletSession.connection.name}` : 'Conectar con Reown AppKit y pagar'} <span>↗</span></button>
           <button className="button button-secondary" disabled={!valid} onClick={() => onConfirm(value)}>Añadir saldo local</button>
           <button className="button button-quiet" onClick={onClose}>Cancelar</button>
         </div>

@@ -1,31 +1,33 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAccount, useSendTransaction, useWriteContract, useSwitchChain } from 'wagmi'
-import { parseEther, parseUnits } from 'viem'
-import { useAppKit, useAppKitAccount, useAppKitNetwork } from '@reown/appkit/react'
-import { PAYMENT_DESTINATIONS, USDT_CONTRACTS, type PaymentNetworkId } from './paymentDestinations'
-import { fetchPaymentQuote, formatAssetAmount, formatCatalogPrice, type PaymentAsset, type PaymentCurrency, type PaymentQuote } from './paymentQuote'
+import { useAccount, useSendTransaction, useSwitchChain, useWriteContract } from 'wagmi'
+import { useAppKit, useAppKitAccount, useAppKitNetwork, useAppKitProvider } from '@reown/appkit/react'
+import {
+  buildExplorerTxUrl,
+  getPaymentDestinations,
+  getPaymentNetworkConfig,
+  isEthereumPaymentEnabled,
+  requireTreasuryAddress,
+  toBackendPaymentNetworkId,
+  toClientPaymentNetworkId,
+  type PaymentNetworkId,
+} from './paymentDestinations'
+import { formatCatalogPrice, type PaymentAsset, type PaymentCurrency, type PaymentQuote } from './paymentQuote'
 import { CryptoIcon, type CryptoSymbol } from './CryptoIcon'
 import { QuoteDetailsSkeleton } from './Skeletons'
-import { buildSolanaPaymentTransaction } from './solanaPayment'
-import { startMiningSimulation } from './miningSimulation'
+import { buildSolanaPaymentTransaction, getSolanaConnection } from './solanaPayment'
 import { useAuth } from './AuthContext'
-import { savePurchasedMiner, creditDirectReferralCommission, recordMinerPurchaseToAdmin } from './firebase'
-import { buyDemoMiner } from './demoStore'
+import { isMinerProduct, parseMinerPowerTh, type PackageSnapshot, type PostTxPendingState } from './minerPurchaseFlow'
+import type { WalletSession } from './walletSession'
 import {
-  completeWalletMinerPurchase,
-  retryWalletMinerPurchase,
-  parseMinerPowerTh,
-  prepareWalletMinerPurchase,
-  isMinerProduct,
-  getPostTxRecovery,
-  savePostTxRecovery,
-  clearPostTxRecovery,
-  type PostTxPendingState,
-  type PackageSnapshot,
-  type PurchaseAdminRecorder,
-} from './minerPurchaseFlow'
-import type { WalletId, WalletSession } from './walletSession'
+  cancelPaymentIntent,
+  confirmPaymentIntent,
+  createPaymentIntent,
+  getPaymentIntent,
+  selectPaymentMethod,
+  type PaymentAssetSymbol,
+  type PaymentIntentRecord,
+} from './services/payments/paymentGatewayClient'
 
 export type { PostTxPendingState, PackageSnapshot }
 
@@ -49,29 +51,15 @@ export const networks: Array<{ id: PaymentNetworkId; label: string; chainId: num
   { id: 'solana', label: 'Solana · SOL/USDT', chainId: 0, icon: 'SOL' },
 ]
 
-export const walletOptions: Record<PaymentNetworkId, Array<{ id: WalletId; name: string }>> = {
-  bnb: [{ id: 'metamask', name: 'MetaMask' }, { id: 'trustwallet', name: 'Trust Wallet' }, { id: 'coinbase', name: 'Coinbase Wallet' }],
-  ethereum: [{ id: 'metamask', name: 'MetaMask' }, { id: 'trustwallet', name: 'Trust Wallet' }, { id: 'coinbase', name: 'Coinbase Wallet' }],
-  polygon: [{ id: 'metamask', name: 'MetaMask' }, { id: 'trustwallet', name: 'Trust Wallet' }, { id: 'coinbase', name: 'Coinbase Wallet' }],
-  solana: [{ id: 'phantom', name: 'Phantom' }, { id: 'solflare', name: 'Solflare' }],
-}
-
-export const initialWallet: Record<PaymentNetworkId, WalletId> = {
-  bnb: 'metamask',
-  ethereum: 'metamask',
-  polygon: 'metamask',
-  solana: 'phantom',
-}
-
-export function networkForConnection(connection: { id?: string; network?: string } | null): PaymentNetworkId {
+export function networkForConnection(connection: { id?: string; protocol?: string; network?: string } | null): PaymentNetworkId {
   if (!connection) return 'bnb'
-  if (connection.id === 'phantom' || connection.id === 'solflare') return 'solana'
+  if (connection.protocol === 'Solana') return 'solana'
   if (connection.network?.toLowerCase().includes('poly')) return 'polygon'
-  if (connection.network?.toLowerCase().includes('eth')) return 'ethereum'
+  if (connection.network?.toLowerCase().includes('eth') && isEthereumPaymentEnabled()) return 'ethereum'
   return 'bnb'
 }
 
-const NATIVE_SYMBOL_BY_NETWORK: Record<PaymentNetworkId, PaymentAsset> = {
+const NATIVE_SYMBOL_BY_NETWORK: Record<PaymentNetworkId, PaymentAssetSymbol> = {
   bnb: 'BNB',
   ethereum: 'ETH',
   polygon: 'POL',
@@ -91,6 +79,11 @@ const ERC20_ABI = [
   },
 ] as const
 
+type SolanaAppKitProvider = {
+  signAndSendTransaction?: (transaction: unknown) => Promise<string | { signature?: string }>
+  sendTransaction?: (transaction: unknown, connection: unknown) => Promise<string>
+}
+
 export function sanitizeErrorReason(raw: unknown): string {
   if (!raw) return ''
   return String(raw)
@@ -105,7 +98,6 @@ export function sanitizeErrorReason(raw: unknown): string {
 
 export type ClassifiedPaymentError = {
   message: string
-  showSimulateFallback: boolean
   kind: string
   name?: string
   code?: number | string
@@ -115,7 +107,7 @@ export type ClassifiedPaymentError = {
 
 export function classifyPaymentError(
   err: unknown,
-  networkName: string
+  networkName: string,
 ): ClassifiedPaymentError {
   let rawReason = ''
   let rootName = (err as { name?: string })?.name || ''
@@ -128,33 +120,23 @@ export function classifyPaymentError(
       details?: string
       message?: string
       cause?: unknown
-      walk?: (fn?: (e: unknown) => boolean) => any
+      walk?: (fn?: (e: unknown) => boolean) => unknown
       data?: { message?: string }
     }
-    if (baseErr.shortMessage) {
-      rawReason = baseErr.shortMessage
-    } else if (baseErr.details) {
-      rawReason = baseErr.details
-    } else if (baseErr.data?.message) {
-      rawReason = baseErr.data.message
-    } else if (baseErr.message) {
-      rawReason = baseErr.message
-    }
+    rawReason = baseErr.shortMessage || baseErr.details || baseErr.data?.message || baseErr.message || ''
     if (typeof baseErr.walk === 'function') {
       try {
         const root = baseErr.walk()
         if (root && root !== err) {
-          rootName = (root as { name?: string }).name || rootName
-          code = (root as { code?: number | string }).code ?? code
-          if (!rawReason) {
-            rawReason = (root as { details?: string }).details || (root as { shortMessage?: string }).shortMessage || (root as { data?: { message?: string } }).data?.message || (root as { message?: string }).message || ''
-          }
+          const r = root as { name?: string; code?: number | string; details?: string; shortMessage?: string; data?: { message?: string }; message?: string }
+          rootName = r.name || rootName
+          code = r.code ?? code
+          if (!rawReason) rawReason = r.details || r.shortMessage || r.data?.message || r.message || ''
         }
       } catch {
-        // ignore walk errors if any
+        // ignore walk errors
       }
     }
-    // Traverse standard Error cause chain (depth up to 10)
     let curr = baseErr.cause
     let depth = 0
     const seen = new Set<unknown>()
@@ -193,7 +175,6 @@ export function classifyPaymentError(
   const safeShortMessage = cleanReason || undefined
   const checkText = `${cleanReason} ${rootName} ${codeStr} ${(err as Error)?.message || ''}${causeMessages}`.toLowerCase()
 
-  // 1. User Rejection (Independent case: zero simulation fallback)
   const isExplicitUserRejection =
     code === 4001 ||
     codeStr === '4001' ||
@@ -204,7 +185,6 @@ export function classifyPaymentError(
   if (isExplicitUserRejection) {
     return {
       message: 'Transacción rechazada en tu billetera.',
-      showSimulateFallback: false,
       kind: 'USER_REJECTION',
       name: safeName,
       code,
@@ -213,7 +193,6 @@ export function classifyPaymentError(
     }
   }
 
-  // 2. Chain / Network Mismatch
   if (
     rootName === 'ChainMismatchError' ||
     rootName === 'ConnectorChainMismatchError' ||
@@ -221,7 +200,6 @@ export function classifyPaymentError(
   ) {
     return {
       message: `La billetera está conectada a otra red. Cambia a la red ${networkName} en tu billetera para continuar.`,
-      showSimulateFallback: false,
       kind: 'CHAIN_MISMATCH',
       name: safeName,
       code,
@@ -230,7 +208,6 @@ export function classifyPaymentError(
     }
   }
 
-  // 3. Missing or Disconnected Wallet
   if (
     rootName === 'ConnectorNotConnectedError' ||
     rootName === 'ProviderNotFoundError' ||
@@ -238,7 +215,6 @@ export function classifyPaymentError(
   ) {
     return {
       message: `No hay una billetera compatible conectada para autorizar la transacción en ${networkName}. Conecta tu billetera para continuar.`,
-      showSimulateFallback: false,
       kind: 'WALLET_NOT_CONNECTED',
       name: safeName,
       code,
@@ -247,7 +223,6 @@ export function classifyPaymentError(
     }
   }
 
-  // 4. Contract Revert / Execution Revert
   if (
     rootName === 'ExecutionRevertedError' ||
     rootName === 'ContractFunctionRevertedError' ||
@@ -256,8 +231,7 @@ export function classifyPaymentError(
   ) {
     const detail = cleanReason ? ` (${cleanReason})` : ''
     return {
-      message: `La transacción fue revertida en la red ${networkName}${detail}. Puedes verificar los parámetros o confirmar en modo de simulación de prueba.`,
-      showSimulateFallback: true,
+      message: `La transacción fue revertida en la red ${networkName}${detail}. Verifica el saldo y los parámetros en tu billetera.`,
       kind: 'EXECUTION_REVERTED',
       name: safeName,
       code,
@@ -266,14 +240,12 @@ export function classifyPaymentError(
     }
   }
 
-  // 5. Insufficient Funds / Gas (Independent case)
   if (
     rootName === 'InsufficientFundsError' ||
     /insufficient.*(?:funds|balance|gas)|exceeds balance|gas required exceeds|saldo insuficiente/.test(checkText)
   ) {
     return {
-      message: `No se pudo procesar la transacción en la red ${networkName} (fondos insuficientes para el pago o para el gas de red). Puedes verificar el saldo en tu billetera o confirmar en modo de simulación de prueba.`,
-      showSimulateFallback: true,
+      message: `No se pudo procesar la transacción en la red ${networkName} (fondos insuficientes para el pago o para el gas de red).`,
       kind: 'INSUFFICIENT_FUNDS',
       name: safeName,
       code,
@@ -282,7 +254,6 @@ export function classifyPaymentError(
     }
   }
 
-  // 6. RPC / Provider / Timeout Error (Separate from insufficient funds)
   if (
     rootName.includes('Rpc') ||
     rootName.includes('Timeout') ||
@@ -299,8 +270,7 @@ export function classifyPaymentError(
   ) {
     const detail = cleanReason ? ` (${cleanReason})` : ''
     return {
-      message: `Error de comunicación con el proveedor RPC en la red ${networkName}${detail}. Puedes verificar tu conexión o confirmar en modo simulación de prueba.`,
-      showSimulateFallback: true,
+      message: `Error de comunicación con el proveedor RPC en la red ${networkName}${detail}. Intenta de nuevo en unos segundos.`,
       kind: 'RPC_ERROR',
       name: safeName,
       code,
@@ -309,11 +279,9 @@ export function classifyPaymentError(
     }
   }
 
-  // 7. Generic Diagnostic Fallback
   const detail = cleanReason ? ` (${cleanReason})` : ''
   return {
-    message: `No se pudo completar el pago en ${networkName}${detail}. Puedes verificar tu conexión o confirmar en modo simulación de prueba.`,
-    showSimulateFallback: true,
+    message: `No se pudo completar el pago en ${networkName}${detail}.`,
     kind: 'GENERIC_DIAGNOSTIC',
     name: safeName,
     code,
@@ -322,18 +290,23 @@ export function classifyPaymentError(
   }
 }
 
+function formatCountdown(msRemaining: number): string {
+  const totalSec = Math.max(0, Math.floor(msRemaining / 1000))
+  const mins = Math.floor(totalSec / 60)
+  const secs = totalSec % 60
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+}
+
 export function WalletPaymentCheckout({
   productName,
   amount,
-  currency,
   packageId,
   purchaseMode = 'once',
   initialNetworkId = 'bnb',
+  initialIntentId,
   session,
-  minerId: propMinerId,
   onClose,
   onPaid,
-  recordPurchaseToAdmin: customRecordPurchaseToAdmin,
 }: {
   productName: string
   amount: number
@@ -343,139 +316,270 @@ export function WalletPaymentCheckout({
   minerId?: string
   initialNetworkId?: PaymentNetworkId
   initialWalletId?: string
+  initialIntentId?: string
   session?: WalletSession
   onClose: (requestPending?: boolean, notice?: string) => void
   onResumeWalletConnect?: (url: string) => void
   onPaid: (receipt: PaymentReceipt) => void
-  recordPurchaseToAdmin?: PurchaseAdminRecorder
 }) {
   const navigate = useNavigate()
   const { open: openAppKit } = useAppKit()
   const appKitAccount = useAppKitAccount()
   const { switchNetwork, chainId: appKitChainId } = useAppKitNetwork()
+  const { walletProvider: solanaProvider } = useAppKitProvider<SolanaAppKitProvider>('solana')
   const { address: evmAddress, isConnected: isEvmConnected, chainId: wagmiChainId } = useAccount()
   const { switchChainAsync } = useSwitchChain()
   const { sendTransactionAsync } = useSendTransaction()
   const { writeContractAsync } = useWriteContract()
   const { user, openAuthModal, linkWallet } = useAuth()
-  const [networkId, setNetworkId] = useState<PaymentNetworkId>(initialNetworkId)
-  const [useUsdt, setUseUsdt] = useState(false)
-  const [quote, setQuote] = useState<PaymentQuote | null>(null)
-  const [loadingQuote, setLoadingQuote] = useState(false)
+
+  const isAuthenticated = Boolean(user && !user.isAnonymous)
+  const ethereumEnabled = isEthereumPaymentEnabled()
+
+  const [networkId, setNetworkId] = useState<PaymentNetworkId>(() =>
+    initialNetworkId === 'ethereum' && !ethereumEnabled ? 'bnb' : initialNetworkId,
+  )
+  const [useUsdt, setUseUsdt] = useState(true)
+  const [intent, setIntent] = useState<PaymentIntentRecord | null>(null)
+  const [loadingIntent, setLoadingIntent] = useState(false)
   const [paying, setPaying] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const [error, setError] = useState('')
-  const [receipt, setReceipt] = useState<PaymentReceipt | null>(null)
-  const [simulatedMiner, setSimulatedMiner] = useState<{ id: string; name: string } | null>(null)
-  const [postTxRecovery, setPostTxRecoveryState] = useState<PostTxPendingState | null>(() => getPostTxRecovery())
-
-  const setPostTxRecovery = useCallback((val: PostTxPendingState | null) => {
-    setPostTxRecoveryState(val)
-    if (val) {
-      savePostTxRecovery(val)
-    } else {
-      clearPostTxRecovery()
-    }
-  }, [])
-
-  const [retryingPersistence, setRetryingPersistence] = useState(false)
-  const minerIdRef = useRef<string>(propMinerId || '')
-
-  useEffect(() => {
-    if (propMinerId) {
-      minerIdRef.current = propMinerId
-    } else if (!minerIdRef.current && isMinerProduct(productName)) {
-      const prep = prepareWalletMinerPurchase({
-        name: productName,
-        powerTh: parseMinerPowerTh(productName, amount),
-        efficiency: 15,
-        price: amount,
-        purchaseMode,
-        packageId,
-      })
-      minerIdRef.current = prep.id
-    }
-  }, [propMinerId, productName, amount, purchaseMode, packageId])
   const [copyStatus, setCopyStatus] = useState('')
-  const [showSimulateFallback, setShowSimulateFallback] = useState(false)
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  const settledNotifiedRef = useRef<string | null>(null)
 
-  // Determine connected address across EVM, AppKit and Direct Session
-  const directAddress = session?.connection?.address || ''
-  const activeAddress = evmAddress || appKitAccount.address || directAddress || ''
+  const activeAddress = evmAddress || appKitAccount.address || session?.connection?.address || ''
   const isWalletConnected = Boolean(activeAddress && (isEvmConnected || appKitAccount.isConnected || Boolean(session?.connection)))
+  const isEvmWallet = Boolean((activeAddress && activeAddress.startsWith('0x')) || isEvmConnected)
+  const isSolanaWallet = Boolean(activeAddress && !activeAddress.startsWith('0x') && !isEvmConnected)
 
-  // Identify wallet ecosystem: EVM vs Solana
-  const isEvmWallet = Boolean(
-    (activeAddress && activeAddress.startsWith('0x')) ||
-    isEvmConnected ||
-    session?.connection?.protocol === 'EIP-1193' ||
-    session?.connection?.id === 'metamask' ||
-    session?.connection?.id === 'coinbase' ||
-    session?.connection?.id === 'trustwallet'
+  const destinations = useMemo(() => getPaymentDestinations(), [])
+  const enabledNetworks = useMemo(
+    () => networks.filter((n) => n.id !== 'ethereum' || ethereumEnabled),
+    [ethereumEnabled],
+  )
+  const availableNetworks = useMemo(() => {
+    if (isEvmWallet) return enabledNetworks.filter((n) => n.id !== 'solana')
+    if (isSolanaWallet) return enabledNetworks.filter((n) => n.id === 'solana')
+    return enabledNetworks
+  }, [enabledNetworks, isEvmWallet, isSolanaWallet])
+
+  const effectiveNetworkId: PaymentNetworkId = availableNetworks.some((n) => n.id === networkId)
+    ? networkId
+    : (availableNetworks[0]?.id ?? 'bnb')
+
+  const isSolana = effectiveNetworkId === 'solana'
+  const activeDestination = destinations.find((d) => d.id === effectiveNetworkId) ?? destinations[0]
+  const activeNetworkConfig = getPaymentNetworkConfig(effectiveNetworkId, intent?.networkMode)
+  const selectedAsset: PaymentAssetSymbol = useUsdt ? 'USDT' : NATIVE_SYMBOL_BY_NETWORK[effectiveNetworkId]
+  const numericChainId = Number(wagmiChainId || appKitChainId || 0) || 0
+  const expectedEvmChainId = typeof activeNetworkConfig.chainId === 'number' ? activeNetworkConfig.chainId : activeDestination.chainId
+  const isWrongEvmChain = !isSolana && isWalletConnected && numericChainId > 0 && numericChainId !== expectedEvmChainId
+
+  const expiresAtMs = intent?.expiresAt ? Date.parse(intent.expiresAt) : Number.NaN
+  const remainingMs = Number.isFinite(expiresAtMs) ? Math.max(0, expiresAtMs - nowMs) : 0
+  const isIntentExpired = Boolean(
+    intent && (
+      intent.status === 'EXPIRED' ||
+      intent.isExpired ||
+      ((intent.status === 'OPEN' || intent.status === 'AWAITING') && Number.isFinite(expiresAtMs) && nowMs > expiresAtMs)
+    ),
   )
 
-  const isSolanaWallet = Boolean(
-    (activeAddress && !activeAddress.startsWith('0x')) ||
-    session?.connection?.protocol === 'Solana' ||
-    session?.connection?.id === 'phantom' ||
-    session?.connection?.id === 'solflare'
+  const canCancel = Boolean(
+    intent && (intent.status === 'OPEN' || intent.status === 'AWAITING') && !intent.txHash && !isIntentExpired,
   )
 
-  // Filter networks: If EVM wallet is connected, show ONLY EVM networks (BNB, ETH, Polygon). Hide Solana!
-  // If Solana wallet is connected, show ONLY Solana.
-  const availableNetworks = isEvmWallet
-    ? networks.filter((n) => n.id !== 'solana')
-    : isSolanaWallet
-      ? networks.filter((n) => n.id === 'solana')
-      : networks
-
-  const isSolana = networkId === 'solana'
-  const isEvmChain = !isSolana
-  const numericChainId = Number(wagmiChainId || appKitChainId || (session?.connection?.network.includes('BNB') ? 56 : session?.connection?.network.includes('Polygon') ? 137 : session?.connection?.network.includes('Ethereum') ? 1 : 0)) || 0
-
-  const prevChainIdRef = useRef<number>(numericChainId)
-  useEffect(() => {
-    if (isEvmWallet) {
-      if (networkId === 'solana') {
-        setNetworkId(numericChainId === 1 ? 'ethereum' : numericChainId === 137 ? 'polygon' : 'bnb')
-      } else if (prevChainIdRef.current !== numericChainId && numericChainId > 0) {
-        prevChainIdRef.current = numericChainId
-        if (numericChainId === 56 && networkId !== 'bnb') setNetworkId('bnb')
-        else if (numericChainId === 1 && networkId !== 'ethereum') setNetworkId('ethereum')
-        else if (numericChainId === 137 && networkId !== 'polygon') setNetworkId('polygon')
-      }
-    } else if (isSolanaWallet && networkId !== 'solana') {
-      setNetworkId('solana')
-    }
-  }, [isEvmWallet, isSolanaWallet, numericChainId, networkId])
-
-  const activeDestination = PAYMENT_DESTINATIONS.find((d) => d.id === networkId) ?? PAYMENT_DESTINATIONS[0]
-  const selectedAsset: PaymentAsset = useUsdt ? 'USDT' : NATIVE_SYMBOL_BY_NETWORK[networkId]
-  const isWrongEvmChain = isEvmChain && isWalletConnected && numericChainId > 0 && numericChainId !== activeDestination.chainId
-
-  const refreshQuote = useCallback(async () => {
-    setLoadingQuote(true)
+  const createFreshIntent = useCallback(async (
+    targetNet: PaymentNetworkId,
+    targetAsset: PaymentAssetSymbol,
+    walletAddr: string,
+  ) => {
+    if (!isAuthenticated || !user) return
+    setLoadingIntent(true)
     setError('')
-    setShowSimulateFallback(false)
     try {
-      const q = await fetchPaymentQuote(amount, currency, networkId, selectedAsset)
-      setQuote(q)
+      const productType = purchaseMode === 'monthly' || !isMinerProduct(productName) ? 'subscription' : 'miner'
+      const cleanPkg = packageId?.trim()
+      const isCustom = !cleanPkg || cleanPkg === 'minerx-custom'
+      const created = await createPaymentIntent({
+        productType,
+        ...(cleanPkg && !isCustom ? { packageId: cleanPkg } : {}),
+        ...(isCustom && productType === 'miner' ? { powerTh: parseMinerPowerTh(productName, amount) } : {}),
+      })
+      const awaiting = await selectPaymentMethod({
+        intentId: created.intentId,
+        networkId: toBackendPaymentNetworkId(targetNet),
+        assetSymbol: targetAsset,
+        ...(walletAddr ? { senderWallet: walletAddr } : {}),
+      })
+      setIntent(awaiting)
     } catch (err) {
-      setQuote(null)
-      setError(err instanceof Error ? err.message : 'Error al cotizar el pago.')
+      setError(classifyPaymentError(err, activeDestination.name).message)
     } finally {
-      setLoadingQuote(false)
+      setLoadingIntent(false)
     }
-  }, [amount, currency, networkId, selectedAsset])
+  }, [isAuthenticated, user, purchaseMode, productName, packageId, amount, activeDestination.name])
 
+  // Step 1: Hydrate existing intent via gmPayIntentId OR create a fresh server-authoritative PaymentIntent
   useEffect(() => {
-    void refreshQuote()
-  }, [refreshQuote])
+    if (!isAuthenticated || !user) return
+    let cancelled = false
+
+    const init = async () => {
+      setLoadingIntent(true)
+      setError('')
+      try {
+        if (initialIntentId?.trim()) {
+          const existing = await getPaymentIntent(initialIntentId.trim())
+          if (cancelled) return
+          setIntent(existing)
+          if (existing.paymentNetwork) {
+            setNetworkId(toClientPaymentNetworkId(existing.paymentNetwork))
+          }
+          if (existing.paymentAsset) {
+            setUseUsdt(existing.paymentAsset === 'USDT')
+          }
+          return
+        }
+
+        const productType = purchaseMode === 'monthly' || !isMinerProduct(productName) ? 'subscription' : 'miner'
+        const cleanPkg = packageId?.trim()
+        const isCustom = !cleanPkg || cleanPkg === 'minerx-custom'
+        const created = await createPaymentIntent({
+          productType,
+          ...(cleanPkg && !isCustom ? { packageId: cleanPkg } : {}),
+          ...(isCustom && productType === 'miner' ? { powerTh: parseMinerPowerTh(productName, amount) } : {}),
+        })
+        if (cancelled) return
+        setIntent(created)
+      } catch (err) {
+        if (!cancelled) setError(classifyPaymentError(err, activeDestination.name).message)
+      } finally {
+        if (!cancelled) setLoadingIntent(false)
+      }
+    }
+
+    void init()
+    return () => { cancelled = true }
+  }, [isAuthenticated, user?.uid, initialIntentId, packageId, productName, purchaseMode, amount])
+
+  // Step 2: Transition OPEN -> AWAITING when wallet connects or method is selected
+  useEffect(() => {
+    if (!isAuthenticated || !intent || intent.status !== 'OPEN' || loadingIntent) return
+    let cancelled = false
+
+    const selectMethod = async () => {
+      setLoadingIntent(true)
+      setError('')
+      try {
+        const updated = await selectPaymentMethod({
+          intentId: intent.intentId,
+          networkId: toBackendPaymentNetworkId(effectiveNetworkId),
+          assetSymbol: selectedAsset,
+          ...(activeAddress ? { senderWallet: activeAddress } : {}),
+        })
+        if (!cancelled) setIntent(updated)
+      } catch (err) {
+        if (!cancelled) setError(classifyPaymentError(err, activeDestination.name).message)
+      } finally {
+        if (!cancelled) setLoadingIntent(false)
+      }
+    }
+
+    void selectMethod()
+    return () => { cancelled = true }
+  }, [isAuthenticated, intent?.intentId, intent?.status, effectiveNetworkId, selectedAsset, activeAddress])
+
+  // Real TTL countdown timer while OPEN or AWAITING
+  useEffect(() => {
+    if (!intent || (intent.status !== 'OPEN' && intent.status !== 'AWAITING')) return
+    setNowMs(Date.now())
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [intent?.intentId, intent?.status, intent?.expiresAt])
+
+  // Controlled polling while PROCESSING (cleaned up on unmount or terminal state)
+  useEffect(() => {
+    if (!intent || intent.status !== 'PROCESSING') return
+    let cancelled = false
+
+    const poll = async () => {
+      try {
+        const refreshed = await getPaymentIntent(intent.intentId)
+        if (!cancelled) setIntent(refreshed)
+      } catch {
+        // Keep polling on transient network errors
+      }
+    }
+
+    const interval = window.setInterval(() => { void poll() }, 4000)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [intent?.intentId, intent?.status])
+
+  // Emit onPaid receipt strictly once when backend reaches SETTLED
+  useEffect(() => {
+    if (!intent || intent.status !== 'SETTLED' || settledNotifiedRef.current === intent.intentId) return
+    settledNotifiedRef.current = intent.intentId
+
+    const settledNet = intent.paymentNetwork ? toClientPaymentNetworkId(intent.paymentNetwork) : effectiveNetworkId
+    const txHash = intent.txHash ?? ''
+    const explorerUrl = txHash
+      ? buildExplorerTxUrl(settledNet, txHash, intent.networkMode)
+      : activeDestination.blockExplorer
+    const receipt: PaymentReceipt = {
+      id: intent.orderId || intent.intentId,
+      productName: intent.packageName || productName,
+      quote: {
+        networkId: settledNet,
+        networkName: activeNetworkConfig.name,
+        asset: (intent.paymentAsset ?? selectedAsset) as PaymentAsset,
+        recipient: intent.treasuryAddress ?? '',
+        catalogValue: intent.amountUsd,
+        catalogCurrency: 'USD',
+        catalogUsd: intent.amountUsd,
+        fxDate: null,
+        assetUsd: Number(intent.quotedSpotUsd || '1') || 1,
+        amount: intent.expectedAmountDisplay || String(intent.amountUsd),
+        decimals: intent.assetDecimals ?? 6,
+        estimatedBridgeFeeUsd: 0,
+        bridgeFeeRate: 0,
+        expectedNetUsd: intent.amountUsd,
+        quoteSource: intent.quoteSource || 'SERVER_PAYMENT_INTENT',
+        updatedAt: Date.now(),
+        expiresAt: Date.parse(intent.expiresAt) || Date.now(),
+      },
+      sender: intent.senderWallet || activeAddress,
+      transactionHash: txHash,
+      sourceStatus: 'submitted',
+      bridgeStatus: 'not-applicable',
+      sentAt: Date.now(),
+      explorerUrl,
+      minerId: intent.activatedMinerId ?? undefined,
+    }
+    onPaid(receipt)
+  }, [intent, effectiveNetworkId, activeDestination.blockExplorer, activeNetworkConfig.name, selectedAsset, activeAddress, productName, onPaid])
+
+  const handleSelectNetworkOrAsset = async (nextNet: PaymentNetworkId, nextUseUsdt: boolean) => {
+    setNetworkId(nextNet)
+    setUseUsdt(nextUseUsdt)
+    const nextAsset: PaymentAssetSymbol = nextUseUsdt ? 'USDT' : NATIVE_SYMBOL_BY_NETWORK[nextNet]
+    if (!intent || intent.txHash || intent.status === 'PROCESSING' || intent.status === 'SETTLED') return
+    if (intent.status === 'AWAITING') {
+      await cancelPaymentIntent(intent.intentId, 'METHOD_CHANGED').catch(() => undefined)
+      await createFreshIntent(nextNet, nextAsset, activeAddress)
+    }
+  }
 
   const handleCopy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text)
       setCopyStatus('Copiado al portapapeles')
-      setTimeout(() => setCopyStatus(''), 2500)
+      window.setTimeout(() => setCopyStatus(''), 2500)
     } catch {
       setCopyStatus('No se pudo copiar automáticamente')
     }
@@ -485,360 +589,124 @@ export function WalletPaymentCheckout({
     setError('')
     try {
       if (isEvmConnected && switchChainAsync) {
-        await switchChainAsync({ chainId: activeDestination.chainId })
-      } else if (typeof window !== 'undefined' && (window as unknown as { ethereum?: { request: (args: unknown) => Promise<unknown> } }).ethereum?.request) {
-        const hexChainId = `0x${activeDestination.chainId.toString(16)}`
-        try {
-          await (window as unknown as { ethereum: { request: (args: unknown) => Promise<unknown> } }).ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: hexChainId }],
-          })
-        } catch (switchErr: unknown) {
-          const errCode = (switchErr as { code?: number })?.code
-          if (errCode === 4902) {
-            await (window as unknown as { ethereum: { request: (args: unknown) => Promise<unknown> } }).ethereum.request({
-              method: 'wallet_addEthereumChain',
-              params: [{
-                chainId: hexChainId,
-                chainName: activeDestination.name,
-                rpcUrls: [networkId === 'bnb' ? 'https://bsc-dataseed.binance.org' : networkId === 'polygon' ? 'https://polygon-rpc.com' : 'https://cloudflare-eth.com'],
-                nativeCurrency: {
-                  name: activeDestination.name,
-                  symbol: NATIVE_SYMBOL_BY_NETWORK[networkId],
-                  decimals: 18,
-                },
-                blockExplorerUrls: [activeDestination.blockExplorer],
-              }],
-            })
-          } else {
-            throw switchErr
-          }
-        }
+        await switchChainAsync({ chainId: expectedEvmChainId })
       } else if (switchNetwork) {
-        await switchNetwork(activeDestination.chainId as never)
+        await switchNetwork(expectedEvmChainId as never)
       }
     } catch {
-      setError(`Por favor confirma el cambio de red a ${activeDestination.name} en tu billetera.`)
+      setError(`Por favor confirma el cambio de red a ${activeNetworkConfig.name} en tu billetera.`)
     }
   }
 
-  const processPurchaseCompletion = async (
-    txHash: string,
-    retryMinerId?: string,
-    activeRecovery?: PostTxPendingState | null
-  ) => {
-    const recoveryToUse = activeRecovery ?? postTxRecovery
-    const targetMinerId = retryMinerId || recoveryToUse?.minerId || minerIdRef.current || propMinerId
-    if (!targetMinerId || !targetMinerId.trim()) {
-      setError('No se pudo determinar el identificador canónico del minero.')
-      setPaying(false)
-      setRetryingPersistence(false)
-      return
-    }
-    minerIdRef.current = targetMinerId
-
-    const effectiveProductName = (retryMinerId && recoveryToUse ? recoveryToUse.productName : undefined) ?? productName
-    const effectiveAmount = (retryMinerId && recoveryToUse ? recoveryToUse.amount : undefined) ?? amount
-    const effectivePackageId = (retryMinerId && recoveryToUse ? recoveryToUse.packageId : undefined) ?? packageId
-    const effectivePurchaseMode = (retryMinerId && recoveryToUse ? recoveryToUse.purchaseMode : undefined) ?? purchaseMode
-    const effectivePriceUsd = (retryMinerId && recoveryToUse ? recoveryToUse.priceUsd : undefined) ?? quote?.catalogUsd
-    const effectiveActiveAddress = (retryMinerId && recoveryToUse ? recoveryToUse.originWalletAddress : undefined) ?? activeAddress
-    const effectiveNetworkName = (retryMinerId && recoveryToUse ? recoveryToUse.networkName : undefined) ?? activeDestination.name
-    const explorerDest = PAYMENT_DESTINATIONS.find((d) => d.id === (recoveryToUse?.networkId ?? networkId)) ?? activeDestination
-    const explorerUrl = `${explorerDest.blockExplorer}/tx/${txHash}`
-
-    let createdMinerId = targetMinerId
-    try {
-      const completionResult = await completeWalletMinerPurchase(
-        {
-          productName: effectiveProductName,
-          amount: effectiveAmount,
-          packageId: effectivePackageId,
-          purchaseMode: effectivePurchaseMode,
-          activeAddress: effectiveActiveAddress,
-          txHash,
-          networkName: effectiveNetworkName,
-          catalogUsd: effectivePriceUsd,
-          user,
-          minerId: targetMinerId,
-          requireCanonicalPackageId: true,
-        },
-        {
-          recordPurchaseToAdmin: customRecordPurchaseToAdmin ?? recordMinerPurchaseToAdmin,
-          saveMinerToFirestore: savePurchasedMiner,
-          creditReferral: creditDirectReferralCommission,
-          linkActiveWallet: linkWallet,
-          onSimulationStart: startMiningSimulation,
-        }
-      )
-      if (completionResult) {
-        createdMinerId = completionResult.createdMinerId
-      }
-    } catch (err) {
-      console.error('Error completing wallet miner purchase persistence:', err)
-      const errMessage = err instanceof Error ? err.message : 'Error completando la persistencia del minero'
-      if (!effectivePackageId || !effectivePackageId.trim()) {
-        setError(errMessage)
-        setPaying(false)
-        setRetryingPersistence(false)
-        return
-      }
-      const cleanPkgId = effectivePackageId.trim()
-      const updatedRecovery: PostTxPendingState = {
-        schemaVersion: 1,
-        status: 'PERSISTENCE_PENDING',
-        txHash,
-        minerId: targetMinerId,
-        packageId: cleanPkgId,
-        productName: effectiveProductName,
-        amount: effectiveAmount,
-        powerTh: recoveryToUse?.powerTh ?? parseMinerPowerTh(effectiveProductName, effectiveAmount),
-        price: recoveryToUse?.price ?? (effectivePriceUsd ?? effectiveAmount),
-        priceUsd: effectivePriceUsd ?? effectiveAmount,
-        currency: recoveryToUse?.currency ?? 'USD',
-        cadence: effectivePurchaseMode || 'once',
-        purchaseMode: effectivePurchaseMode || 'once',
-        networkId: recoveryToUse?.networkId ?? networkId,
-        networkName: effectiveNetworkName,
-        originWalletAddress: effectiveActiveAddress,
-        originUid: user?.uid ?? recoveryToUse?.originUid,
-        packageSnapshot: recoveryToUse?.packageSnapshot ?? {
-          packageId: cleanPkgId,
-          name: effectiveProductName,
-          powerTh: recoveryToUse?.powerTh ?? parseMinerPowerTh(effectiveProductName, effectiveAmount),
-          price: recoveryToUse?.price ?? (effectivePriceUsd ?? effectiveAmount),
-          currency: 'USD',
-          cadence: effectivePurchaseMode || 'once',
-          purchaseMode: effectivePurchaseMode || 'once',
-        },
-        createdAt: recoveryToUse?.createdAt ?? Date.now(),
-        errorMessage: errMessage,
-      }
-      setPostTxRecovery(updatedRecovery)
-      setError(errMessage)
-      setPaying(false)
-      setRetryingPersistence(false)
-      return
-    }
-
-    setPostTxRecovery(null)
-    setRetryingPersistence(false)
-
-    const currentQuote = quote ?? {
-      networkId,
-      networkName: effectiveNetworkName || activeDestination.name,
-      asset: selectedAsset,
-      recipient: activeDestination.address,
-      catalogValue: effectiveAmount,
-      catalogCurrency: 'USD' as const,
-      catalogUsd: effectivePriceUsd ?? effectiveAmount,
-      fxDate: null,
-      assetUsd: 1,
-      amount: String(effectiveAmount),
-      decimals: 18,
-      estimatedBridgeFeeUsd: 0,
-      bridgeFeeRate: 0.015,
-      expectedNetUsd: effectiveAmount,
-      quoteSource: 'Direct',
-      updatedAt: Date.now(),
-      expiresAt: Date.now() + 30000,
-    }
-
-    const paymentReceipt: PaymentReceipt = {
-      id: `REC-${Date.now().toString(36).toUpperCase()}`,
-      productName: effectiveProductName,
-      quote: currentQuote,
-      sender: effectiveActiveAddress || activeAddress,
-      transactionHash: txHash,
-      sourceStatus: 'submitted',
-      bridgeStatus: 'not-applicable',
-      sentAt: Date.now(),
-      explorerUrl,
-      minerId: createdMinerId,
-    }
-
-    setReceipt(paymentReceipt)
-    onPaid(paymentReceipt)
-  }
-
-  const handleRetryPersistence = async () => {
-    if (!postTxRecovery || retryingPersistence) return
+  const handleCancelIntent = async () => {
+    if (!intent || !canCancel || cancelling) return
+    setCancelling(true)
     setError('')
-
-    // R1 & Blocker 7: Bound to original authenticated owner
-    if (!user || user.isAnonymous) {
-      setError('Debes iniciar sesión con la cuenta originaria para reintentar la persistencia.')
-      openAuthModal('login')
-      return
-    }
-    if (!postTxRecovery.originUid || user.uid !== postTxRecovery.originUid) {
-      setError(`Esta recuperación pertenece a otra cuenta (${postTxRecovery.originUid || 'desconocida'}). Inicia sesión con la cuenta originaria.`)
-      return
-    }
-    if (postTxRecovery.originWalletAddress) {
-      if (!activeAddress || activeAddress.toLowerCase() !== postTxRecovery.originWalletAddress.toLowerCase()) {
-        setError(`Esta recuperación requiere conectar la billetera originaria (${postTxRecovery.originWalletAddress}).`)
-        return
-      }
-    }
-
-    setRetryingPersistence(true)
     try {
-      // Blocker 8: Retry must prove zero re-payment via dedicated helper
-      const retryResult = await retryWalletMinerPurchase(postTxRecovery, {
-        user,
-        activeAddress,
-        recordPurchaseToAdmin: customRecordPurchaseToAdmin ?? recordMinerPurchaseToAdmin,
-        saveMinerToFirestore: savePurchasedMiner,
-        creditReferral: creditDirectReferralCommission,
-        linkActiveWallet: linkWallet,
-        onSimulationStart: startMiningSimulation,
-      })
-
-      clearPostTxRecovery()
-      setPostTxRecovery(null)
-      setRetryingPersistence(false)
-
-      const effectivePriceUsd = postTxRecovery.priceUsd ?? postTxRecovery.price
-      const retryDest = PAYMENT_DESTINATIONS.find((d) => d.id === postTxRecovery.networkId) ?? activeDestination
-      const explorerUrl = `${retryDest.blockExplorer}/tx/${postTxRecovery.txHash}`
-      const currentQuote = quote ?? {
-        networkId: postTxRecovery.networkId,
-        networkName: postTxRecovery.networkName || activeDestination.name,
-        asset: selectedAsset,
-        recipient: activeDestination.address,
-        catalogValue: postTxRecovery.amount,
-        catalogCurrency: 'USD' as const,
-        catalogUsd: effectivePriceUsd,
-        fxDate: null,
-        assetUsd: 1,
-        amount: String(postTxRecovery.amount),
-        decimals: 18,
-        estimatedBridgeFeeUsd: 0,
-        bridgeFeeRate: 0.015,
-        expectedNetUsd: postTxRecovery.amount,
-        quoteSource: 'Direct',
-        updatedAt: Date.now(),
-        expiresAt: Date.now() + 30000,
-      }
-
-      const paymentReceipt: PaymentReceipt = {
-        id: `REC-${Date.now().toString(36).toUpperCase()}`,
-        productName: postTxRecovery.productName,
-        quote: currentQuote,
-        sender: postTxRecovery.originWalletAddress || activeAddress,
-        transactionHash: postTxRecovery.txHash,
-        sourceStatus: 'submitted',
-        bridgeStatus: 'not-applicable',
-        sentAt: Date.now(),
-        explorerUrl,
-        minerId: retryResult?.createdMinerId || postTxRecovery.minerId,
-      }
-
-      setReceipt(paymentReceipt)
-      onPaid(paymentReceipt)
+      const cancelledIntent = await cancelPaymentIntent(intent.intentId, 'USER_CANCELLED')
+      setIntent(cancelledIntent)
     } catch (err) {
-      console.error('Error retrying wallet miner purchase persistence:', err)
-      const errMessage = err instanceof Error ? err.message : 'Error completando la persistencia del minero'
-      const updatedRecovery: PostTxPendingState = {
-        ...postTxRecovery,
-        status: 'PERSISTENCE_PENDING',
-        errorMessage: errMessage,
-      }
-      setPostTxRecovery(updatedRecovery)
-      setError(errMessage)
-      setRetryingPersistence(false)
+      setError(classifyPaymentError(err, activeNetworkConfig.name).message)
+    } finally {
+      setCancelling(false)
     }
   }
 
   const handlePay = async () => {
-    if (!quote) return
     if (!user || user.isAnonymous) {
       setError('Debes iniciar sesión con una cuenta registrada para completar la compra.')
       openAuthModal('register')
       return
     }
-    const canonicalPackageId = packageId?.trim()
-    const lowerPkg = canonicalPackageId?.toLowerCase() || ''
-    if (!canonicalPackageId || lowerPkg.startsWith('pkg-miner_') || lowerPkg.startsWith('pkg-miner-') || lowerPkg.startsWith('pkg-miner')) {
-      setError(`No se puede completar la compra sin un packageId canónico válido: '${packageId}'`)
+    if (!intent || intent.status !== 'AWAITING') {
+      setError('La orden de pago aún no está lista. Selecciona red y moneda para continuar.')
       return
     }
-
-    const targetMinerId = minerIdRef.current || propMinerId
-    if (!targetMinerId || !targetMinerId.trim()) {
-      setError('No se pudo determinar el identificador canónico del minero.')
+    if (isIntentExpired) {
+      setError('La cotización de pago expiró. Genera una nueva cotización para continuar.')
       return
     }
-    minerIdRef.current = targetMinerId
+    if (!intent.expectedAmountAtomic || !intent.treasuryAddress) {
+      setError('Faltan parámetros autoritativos del servidor (monto atómico o tesorería).')
+      return
+    }
 
     setError('')
-    setShowSimulateFallback(false)
     setPaying(true)
 
     try {
       let txHash = ''
 
       if (isSolana) {
-        // Solana payment logic
-        const target = window as unknown as { solana?: { signAndSendTransaction?: (tx: unknown) => Promise<{ signature?: string } | string> } }
-        if (target.solana?.signAndSendTransaction) {
-          const tx = await buildSolanaPaymentTransaction(activeAddress, quote.recipient, quote)
-          const res = await target.solana.signAndSendTransaction(tx)
-          txHash = typeof res === 'string' ? res : res.signature ?? ''
-        } else if (session?.connection?.protocol === 'Solana') {
-          txHash = await session.connection.sendPayment(quote)
+        const treasury = requireTreasuryAddress(intent.treasuryAddress, 'solana')
+        if (!activeAddress || !solanaProvider) {
+          throw new Error('No hay una wallet Solana conectada vía Reown AppKit para autorizar el pago.')
+        }
+        const tx = await buildSolanaPaymentTransaction(
+          activeAddress,
+          treasury,
+          {
+            networkId: 'solana',
+            networkName: activeNetworkConfig.name,
+            asset: (intent.paymentAsset ?? selectedAsset) as PaymentAsset,
+            recipient: treasury,
+            catalogValue: intent.amountUsd,
+            catalogCurrency: 'USD',
+            catalogUsd: intent.amountUsd,
+            fxDate: null,
+            assetUsd: Number(intent.quotedSpotUsd || '1') || 1,
+            amount: intent.expectedAmountDisplay || String(intent.amountUsd),
+            decimals: intent.assetDecimals ?? (intent.paymentAsset === 'USDT' ? 6 : 9),
+            estimatedBridgeFeeUsd: 0,
+            bridgeFeeRate: 0,
+            expectedNetUsd: intent.amountUsd,
+            quoteSource: intent.quoteSource || 'SERVER_PAYMENT_INTENT',
+            updatedAt: Date.now(),
+            expiresAt: Date.parse(intent.expiresAt) || Date.now(),
+            expectedAmountAtomic: intent.expectedAmountAtomic,
+            tokenContractAddress: intent.tokenContractAddress ?? undefined,
+          },
+          {
+            expectedAmountAtomic: intent.expectedAmountAtomic,
+            tokenMint: intent.tokenContractAddress ?? undefined,
+            networkMode: intent.networkMode,
+          },
+        )
+        if (typeof solanaProvider.signAndSendTransaction === 'function') {
+          const res = await solanaProvider.signAndSendTransaction(tx)
+          txHash = typeof res === 'string' ? res : (res?.signature ?? '')
+        } else if (typeof solanaProvider.sendTransaction === 'function') {
+          const connection = await getSolanaConnection(intent.networkMode)
+          txHash = await solanaProvider.sendTransaction(tx, connection)
         } else {
-          throw new Error('Abre tu wallet de Solana (Phantom / Solflare) o conéctala mediante el modal para autorizar.')
+          throw new Error('La billetera Solana conectada no soporta firma directa en Reown AppKit.')
         }
       } else {
-        // EVM payment logic
-        const recipient = quote.recipient as `0x${string}`
+        const recipient = requireTreasuryAddress(intent.treasuryAddress, 'evm') as `0x${string}`
+        const atomicAmount = BigInt(intent.expectedAmountAtomic)
 
-        if (useUsdt) {
-          // ERC-20 USDT transfer
-          const tokenAddress = USDT_CONTRACTS[networkId].address as `0x${string}`
-          const amountUnits = parseUnits(quote.amount, quote.decimals)
-          if (isEvmConnected && writeContractAsync) {
-            txHash = await writeContractAsync({
-              address: tokenAddress,
-              abi: ERC20_ABI,
-              functionName: 'transfer',
-              args: [recipient, amountUnits],
-            })
-          } else if (session?.connection) {
-            txHash = await session.connection.sendPayment(quote)
-          } else if (typeof window !== 'undefined' && (window as unknown as { ethereum?: { request: (args: unknown) => Promise<unknown> } }).ethereum?.request) {
-            const cleanTo = quote.recipient.replace(/^0x/i, '').toLowerCase().padStart(64, '0')
-            const cleanVal = amountUnits.toString(16).padStart(64, '0')
-            const data = `0xa9059cbb${cleanTo}${cleanVal}`
-            const hash = await (window as unknown as { ethereum: { request: (args: unknown) => Promise<unknown> } }).ethereum.request({
-              method: 'eth_sendTransaction',
-              params: [{ from: activeAddress, to: tokenAddress, value: '0x0', data }],
-            })
-            txHash = typeof hash === 'string' ? hash : ''
-          } else {
-            throw new Error('No hay una wallet EVM conectada para autorizar el pago en USDT.')
+        if (intent.paymentAsset === 'USDT') {
+          const tokenAddress = intent.tokenContractAddress?.trim() as `0x${string}` | undefined
+          if (!tokenAddress) {
+            throw new Error('El servidor no devolvió el contrato USDT autoritativo para esta red.')
           }
+          if (!isEvmConnected || !writeContractAsync) {
+            throw new Error('No hay una wallet EVM conectada vía Reown AppKit para autorizar el pago en USDT.')
+          }
+          txHash = await writeContractAsync({
+            address: tokenAddress,
+            abi: ERC20_ABI,
+            functionName: 'transfer',
+            args: [recipient, atomicAmount],
+          })
         } else {
-          // Native transfer (BNB, ETH, POL)
-          const valueUnits = parseEther(quote.amount)
-          if (isEvmConnected && sendTransactionAsync) {
-            txHash = await sendTransactionAsync({
-              to: recipient,
-              value: valueUnits,
-            })
-          } else if (session?.connection) {
-            txHash = await session.connection.sendPayment(quote)
-          } else if (typeof window !== 'undefined' && (window as unknown as { ethereum?: { request: (args: unknown) => Promise<unknown> } }).ethereum?.request) {
-            const hash = await (window as unknown as { ethereum: { request: (args: unknown) => Promise<unknown> } }).ethereum.request({
-              method: 'eth_sendTransaction',
-              params: [{ from: activeAddress, to: recipient, value: `0x${valueUnits.toString(16)}` }],
-            })
-            txHash = typeof hash === 'string' ? hash : ''
-          } else {
-            throw new Error('No hay una wallet EVM conectada para autorizar la transacción.')
+          if (!isEvmConnected || !sendTransactionAsync) {
+            throw new Error('No hay una wallet EVM conectada vía Reown AppKit para autorizar la transacción.')
           }
+          txHash = await sendTransactionAsync({
+            to: recipient,
+            value: atomicAmount,
+          })
         }
       }
 
@@ -846,60 +714,39 @@ export function WalletPaymentCheckout({
         throw new Error('La billetera no devolvió el hash de la transacción.')
       }
 
-      const allocatedMinerId = targetMinerId
-      minerIdRef.current = allocatedMinerId
-
-      const initialRecovery: PostTxPendingState = {
-        schemaVersion: 1,
-        status: 'PAYMENT_TRANSMITTED',
-        txHash,
-        minerId: allocatedMinerId,
-        packageId: canonicalPackageId,
-        productName,
-        amount,
-        powerTh: parseMinerPowerTh(productName, amount),
-        price: quote?.catalogUsd ?? amount,
-        priceUsd: quote?.catalogUsd ?? amount,
-        currency: 'USD',
-        cadence: purchaseMode,
-        purchaseMode,
-        networkId,
-        networkName: activeDestination.name,
-        originWalletAddress: activeAddress || undefined,
-        originUid: user?.uid || undefined,
-        packageSnapshot: {
-          packageId: canonicalPackageId,
-          name: productName,
-          powerTh: parseMinerPowerTh(productName, amount),
-          price: quote?.catalogUsd ?? amount,
-          currency: 'USD',
-          cadence: purchaseMode,
-          purchaseMode,
-        },
-        createdAt: Date.now(),
+      if (activeAddress) {
+        void linkWallet(activeAddress).catch(() => undefined)
       }
 
-      // Blocker 3: Immediately persist PAYMENT_TRANSMITTED upon receiving txHash before attempting Firestore persistence
-      setPostTxRecovery(initialRecovery)
-
-      await processPurchaseCompletion(txHash, allocatedMinerId, initialRecovery)
+      const confirmation = await confirmPaymentIntent(intent.intentId, txHash)
+      setIntent((prev) => prev ? {
+        ...prev,
+        status: confirmation.status,
+        txHash: confirmation.txHash ?? txHash,
+        confirmations: confirmation.confirmations ?? prev.confirmations,
+        requiredConfirmations: confirmation.requiredConfirmations ?? prev.requiredConfirmations,
+        activatedMinerId: confirmation.activatedMinerId ?? prev.activatedMinerId,
+        settledAt: confirmation.settledAt ?? prev.settledAt,
+      } : prev)
     } catch (err) {
-      const classified = classifyPaymentError(err, activeDestination.name)
+      const classified = classifyPaymentError(err, activeNetworkConfig.name)
       setError(classified.message)
-      setShowSimulateFallback(classified.showSimulateFallback)
     } finally {
       setPaying(false)
     }
   }
 
+  const currentExplorerUrl = intent?.txHash
+    ? buildExplorerTxUrl(intent.paymentNetwork ?? effectiveNetworkId, intent.txHash, intent.networkMode)
+    : ''
+
   return (
     <div className="wallet-checkout-overlay" role="dialog" aria-modal="true" aria-labelledby="checkout-title">
       <div className="wallet-checkout-modal">
-        {/* Header */}
         <div className="checkout-modal-header">
           <div>
-            <h2 id="checkout-title">{productName}</h2>
-            <p className="checkout-subtitle">Checkout Web3 · Pago multired automatizado</p>
+            <h2 id="checkout-title">{intent?.packageName || productName}</h2>
+            <p className="checkout-subtitle">Checkout Web3 · Verificación On-Chain Autoritativa</p>
           </div>
           <button type="button" className="checkout-close-btn" onClick={() => onClose(paying)} aria-label="Cerrar modal">
             ✕
@@ -907,7 +754,6 @@ export function WalletPaymentCheckout({
         </div>
 
         {(!user || user.isAnonymous) ? (
-          /* Authentication Gate: Guest & Anonymous Users Blocked From Canonical Checkout */
           <div className="checkout-auth-gate" data-testid="checkout-auth-gate" style={{ textAlign: 'center', padding: '36px 16px' }}>
             <div style={{ fontSize: 44, marginBottom: 16 }}>🔒</div>
             <h3 style={{ fontSize: 18, fontWeight: 600, color: '#f1f5f9', margin: '0 0 8px 0' }}>
@@ -935,265 +781,209 @@ export function WalletPaymentCheckout({
               </button>
             </div>
           </div>
-        ) : simulatedMiner ? (
-          /* Pure Local Simulation View - Zero Blockchain / Zero Firestore / Zero Admin */
-          <div className="checkout-receipt-view" data-testid="simulated-purchase-view">
-            <div className="receipt-success-badge" style={{ background: '#3b82f6' }}>⚡</div>
-            <h3>¡Simulación completada en modo prueba!</h3>
-            <p className="receipt-desc">
-              El minero ha sido activado en tu entorno de demostración local. No se realizaron cargos reales ni transacciones blockchain.
-            </p>
-
-            <div className="receipt-details-box">
-              <div className="receipt-row">
-                <span>Producto:</span>
-                <strong>{simulatedMiner.name}</strong>
-              </div>
-              <div className="receipt-row">
-                <span>Modo:</span>
-                <strong style={{ color: '#3b82f6' }}>Simulación Local (Demo)</strong>
-              </div>
-              <div className="receipt-row">
-                <span>ID Local:</span>
-                <code>{simulatedMiner.id}</code>
-              </div>
-            </div>
-
-            <div className="receipt-actions">
-              <button
-                type="button"
-                className="button button-primary receipt-customize-btn"
-                onClick={() => {
-                  onClose(false)
-                  navigate(`/miners/${simulatedMiner.id}/customize`)
-                }}
-              >
-                Personalizar mi Minero Ahora ⚙
-              </button>
-              <button
-                type="button"
-                className="button button-secondary"
-                onClick={() => onClose(false)}
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        ) : receipt ? (
-          /* Payment Success & Receipt View */
-          <div className="checkout-receipt-view">
+        ) : intent?.status === 'SETTLED' ? (
+          <div className="checkout-receipt-view" data-testid="checkout-settled-view">
             <div className="receipt-success-badge">✓</div>
-            <h3>¡Pago confirmado y enviado!</h3>
+            <h3>¡Pago liquidado y confirmado!</h3>
             <p className="receipt-desc">
-              Tu transacción ha sido firmada y transmitida a la red con éxito.
+              El servidor verificó tu transacción on-chain y aprovisionó tu compra de forma atómica.
             </p>
-
             <div className="receipt-details-box">
               <div className="receipt-row">
                 <span>Producto:</span>
-                <strong>{receipt.productName || productName}</strong>
+                <strong>{intent.packageName}</strong>
               </div>
               <div className="receipt-row">
-                <span>Importe Pagado:</span>
-                <strong>{formatAssetAmount(receipt.quote.amount, receipt.quote.asset)}</strong>
+                <span>Importe liquidado:</span>
+                <strong>{intent.expectedAmountDisplay} {intent.paymentAsset}</strong>
               </div>
               <div className="receipt-row">
                 <span>Red:</span>
-                <strong>{receipt.quote.networkName}</strong>
+                <strong>{activeNetworkConfig.name}</strong>
               </div>
-              <div className="receipt-row">
-                <span>Hash de transacción:</span>
-                <code className="receipt-hash">{receipt.transactionHash.slice(0, 18)}...</code>
-              </div>
+              {intent.txHash && (
+                <div className="receipt-row">
+                  <span>Hash de transacción:</span>
+                  <code className="receipt-hash">{intent.txHash.slice(0, 18)}...</code>
+                </div>
+              )}
+              {intent.activatedMinerId && (
+                <div className="receipt-row">
+                  <span>Minero activado:</span>
+                  <code>{intent.activatedMinerId}</code>
+                </div>
+              )}
             </div>
-
             <div className="receipt-actions">
-              <a
-                href={receipt.explorerUrl}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="button button-secondary explorer-link-button"
-              >
-                Ver en Explorador de Bloques ↗
-              </a>
-              {receipt.minerId ? (
+              {currentExplorerUrl && (
+                <a
+                  href={currentExplorerUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="button button-secondary explorer-link-button"
+                >
+                  Ver en Explorador de Bloques ↗
+                </a>
+              )}
+              {intent.activatedMinerId ? (
                 <button
                   type="button"
                   className="button button-primary receipt-customize-btn"
                   onClick={() => {
                     onClose(false)
-                    navigate(`/miners/${receipt.minerId}/customize`)
+                    navigate(`/miners/${intent.activatedMinerId}/customize`)
                   }}
                 >
-                  Personalizar mi Minero Ahora ⚙
+                  Personalizar mi Minero Ahora
                 </button>
               ) : (
-                <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={() => onClose(false)}
-                >
+                <button type="button" className="button button-primary" onClick={() => onClose(false)}>
                   Finalizar
                 </button>
               )}
             </div>
           </div>
-        ) : postTxRecovery ? (
-          /* Post-Transaction Recovery View (PERSISTENCE_PENDING) */
-          <div className="checkout-receipt-view" data-testid="post-tx-recovery-view">
-            <div className="receipt-success-badge" style={{ background: '#f59e0b' }}>!</div>
-            <h3>Pago transmitido en blockchain · Persistencia pendiente</h3>
+        ) : intent?.status === 'PROCESSING' ? (
+          <div className="checkout-receipt-view" data-testid="checkout-processing-view">
+            <div className="receipt-success-badge" style={{ background: '#7c3aed' }}>⏳</div>
+            <h3>Verificando confirmaciones on-chain...</h3>
             <p className="receipt-desc">
-              Tu transacción fue enviada a la red con éxito, pero ocurrió un error al registrar el minero en Firestore. No vuelvas a realizar el pago.
+              Tu transacción fue detectada. Esperando confirmaciones finales en {activeNetworkConfig.name}.
             </p>
-
             <div className="receipt-details-box">
               <div className="receipt-row">
                 <span>Estado:</span>
-                <strong style={{ color: '#f59e0b' }}>{postTxRecovery.status}</strong>
+                <strong>PROCESSING</strong>
               </div>
               <div className="receipt-row">
-                <span>Hash de transacción:</span>
-                <code className="receipt-hash">{postTxRecovery.txHash}</code>
+                <span>Confirmaciones:</span>
+                <strong>{intent.confirmations} / {intent.requiredConfirmations}</strong>
               </div>
-              <div className="receipt-row">
-                <span>ID de minero:</span>
-                <code>{postTxRecovery.minerId}</code>
-              </div>
-              {postTxRecovery.packageId && (
+              {intent.txHash && (
                 <div className="receipt-row">
-                  <span>Paquete canónico:</span>
-                  <code>{postTxRecovery.packageId}</code>
+                  <span>Hash:</span>
+                  <code className="receipt-hash">{intent.txHash.slice(0, 18)}...</code>
                 </div>
               )}
-              <div className="receipt-row">
-                <span>Detalle del error:</span>
-                <span style={{ color: '#ef4444', fontSize: '0.9em' }}>{postTxRecovery.errorMessage}</span>
-              </div>
             </div>
-
             <div className="receipt-actions">
-              <a
-                href={`${(PAYMENT_DESTINATIONS.find((d) => d.id === postTxRecovery.networkId) ?? activeDestination).blockExplorer}/tx/${postTxRecovery.txHash}`}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="button button-secondary explorer-link-button"
-              >
-                Ver Tx en Explorador ↗
-              </a>
+              {currentExplorerUrl && (
+                <a
+                  href={currentExplorerUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="button button-secondary explorer-link-button"
+                >
+                  Ver en Explorador ↗
+                </a>
+              )}
+              <button type="button" className="button button-secondary" onClick={() => onClose(true)}>
+                Seguir en segundo plano
+              </button>
+            </div>
+          </div>
+        ) : intent && (intent.status === 'UNDERPAID' || intent.status === 'FAILED' || intent.status === 'CANCELLED' || isIntentExpired) ? (
+          <div className="checkout-receipt-view" data-testid={`checkout-${isIntentExpired ? 'expired' : intent.status.toLowerCase()}-view`}>
+            <div className="receipt-success-badge" style={{ background: '#ef4444' }}>!</div>
+            <h3>
+              {intent.status === 'UNDERPAID'
+                ? 'Pago insuficiente (UNDERPAID)'
+                : intent.status === 'FAILED'
+                  ? 'Transacción fallida (FAILED)'
+                  : intent.status === 'CANCELLED'
+                    ? 'Orden cancelada (CANCELLED)'
+                    : 'Cotización expirada (EXPIRED)'}
+            </h3>
+            <p className="receipt-desc">
+              {intent.status === 'UNDERPAID'
+                ? 'El monto recibido on-chain fue menor al monto exacto requerido por la orden.'
+                : intent.status === 'FAILED'
+                  ? 'La transacción fue revertida o no superó la verificación on-chain.'
+                  : intent.status === 'CANCELLED'
+                    ? 'Esta orden de pago fue cancelada antes de recibir fondos.'
+                    : 'El tiempo de validez (TTL) de la cotización expiró. Genera una nueva cotización para continuar.'}
+            </p>
+            <div className="receipt-actions">
+              {currentExplorerUrl && (
+                <a
+                  href={currentExplorerUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="button button-secondary explorer-link-button"
+                >
+                  Ver en Explorador ↗
+                </a>
+              )}
               <button
                 type="button"
                 className="button button-primary"
-                data-testid="retry-persistence-btn"
-                disabled={retryingPersistence}
-                onClick={handleRetryPersistence}
+                disabled={loadingIntent}
+                onClick={() => void createFreshIntent(effectiveNetworkId, selectedAsset, activeAddress)}
               >
-                {retryingPersistence ? 'Reintentando registro...' : 'Reintentar persistencia'}
+                Generar nueva cotización
+              </button>
+              <button type="button" className="button button-secondary" onClick={() => onClose(false)}>
+                Cerrar
               </button>
             </div>
           </div>
         ) : (
-          /* Payment Form View */
           <div className="checkout-form-content">
             {!isWalletConnected ? (
-              /* State: Wallet Not Connected Yet -> Networks and currencies not shown until connected */
               <div className="checkout-section">
                 <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '16px', marginBottom: 16, border: '1px solid rgba(255,255,255,0.08)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 13, color: '#94a3b8' }}>Importe a pagar:</span>
-                    <strong style={{ fontSize: 18, color: '#fff' }}>{formatCatalogPrice(amount, 'USD')}</strong>
+                    <span style={{ fontSize: 13, color: '#94a3b8' }}>Importe autoritativo:</span>
+                    <strong style={{ fontSize: 18, color: '#fff' }}>
+                      {formatCatalogPrice(intent?.amountUsd ?? amount, 'USD')}
+                    </strong>
                   </div>
                 </div>
 
                 <div style={{ textAlign: 'center', marginBottom: 18 }}>
-                  <h3 style={{ fontSize: 15, fontWeight: 600, color: '#f1f5f9', margin: '0 0 6px 0' }}>Conecta tu billetera para continuar</h3>
+                  <h3 style={{ fontSize: 15, fontWeight: 600, color: '#f1f5f9', margin: '0 0 6px 0' }}>
+                    Conecta tu billetera con Reown AppKit
+                  </h3>
                   <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>
-                    Las opciones de red y moneda se habilitarán automáticamente con las que sean compatibles con tu billetera conectada.
+                    Compatible con MetaMask, Phantom, Solflare, Trust Wallet, Coinbase Wallet y +300 wallets.
                   </p>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', marginBottom: 16 }}>
-                  <button
-                    type="button"
-                    className="button button-primary checkout-action-btn"
-                    onClick={async () => {
-                      if (session?.connect) {
-                        await session.connect('metamask', 'bnb')
-                      } else {
-                        openAppKit()
-                      }
-                    }}
-                  >
-                    Conectar MetaMask Directa 🦊
-                  </button>
-                  <button
-                    type="button"
-                    className="button button-secondary checkout-action-btn"
-                    onClick={async () => {
-                      if (session?.connect) {
-                        await session.connect('phantom')
-                      } else {
-                        openAppKit()
-                      }
-                    }}
-                  >
-                    Conectar Phantom / Solflare (Solana) ⚡
-                  </button>
-                  <button
-                    type="button"
-                    className="button button-secondary checkout-action-btn"
-                    onClick={() => openAppKit()}
-                  >
-                    Otras Billeteras / WalletConnect (AppKit) 🌐
-                  </button>
-                </div>
-
-                {/* Protocol Treasury Transparent Info */}
-                <div style={{ padding: 12, borderRadius: 10, background: 'rgba(124, 58, 237, 0.08)', border: '1px solid rgba(124, 58, 237, 0.25)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <strong style={{ fontSize: 11, color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span>🏛️</span> Tesorería Oficial del Protocolo
-                    </strong>
-                  </div>
-                  <p style={{ margin: 0, fontSize: 11, color: '#94a3b8', lineHeight: 1.4 }}>
-                    Destino transparente de fondos: Las compras se transfieren de forma directa y verificable a la dirección oficial de la tesorería de GoMining en cada blockchain para acuñar y respaldar tu minero digital.
-                  </p>
-                </div>
+                <button
+                  type="button"
+                  className="button button-primary checkout-action-btn"
+                  style={{ width: '100%', marginBottom: 16 }}
+                  onClick={() => openAppKit()}
+                >
+                  Conectar Billetera (Reown AppKit)
+                </button>
               </div>
             ) : (
-              /* State: Wallet Connected -> Show compatible networks, currencies, quote and pay button */
               <>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: 10, marginBottom: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 14 }}>🟢</span>
-                    <div>
-                      <strong style={{ fontSize: 12, color: '#22c55e', display: 'block' }}>
-                        {isEvmWallet ? 'Billetera EVM Conectada' : 'Billetera Solana Conectada'}
-                      </strong>
-                      <code style={{ fontSize: 11, color: '#e2e8f0' }}>
-                        {activeAddress.slice(0, 8)}...{activeAddress.slice(-6)}
-                      </code>
-                    </div>
+                  <div>
+                    <strong style={{ fontSize: 12, color: '#22c55e', display: 'block' }}>
+                      {isEvmWallet ? 'Billetera EVM (Reown AppKit)' : 'Billetera Solana (Reown AppKit)'}
+                    </strong>
+                    <code style={{ fontSize: 11, color: '#e2e8f0' }}>
+                      {activeAddress.slice(0, 8)}...{activeAddress.slice(-6)}
+                    </code>
                   </div>
                   <span style={{ fontSize: 10, color: '#94a3b8', background: 'rgba(0,0,0,0.3)', padding: '3px 8px', borderRadius: 6 }}>
-                    {activeDestination.name}
+                    {activeNetworkConfig.name}
                   </span>
                 </div>
 
-                {/* Step 1: Network Selection */}
                 <div className="checkout-section">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <label className="checkout-label" style={{ margin: 0 }}>1. Red de pago compatible</label>
-                    {isEvmWallet && <span style={{ fontSize: 10, color: '#a78bfa' }}>Filtrado: Solo redes EVM compatibles</span>}
-                    {isSolanaWallet && <span style={{ fontSize: 10, color: '#a78bfa' }}>Filtrado: Red Solana activa</span>}
-                  </div>
+                  <label className="checkout-label">1. Red de pago</label>
                   <div className="checkout-network-grid">
                     {availableNetworks.map((net) => (
                       <button
                         key={net.id}
                         type="button"
-                        className={`network-chip-btn ${networkId === net.id ? 'network-chip-active' : ''}`}
-                        onClick={() => setNetworkId(net.id)}
+                        className={`network-chip-btn ${effectiveNetworkId === net.id ? 'network-chip-active' : ''}`}
+                        disabled={loadingIntent || paying}
+                        onClick={() => void handleSelectNetworkOrAsset(net.id, useUsdt)}
                       >
                         <CryptoIcon symbol={net.icon} size="sm" />
                         <span>{net.label}</span>
@@ -1202,94 +992,68 @@ export function WalletPaymentCheckout({
                   </div>
                 </div>
 
-                {/* Step 2: Currency Type (Native vs USDT) */}
                 <div className="checkout-section">
-                  <label className="checkout-label">2. Selecciona la moneda</label>
+                  <label className="checkout-label">2. Moneda de pago</label>
                   <div className="currency-selector-row">
                     <button
                       type="button"
-                      className={`currency-pill-btn ${!useUsdt ? 'currency-pill-active' : ''}`}
-                      onClick={() => setUseUsdt(false)}
+                      className={`currency-pill-btn ${useUsdt ? 'currency-pill-active' : ''}`}
+                      disabled={loadingIntent || paying}
+                      onClick={() => void handleSelectNetworkOrAsset(effectiveNetworkId, true)}
                     >
-                      <CryptoIcon symbol={NATIVE_SYMBOL_BY_NETWORK[networkId] as CryptoSymbol} size="sm" />
-                      <span>Moneda Nativa ({NATIVE_SYMBOL_BY_NETWORK[networkId]})</span>
+                      <CryptoIcon symbol="USDT" size="sm" />
+                      <span>Tether USD (USDT {isSolana ? 'SPL' : 'ERC-20/BEP-20'})</span>
                     </button>
                     <button
                       type="button"
-                      className={`currency-pill-btn ${useUsdt ? 'currency-pill-active' : ''}`}
-                      onClick={() => setUseUsdt(true)}
+                      className={`currency-pill-btn ${!useUsdt ? 'currency-pill-active' : ''}`}
+                      disabled={loadingIntent || paying}
+                      onClick={() => void handleSelectNetworkOrAsset(effectiveNetworkId, false)}
                     >
-                      <CryptoIcon symbol="USDT" size="sm" />
-                      <span>Tether USD (USDT {isSolana ? 'SPL' : 'ERC-20'})</span>
+                      <CryptoIcon symbol={NATIVE_SYMBOL_BY_NETWORK[effectiveNetworkId] as CryptoSymbol} size="sm" />
+                      <span>Moneda Nativa ({NATIVE_SYMBOL_BY_NETWORK[effectiveNetworkId]})</span>
                     </button>
                   </div>
                 </div>
 
-                {/* Step 3: Quote & Price Breakdown */}
                 <div className="checkout-quote-card">
-                  {loadingQuote ? (
+                  {loadingIntent ? (
                     <QuoteDetailsSkeleton />
-                  ) : quote ? (
+                  ) : intent && intent.status === 'AWAITING' && intent.treasuryAddress ? (
                     <>
                       <div className="quote-header-row">
                         <span className="quote-asset-pill">
-                          {formatAssetAmount(quote.amount, quote.asset)}
+                          {intent.expectedAmountDisplay} {intent.paymentAsset}
                         </span>
                         <span className="quote-fiat-reference">
-                          {formatCatalogPrice(quote.catalogValue, 'USD')}
+                          {formatCatalogPrice(intent.amountUsd, 'USD')}
                         </span>
                       </div>
-
                       <div className="quote-breakdown-details">
                         <div className="quote-line">
-                          <span>Destinatario de fondos:</span>
-                          <code className="quote-address" onClick={() => handleCopy(quote.recipient)} title="Haz clic para copiar">
-                            {quote.recipient.slice(0, 8)}...{quote.recipient.slice(-6)} 📋
+                          <span>Tesorería autoritativa:</span>
+                          <code className="quote-address" onClick={() => handleCopy(intent.treasuryAddress!)} title="Haz clic para copiar">
+                            {intent.treasuryAddress.slice(0, 8)}...{intent.treasuryAddress.slice(-6)}
                           </code>
                         </div>
                         <div className="quote-line">
-                          <span>Comisiones de red y swap:</span>
-                          <span className="quote-tag-fee">+1.5% incluido</span>
+                          <span>Validez (TTL):</span>
+                          <strong>{formatCountdown(remainingMs)}</strong>
                         </div>
                         <div className="quote-line">
-                          <span>Tiempo estimado:</span>
-                          <span>{activeDestination.eta}</span>
+                          <span>Confirmaciones requeridas:</span>
+                          <span>{intent.requiredConfirmations}</span>
                         </div>
                       </div>
                     </>
                   ) : (
-                    <p className="quote-error-text">No se pudo cargar la cotización para esta red.</p>
+                    <p className="quote-error-text">Preparando cotización autoritativa del servidor...</p>
                   )}
-                </div>
-
-                {/* Protocol Treasury Transparent Info */}
-                <div style={{ marginTop: 12, padding: 12, borderRadius: 10, background: 'rgba(124, 58, 237, 0.08)', border: '1px solid rgba(124, 58, 237, 0.25)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <strong style={{ fontSize: 11, color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span>🏛️</span> Tesorería Oficial del Protocolo
-                    </strong>
-                    <a
-                      href={`${activeDestination.blockExplorer}/address/${activeDestination.address}`}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      style={{ fontSize: 9, color: '#a78bfa', textDecoration: 'underline' }}
-                    >
-                      Ver en Explorador ↗
-                    </a>
-                  </div>
-                  <p style={{ margin: '0 0 6px 0', fontSize: 10, color: '#94a3b8', lineHeight: 1.4 }}>
-                    Los fondos de la compra se depositan de manera directa en la tesorería del protocolo en <strong>{activeDestination.name}</strong> para acuñar y activar tu minero digital.
-                  </p>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0,0,0,0.3)', padding: '6px 10px', borderRadius: 8 }}>
-                    <code style={{ fontSize: 10, color: '#c4b5fd', wordBreak: 'break-all' }}>{activeDestination.address}</code>
-                    <button type="button" onClick={() => handleCopy(activeDestination.address)} style={{ background: 'transparent', border: 0, color: '#a78bfa', cursor: 'pointer', fontSize: 11, padding: '2px 6px', fontWeight: 600 }}>Copiar</button>
-                  </div>
                 </div>
 
                 {copyStatus && <p className="copy-notice-text">{copyStatus}</p>}
                 {error && <div className="checkout-error-banner" role="alert">{error}</div>}
 
-                {/* Step 4: Pay CTA */}
                 <div className="checkout-cta-box">
                   {isWrongEvmChain ? (
                     <button
@@ -1297,60 +1061,29 @@ export function WalletPaymentCheckout({
                       className="button button-secondary checkout-action-btn"
                       onClick={handleSwitchNetwork}
                     >
-                      Cambiar a {activeDestination.name} en tu billetera
+                      Cambiar a {activeNetworkConfig.name} en tu billetera
                     </button>
                   ) : (
                     <>
                       <button
                         type="button"
                         className="button button-primary checkout-action-btn"
-                        disabled={!quote || loadingQuote || paying}
+                        disabled={!intent || intent.status !== 'AWAITING' || loadingIntent || paying || isIntentExpired}
                         onClick={handlePay}
                       >
-                        {paying ? 'Aprobando en tu wallet...' : `Pagar ${quote ? formatAssetAmount(quote.amount, quote.asset) : ''}`}
+                        {paying
+                          ? 'Firmando y verificando on-chain...'
+                          : `Pagar ${intent?.expectedAmountDisplay ?? ''} ${intent?.paymentAsset ?? selectedAsset}`}
                       </button>
-                      {showSimulateFallback && (
+                      {canCancel && (
                         <button
                           type="button"
                           className="button button-secondary checkout-action-btn"
                           style={{ marginTop: 8 }}
-                          onClick={async () => {
-                            const canonicalPackageId = packageId?.trim()
-                            const lowerPkg = canonicalPackageId?.toLowerCase() || ''
-                            if (!canonicalPackageId || lowerPkg.startsWith('pkg-miner_') || lowerPkg.startsWith('pkg-miner-') || lowerPkg.startsWith('pkg-miner')) {
-                              setError(`No se puede completar la compra sin un packageId canónico válido: '${packageId}'`)
-                              return
-                            }
-                            setError('')
-                            setShowSimulateFallback(false)
-                            setPaying(true)
-                            try {
-                              // Blocker B: Decoupled local simulation path - 0 Firestore, 0 Admin, 0 Referral, 0 Recovery, NO fake txHash
-                              const simResult = buyDemoMiner({
-                                name: productName,
-                                powerTh: parseMinerPowerTh(productName, amount),
-                                efficiency: 15,
-                                price: 0,
-                                purchaseMode,
-                                ownerWallet: activeAddress || 'DEMO_SIMULATION',
-                                packageId: canonicalPackageId,
-                              })
-                              if (simResult.ok) {
-                                if (startMiningSimulation && simResult.miner) {
-                                  startMiningSimulation(simResult.miner.id, simResult.miner.name, simResult.miner.powerTh)
-                                }
-                                setSimulatedMiner(simResult.miner ? { id: simResult.miner.id, name: simResult.miner.name } : null)
-                              } else {
-                                setError('No se pudo registrar la simulación local.')
-                              }
-                            } catch (simErr) {
-                              setError(simErr instanceof Error ? simErr.message : 'Error en simulación.')
-                            } finally {
-                              setPaying(false)
-                            }
-                          }}
+                          disabled={cancelling || paying}
+                          onClick={handleCancelIntent}
                         >
-                          Confirmar compra en modo prueba / simulación ⚡
+                          {cancelling ? 'Cancelando orden...' : 'Cancelar orden de pago'}
                         </button>
                       )}
                     </>

@@ -2674,19 +2674,21 @@ describe('SCRUM-218 Corrective Consolidation: Real Persistence & Recording Adapt
     assert.equal(referralWrites, 0, 'Zero referral writes')
     assert.equal(getPostTxRecovery(), null, 'Zero recovery records created')
 
-    // Verify source code of WalletPaymentCheckout strictly ensures simulation fallback is decoupled from canonical completeWalletMinerPurchase / fake txHash
+    // Verify source code of WalletPaymentCheckout strictly removes local simulation fallback & fake txHash (SCRUM-346)
     const checkoutSource = fs.readFileSync(path.resolve(projectRoot, 'src/WalletPaymentCheckout.tsx'), 'utf-8')
     assert.ok(
       !checkoutSource.includes(`processPurchaseCompletion(\`0x\${'a'.repeat(64)}\`)`),
       'WalletPaymentCheckout must NEVER pass fake 0xaaaa... hash to processPurchaseCompletion'
     )
-    assert.ok(
-      checkoutSource.includes('buyDemoMiner({'),
-      'WalletPaymentCheckout simulation fallback must directly use local buyDemoMiner'
+    assert.equal(
+      checkoutSource.includes('buyDemoMiner'),
+      false,
+      'WalletPaymentCheckout must NOT invoke buyDemoMiner (simulation fallback removed in SCRUM-346)'
     )
-    assert.ok(
+    assert.equal(
       checkoutSource.includes('data-testid="simulated-purchase-view"'),
-      'WalletPaymentCheckout must render dedicated local simulation view without fake blockchain receipt'
+      false,
+      'WalletPaymentCheckout must NOT render local simulation view (removed in SCRUM-346)'
     )
   })
 

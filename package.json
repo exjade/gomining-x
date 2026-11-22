@@ -11,18 +11,13 @@
     "audit:contamination": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/auditContamination.ts"
   },
   "dependencies": {
-    "@coinbase/wallet-sdk": "^4.4.0",
-    "@metamask/connect-evm": "^2.1.1",
     "@reown/appkit": "^1.8.24",
     "@reown/appkit-adapter-solana": "^1.8.24",
     "@reown/appkit-adapter-wagmi": "^1.8.24",
-    "@solana/wallet-adapter-wallets": "^0.19.40",
     "@solana/web3.js": "^1.99.0",
-    "@solflare-wallet/sdk": "1.4.2",
     "@studio-freight/lenis": "^1.0.42",
     "@tanstack/react-query": "^5.105.3",
     "@types/qrcode": "^1.5.6",
-    "bs58": "^6.0.0",
     "buffer": "^6.0.3",
     "firebase": "^13.1.0",
     "framer-motion": "^11.11.17",
@@ -32,15 +27,11 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.6.2",
-    "tweetnacl": "^1.0.3",
     "viem": "2.57.14",
     "wagmi": "^2.19.5"
   },
   "overrides": {
     "@wagmi/connectors": "6.2.0",
-    "@solflare-wallet/sdk": {
-      "uuid": "11.1.1"
-    },
     "jayson": {
       "stream-json": "3.8.0",
       "uuid": "11.1.1"

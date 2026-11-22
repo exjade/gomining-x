@@ -554,9 +554,9 @@ describe('SCRUM-220 Pre-launch Hardening Suite (POUW-1.8*LAUNCH*HARDENING)', () 
       assert.match(appSource, /onPayWithWallet=\{[\s\S]*?if \(!user \|\| user\.isAnonymous\) \{[\s\S]*?openAuthModal\('register'\)/)
       assert.match(appSource, /onPayWithWallet=\{[\s\S]*?prepareWalletMinerPurchase\([\s\S]*?minerId:\s*prep\.id/)
 
-      // 2. gmPay URL trigger waits for auth initialization and pre-allocates minerId
-      assert.match(appSource, /if \(!mobileCheckout\) return[\s\r\n]*if \(loading\) return/)
-      assert.match(appSource, /if \(!user \|\| user\.isAnonymous\) \{[\s\S]*?openAuthModal\('register'\)[\s\S]*?return[\s\S]*?\}[\s\S]*?prepareWalletMinerPurchase\([\s\S]*?minerId:\s*prep\.id/)
+      // 2. gmPayIntentId URL resume waits for auth initialization and gates on registered user (SCRUM-346)
+      assert.match(appSource, /const intentId = params\.get\('gmPayIntentId'\)\?\.trim\(\) \|\| ''/)
+      assert.match(appSource, /if \(!intentId \|\| loading\) return[\s\S]*?if \(!user \|\| user\.isAnonymous\) \{[\s\S]*?openAuthModal\('register'\)[\s\S]*?return/)
 
       // 3. onDefer gates on registered user
       assert.match(appSource, /onDefer=\{async \(input\) => \{[\s\S]*?if \(!user \|\| user\.isAnonymous\) \{[\s\S]*?openAuthModal\('register'\)/)
@@ -580,7 +580,7 @@ describe('SCRUM-220 Pre-launch Hardening Suite (POUW-1.8*LAUNCH*HARDENING)', () 
       )
     })
 
-    it('WalletPaymentCheckout.tsx statically renders auth modal prompt when unauthenticated or anonymous and validates minerId before payment', () => {
+    it('WalletPaymentCheckout.tsx statically renders auth modal prompt when unauthenticated or anonymous and enforces server-authoritative PaymentIntent checkout', () => {
       const checkoutSource = fs.readFileSync(path.resolve(projectRoot, 'src/WalletPaymentCheckout.tsx'), 'utf8')
 
       // Renders auth gate prompt block instead of payment controls
@@ -592,14 +592,9 @@ describe('SCRUM-220 Pre-launch Hardening Suite (POUW-1.8*LAUNCH*HARDENING)', () 
       // handlePay fails closed if user is null or anonymous
       assert.match(checkoutSource, /const handlePay = async \(\) => \{[\s\S]*?if \(!user \|\| user\.isAnonymous\) \{/)
 
-      // handlePay validates targetMinerId before transmitting transaction
-      assert.match(
-        checkoutSource,
-        /const targetMinerId = minerIdRef\.current \|\| propMinerId[\s\S]*?if \(!targetMinerId \|\| !targetMinerId\.trim\(\)\) \{[\s\S]*?setError\('No se pudo determinar el identificador canónico del minero\.'\)[\s\S]*?return[\s\S]*?setPaying\(true\)/
-      )
-
-      // handleRetryPersistence fails closed if user is null or anonymous
-      assert.match(checkoutSource, /const handleRetryPersistence = async \(\) => \{[\s\S]*?if \(!user \|\| user\.isAnonymous\) \{/)
+      // handlePay requires server-authoritative PaymentIntent in AWAITING state before transmitting
+      assert.match(checkoutSource, /if \(!intent \|\| intent\.status !== 'AWAITING'\) \{/)
+      assert.match(checkoutSource, /confirmPaymentIntent\(intent\.intentId, txHash\)/)
     })
 
     it('offline demo flow remains fully operational for guests with zero canonical writes', () => {
@@ -795,11 +790,11 @@ describe('SCRUM-220 Pre-launch Hardening Suite (POUW-1.8*LAUNCH*HARDENING)', () 
         'Unilevel node and subcollections must enforce owner/admin read and deny all client writes'
       )
 
-      // 4. Preserves hardened /miners/{uid}/miner/{minerId} rule (SCRUM-210: explicit read/create/update, delete: false)
+      // 4. Hardened /miners/{uid}/miner/{minerId} rule (SCRUM-346: server-only create/delete, cosmetic-only owner update)
       assert.match(
         rulesSource,
-        /match \/miners\/\{uid\}\/miner\/\{minerId\}\s*\{[\s\S]*?allow read:\s*if isOwner\(uid\) \|\| isAdmin\(\);[\s\S]*?allow create:\s*if isOwner\(uid\) \|\| isAdmin\(\);[\s\S]*?allow update:\s*if isOwner\(uid\) \|\| isAdmin\(\);[\s\S]*?allow delete:\s*if false;/,
-        'Must preserve owner/admin read/create/update and delete: false on /miners/{uid}/miner/{minerId}'
+        /match \/miners\/\{uid\}\/miner\/\{minerId\}\s*\{[\s\S]*?allow read:\s*if isOwner\(uid\) \|\| isAdmin\(\);[\s\S]*?allow create, delete:\s*if false;[\s\S]*?allow update:\s*if isOwner\(uid\) && isNonAnonymous\(\) && isValidCosmeticMinerUpdate\(\);/,
+        'Must enforce owner/admin read, server-only create/delete, and cosmetic-only owner update on /miners/{uid}/miner/{minerId}'
       )
     })
 
@@ -856,12 +851,12 @@ describe('SCRUM-220 Pre-launch Hardening Suite (POUW-1.8*LAUNCH*HARDENING)', () 
       { name: 'admin_users root', path: '/admin_users/usr_01', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: true, expectedAdminRead: true, expectedAdminWrite: false, expectedAdminCreate: true, expectedAdminUpdate: true, expectedAdminDelete: false },
       { name: 'admin_users subcollection', path: '/admin_users/usr_01/roles/super_admin', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: false, expectedAdminRead: true, expectedAdminWrite: true },
       { name: 'admin_workers', path: '/admin_workers/worker_01', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: false, expectedAdminRead: true, expectedAdminWrite: true },
-      { name: 'admin_contracts', path: '/admin_contracts/contract_01', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: false, expectedAdminRead: true, expectedAdminWrite: false, expectedAdminUpdate: true, expectedAdminDelete: false },
+      { name: 'admin_contracts', path: '/admin_contracts/contract_01', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: false, expectedAdminRead: true, expectedAdminWrite: false, expectedAdminCreate: false, expectedAdminUpdate: false, expectedAdminDelete: false },
       { name: 'admin_audit_logs', path: '/admin_audit_logs/log_01', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: false, expectedAdminRead: true, expectedAdminWrite: false, expectedAdminUpdate: false, expectedAdminDelete: false },
       { name: 'admin_settings internal', path: '/admin_settings/setting_01', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: false, expectedAdminRead: true, expectedAdminWrite: true },
       { name: 'admin_settings storefront_sections', path: '/admin_settings/storefront_sections', expectedRegisteredRead: true, expectedAnonymousRead: false, expectedOwnerRead: true, expectedAdminRead: true, expectedAdminWrite: true },
       { name: 'commercial_packages', path: '/commercial_packages/pkg_01', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: false, expectedAdminRead: true, expectedAdminWrite: false, expectedAdminCreate: true, expectedAdminUpdate: true, expectedAdminDelete: false },
-      { name: 'admin_orders', path: '/admin_orders/order_01', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: false, expectedAdminRead: true, expectedAdminWrite: false, expectedAdminUpdate: true, expectedAdminDelete: false },
+      { name: 'admin_orders', path: '/admin_orders/order_01', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: false, expectedAdminRead: true, expectedAdminWrite: false, expectedAdminCreate: false, expectedAdminUpdate: false, expectedAdminDelete: false },
       { name: 'unilevel node', path: '/unilevel/usr_01', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: true, expectedAdminRead: true, expectedAdminWrite: false, expectedAdminCreate: false, expectedAdminUpdate: false, expectedAdminDelete: false },
       { name: 'unilevel recursive catch-all subcollection', path: '/unilevel/usr_01/downline/node_01', expectedRegisteredRead: false, expectedAnonymousRead: false, expectedOwnerRead: true, expectedAdminRead: true, expectedAdminWrite: false },
     ]

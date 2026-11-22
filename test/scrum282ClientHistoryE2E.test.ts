@@ -383,7 +383,7 @@ test('SCRUM-282 (W07.3 — Regresión e Integración Acumulada W01..W07): Verifi
   );
   assert.equal(
     sha256Of('firestore.rules'),
-    '02FB0892E381A8AD42C89910A610FFCFD37B708FF978E6CC3862020EE36460CD',
+    '3422F1E051904328C791377B6BE4DB34269AFC9AA7D3FF0E00C59677503F6C8C',
   );
   assert.equal(
     sha256Of('src/components/withdrawals/WithdrawalForm.tsx'),

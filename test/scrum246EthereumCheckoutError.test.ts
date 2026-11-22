@@ -30,7 +30,6 @@ const { sanitizeErrorReason, classifyPaymentError } = (await import(dataUrl)) as
   sanitizeErrorReason: (raw: unknown) => string
   classifyPaymentError: (err: unknown, networkName: string) => {
     message: string
-    showSimulateFallback: boolean
     kind: string
     name?: string
     code?: number | string
@@ -55,7 +54,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       assert.equal(result.code, 4001)
       assert.equal(result.shortMessage, 'User rejected the request.')
       assert.equal(result.message, 'Transacción rechazada en tu billetera.')
-      assert.equal(result.showSimulateFallback, false)
     })
 
     it('isolates standard EIP-1193 rejection error code 4001', () => {
@@ -68,7 +66,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       assert.equal(result.category, 'USER_REJECTION')
       assert.equal(result.code, 4001)
       assert.equal(result.message, 'Transacción rechazada en tu billetera.')
-      assert.equal(result.showSimulateFallback, false)
     })
 
     it('isolates nested cause with code 4001 and rejection keywords', () => {
@@ -82,7 +79,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       assert.equal(result.category, 'USER_REJECTION')
       assert.equal(result.code, 4001)
       assert.equal(result.message, 'Transacción rechazada en tu billetera.')
-      assert.equal(result.showSimulateFallback, false)
     })
 
     it('isolates TransactionRejectedRpcError', () => {
@@ -95,7 +91,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       assert.equal(result.category, 'USER_REJECTION')
       assert.equal(result.name, 'TransactionRejectedRpcError')
       assert.equal(result.message, 'Transacción rechazada en tu billetera.')
-      assert.equal(result.showSimulateFallback, false)
     })
 
     it('isolates multi-level standard Error cause chains (depth >= 3) with code 4001 as USER_REJECTION with zero simulation fallback', () => {
@@ -110,7 +105,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       assert.equal(result.category, 'USER_REJECTION')
       assert.equal(result.code, 4001)
       assert.equal(result.message, 'Transacción rechazada en tu billetera.')
-      assert.equal(result.showSimulateFallback, false)
     })
 
     // R2 Adversarial tests: Provider rejection strings must NOT trigger USER_REJECTION
@@ -120,7 +114,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       assert.notEqual(result.kind, 'USER_REJECTION')
       assert.equal(result.kind, 'RPC_ERROR')
       assert.equal(result.category, 'RPC_ERROR')
-      assert.equal(result.showSimulateFallback, true)
       assert.equal(result.shortMessage, 'RPC request rejected by provider rate limit')
       assert.match(result.message, /Error de comunicación con el proveedor RPC/)
     })
@@ -131,7 +124,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       assert.notEqual(result.kind, 'USER_REJECTION')
       assert.equal(result.kind, 'RPC_ERROR')
       assert.equal(result.category, 'RPC_ERROR')
-      assert.equal(result.showSimulateFallback, true)
       assert.equal(result.shortMessage, 'request denied by provider policy')
       assert.match(result.message, /Error de comunicación con el proveedor RPC/)
     })
@@ -142,7 +134,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       assert.notEqual(result.kind, 'USER_REJECTION')
       assert.equal(result.kind, 'RPC_ERROR')
       assert.equal(result.category, 'RPC_ERROR')
-      assert.equal(result.showSimulateFallback, true)
       assert.equal(result.shortMessage, 'provider-side cancellation due to gateway timeout')
       assert.match(result.message, /Error de comunicación con el proveedor RPC/)
     })
@@ -177,7 +168,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       assert.equal(result.kind, 'INSUFFICIENT_FUNDS')
       assert.match(result.message, /Ethereum/)
       assert.match(result.message, /fondos insuficientes para el pago o para el gas de red/)
-      assert.equal(result.showSimulateFallback, true)
     })
 
     it('classifies gas required exceeds allowance error', () => {
@@ -185,7 +175,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       const result = classifyPaymentError(err, 'Ethereum')
       assert.equal(result.kind, 'INSUFFICIENT_FUNDS')
       assert.match(result.message, /Ethereum/)
-      assert.equal(result.showSimulateFallback, true)
     })
 
     it('classifies insufficient balance for transfer across different networks', () => {
@@ -203,7 +192,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       const insufficientErr = new Error('insufficient funds for gas * price + value')
       const result = classifyPaymentError(insufficientErr, 'Ethereum')
       assert.notEqual(result.kind, 'USER_REJECTION')
-      assert.equal(result.showSimulateFallback, true)
     })
   })
 
@@ -217,7 +205,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       assert.equal(result.kind, 'EXECUTION_REVERTED')
       assert.match(result.message, /La transacción fue revertida en la red Ethereum/)
       assert.match(result.message, /ERC20: transfer amount exceeds balance/)
-      assert.equal(result.showSimulateFallback, true)
     })
 
     it('diagnoses ContractFunctionRevertedError with detail', () => {
@@ -229,7 +216,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       assert.equal(result.kind, 'EXECUTION_REVERTED')
       assert.match(result.message, /La transacción fue revertida en la red Ethereum/)
       assert.match(result.message, /TransferFailed\(\)/)
-      assert.equal(result.showSimulateFallback, true)
     })
 
     it('diagnoses Chain Mismatch with actionable wallet guidance and NO simulation fallback', () => {
@@ -240,7 +226,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       const result = classifyPaymentError(err, 'Ethereum')
       assert.equal(result.kind, 'CHAIN_MISMATCH')
       assert.equal(result.message, 'La billetera está conectada a otra red. Cambia a la red Ethereum en tu billetera para continuar.')
-      assert.equal(result.showSimulateFallback, false)
     })
 
     it('diagnoses Missing / Disconnected EVM wallet with actionable guidance and NO simulation fallback', () => {
@@ -248,7 +233,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       const result = classifyPaymentError(err, 'Ethereum')
       assert.equal(result.kind, 'WALLET_NOT_CONNECTED')
       assert.equal(result.message, 'No hay una billetera compatible conectada para autorizar la transacción en Ethereum. Conecta tu billetera para continuar.')
-      assert.equal(result.showSimulateFallback, false)
     })
 
     it('diagnoses ConnectorNotConnectedError', () => {
@@ -258,7 +242,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       }
       const result = classifyPaymentError(err, 'Ethereum')
       assert.equal(result.kind, 'WALLET_NOT_CONNECTED')
-      assert.equal(result.showSimulateFallback, false)
     })
 
     it('diagnoses Internal JSON-RPC error (-32603) as RPC communication failure, NOT insufficient funds', () => {
@@ -271,7 +254,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       assert.match(result.message, /Error de comunicación con el proveedor RPC en la red Ethereum/)
       assert.match(result.message, /replacement transaction underpriced/)
       assert.doesNotMatch(result.message, /fondos insuficientes/)
-      assert.equal(result.showSimulateFallback, true)
     })
 
     it('diagnoses RPC rate limit (HTTP 429) or gateway timeouts', () => {
@@ -279,7 +261,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       const result = classifyPaymentError(err, 'Ethereum')
       assert.equal(result.kind, 'RPC_ERROR')
       assert.match(result.message, /Error de comunicación con el proveedor RPC en la red Ethereum/)
-      assert.equal(result.showSimulateFallback, true)
     })
 
     it('diagnoses non-standard JSON-RPC code -32000 as RPC_ERROR', () => {
@@ -288,7 +269,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       assert.equal(result.kind, 'RPC_ERROR')
       assert.match(result.message, /Error de comunicación con el proveedor RPC en la red Ethereum/)
       assert.match(result.message, /Server error/)
-      assert.equal(result.showSimulateFallback, true)
     })
 
     it('diagnoses JSON-RPC revert payload in data.message as EXECUTION_REVERTED with detail', () => {
@@ -297,7 +277,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       assert.equal(result.kind, 'EXECUTION_REVERTED')
       assert.match(result.message, /La transacción fue revertida en la red Ethereum/)
       assert.match(result.message, /execution reverted: custom error/)
-      assert.equal(result.showSimulateFallback, true)
     })
 
     it('safely handles circular cause references without infinite loops', () => {
@@ -306,7 +285,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       const result = classifyPaymentError(circErr, 'Ethereum')
       assert.ok(result.message)
       assert.equal(result.kind, 'GENERIC_DIAGNOSTIC')
-      assert.equal(result.showSimulateFallback, true)
     })
 
     it('diagnoses generic unknown error with diagnostic detail rather than masking it', () => {
@@ -320,7 +298,6 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       const fallbackResult = classifyPaymentError(unclassifiedErr, 'Ethereum')
       assert.equal(fallbackResult.kind, 'GENERIC_DIAGNOSTIC')
       assert.match(fallbackResult.message, /No se pudo completar el pago en Ethereum \(Unforeseen peripheral state corruption\)/)
-      assert.equal(fallbackResult.showSimulateFallback, true)
     })
   })
 
@@ -401,25 +378,17 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       assert.ok(session.receipts[0].label.includes('Compra'), 'Receipt must reflect demo purchase')
     })
 
-    it('verifies static source guarantee: simulation fallback in WalletPaymentCheckout never passes fake txHash to real purchase pipeline', () => {
-      // Inspect WalletPaymentCheckout.tsx to verify the simulation fallback button
-      // triggers buyDemoMiner / startMiningSimulation and NEVER processPurchaseCompletion
-      const buttonIdx = checkoutSource.indexOf('Confirmar compra en modo prueba / simulación')
-      assert.ok(buttonIdx > 0, 'Simulation fallback button text must exist in WalletPaymentCheckout.tsx')
-      const simulationButtonBlock = checkoutSource.slice(buttonIdx - 1500, buttonIdx + 100)
-      assert.match(simulationButtonBlock, /buyDemoMiner/)
-      assert.match(simulationButtonBlock, /startMiningSimulation/)
-      assert.doesNotMatch(simulationButtonBlock, /processPurchaseCompletion/)
-      assert.doesNotMatch(simulationButtonBlock, /savePurchasedMiner/)
-      assert.doesNotMatch(simulationButtonBlock, /recordMinerPurchaseToAdmin/)
+    it('verifies static source guarantee: simulation fallback button and state are completely removed from WalletPaymentCheckout (SCRUM-346)', () => {
+      assert.equal(checkoutSource.includes('Confirmar compra en modo prueba / simulación'), false)
+      assert.equal(checkoutSource.includes('showSimulateFallback'), false)
+      assert.equal(checkoutSource.includes('buyDemoMiner'), false)
+      assert.doesNotMatch(checkoutSource, /savePurchasedMiner/)
+      assert.doesNotMatch(checkoutSource, /recordMinerPurchaseToAdmin/)
     })
   })
 
   describe('Suite 6: Static Invariants & Anti-Regression on WalletPaymentCheckout.tsx', () => {
     it('verifies absence of legacy unconditional masking string', () => {
-      // Legacy bug string that was unconditionally shown on any unclassified error:
-      // setError(`No se pudo completar el pago en ${activeDestination.name}. Puedes verificar tu conexión o confirmar en modo simulación de prueba.`)
-      // Must NOT be present as an unconditional assignment
       const legacyPattern = /setError\(\s*`No se pudo completar el pago en \$\{activeDestination\.name\}\. Puedes verificar tu conexión o confirmar en modo simulación de prueba\.`\s*\)/
       assert.doesNotMatch(
         checkoutSource,
@@ -428,12 +397,12 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       )
     })
 
-    it('verifies handlePay catch block uses classifyPaymentError', () => {
+    it('verifies handlePay catch block uses classifyPaymentError without simulation fallback', () => {
       const handlePayCatchMatch = checkoutSource.match(/handlePay[\s\S]*?} catch \(err\) \{([\s\S]*?)\} finally/)?.[1]
       assert.ok(handlePayCatchMatch, 'handlePay catch block must be present')
-      assert.match(handlePayCatchMatch, /classifyPaymentError\s*\(\s*err\s*,\s*activeDestination\.name\s*\)/)
+      assert.match(handlePayCatchMatch, /classifyPaymentError\s*\(\s*err\s*,\s*activeNetworkConfig\.name\s*\)/)
       assert.match(handlePayCatchMatch, /setError\s*\(\s*classified\.message\s*\)/)
-      assert.match(handlePayCatchMatch, /setShowSimulateFallback\s*\(\s*classified\.showSimulateFallback\s*\)/)
+      assert.doesNotMatch(handlePayCatchMatch, /setShowSimulateFallback/)
     })
 
     it('verifies exported contracts for sanitizeErrorReason and classifyPaymentError', () => {
@@ -441,9 +410,8 @@ describe('SCRUM-246: Safe Error Classification for Ethereum and Multi-Chain Chec
       assert.match(checkoutSource, /export function classifyPaymentError\s*\(/)
     })
 
-    it('verifies user rejection cannot trigger showSimulateFallback', () => {
+    it('verifies user rejection is classified cleanly as USER_REJECTION', () => {
       const rejectionResult = classifyPaymentError(new Error('User rejected the transaction'), 'Ethereum')
-      assert.equal(rejectionResult.showSimulateFallback, false)
       assert.equal(rejectionResult.kind, 'USER_REJECTION')
     })
   })
