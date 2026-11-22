@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Users, 
   Cpu, 
@@ -26,7 +26,7 @@ import {
   type AdminWithdrawalSession,
   type AdminWithdrawalsApiClientOptions,
 } from '../../services/admin/adminWithdrawalsClient';
-import type { ProfitEngineGlobalConfig, AllocationSummary } from '../../types/admin';
+import type { ProfitEngineGlobalConfig, AllocationSummary, PackageOrderPayment } from '../../types/admin';
 
 interface AdminOverviewProps {
   onNavigateTab: (tabId: string) => void;
@@ -47,12 +47,14 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
   const userService = UserManagementService.getInstance();
   const paymentsService = PackagePaymentsService.getInstance();
 
-  const [globalConfig, setGlobalConfig] = useState<ProfitEngineGlobalConfig>(engine.getGlobalConfig());
-  const [allocation, setAllocation] = useState<AllocationSummary>(allocationService.getAllocationSummary(1200));
-  const [usersCount, setUsersCount] = useState<number>(userService.getUsers().length);
-  const [packagesCount, setPackagesCount] = useState<number>(packageService.getPackages().length);
-  const [paymentsSummary] = useState(paymentsService.getSummary());
+  const [globalConfig, setGlobalConfig] = useState<ProfitEngineGlobalConfig>(() => engine.getGlobalConfig());
+  const [allocation, setAllocation] = useState<AllocationSummary>(() => allocationService.getAllocationSummary(1200));
+  const [usersCount, setUsersCount] = useState<number>(() => userService.getUsers().length);
+  const [packagesCount, setPackagesCount] = useState<number>(() => packageService.getPackages().length);
+  const [payments, setPayments] = useState<PackageOrderPayment[]>(() => paymentsService.getPayments());
   const [pendingWithdrawalsCount, setPendingWithdrawalsCount] = useState<number>(0);
+
+  const paymentsSummary = useMemo(() => paymentsService.getSummary(payments), [paymentsService, payments]);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,20 +96,29 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
   ]);
 
   useEffect(() => {
+    let cancelled = false;
     setGlobalConfig(engine.getGlobalConfig());
     allocationService.fetchFirestoreContracts().then(() => {
-      setAllocation(allocationService.getAllocationSummary(1200));
+      if (!cancelled) setAllocation(allocationService.getAllocationSummary(1200));
     }).catch(() => {});
     packageService.fetchFirestorePackages().then((pkgs) => {
-      setPackagesCount(pkgs.length);
+      if (!cancelled) setPackagesCount(pkgs.length);
+    }).catch(() => {});
+    paymentsService.fetchFirestorePayments().then((orders) => {
+      if (!cancelled) setPayments(orders);
     }).catch(() => {});
     setUsersCount(userService.getUsers().length);
 
-    const unsubscribe = allocationService.subscribeToFirestoreContracts(() => {
-      setAllocation(allocationService.getAllocationSummary(1200));
+    const unsubscribeContracts = allocationService.subscribeToFirestoreContracts(() => {
+      if (!cancelled) setAllocation(allocationService.getAllocationSummary(1200));
+    });
+    const unsubscribePayments = paymentsService.subscribeToFirestorePayments((orders) => {
+      if (!cancelled) setPayments(orders);
     });
     return () => {
-      unsubscribe();
+      cancelled = true;
+      unsubscribeContracts();
+      unsubscribePayments();
     };
   }, []);
 

@@ -1,155 +1,138 @@
-import type { PackageOrderPayment } from '../../types/admin';
-import { AdminAuditService } from './adminAuditService';
-import { FinancialLedgerService } from './financialLedgerService';
-import { db, collection, doc, getDocs, setDoc, onSnapshot } from '../../utils/firebaseAuth';
-import { apiFetch } from '../../utils/apiConfig';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import type { OrderPaymentStatus, PackageOrderPayment } from '../../types/admin';
+import { app, db, collection, getDocs, onSnapshot } from '../../utils/firebaseAuth';
 
-const STORAGE_PAYMENTS_KEY = 'minerx_package_payments_v2';
 export const ADMIN_ORDERS_COLLECTION = 'admin_orders';
 
-export const INITIAL_PACKAGE_PAYMENTS: PackageOrderPayment[] = [
-  {
-    orderId: 'ord_pack_1001',
-    attemptId: 'att_tron_01',
-    createdAt: '2026-10-15T12:05:00Z',
-    userId: 'usr_roman_01',
-    userEmail: 'roman@minerx.cloud',
-    userName: 'Román Martínez',
-    packageId: 'pkg-enterprise-05',
-    packageName: 'Minero 5 Enterprise',
-    contractedTh: 192,
-    amountUsd: 2201.99,
-    cryptoAsset: 'USDT',
-    cryptoAmount: '2201.99 USDT',
-    paymentNetwork: 'TRON',
-    recipientAddress: 'TYDzpFs8XzQ3Y9aP1mXk9Vn5B3LmQ819aa',
-    txHash: '4f92019481029481204918230918234123491820491820491820491820491820',
-    confirmations: 35,
-    requiredConfirmations: 19,
-    status: 'SETTLED',
-    bridgeStatus: 'NONE',
-    activatedMinerId: 'miner_ent_8912',
-    idempotencyKey: 'tron_4f92019481029481204918230918234123491820491820491820491820491820_0',
-    settledAt: '2026-10-15T12:08:30Z'
-  },
-  {
-    orderId: 'ord_pack_1002',
-    attemptId: 'att_eth_02',
-    createdAt: '2026-10-18T09:30:00Z',
-    userId: 'usr_alpha_99',
-    userEmail: 'operator.alpha@minerx.cloud',
-    userName: 'Alpha Operator',
-    packageId: 'pkg-master-04',
-    packageName: 'Minero 4 Master',
-    contractedTh: 128,
-    amountUsd: 1474.99,
-    cryptoAsset: 'USDT',
-    cryptoAmount: '1474.99 USDT',
-    paymentNetwork: 'ETHEREUM',
-    recipientAddress: '0x71C...49182049182',
-    txHash: '0x8b39102491820491820491820491820491820491820491820491820491820491',
-    confirmations: 48,
-    requiredConfirmations: 12,
-    status: 'SETTLED',
-    bridgeStatus: 'NONE',
-    activatedMinerId: 'miner_mast_8913',
-    idempotencyKey: 'eth_0x8b39102491820491820491820491820491820491820491820491820491820491_0',
-    settledAt: '2026-10-18T09:34:10Z'
-  },
-  {
-    orderId: 'ord_pack_1003',
-    attemptId: 'att_sol_03',
-    createdAt: '2026-10-25T16:20:00Z',
-    userId: 'usr_beta_04',
-    userEmail: 'investor.beta@gmail.com',
-    userName: 'Carlos Méndez',
-    packageId: 'pkg-pro-03',
-    packageName: 'Minero 3 Pro',
-    contractedTh: 64,
-    amountUsd: 749.99,
-    cryptoAsset: 'USDT',
-    cryptoAmount: '749.99 USDT',
-    paymentNetwork: 'SOLANA',
-    recipientAddress: 'DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK',
-    txHash: '5K92810491204918204918204918204918204918204918204918204918204918',
-    confirmations: 120,
-    requiredConfirmations: 32,
-    status: 'SETTLED',
-    bridgeStatus: 'NONE',
-    activatedMinerId: 'miner_pro_8914',
-    idempotencyKey: 'sol_5K92810491204918204918204918204918204918204918204918204918204918_0',
-    settledAt: '2026-10-25T16:21:40Z'
-  },
-  {
-    orderId: 'ord_pack_1004',
-    attemptId: 'att_btc_04',
-    createdAt: '2026-11-04T12:15:00Z',
-    userId: 'usr_ana_02',
-    userEmail: 'ana.soto@minerx.org',
-    userName: 'Ana Soto',
-    packageId: 'pkg-plus-02',
-    packageName: 'Minero 2 Plus',
-    contractedTh: 32,
-    amountUsd: 389.99,
-    cryptoAsset: 'BTC',
-    cryptoAmount: '0.00573 BTC',
-    paymentNetwork: 'BITCOIN',
-    recipientAddress: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
-    txHash: '7c89102491820491820491820491820491820491820491820491820491820491',
-    confirmations: 2,
-    requiredConfirmations: 3,
-    status: 'CONFIRMED',
-    bridgeStatus: 'NONE',
-    idempotencyKey: 'btc_7c89102491820491820491820491820491820491820491820491820491820491_0'
-  },
-  {
-    orderId: 'ord_pack_1005',
-    attemptId: 'att_spei_05',
-    createdAt: '2026-11-04T12:45:00Z',
-    userId: 'usr_luis_03',
-    userEmail: 'luis.miner@crypto.io',
-    userName: 'Luis Navarro',
-    packageId: 'pkg-essential-01',
-    packageName: 'Minero 1 Esencial',
-    contractedTh: 16,
-    amountUsd: 199.99,
-    cryptoAsset: 'MXN',
-    cryptoAmount: '3,999.00 MXN',
-    paymentNetwork: 'BRIDGE_SPEI',
-    recipientAddress: 'STP 646180123456789012',
-    confirmations: 0,
-    requiredConfirmations: 1,
-    status: 'PENDING',
-    bridgeStatus: 'INITIATED',
-    idempotencyKey: 'spei_ord_pack_1005_att_spei_05'
-  },
-  {
-    orderId: 'ord_pack_1006',
-    attemptId: 'att_tron_06',
-    createdAt: '2026-11-03T02:00:00Z',
-    userId: 'usr_elena_06',
-    userEmail: 'elena.v@quantum.tech',
-    userName: 'Elena Vega',
-    packageId: 'pkg-plus-02',
-    packageName: 'Minero 2 Plus',
-    contractedTh: 32,
-    amountUsd: 389.99,
-    cryptoAsset: 'USDT',
-    cryptoAmount: '389.99 USDT',
-    paymentNetwork: 'TRON',
-    recipientAddress: 'TYDzpFs8XzQ3Y9aP1mXk9Vn5B3LmQ819aa',
-    confirmations: 0,
-    requiredConfirmations: 19,
-    status: 'EXPIRED',
-    bridgeStatus: 'NONE',
-    idempotencyKey: 'tron_expired_ord_1006'
+const CANONICAL_ORDER_STATUSES = new Set<OrderPaymentStatus>([
+  'OPEN',
+  'AWAITING',
+  'PROCESSING',
+  'SETTLED',
+  'UNDERPAID',
+  'FAILED',
+  'EXPIRED',
+  'CANCELLED',
+  'REVERSED',
+]);
+
+export interface PackagePaymentsSummary {
+  totalOrdersCount: number;
+  settledCount: number;
+  pendingCount: number;
+  underpaidCount: number;
+  failedCount: number;
+  expiredCount: number;
+  cancelledCount: number;
+  reversedCount: number;
+  totalVolumeUsd: number;
+  totalThSold: number;
+}
+
+export interface ReverifyPaymentResult {
+  outcome: string;
+  status: OrderPaymentStatus;
+  verificationStatus?: string;
+  intentId: string;
+  orderId?: string;
+  txHash?: string | null;
+  confirmations?: number;
+  requiredConfirmations?: number;
+  activatedMinerId?: string | null;
+  contractId?: string | null;
+  settledAt?: string | null;
+}
+
+function normalizeTimestampIso(raw: unknown): string {
+  if (typeof raw === 'string' && raw.trim()) return raw;
+  if (raw && typeof raw === 'object' && typeof (raw as { toDate?: () => Date }).toDate === 'function') {
+    const date = (raw as { toDate: () => Date }).toDate();
+    if (date instanceof Date && !Number.isNaN(date.getTime())) return date.toISOString();
   }
-];
+  if (raw && typeof raw === 'object' && typeof (raw as { seconds?: number }).seconds === 'number') {
+    return new Date((raw as { seconds: number }).seconds * 1000).toISOString();
+  }
+  return '';
+}
+
+function normalizeOrderStatus(raw: unknown): OrderPaymentStatus {
+  if (typeof raw === 'string') {
+    const upper = raw.trim().toUpperCase() as OrderPaymentStatus;
+    if (CANONICAL_ORDER_STATUSES.has(upper)) {
+      return upper;
+    }
+  }
+  return 'OPEN';
+}
+
+export function normalizePackageOrderDoc(id: string, data: Record<string, any>): PackageOrderPayment {
+  const amountUsd = Number(data.amountUsd ?? data.price ?? 0);
+  const contractedTh = Number(data.contractedTh ?? data.powerTh ?? 0);
+  const rawConfirmations = Number(data.confirmations ?? 0);
+  const rawRequired = Number(data.requiredConfirmations ?? 1);
+  const cryptoAsset = String(data.cryptoAsset || data.paymentAsset || 'USDT');
+  const displayAmount = data.expectedAmountDisplay ? `${data.expectedAmountDisplay} ${cryptoAsset}` : '';
+  const txHash = typeof data.txHash === 'string' && data.txHash.trim() ? data.txHash.trim() : undefined;
+  const activatedMinerId =
+    typeof data.activatedMinerId === 'string' && data.activatedMinerId.trim()
+      ? data.activatedMinerId.trim()
+      : undefined;
+  const contractId =
+    typeof data.contractId === 'string' && data.contractId.trim() ? data.contractId.trim() : undefined;
+  const networkMode =
+    data.networkMode === 'mainnet' || data.networkMode === 'testnet' ? data.networkMode : undefined;
+  const productType =
+    data.productType === 'subscription' || data.productType === 'miner' ? data.productType : undefined;
+
+  return {
+    orderId: typeof data.orderId === 'string' && data.orderId.trim() ? data.orderId.trim() : id,
+    attemptId: typeof data.attemptId === 'string' && data.attemptId.trim() ? data.attemptId.trim() : `att_${id}`,
+    intentId: typeof data.intentId === 'string' && data.intentId.trim() ? data.intentId.trim() : id,
+    buyerUid: typeof data.buyerUid === 'string' && data.buyerUid.trim() ? data.buyerUid.trim() : data.userId,
+    createdAt: normalizeTimestampIso(data.createdAt) || new Date(0).toISOString(),
+    userId: typeof data.userId === 'string' && data.userId.trim() ? data.userId.trim() : String(data.buyerUid || ''),
+    userEmail: typeof data.userEmail === 'string' ? data.userEmail : '',
+    userName:
+      typeof data.userName === 'string' && data.userName.trim()
+        ? data.userName.trim()
+        : typeof data.userEmail === 'string' && data.userEmail.includes('@')
+        ? data.userEmail.split('@')[0]
+        : 'Cliente',
+    packageId: typeof data.packageId === 'string' ? data.packageId : '',
+    packageName: typeof data.packageName === 'string' && data.packageName.trim() ? data.packageName.trim() : 'Minero Digital',
+    productType,
+    contractedTh: Number.isFinite(contractedTh) ? contractedTh : 0,
+    amountUsd: Number.isFinite(amountUsd) ? amountUsd : 0,
+    cryptoAsset,
+    cryptoAmount: typeof data.cryptoAmount === 'string' && data.cryptoAmount.trim() ? data.cryptoAmount.trim() : displayAmount || `${Number.isFinite(amountUsd) ? amountUsd : 0} ${cryptoAsset}`,
+    paymentNetwork: String(data.paymentNetwork || '').toUpperCase() || 'PENDING',
+    networkMode,
+    recipientAddress: typeof data.recipientAddress === 'string' ? data.recipientAddress : String(data.treasuryAddress || ''),
+    txHash,
+    confirmations: Number.isFinite(rawConfirmations) && rawConfirmations >= 0 ? rawConfirmations : 0,
+    requiredConfirmations: Number.isFinite(rawRequired) && rawRequired > 0 ? rawRequired : 1,
+    status: normalizeOrderStatus(data.status),
+    bridgeStatus: data.bridgeStatus || 'NONE',
+    activatedMinerId,
+    contractId,
+    idempotencyKey: typeof data.idempotencyKey === 'string' && data.idempotencyKey.trim() ? data.idempotencyKey.trim() : id,
+    settledAt: normalizeTimestampIso(data.settledAt) || undefined,
+    expiresAt: normalizeTimestampIso(data.expiresAt) || undefined,
+    cancelledAt: normalizeTimestampIso(data.cancelledAt) || undefined,
+  };
+}
+
+function sortPaymentsByCreatedDesc(list: PackageOrderPayment[]): PackageOrderPayment[] {
+  return [...list].sort((a, b) => {
+    const aMs = Date.parse(a.createdAt || '') || 0;
+    const bMs = Date.parse(b.createdAt || '') || 0;
+    return bMs - aMs;
+  });
+}
 
 export class PackagePaymentsService {
   private static instance: PackagePaymentsService;
-  private audit = AdminAuditService.getInstance();
-  private ledger = FinancialLedgerService.getInstance();
+  private cachedPayments: PackageOrderPayment[] = [];
 
   private constructor() {}
 
@@ -161,227 +144,141 @@ export class PackagePaymentsService {
   }
 
   public getPayments(): PackageOrderPayment[] {
-    try {
-      const raw = localStorage.getItem(STORAGE_PAYMENTS_KEY);
-      if (raw) return JSON.parse(raw);
-    } catch {}
-    return INITIAL_PACKAGE_PAYMENTS;
+    return this.cachedPayments;
   }
 
   /**
-   * Fetches package payment orders from Cloud Firestore (/admin_orders),
-   * merging any client-purchased miners with local admin orders.
+   * Fetches package payment orders exclusively from Cloud Firestore (/admin_orders).
    */
   public async fetchFirestorePayments(): Promise<PackageOrderPayment[]> {
-    if (!db) return this.getPayments();
-    try {
-      const snap = await getDocs(collection(db, ADMIN_ORDERS_COLLECTION));
-      if (!snap.empty) {
-        const firestoreOrders: PackageOrderPayment[] = snap.docs.map(d => {
-          const data = d.data();
-          return {
-            orderId: d.id,
-            attemptId: data.attemptId || `att_${d.id}`,
-            createdAt: data.createdAt || new Date().toISOString(),
-            userId: data.userId || 'usr_client',
-            userEmail: data.userEmail || 'cliente@gomining.cloud',
-            userName: data.userName || data.userEmail?.split('@')[0] || 'Cliente',
-            packageId: data.packageId || 'pkg-custom',
-            packageName: data.packageName || 'Minero Digital',
-            contractedTh: Number(data.contractedTh ?? data.powerTh ?? 0),
-            amountUsd: Number(data.amountUsd ?? data.price ?? 0),
-            cryptoAsset: data.cryptoAsset || 'USDT',
-            cryptoAmount: data.cryptoAmount || `${Number(data.amountUsd ?? data.price ?? 0)} USDT`,
-            paymentNetwork: data.paymentNetwork || 'USDT',
-            recipientAddress: data.recipientAddress || 'PLATFORM_TREASURY',
-            txHash: data.txHash || 'tx_internal',
-            confirmations: Number(data.confirmations ?? 12),
-            requiredConfirmations: Number(data.requiredConfirmations ?? 12),
-            status: data.status || 'SETTLED',
-            bridgeStatus: data.bridgeStatus || 'NONE',
-            activatedMinerId: data.activatedMinerId || d.id,
-            idempotencyKey: data.idempotencyKey || `idem_${d.id}`,
-            settledAt: data.settledAt || data.createdAt || new Date().toISOString()
-          };
-        });
-
-        const local = this.getPayments();
-        const mergedMap = new Map<string, PackageOrderPayment>();
-        // Add firestore orders first
-        for (const fo of firestoreOrders) {
-          mergedMap.set(fo.orderId, fo);
-        }
-        // Add local orders if not already present
-        for (const lo of local) {
-          if (!mergedMap.has(lo.orderId)) {
-            mergedMap.set(lo.orderId, lo);
-          }
-        }
-        const mergedList = Array.from(mergedMap.values());
-        localStorage.setItem(STORAGE_PAYMENTS_KEY, JSON.stringify(mergedList));
-        return mergedList;
-      }
-    } catch (err) {
-      console.warn('[PackagePaymentsService] Notice fetching from Firestore, checking Express API:', err);
-    }
-
-    // Secondary fallback: Express API Server
-    try {
-      const res = await apiFetch('/api/admin/orders');
-      if (res.ok) {
-        const remoteOrders = await res.json();
-        if (Array.isArray(remoteOrders) && remoteOrders.length > 0) {
-          const local = this.getPayments();
-          const mergedMap = new Map<string, PackageOrderPayment>();
-          for (const ro of remoteOrders) {
-            mergedMap.set(ro.orderId, ro);
-          }
-          for (const lo of local) {
-            if (!mergedMap.has(lo.orderId)) {
-              mergedMap.set(lo.orderId, lo);
-            }
-          }
-          const mergedList = Array.from(mergedMap.values());
-          localStorage.setItem(STORAGE_PAYMENTS_KEY, JSON.stringify(mergedList));
-          return mergedList;
-        }
-      }
-    } catch {}
-
-    return this.getPayments();
+    if (!db) return this.cachedPayments;
+    const snap = await getDocs(collection(db, ADMIN_ORDERS_COLLECTION));
+    const orders = sortPaymentsByCreatedDesc(snap.docs.map((d) => normalizePackageOrderDoc(d.id, d.data())));
+    this.cachedPayments = orders;
+    return orders;
   }
 
   /**
-   * Real-time subscription to Cloud Firestore collection /admin_orders
+   * Real-time subscription to Cloud Firestore collection /admin_orders (read-only).
    */
-  public subscribeToFirestorePayments(callback: (payments: PackageOrderPayment[]) => void): () => void {
+  public subscribeToFirestorePayments(
+    callback: (payments: PackageOrderPayment[]) => void,
+    onError?: (err: unknown) => void
+  ): () => void {
     if (!db) return () => {};
     try {
       const colRef = collection(db, ADMIN_ORDERS_COLLECTION);
-      return onSnapshot(colRef, (snap) => {
-        if (!snap.empty) {
-          const firestoreOrders: PackageOrderPayment[] = snap.docs.map(d => {
-            const data = d.data();
-            return {
-              orderId: d.id,
-              attemptId: data.attemptId || `att_${d.id}`,
-              createdAt: data.createdAt || new Date().toISOString(),
-              userId: data.userId || 'usr_client',
-              userEmail: data.userEmail || 'cliente@gomining.cloud',
-              userName: data.userName || data.userEmail?.split('@')[0] || 'Cliente',
-              packageId: data.packageId || 'pkg-custom',
-              packageName: data.packageName || 'Minero Digital',
-              contractedTh: Number(data.contractedTh ?? data.powerTh ?? 0),
-              amountUsd: Number(data.amountUsd ?? data.price ?? 0),
-              cryptoAsset: data.cryptoAsset || 'USDT',
-              cryptoAmount: data.cryptoAmount || `${Number(data.amountUsd ?? data.price ?? 0)} USDT`,
-              paymentNetwork: data.paymentNetwork || 'USDT',
-              recipientAddress: data.recipientAddress || 'PLATFORM_TREASURY',
-              txHash: data.txHash || 'tx_internal',
-              confirmations: Number(data.confirmations ?? 12),
-              requiredConfirmations: Number(data.requiredConfirmations ?? 12),
-              status: data.status || 'SETTLED',
-              bridgeStatus: data.bridgeStatus || 'NONE',
-              activatedMinerId: data.activatedMinerId || d.id,
-              idempotencyKey: data.idempotencyKey || `idem_${d.id}`,
-              settledAt: data.settledAt || data.createdAt || new Date().toISOString()
-            };
-          });
-
-          const local = this.getPayments();
-          const mergedMap = new Map<string, PackageOrderPayment>();
-          for (const fo of firestoreOrders) {
-            mergedMap.set(fo.orderId, fo);
-          }
-          for (const lo of local) {
-            if (!mergedMap.has(lo.orderId)) {
-              mergedMap.set(lo.orderId, lo);
-            }
-          }
-          const mergedList = Array.from(mergedMap.values());
-          localStorage.setItem(STORAGE_PAYMENTS_KEY, JSON.stringify(mergedList));
-          callback(mergedList);
+      return onSnapshot(
+        colRef,
+        (snap) => {
+          const orders = sortPaymentsByCreatedDesc(snap.docs.map((d) => normalizePackageOrderDoc(d.id, d.data())));
+          this.cachedPayments = orders;
+          callback(orders);
+        },
+        (err) => {
+          console.warn('[PackagePaymentsService] onSnapshot subscription notice:', err);
+          if (onError) onError(err);
         }
-      }, (err) => {
-        console.warn('[PackagePaymentsService] onSnapshot subscription notice:', err);
-      });
-    } catch {
+      );
+    } catch (err) {
+      if (onError) onError(err);
       return () => {};
     }
   }
 
-  public confirmAndSettlePayment(orderId: string, txHash: string, operatorUid = 'admin_sys'): boolean {
-    const list = this.getPayments();
-    const item = list.find(p => p.orderId === orderId);
-    if (!item) return false;
-
-    const minerId = `miner_${item.packageId.replace('pkg-', '')}_${Date.now().toString().slice(-4)}`;
-    item.status = 'SETTLED';
-    item.txHash = txHash || item.txHash || `0x${Math.random().toString(16).substring(2, 18)}`;
-    item.confirmations = item.requiredConfirmations;
-    item.activatedMinerId = minerId;
-    item.settledAt = new Date().toISOString();
-    if (item.paymentNetwork === 'BRIDGE_SPEI') {
-      item.bridgeStatus = 'COMPLETED';
+  /**
+   * Re-verifies an on-chain payment using the server-authoritative Gen 2 callable confirmPaymentIntent (SCRUM-345).
+   */
+  public async reverifyPaymentOnChain(
+    intentId: string,
+    txHash?: string,
+    callableOverride?: (payload: { intentId: string; txHash?: string }) => Promise<{ data: ReverifyPaymentResult }>
+  ): Promise<ReverifyPaymentResult> {
+    const cleanIntentId = intentId.trim();
+    if (!cleanIntentId) {
+      throw new Error('intentId es requerido para re-verificar el pago on-chain');
     }
 
-    localStorage.setItem(STORAGE_PAYMENTS_KEY, JSON.stringify(list));
-
-    if (db) {
-      setDoc(doc(db, ADMIN_ORDERS_COLLECTION, orderId), item, { merge: true }).catch(err => {
-        console.error('[PackagePaymentsService] Error syncing settled payment to Firestore:', err);
-      });
+    const payload: { intentId: string; txHash?: string } = { intentId: cleanIntentId };
+    if (typeof txHash === 'string' && txHash.trim()) {
+      payload.txHash = txHash.trim();
     }
 
-    try {
-      apiFetch('/api/admin/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(item)
-      }).catch(() => {});
-    } catch {}
+    if (callableOverride) {
+      const res = await callableOverride(payload);
+      return res.data;
+    }
 
-    // Reflejar en Ledger Contable
-    this.ledger.addEntry({
-      userId: item.userId,
-      userEmail: item.userEmail,
-      transactionType: 'PACKAGE_PURCHASE',
-      direction: 'CREDIT',
-      amount: item.amountUsd,
-      currency: 'USDT',
-      status: 'SETTLED',
-      referenceId: item.orderId,
-      description: `Pago liquidado para ${item.packageName} (${item.contractedTh} TH/s) asignado a minero ${minerId}`,
-      balanceAfter: 0,
-      provenance: 'FINANCIAL_REALIZED'
-    });
+    if (!app) {
+      throw new Error('Firebase App no inicializada para invocar confirmPaymentIntent');
+    }
 
-    this.audit.logAction(operatorUid, 'admin@minerx.cloud', 'FINANCE_ADMIN', 'COMMERCIAL', 'SETTLE_PACKAGE_ORDER', orderId, {
-      packageName: item.packageName,
-      contractedTh: item.contractedTh,
-      amountUsd: item.amountUsd,
-      cryptoAsset: item.cryptoAsset,
-      minerId
-    });
-
-    return true;
+    const functionsInstance = getFunctions(app);
+    const confirmCallable = httpsCallable<{ intentId: string; txHash?: string }, ReverifyPaymentResult>(
+      functionsInstance,
+      'confirmPaymentIntent'
+    );
+    const response = await confirmCallable(payload);
+    return response.data;
   }
 
-  public getSummary() {
-    const list = this.getPayments();
-    const settledList = list.filter(p => p.status === 'SETTLED');
-    const pendingList = list.filter(p => p.status === 'PENDING' || p.status === 'CONFIRMED');
+  /**
+   * Pure summary calculator over canonical payment statuses.
+   * Only SETTLED orders contribute to totalVolumeUsd and totalThSold.
+   */
+  public getSummary(payments?: PackageOrderPayment[]): PackagePaymentsSummary {
+    const list = payments ?? this.cachedPayments;
+    let settledCount = 0;
+    let pendingCount = 0;
+    let underpaidCount = 0;
+    let failedCount = 0;
+    let expiredCount = 0;
+    let cancelledCount = 0;
+    let reversedCount = 0;
+    let totalVolumeUsd = 0;
+    let totalThSold = 0;
 
-    const totalVolumeUsd = settledList.reduce((acc, p) => acc + p.amountUsd, 0);
-    const totalThSold = settledList.reduce((acc, p) => acc + p.contractedTh, 0);
+    for (const p of list) {
+      switch (p.status) {
+        case 'SETTLED':
+          settledCount += 1;
+          totalVolumeUsd += Number(p.amountUsd) || 0;
+          totalThSold += Number(p.contractedTh) || 0;
+          break;
+        case 'OPEN':
+        case 'AWAITING':
+        case 'PROCESSING':
+          pendingCount += 1;
+          break;
+        case 'UNDERPAID':
+          underpaidCount += 1;
+          break;
+        case 'FAILED':
+          failedCount += 1;
+          break;
+        case 'EXPIRED':
+          expiredCount += 1;
+          break;
+        case 'CANCELLED':
+          cancelledCount += 1;
+          break;
+        case 'REVERSED':
+          reversedCount += 1;
+          break;
+      }
+    }
 
     return {
       totalOrdersCount: list.length,
-      settledCount: settledList.length,
-      pendingCount: pendingList.length,
-      expiredCount: list.filter(p => p.status === 'EXPIRED').length,
+      settledCount,
+      pendingCount,
+      underpaidCount,
+      failedCount,
+      expiredCount,
+      cancelledCount,
+      reversedCount,
       totalVolumeUsd,
-      totalThSold
+      totalThSold,
     };
   }
 }

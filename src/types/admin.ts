@@ -269,6 +269,9 @@ export interface AllocationSummary {
 
 export interface MiningContract {
   id: string;
+  orderId?: string;
+  activatedMinerId?: string;
+  intentId?: string;
   userId: string;
   userEmail: string;
   packageId: string;
@@ -361,23 +364,36 @@ export interface PromotionItem {
   conversionsCount: number;
 }
 
-// Package Order & Payment Attempt
-export type OrderPaymentStatus = 'SETTLED' | 'CONFIRMED' | 'PENDING' | 'UNDERPAID' | 'EXPIRED' | 'REVERSED';
+// Package Order & Payment Attempt — Canonical 8-state machine (SCRUM-343/345/370) + retroactive REVERSED
+export type OrderPaymentStatus =
+  | 'OPEN'
+  | 'AWAITING'
+  | 'PROCESSING'
+  | 'SETTLED'
+  | 'UNDERPAID'
+  | 'FAILED'
+  | 'EXPIRED'
+  | 'CANCELLED'
+  | 'REVERSED';
 
 export interface PackageOrderPayment {
   orderId: string;
   attemptId: string;
+  intentId?: string;
+  buyerUid?: string;
   createdAt: string;
   userId: string;
   userEmail: string;
   userName: string;
   packageId: string;
   packageName: string;
+  productType?: 'miner' | 'subscription';
   contractedTh: number;
   amountUsd: number;
-  cryptoAsset: 'USDT' | 'BTC' | 'ETH' | 'SOL' | 'POL' | 'MXN';
+  cryptoAsset: 'USDT' | 'BNB' | 'POL' | 'ETH' | 'SOL' | 'BTC' | string;
   cryptoAmount: string;
-  paymentNetwork: 'TRON' | 'ETHEREUM' | 'SOLANA' | 'BITCOIN' | 'POLYGON' | 'BRIDGE_SPEI';
+  paymentNetwork: 'BSC' | 'POLYGON' | 'ETHEREUM' | 'SOLANA' | 'LOCAL_BALANCE' | string;
+  networkMode?: 'testnet' | 'mainnet';
   recipientAddress: string;
   txHash?: string;
   confirmations: number;
@@ -385,7 +401,10 @@ export interface PackageOrderPayment {
   status: OrderPaymentStatus;
   bridgeStatus?: 'NONE' | 'INITIATED' | 'COMPLETED' | 'FAILED';
   activatedMinerId?: string;
+  contractId?: string;
   idempotencyKey: string;
   settledAt?: string;
+  expiresAt?: string;
+  cancelledAt?: string;
 }
 

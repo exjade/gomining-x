@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
+import { getFirestore } from 'firebase-admin/firestore';
 import { VastClient } from './services/vastClient.js';
 import { VastOffersService } from './services/vastOffersService.js';
 import { VastInstanceService } from './services/vastInstanceService.js';
@@ -985,10 +986,161 @@ app.post(['/api/packages', '/api/commercial-packages'], async (req, res) => {
   res.json({ success: true, package: saved, isLegacy: true });
 });
 
-// 2b. Admin Contracts Endpoints (Client-purchased miners allocated to platform)
+// 2b. Admin Contracts Endpoints (Server-Authoritative via Firebase Admin SDK — SCRUM-370)
+const VALID_CONTRACT_STATUSES = new Set([
+  'ACTIVE',
+  'PENDING',
+  'PARTIALLY_ALLOCATED',
+  'SUSPENDED',
+  'EXPIRED',
+  'CANCELLED',
+]);
+const SAFE_CONTRACT_ID_PATTERN = /^[a-zA-Z0-9_-]{1,128}$/;
+
+export interface AdminContractsFirestoreLike {
+  collection(name: string): {
+    doc(id: string): {
+      get(): Promise<{ exists: boolean | (() => boolean); data(): Record<string, unknown> | undefined }>;
+      set(data: Record<string, unknown>, options?: { merge?: boolean }): Promise<unknown>;
+    };
+    get?(): Promise<{ empty?: boolean; docs: Array<{ id: string; data(): Record<string, unknown> | undefined }> }>;
+  };
+}
+
+let adminContractsFirestoreOverride: AdminContractsFirestoreLike | null = null;
+
+export function setAdminContractsFirestore(firestore: AdminContractsFirestoreLike | null): void {
+  adminContractsFirestoreOverride = firestore;
+}
+
+function getAdminContractsFirestore(): AdminContractsFirestoreLike | null {
+  if (adminContractsFirestoreOverride) return adminContractsFirestoreOverride;
+  if (!firebaseAdminAuthAdapter.isInitialized()) return null;
+  const adminApp = firebaseAdminAuthAdapter.getApp();
+  if (!adminApp) return null;
+  try {
+    return getFirestore(adminApp) as unknown as AdminContractsFirestoreLike;
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeContractReason(raw: unknown): string | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== 'string') return '';
+  return raw.replace(/[\x00-\x1f\x7f]/g, ' ').trim().slice(0, 500);
+}
+
+function stripUndefinedFields(record: Record<string, unknown>): Record<string, unknown> {
+  const clean: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(record)) {
+    if (v !== undefined) clean[k] = v;
+  }
+  return clean;
+}
+
+function appendContractAuditRecord(
+  firestore: AdminContractsFirestoreLike | null,
+  admin: UserAccount,
+  action: string,
+  contractId: string,
+  details: Record<string, unknown>
+): void {
+  const now = new Date().toISOString();
+  const auditEntry = {
+    id: `aud_ctr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    timestamp: now,
+    actorUid: admin.id,
+    actorEmail: admin.email || '',
+    action,
+    module: 'ALLOCATION',
+    targetId: contractId,
+    details,
+    status: 'SUCCESS',
+  };
+
+  try {
+    const auditFile = getAuditLogsFile();
+    const existing = fs.existsSync(auditFile) ? JSON.parse(fs.readFileSync(auditFile, 'utf-8')) : [];
+    const list = Array.isArray(existing) ? existing : [];
+    list.unshift(auditEntry);
+    const dir = path.dirname(auditFile);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(auditFile, JSON.stringify(list.slice(0, 1000), null, 2), 'utf-8');
+  } catch {
+    // Non-blocking local audit fallback
+  }
+
+  if (firestore) {
+    firestore
+      .collection('admin_audit_logs')
+      .doc(auditEntry.id)
+      .set(stripUndefinedFields(auditEntry), { merge: true })
+      .catch(() => {});
+  }
+}
+
+function validateContractNumbersAndStatus(
+  payload: Record<string, unknown>,
+  existingContractedTh?: number
+): { error?: string; contractedTh?: number; allocatedTh?: number; status?: string; reason?: string } {
+  let contractedTh: number | undefined;
+  if (payload.contractedTh !== undefined) {
+    if (typeof payload.contractedTh !== 'number' || !Number.isFinite(payload.contractedTh) || payload.contractedTh < 0) {
+      return { error: 'contractedTh debe ser un número finito mayor o igual a 0' };
+    }
+    contractedTh = payload.contractedTh;
+  }
+
+  const effectiveContracted = contractedTh ?? existingContractedTh;
+
+  let allocatedTh: number | undefined;
+  if (payload.allocatedTh !== undefined) {
+    if (typeof payload.allocatedTh !== 'number' || !Number.isFinite(payload.allocatedTh) || payload.allocatedTh < 0) {
+      return { error: 'allocatedTh debe ser un número finito mayor o igual a 0' };
+    }
+    if (effectiveContracted !== undefined && payload.allocatedTh > effectiveContracted) {
+      return { error: `allocatedTh (${payload.allocatedTh}) no puede superar contractedTh (${effectiveContracted})` };
+    }
+    allocatedTh = payload.allocatedTh;
+  }
+
+  let status: string | undefined;
+  if (payload.status !== undefined) {
+    if (typeof payload.status !== 'string' || !VALID_CONTRACT_STATUSES.has(payload.status)) {
+      return { error: 'status de contrato inválido' };
+    }
+    status = payload.status;
+  }
+
+  let reason: string | undefined;
+  if (payload.reason !== undefined && payload.reason !== null) {
+    if (typeof payload.reason !== 'string') {
+      return { error: 'reason debe ser una cadena de texto' };
+    }
+    reason = sanitizeContractReason(payload.reason);
+  }
+
+  return { contractedTh, allocatedTh, status, reason };
+}
+
 app.get('/api/admin/contracts', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
+  const firestore = getAdminContractsFirestore();
+  if (firestore) {
+    try {
+      const col = firestore.collection('admin_contracts');
+      if (typeof col.get === 'function') {
+        const snap = await col.get();
+        if (snap && !snap.empty) {
+          return res.json(snap.docs.map((d) => ({ ...(d.data() || {}), id: d.id })));
+        }
+      }
+    } catch (err) {
+      console.warn('[AdminContracts] Firestore read notice, falling back to local store:', err);
+    }
+  }
   const contracts = readContracts();
   res.json(contracts);
 });
@@ -997,39 +1149,191 @@ app.post('/api/admin/contracts', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
   const contract = req.body;
-  if (!contract || typeof contract !== 'object' || !contract.id) {
+  if (!contract || typeof contract !== 'object' || Array.isArray(contract) || typeof contract.id !== 'string') {
     return res.status(400).json({ error: 'ID de contrato requerido' });
+  }
+  const contractId = contract.id.trim();
+  if (!SAFE_CONTRACT_ID_PATTERN.test(contractId)) {
+    return res.status(400).json({ error: 'ID de contrato inválido' });
   }
 
   // Strip client authority metadata (preserve business data like userId)
   const { updatedBy: _u, role: _r, adminId: _a, ...safeContract } = contract;
-  const now = new Date().toISOString();
   const contracts = readContracts();
-  const idx = contracts.findIndex(c => c.id === safeContract.id);
-  let savedContract: any;
+  const idx = contracts.findIndex((c) => c.id === contractId);
+  const firestore = getAdminContractsFirestore();
+
+  let existingRecord: Record<string, any> | undefined = idx >= 0 ? contracts[idx] : undefined;
+  if (!existingRecord && firestore) {
+    try {
+      const snap = await firestore.collection('admin_contracts').doc(contractId).get();
+      const exists = typeof snap.exists === 'function' ? snap.exists() : Boolean(snap.exists);
+      if (exists) {
+        existingRecord = { ...(snap.data() || {}), id: contractId };
+      }
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Error consultando contrato en Firestore', details: err?.message });
+    }
+  }
+
+  const existingContractedTh =
+    typeof existingRecord?.contractedTh === 'number' && Number.isFinite(existingRecord.contractedTh)
+      ? existingRecord.contractedTh
+      : undefined;
+
+  const validated = validateContractNumbersAndStatus(safeContract, existingContractedTh);
+  if (validated.error) {
+    return res.status(400).json({ error: validated.error });
+  }
+
+  const now = new Date().toISOString();
+  const savedContract: Record<string, any> = existingRecord
+    ? {
+        ...existingRecord,
+        ...safeContract,
+        id: contractId,
+        ...(validated.contractedTh !== undefined ? { contractedTh: validated.contractedTh } : {}),
+        ...(validated.allocatedTh !== undefined ? { allocatedTh: validated.allocatedTh } : {}),
+        ...(validated.status !== undefined ? { status: validated.status } : {}),
+        ...(validated.reason !== undefined ? { lastReason: validated.reason } : {}),
+        updatedBy: admin.id,
+        updatedAt: now,
+      }
+    : {
+        ...safeContract,
+        id: contractId,
+        status: validated.status || 'ACTIVE',
+        ...(validated.contractedTh !== undefined ? { contractedTh: validated.contractedTh } : {}),
+        ...(validated.allocatedTh !== undefined ? { allocatedTh: validated.allocatedTh } : {}),
+        ...(validated.reason !== undefined ? { lastReason: validated.reason } : {}),
+        updatedBy: admin.id,
+        createdAt: safeContract.createdAt || now,
+        updatedAt: now,
+      };
+  delete savedContract.reason;
+
+  if (firestore) {
+    try {
+      await firestore
+        .collection('admin_contracts')
+        .doc(contractId)
+        .set(stripUndefinedFields(savedContract), { merge: true });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Error persistiendo contrato en Firestore', details: err?.message });
+    }
+  }
 
   if (idx >= 0) {
-    savedContract = {
-      ...contracts[idx],
-      ...safeContract,
-      id: contracts[idx].id,
-      updatedBy: admin.id,
-      updatedAt: now
-    };
     contracts[idx] = savedContract;
   } else {
-    savedContract = {
-      ...safeContract,
-      id: safeContract.id,
-      status: safeContract.status || 'ACTIVE',
-      updatedBy: admin.id,
-      createdAt: safeContract.createdAt || now,
-      updatedAt: now
-    };
     contracts.unshift(savedContract);
   }
   writeContracts(contracts);
+  appendContractAuditRecord(firestore, admin, 'UPSERT_ADMIN_CONTRACT', contractId, {
+    allocatedTh: savedContract.allocatedTh,
+    contractedTh: savedContract.contractedTh,
+    status: savedContract.status,
+    reason: validated.reason,
+  });
+
   res.json({ success: true, contract: savedContract });
+});
+
+app.patch('/api/admin/contracts/:contractId', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+
+  const contractId = typeof req.params.contractId === 'string' ? req.params.contractId.trim() : '';
+  if (!SAFE_CONTRACT_ID_PATTERN.test(contractId)) {
+    return res.status(400).json({ error: 'ID de contrato inválido' });
+  }
+  const body = req.body;
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return res.status(400).json({ error: 'Cuerpo de solicitud inválido' });
+  }
+
+  const { updatedBy: _u, role: _r, adminId: _a, id: _id, ...safePatch } = body;
+  const firestore = getAdminContractsFirestore();
+  const contracts = readContracts();
+  const idx = contracts.findIndex((c) => c.id === contractId);
+
+  let existingRecord: Record<string, any> | undefined;
+  if (firestore) {
+    try {
+      const snap = await firestore.collection('admin_contracts').doc(contractId).get();
+      const exists = typeof snap.exists === 'function' ? snap.exists() : Boolean(snap.exists);
+      if (exists) {
+        existingRecord = { ...(snap.data() || {}), id: contractId };
+      }
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Error consultando contrato en Firestore', details: err?.message });
+    }
+  }
+  if (!existingRecord && idx >= 0) {
+    existingRecord = contracts[idx];
+  }
+  if (!existingRecord) {
+    return res.status(404).json({ error: `Contrato no encontrado: ${contractId}` });
+  }
+
+  const existingContractedTh = Number(existingRecord.contractedTh ?? existingRecord.powerTh ?? 0);
+  const validated = validateContractNumbersAndStatus(safePatch, existingContractedTh);
+  if (validated.error) {
+    return res.status(400).json({ error: validated.error });
+  }
+
+  const nextContractedTh = validated.contractedTh ?? existingContractedTh;
+  const nextAllocatedTh = validated.allocatedTh ?? Number(existingRecord.allocatedTh ?? nextContractedTh);
+
+  let nextStatus = validated.status ?? existingRecord.status ?? 'ACTIVE';
+  if (validated.allocatedTh !== undefined && validated.status === undefined) {
+    if (nextContractedTh > 0 && nextAllocatedTh === nextContractedTh) {
+      nextStatus = 'ACTIVE';
+    } else if (nextAllocatedTh > 0) {
+      nextStatus = 'PARTIALLY_ALLOCATED';
+    } else {
+      nextStatus = 'SUSPENDED';
+    }
+  }
+
+  const now = new Date().toISOString();
+  const updatedContract: Record<string, any> = {
+    ...existingRecord,
+    id: contractId,
+    contractedTh: nextContractedTh,
+    allocatedTh: nextAllocatedTh,
+    status: nextStatus,
+    ...(validated.reason !== undefined ? { lastReason: validated.reason } : {}),
+    updatedBy: admin.id,
+    updatedAt: now,
+  };
+
+  if (firestore) {
+    try {
+      await firestore
+        .collection('admin_contracts')
+        .doc(contractId)
+        .set(stripUndefinedFields(updatedContract), { merge: true });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Error actualizando contrato en Firestore', details: err?.message });
+    }
+  }
+
+  if (idx >= 0) {
+    contracts[idx] = updatedContract;
+  } else {
+    contracts.unshift(updatedContract);
+  }
+  writeContracts(contracts);
+  appendContractAuditRecord(firestore, admin, 'PATCH_ADMIN_CONTRACT', contractId, {
+    previousAllocatedTh: existingRecord.allocatedTh,
+    allocatedTh: nextAllocatedTh,
+    previousStatus: existingRecord.status,
+    status: nextStatus,
+    reason: validated.reason,
+  });
+
+  res.json({ success: true, contract: updatedContract });
 });
 
 // 2c. Admin Package Orders & Payments Endpoints

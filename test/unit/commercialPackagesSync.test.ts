@@ -25,7 +25,6 @@ import {
 } from '../../src/services/admin/hashrateAllocationService.js';
 import {
   PackagePaymentsService,
-  INITIAL_PACKAGE_PAYMENTS,
   ADMIN_ORDERS_COLLECTION,
 } from '../../src/services/admin/packagePaymentsService.js';
 import { VirtualWorkerService } from '../../src/services/admin/virtualWorkerService.js';
@@ -139,29 +138,37 @@ describe('Commercial Packages & Admin Synchronization Unit Tests', () => {
       lastCalculatedAt: new Date().toISOString(),
     };
 
-    const registered = await allocationService.registerContract(newContract);
-    assert.equal(registered.id, 'ctr-test-buyer-101');
-    assert.equal(registered.userEmail, 'comprador@gomining.cloud');
-    assert.equal(registered.contractedTh, 96);
-    assert.equal(registered.pricePaidUsdt, 1111.99);
+    const originalFetch = globalThis.fetch;
+    (globalThis as any).fetch = async (_url: string, init?: RequestInit) => {
+      const body = init?.body ? JSON.parse(String(init.body)) : newContract;
+      return new Response(JSON.stringify({ success: true, contract: body }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+    try {
+      const registered = await allocationService.registerContract(newContract);
+      assert.equal(registered.id, 'ctr-test-buyer-101');
+      assert.equal(registered.userEmail, 'comprador@gomining.cloud');
+      assert.equal(registered.contractedTh, 96);
+      assert.equal(registered.pricePaidUsdt, 1111.99);
 
-    const summary = allocationService.getAllocationSummary();
-    assert.ok(summary.totalContractedTh >= 96);
+      const summary = allocationService.getAllocationSummary();
+      assert.ok(summary.totalContractedTh >= 96);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
-  it('validates initial package orders and payment structure', () => {
+  it('starts package orders clean with zero hardcoded mocks and computes pure summary', () => {
     const payments = paymentService.getPayments();
     assert.ok(Array.isArray(payments));
-    assert.ok(payments.length >= 2);
+    assert.equal(payments.length, 0);
 
-    for (const payment of payments) {
-      assert.ok(payment.orderId);
-      assert.ok(payment.userEmail);
-      assert.ok(payment.contractedTh > 0);
-      assert.ok(payment.amountUsd > 0);
-      assert.ok(payment.cryptoAsset);
-      assert.ok(payment.status);
-    }
+    const summary = paymentService.getSummary(payments);
+    assert.equal(summary.totalOrdersCount, 0);
+    assert.equal(summary.totalVolumeUsd, 0);
+    assert.equal(summary.totalThSold, 0);
   });
 
   it('maps navigation tab URL query parameters and paths correctly using resolveTabFromUrl', () => {
@@ -213,7 +220,19 @@ describe('Commercial Packages & Admin Synchronization Unit Tests', () => {
       lastCalculatedAt: new Date().toISOString(),
     };
 
-    await allocationService.registerContract(clientContract);
+    const originalFetch = globalThis.fetch;
+    (globalThis as any).fetch = async (_url: string, init?: RequestInit) => {
+      const body = init?.body ? JSON.parse(String(init.body)) : clientContract;
+      return new Response(JSON.stringify({ success: true, contract: body }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+    try {
+      await allocationService.registerContract(clientContract);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
     const workers = vWorkerService.getVirtualWorkers();
     const matchingWorker = workers.find(w => w.contractId === uniqueContractId);
 

@@ -1,9 +1,8 @@
 import type { MiningContract, ContractStatus, AllocationSummary } from '../../types/admin';
 import { AdminAuditService } from './adminAuditService';
-import { db, collection, doc, getDocs, setDoc, onSnapshot } from '../../utils/firebaseAuth';
+import { db, collection, getDocs, onSnapshot } from '../../utils/firebaseAuth';
 import { apiFetch } from '../../utils/apiConfig';
 
-const STORAGE_CONTRACTS_KEY = 'minerx_admin_contracts_v3';
 export const ADMIN_CONTRACTS_COLLECTION = 'admin_contracts';
 
 export const INITIAL_CONTRACTS: MiningContract[] = [
@@ -23,7 +22,7 @@ export const INITIAL_CONTRACTS: MiningContract[] = [
     activatedAt: '2026-10-15T12:00:00Z',
     expiresAt: '2027-10-15T12:00:00Z',
     accumulatedProductionPrl: 85.40,
-    accumulatedNetProfitUsd: 125.54, // 85.40 PRL * $1.47 USD
+    accumulatedNetProfitUsd: 125.54,
     lastCalculatedAt: new Date().toISOString()
   },
   {
@@ -42,7 +41,7 @@ export const INITIAL_CONTRACTS: MiningContract[] = [
     activatedAt: '2026-10-18T09:30:00Z',
     expiresAt: '2027-10-18T09:30:00Z',
     accumulatedProductionPrl: 49.30,
-    accumulatedNetProfitUsd: 72.47, // 49.30 PRL * $1.47 USD
+    accumulatedNetProfitUsd: 72.47,
     lastCalculatedAt: new Date().toISOString()
   },
   {
@@ -61,7 +60,7 @@ export const INITIAL_CONTRACTS: MiningContract[] = [
     activatedAt: '2026-10-25T14:15:00Z',
     expiresAt: '2027-10-25T14:15:00Z',
     accumulatedProductionPrl: 21.60,
-    accumulatedNetProfitUsd: 31.75, // 21.60 PRL * $1.47 USD
+    accumulatedNetProfitUsd: 31.75,
     lastCalculatedAt: new Date().toISOString()
   },
   {
@@ -80,16 +79,58 @@ export const INITIAL_CONTRACTS: MiningContract[] = [
     activatedAt: '2026-10-28T16:00:00Z',
     expiresAt: '2027-10-28T16:00:00Z',
     accumulatedProductionPrl: 10.20,
-    accumulatedNetProfitUsd: 14.99, // 10.20 PRL * $1.47 USD
+    accumulatedNetProfitUsd: 14.99,
     lastCalculatedAt: new Date().toISOString()
   }
 ];
 
 export type { AllocationSummary };
 
+export function normalizeMiningContractDoc(id: string, data: Record<string, any>): MiningContract {
+  const contractedTh = Number(data.contractedTh ?? data.powerTh ?? 0);
+  const allocatedTh = Number(data.allocatedTh ?? data.contractedTh ?? data.powerTh ?? 0);
+  return {
+    id,
+    orderId: typeof data.orderId === 'string' && data.orderId.trim() ? data.orderId.trim() : undefined,
+    activatedMinerId:
+      typeof data.activatedMinerId === 'string' && data.activatedMinerId.trim()
+        ? data.activatedMinerId.trim()
+        : undefined,
+    intentId: typeof data.intentId === 'string' && data.intentId.trim() ? data.intentId.trim() : undefined,
+    userId: data.userId || 'usr_client',
+    userEmail: data.userEmail || 'cliente@gomining.cloud',
+    packageId: data.packageId || 'pkg-custom',
+    packageName: data.packageName || data.name || 'Minero Digital',
+    contractedTh: Number.isFinite(contractedTh) ? contractedTh : 0,
+    allocatedTh: Number.isFinite(allocatedTh) ? allocatedTh : 0,
+    status: (data.status as ContractStatus) || 'ACTIVE',
+    pricePaidUsdt: Number(data.pricePaidUsdt ?? data.price ?? 0),
+    variablePct: Number(data.variablePct) || 0,
+    commissionPct: Number(data.commissionPct) || 2,
+    workerId: data.workerId || `vwk-${id.slice(0, 8)}`,
+    activatedAt: data.activatedAt || data.createdAt || new Date().toISOString(),
+    expiresAt: data.expiresAt || new Date(Date.now() + 365 * 86400000).toISOString(),
+    accumulatedProductionPrl: Number(data.accumulatedProductionPrl) || 0,
+    accumulatedNetProfitUsd: Number(data.accumulatedNetProfitUsd) || 0,
+    lastCalculatedAt: data.lastCalculatedAt || new Date().toISOString(),
+  };
+}
+
+async function parseErrorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const body = await res.json();
+    if (body && typeof body.error === 'string' && body.error.trim()) return body.error;
+    if (body && typeof body.message === 'string' && body.message.trim()) return body.message;
+  } catch {
+    // Non-JSON error body
+  }
+  return `${fallback} (HTTP ${res.status})`;
+}
+
 export class HashrateAllocationService {
   private static instance: HashrateAllocationService;
   private audit = AdminAuditService.getInstance();
+  private cachedContracts: MiningContract[] | null = null;
 
   private constructor() {}
 
@@ -101,23 +142,33 @@ export class HashrateAllocationService {
   }
 
   public getContracts(): MiningContract[] {
-    try {
-      const raw = localStorage.getItem(STORAGE_CONTRACTS_KEY);
-      if (raw) return JSON.parse(raw);
-    } catch {}
-    return INITIAL_CONTRACTS;
+    if (this.cachedContracts !== null) {
+      return this.cachedContracts;
+    }
+    return INITIAL_CONTRACTS.map((c) => ({ ...c }));
   }
 
-  public getAllocationSummary(backedCapacityTh = 1000): AllocationSummary {
-    const contracts = this.getContracts();
-    const activeContracts = contracts.filter(c => c.status === 'ACTIVE' || c.status === 'PARTIALLY_ALLOCATED');
+  private upsertCache(contract: MiningContract): void {
+    const list = this.getContracts().slice();
+    const idx = list.findIndex((c) => c.id === contract.id);
+    if (idx >= 0) {
+      list[idx] = contract;
+    } else {
+      list.unshift(contract);
+    }
+    this.cachedContracts = list;
+  }
+
+  public getAllocationSummary(backedCapacityTh = 1000, contractsOverride?: MiningContract[]): AllocationSummary {
+    const contracts = contractsOverride ?? this.getContracts();
+    const activeContracts = contracts.filter((c) => c.status === 'ACTIVE' || c.status === 'PARTIALLY_ALLOCATED');
 
     const totalContractedTh = activeContracts.reduce((sum, c) => sum + c.contractedTh, 0);
     const totalAllocatedTh = activeContracts.reduce((sum, c) => sum + c.allocatedTh, 0);
     const availableCapacityTh = Math.max(0, backedCapacityTh - totalAllocatedTh);
     const utilizationRatePct = backedCapacityTh > 0 ? (totalAllocatedTh / backedCapacityTh) * 100 : 0;
     const isOverallocated = totalAllocatedTh > backedCapacityTh;
-    const unallocatedContractsCount = activeContracts.filter(c => c.allocatedTh < c.contractedTh).length;
+    const unallocatedContractsCount = activeContracts.filter((c) => c.allocatedTh < c.contractedTh).length;
 
     return {
       totalContractedTh,
@@ -126,235 +177,133 @@ export class HashrateAllocationService {
       availableCapacityTh,
       utilizationRatePct: Number(utilizationRatePct.toFixed(1)),
       isOverallocated,
-      unallocatedContractsCount
+      unallocatedContractsCount,
     };
   }
 
   /**
-   * Fetches contracts from Cloud Firestore /admin_contracts,
-   * merging any client-purchased miners with local admin contracts.
-   * Falls back to Express REST endpoint (/api/admin/contracts).
+   * Fetches contracts directly from Cloud Firestore /admin_contracts without stale localStorage merge.
+   * Falls back to authenticated Express REST endpoint (/api/admin/contracts).
    */
   public async fetchFirestoreContracts(): Promise<MiningContract[]> {
     if (db) {
       try {
         const snap = await getDocs(collection(db, ADMIN_CONTRACTS_COLLECTION));
-        if (!snap.empty) {
-          const firestoreContracts: MiningContract[] = snap.docs.map(d => {
-            const data = d.data();
-            return {
-              id: d.id,
-              userId: data.userId || 'usr_client',
-              userEmail: data.userEmail || 'cliente@gomining.cloud',
-              packageId: data.packageId || 'pkg-custom',
-              packageName: data.packageName || data.name || 'Minero Digital',
-              contractedTh: Number(data.contractedTh ?? data.powerTh ?? 0),
-              allocatedTh: Number(data.allocatedTh ?? data.contractedTh ?? data.powerTh ?? 0),
-              status: (data.status as ContractStatus) || 'ACTIVE',
-              pricePaidUsdt: Number(data.pricePaidUsdt ?? data.price ?? 0),
-              variablePct: Number(data.variablePct) || 0,
-              commissionPct: Number(data.commissionPct) || 2,
-              workerId: data.workerId || `vwk-${d.id.slice(0, 8)}`,
-              activatedAt: data.activatedAt || data.createdAt || new Date().toISOString(),
-              expiresAt: data.expiresAt || new Date(Date.now() + 365 * 86400000).toISOString(),
-              accumulatedProductionPrl: Number(data.accumulatedProductionPrl) || 0,
-              accumulatedNetProfitUsd: Number(data.accumulatedNetProfitUsd) || 0,
-              lastCalculatedAt: data.lastCalculatedAt || new Date().toISOString()
-            };
-          });
-
-          const local = this.getContracts();
-          const mergedMap = new Map<string, MiningContract>();
-          for (const fc of firestoreContracts) {
-            mergedMap.set(fc.id, fc);
-          }
-          for (const lc of local) {
-            if (!mergedMap.has(lc.id)) {
-              mergedMap.set(lc.id, lc);
-            }
-          }
-
-          const mergedList = Array.from(mergedMap.values());
-          localStorage.setItem(STORAGE_CONTRACTS_KEY, JSON.stringify(mergedList));
-          return mergedList;
-        }
+        const firestoreContracts = snap.docs.map((d) => normalizeMiningContractDoc(d.id, d.data()));
+        this.cachedContracts = firestoreContracts;
+        return firestoreContracts;
       } catch (err) {
         console.warn('[HashrateAllocationService] Notice fetching from Firestore, checking Express API:', err);
       }
     }
 
-    // Secondary fallback: Express API Server
     try {
       const res = await apiFetch('/api/admin/contracts');
       if (res.ok) {
         const remoteContracts = await res.json();
-        if (Array.isArray(remoteContracts) && remoteContracts.length > 0) {
-          const local = this.getContracts();
-          const mergedMap = new Map<string, MiningContract>();
-          for (const rc of remoteContracts) {
-            mergedMap.set(rc.id, rc);
-          }
-          for (const lc of local) {
-            if (!mergedMap.has(lc.id)) {
-              mergedMap.set(lc.id, lc);
-            }
-          }
-          const mergedList = Array.from(mergedMap.values());
-          localStorage.setItem(STORAGE_CONTRACTS_KEY, JSON.stringify(mergedList));
-          return mergedList;
+        if (Array.isArray(remoteContracts)) {
+          const normalized = remoteContracts.map((rc) => normalizeMiningContractDoc(rc.id, rc));
+          this.cachedContracts = normalized;
+          return normalized;
         }
       }
-    } catch {}
+    } catch {
+      // Backend unavailable
+    }
 
     return this.getContracts();
   }
 
   /**
-   * Real-time subscription to Cloud Firestore collection /admin_contracts
+   * Real-time subscription to Cloud Firestore collection /admin_contracts (server-authoritative).
    */
   public subscribeToFirestoreContracts(callback: (contracts: MiningContract[]) => void): () => void {
     if (!db) return () => {};
     try {
       const colRef = collection(db, ADMIN_CONTRACTS_COLLECTION);
-      return onSnapshot(colRef, (snap) => {
-        if (!snap.empty) {
-          const firestoreContracts: MiningContract[] = snap.docs.map(d => {
-            const data = d.data();
-            return {
-              id: d.id,
-              userId: data.userId || 'usr_client',
-              userEmail: data.userEmail || 'cliente@gomining.cloud',
-              packageId: data.packageId || 'pkg-custom',
-              packageName: data.packageName || data.name || 'Minero Digital',
-              contractedTh: Number(data.contractedTh ?? data.powerTh ?? 0),
-              allocatedTh: Number(data.allocatedTh ?? data.contractedTh ?? data.powerTh ?? 0),
-              status: (data.status as ContractStatus) || 'ACTIVE',
-              pricePaidUsdt: Number(data.pricePaidUsdt ?? data.price ?? 0),
-              variablePct: Number(data.variablePct) || 0,
-              commissionPct: Number(data.commissionPct) || 2,
-              workerId: data.workerId || `vwk-${d.id.slice(0, 8)}`,
-              activatedAt: data.activatedAt || data.createdAt || new Date().toISOString(),
-              expiresAt: data.expiresAt || new Date(Date.now() + 365 * 86400000).toISOString(),
-              accumulatedProductionPrl: Number(data.accumulatedProductionPrl) || 0,
-              accumulatedNetProfitUsd: Number(data.accumulatedNetProfitUsd) || 0,
-              lastCalculatedAt: data.lastCalculatedAt || new Date().toISOString()
-            };
-          });
-
-          const local = this.getContracts();
-          const mergedMap = new Map<string, MiningContract>();
-          for (const fc of firestoreContracts) {
-            mergedMap.set(fc.id, fc);
-          }
-          for (const lc of local) {
-            if (!mergedMap.has(lc.id)) {
-              mergedMap.set(lc.id, lc);
-            }
-          }
-
-          const mergedList = Array.from(mergedMap.values());
-          localStorage.setItem(STORAGE_CONTRACTS_KEY, JSON.stringify(mergedList));
-          callback(mergedList);
+      return onSnapshot(
+        colRef,
+        (snap) => {
+          const firestoreContracts = snap.docs.map((d) => normalizeMiningContractDoc(d.id, d.data()));
+          this.cachedContracts = firestoreContracts;
+          callback(firestoreContracts);
+        },
+        (err) => {
+          console.warn('[HashrateAllocationService] onSnapshot subscription notice:', err);
         }
-      }, (err) => {
-        console.warn('[HashrateAllocationService] onSnapshot subscription notice:', err);
-      });
+      );
     } catch {
       return () => {};
     }
   }
 
-  public updateContractAllocation(contractId: string, newAllocatedTh: number, reason: string): boolean {
-    const list = this.getContracts();
-    const contract = list.find(c => c.id === contractId);
-    if (!contract) return false;
-
-    const previousAllocated = contract.allocatedTh;
-    contract.allocatedTh = Math.min(newAllocatedTh, contract.contractedTh);
-    if (contract.allocatedTh === contract.contractedTh) {
-      contract.status = 'ACTIVE';
-    } else if (contract.allocatedTh > 0) {
-      contract.status = 'PARTIALLY_ALLOCATED';
-    } else {
-      contract.status = 'SUSPENDED';
-    }
-
-    localStorage.setItem(STORAGE_CONTRACTS_KEY, JSON.stringify(list));
-    this.audit.logAction('admin_sys', 'admin@minerx.cloud', 'MINING_OPERATOR', 'ALLOCATION', 'UPDATE_HASHRATE_ALLOCATION', contractId, {
-      previousAllocated,
-      newAllocatedTh: contract.allocatedTh,
-      contractedTh: contract.contractedTh,
-      reason
+  public async updateContractAllocation(
+    contractId: string,
+    newAllocatedTh: number,
+    reason: string
+  ): Promise<MiningContract> {
+    const res = await apiFetch(`/api/admin/contracts/${encodeURIComponent(contractId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ allocatedTh: newAllocatedTh, reason }),
     });
 
-    if (db) {
-      setDoc(doc(db, ADMIN_CONTRACTS_COLLECTION, contractId), contract, { merge: true }).catch(err => {
-        console.error('[HashrateAllocationService] Error syncing allocation to Firestore:', err);
-      });
+    if (!res.ok) {
+      throw new Error(await parseErrorMessage(res, 'No se pudo actualizar la asignación del contrato'));
     }
 
-    try {
-      apiFetch('/api/admin/contracts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(contract)
-      }).catch(() => {});
-    } catch {}
-
-    return true;
+    const payload = await res.json();
+    const updated = normalizeMiningContractDoc(payload?.contract?.id || contractId, payload?.contract || {});
+    this.upsertCache(updated);
+    this.audit.logAction('admin_sys', 'admin@minerx.cloud', 'MINING_OPERATOR', 'ALLOCATION', 'UPDATE_HASHRATE_ALLOCATION', contractId, {
+      newAllocatedTh: updated.allocatedTh,
+      contractedTh: updated.contractedTh,
+      reason,
+    });
+    return updated;
   }
 
-  public updateContractStatus(contractId: string, status: ContractStatus, reason: string): boolean {
-    const list = this.getContracts();
-    const contract = list.find(c => c.id === contractId);
-    if (!contract) return false;
-
-    const previousStatus = contract.status;
-    contract.status = status;
-    localStorage.setItem(STORAGE_CONTRACTS_KEY, JSON.stringify(list));
-
-    this.audit.logAction('admin_sys', 'admin@minerx.cloud', 'MINING_OPERATOR', 'ALLOCATION', 'UPDATE_CONTRACT_STATUS', contractId, {
-      previousStatus,
-      newStatus: status,
-      reason
+  public async updateContractStatus(
+    contractId: string,
+    status: ContractStatus,
+    reason: string
+  ): Promise<MiningContract> {
+    const res = await apiFetch(`/api/admin/contracts/${encodeURIComponent(contractId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, reason }),
     });
 
-    if (db) {
-      setDoc(doc(db, ADMIN_CONTRACTS_COLLECTION, contractId), contract, { merge: true }).catch(err => {
-        console.error('[HashrateAllocationService] Error syncing status to Firestore:', err);
-      });
+    if (!res.ok) {
+      throw new Error(await parseErrorMessage(res, 'No se pudo actualizar el estado del contrato'));
     }
 
-    try {
-      apiFetch('/api/admin/contracts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(contract)
-      }).catch(() => {});
-    } catch {}
-
-    return true;
+    const payload = await res.json();
+    const updated = normalizeMiningContractDoc(payload?.contract?.id || contractId, payload?.contract || {});
+    this.upsertCache(updated);
+    this.audit.logAction('admin_sys', 'admin@minerx.cloud', 'MINING_OPERATOR', 'ALLOCATION', 'UPDATE_CONTRACT_STATUS', contractId, {
+      newStatus: updated.status,
+      reason,
+    });
+    return updated;
   }
 
   public async registerContract(contract: MiningContract): Promise<MiningContract> {
-    const list = this.getContracts();
-    const existingIdx = list.findIndex(c => c.id === contract.id);
-    if (existingIdx >= 0) {
-      list[existingIdx] = contract;
-    } else {
-      list.unshift(contract);
+    const res = await apiFetch('/api/admin/contracts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(contract),
+    });
+
+    if (!res.ok) {
+      throw new Error(await parseErrorMessage(res, 'No se pudo registrar el contrato en el backend'));
     }
-    localStorage.setItem(STORAGE_CONTRACTS_KEY, JSON.stringify(list));
-    if (db) {
-      await setDoc(doc(db, ADMIN_CONTRACTS_COLLECTION, contract.id), contract, { merge: true }).catch(() => {});
-    }
-    try {
-      apiFetch('/api/admin/contracts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(contract)
-      }).catch(() => {});
-    } catch {}
-    return contract;
+
+    const payload = await res.json();
+    const saved = payload?.contract
+      ? normalizeMiningContractDoc(payload.contract.id || contract.id, payload.contract)
+      : contract;
+    this.upsertCache(saved);
+    return saved;
   }
 }
