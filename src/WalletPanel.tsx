@@ -1,15 +1,19 @@
 import { useState } from 'react'
 import { useAppKit, useAppKitAccount, useDisconnect } from '@reown/appkit/react'
 import { useAccount, useBalance } from 'wagmi'
+import { useAuth } from './AuthContext'
+import { ClientPaymentHistory } from './components/payments/ClientPaymentHistory'
 import type { WalletSession } from './walletSession'
 
 export function WalletPanel({ session }: { session?: WalletSession }) {
+  const { user } = useAuth()
   const { open } = useAppKit()
   const { address: appKitAddress, isConnected: isAppKitConnected } = useAppKitAccount()
   const { address: wagmiAddress, isConnected: isWagmiConnected, chain } = useAccount()
   const { disconnect: disconnectAppKit } = useDisconnect()
 
   const [copied, setCopied] = useState(false)
+  const authenticatedUid = user && !user.isAnonymous ? user.uid : ''
 
   const activeAddress = wagmiAddress || appKitAddress || session?.connection?.address || ''
   const isConnected = Boolean(activeAddress && (isWagmiConnected || isAppKitConnected || Boolean(session?.connection)))
@@ -159,6 +163,8 @@ export function WalletPanel({ session }: { session?: WalletSession }) {
           {isConnected ? 'Gestionar en Reown AppKit' : 'Conectar con Reown AppKit'}
         </button>
       </div>
+
+      {authenticatedUid ? <ClientPaymentHistory uid={authenticatedUid} /> : null}
     </div>
   )
 }
