@@ -201,7 +201,7 @@ test('SCRUM-281 Admin (W06.2 — Regresión e Integración W01..W04 + W06): Veri
   );
   assert.equal(
     sha256Of(path.join(projectRoot, 'firestore.rules')),
-    '3422F1E051904328C791377B6BE4DB34269AFC9AA7D3FF0E00C59677503F6C8C',
+    'EA8F0C18923E1B2D25ED1C9D2599858475ADDDB06E6677667F29EC594F90705C',
   );
   assert.equal(
     sha256Of(path.join(projectRoot, 'server/services/withdrawalRequestLockService.ts')),

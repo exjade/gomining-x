@@ -276,7 +276,8 @@ service cloud.firestore {
 
     // Contratos y Asignaciones Administrativas (server-authoritative — SCRUM-346)
     match /admin_contracts/{contractId} {
-      allow read: if isAdmin() || (isNonAnonymous() && resource != null && (resource.data.uid == request.auth.uid || resource.data.userId == request.auth.uid));
+      allow get: if isAdmin() || (isNonAnonymous() && resource != null && (('userId' in resource.data && resource.data.userId == request.auth.uid) || ('uid' in resource.data && resource.data.uid == request.auth.uid)));
+      allow list: if isAdmin() || (isNonAnonymous() && resource.data.userId == request.auth.uid);
       allow create, update, delete: if false;
     }
 
@@ -302,7 +303,8 @@ service cloud.firestore {
 
     // Órdenes y pagos de paquetes (server-authoritative — SCRUM-346)
     match /admin_orders/{orderId} {
-      allow read: if isAdmin() || (isNonAnonymous() && resource != null && (resource.data.buyerUid == request.auth.uid || resource.data.userId == request.auth.uid));
+      allow get: if isAdmin() || (isNonAnonymous() && resource != null && (('userId' in resource.data && resource.data.userId == request.auth.uid) || ('buyerUid' in resource.data && resource.data.buyerUid == request.auth.uid)));
+      allow list: if isAdmin() || (isNonAnonymous() && resource.data.userId == request.auth.uid);
       allow create, update, delete: if false;
     }
 
