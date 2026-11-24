@@ -1,6 +1,12 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { onAuthStateChanged, type User } from 'firebase/auth'
 import { doc, onSnapshot } from 'firebase/firestore'
+import {
+  broadcastCrossTabSessionLogout,
+  clearStoredWalletOwnerUid,
+  disconnectWeb3SessionBestEffort,
+  readStoredWalletOwnerUid,
+} from './services/session/accountSessionIsolation'
 import {
   auth,
   db,
@@ -69,18 +75,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Helper to distinguish registered account from guest/anonymous session
   const isRegisteredUser = (u: User | null): u is User => Boolean(u && !u.isAnonymous && u.email)
+  const prevUidRef = useRef<string | null>(null)
+  const authActionEpochRef = useRef(0)
+  const profileLoadSeqRef = useRef(0)
+  const logoutInFlightRef = useRef<Promise<void> | null>(null)
 
   // Listen for Firebase Auth state changes
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
+      const seq = ++profileLoadSeqRef.current
+      const nextUid = isRegisteredUser(currentUser) ? currentUser.uid : null
+      const prevUid = prevUidRef.current
+      prevUidRef.current = nextUid
+      if (prevUid && prevUid !== nextUid) {
+        const storedOwner = readStoredWalletOwnerUid()
+        if (!storedOwner || storedOwner !== nextUid) {
+          void disconnectWeb3SessionBestEffort({
+            clearOwnerStorage: !storedOwner || storedOwner === prevUid,
+          })
+        }
+      }
       if (isRegisteredUser(currentUser)) {
         setUser(currentUser)
         // If logged in, fetch profile (ensure profile exists if missing)
         try {
           let p = await getUserProfile(currentUser.uid)
+          if (profileLoadSeqRef.current !== seq) return
           if (!p) {
             p = await ensureUserProfile(currentUser)
           }
+          if (profileLoadSeqRef.current !== seq) return
           setProfile(p)
         } catch {
           // ignore
@@ -156,12 +180,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const login = async (email: string, pass: string) => {
+    const epoch = ++authActionEpochRef.current
+    profileLoadSeqRef.current += 1
     const loggedUser = await loginWithEmail(email, pass)
+    if (authActionEpochRef.current !== epoch) return
     setUser(loggedUser)
     let prof = await getUserProfile(loggedUser.uid)
+    if (authActionEpochRef.current !== epoch) return
     if (!prof) {
       prof = await ensureUserProfile(loggedUser)
     }
+    if (authActionEpochRef.current !== epoch) return
     setProfile(prof)
     if (!loggedUser.emailVerified) {
       setAuthMode('verify-email')
@@ -172,8 +201,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const register = async (email: string, pass: string, refCode?: string) => {
+    const epoch = ++authActionEpochRef.current
+    profileLoadSeqRef.current += 1
     const code = refCode || referralCodeFromUrl
     const res = await registerWithEmail(email, pass, code)
+    if (authActionEpochRef.current !== epoch) return
     setUser(res.user)
     setProfile(res.profile)
     setAuthMode('verify-email')
@@ -181,10 +213,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const logout = async () => {
-    await logoutUser()
-    setUser(null)
-    setProfile(null)
-    setAuthModalOpen(false)
+    if (logoutInFlightRef.current) {
+      await logoutInFlightRef.current
+      return
+    }
+    const epoch = ++authActionEpochRef.current
+    profileLoadSeqRef.current += 1
+    const prevUidBeforeLogout = prevUidRef.current
+    const storedOwnerBeforeLogout = readStoredWalletOwnerUid()
+    const shouldClearOwner =
+      !storedOwnerBeforeLogout || !prevUidBeforeLogout || storedOwnerBeforeLogout === prevUidBeforeLogout
+    const run = (async () => {
+      try {
+        broadcastCrossTabSessionLogout()
+        await disconnectWeb3SessionBestEffort({ clearOwnerStorage: shouldClearOwner })
+      } catch {
+        if (shouldClearOwner) {
+          clearStoredWalletOwnerUid()
+        }
+      } finally {
+        if (authActionEpochRef.current === epoch) {
+          prevUidRef.current = null
+          try {
+            await logoutUser()
+          } catch {
+            // Ensure local auth state still clears if signOut transiently fails.
+          }
+          if (authActionEpochRef.current === epoch) {
+            setUser(null)
+            setProfile(null)
+            setAuthModalOpen(false)
+          }
+        }
+      }
+    })()
+    logoutInFlightRef.current = run
+    try {
+      await run
+    } finally {
+      if (logoutInFlightRef.current === run) {
+        logoutInFlightRef.current = null
+      }
+    }
   }
 
   const resendVerification = async () => {

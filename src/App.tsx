@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAccount, useDisconnect as useWagmiDisconnect } from 'wagmi'
 import { useAppKit, useAppKitAccount } from '@reown/appkit/react'
@@ -78,6 +78,17 @@ import {
 import { WithdrawalForm } from './components/withdrawals/WithdrawalForm'
 import { WithdrawalHistoryPanel } from './components/withdrawals/WithdrawalHistoryPanel'
 import type { ClientWithdrawalAuthSession } from './services/withdrawals/withdrawalAuthGuard'
+import {
+  WALLET_OWNER_UID_STORAGE_KEY,
+  clearStoredWalletOwnerUid,
+  disconnectWeb3SessionBestEffort,
+  evaluateCrossTabStorageEvent,
+  evaluateWalletSessionTransition,
+  readStoredWalletOwnerUid,
+  resolveVisibleTransactionRows,
+  shouldResetAccountUiState,
+  writeStoredWalletOwnerUid,
+} from './services/session/accountSessionIsolation'
 
 type PendingAction = { title: string; detail: string; productId?: string }
 
@@ -94,6 +105,7 @@ function AppContent() {
   const screen = getScreen(location.pathname)
   const { user, profile, loading, isEmailVerified, openAuthModal } = useAuth()
   const isAuthenticated = Boolean(user && !user.isAnonymous)
+  const activeUid = isAuthenticated && user ? user.uid : null
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
   const [toast, setToast] = useState('')
   const [sessionEvents, setSessionEvents] = useState<string[]>([])
@@ -102,6 +114,46 @@ function AppContent() {
   const [topUpOpen, setTopUpOpen] = useState(false)
   const [minerBuilderOpen, setMinerBuilderOpen] = useState(false)
   const [walletCheckout, setWalletCheckout] = useState<{ productName: string; amount: number; currency: PaymentCurrency; packageId?: string; purchaseMode?: 'once' | 'monthly'; networkId?: PaymentNetworkId; walletId?: WalletId; minerId?: string; intentId?: string } | null>(null)
+  const [paymentReceipts, setPaymentReceipts] = useState<PaymentReceipt[]>([])
+  const prevAuthUidRef = useRef<string | null>(activeUid)
+  const paidRedirectTimerRef = useRef<number | null>(null)
+  const prevWalletGuardUidRef = useRef<string | null>(null)
+  const prevWalletConnectedOnGuardRef = useRef(false)
+  const pendingResidualWalletRef = useRef(false)
+  const preservedRemoteOwnerUidRef = useRef<string | null>(null)
+  const activeUidRef = useRef<string | null>(activeUid)
+  activeUidRef.current = activeUid
+
+  useEffect(() => () => {
+    if (paidRedirectTimerRef.current !== null) {
+      window.clearTimeout(paidRedirectTimerRef.current)
+      paidRedirectTimerRef.current = null
+    }
+  }, [])
+
+  const resetAccountTransientUiState = useCallback(() => {
+    if (paidRedirectTimerRef.current !== null) {
+      window.clearTimeout(paidRedirectTimerRef.current)
+      paidRedirectTimerRef.current = null
+    }
+    setSessionEvents([])
+    setPaymentReceipts([])
+    setCart([])
+    setWalletCheckout(null)
+    setPendingAction(null)
+    setToast('')
+    setPurchaseOpen(false)
+    setTopUpOpen(false)
+    setMinerBuilderOpen(false)
+  }, [])
+
+  // SCRUM-376: Deterministic per-uid reset of transient UI state & redirect timer
+  useEffect(() => {
+    const prevUid = prevAuthUidRef.current
+    prevAuthUidRef.current = activeUid
+    if (!shouldResetAccountUiState(prevUid, activeUid)) return
+    resetAccountTransientUiState()
+  }, [activeUid, resetAccountTransientUiState])
 
   // Blocker 6: Restore pending post-tx recovery modal after application reload
   useEffect(() => {
@@ -115,16 +167,50 @@ function AppContent() {
     if (!target) return
     setWalletCheckout((current) => current ?? target)
   }, [loading, user])
-  const [paymentReceipts, setPaymentReceipts] = useState<PaymentReceipt[]>([])
   const { theme, language, toggleTheme, setAppLanguage, t } = usePersonalization()
   const walletSession = useWalletSession()
-  const { address: wagmiAddress, isConnected: isWagmiConnected, chain } = useAccount()
-  const { address: appKitAddress, isConnected: isAppKitConnected } = useAppKitAccount()
+  const { address: wagmiAddress, isConnected: isWagmiConnected, status: wagmiStatus, chain } = useAccount()
+  const { address: appKitAddress, isConnected: isAppKitConnected, status: appKitStatus } = useAppKitAccount()
   const { open: openAppKit } = useAppKit()
-  const { disconnect: disconnectWagmi } = useWagmiDisconnect()
+  const { disconnect: disconnectWagmi, disconnectAsync: disconnectWagmiAsync, connectors: wagmiConnectors } = useWagmiDisconnect()
+  const wagmiConnectorsRef = useRef(wagmiConnectors)
+  wagmiConnectorsRef.current = wagmiConnectors
+  const isWalletReconnecting =
+    walletSession.restoringWallet ||
+    appKitStatus === 'reconnecting' ||
+    appKitStatus === 'connecting' ||
+    wagmiStatus === 'reconnecting' ||
+    wagmiStatus === 'connecting'
+  const isWalletReconnectingRef = useRef(isWalletReconnecting)
+  isWalletReconnectingRef.current = isWalletReconnecting
 
   const activeWalletAddress = wagmiAddress || appKitAddress || walletSession.connection?.address || ''
   const isWalletConnected = isWagmiConnected || isAppKitConnected || Boolean(walletSession.connection)
+  const isWalletConnectedRef = useRef(isWalletConnected)
+  isWalletConnectedRef.current = isWalletConnected
+  const disconnectAllWagmiConnectors = useCallback(async () => {
+    const activeConnectors = wagmiConnectorsRef.current
+    if (activeConnectors.length > 0) {
+      await Promise.allSettled(
+        activeConnectors.map(async (connector) => {
+          try {
+            const provider = (await connector.getProvider?.()) as { request?: (args: { method: string; params?: unknown[] }) => Promise<unknown> } | undefined
+            if (typeof provider?.request === 'function') {
+              await provider.request({
+                method: 'wallet_revokePermissions',
+                params: [{ eth_accounts: {} }],
+              })
+            }
+          } catch {
+            // Best-effort EIP-2255 revocation per connector.
+          }
+          await disconnectWagmiAsync({ connector })
+        }),
+      )
+    } else {
+      await disconnectWagmiAsync()
+    }
+  }, [disconnectWagmiAsync])
   const shortWalletAddress = activeWalletAddress
     ? `${activeWalletAddress.slice(0, 6)}...${activeWalletAddress.slice(-4)}`
     : ''
@@ -180,7 +266,7 @@ function AppContent() {
     const params = new URLSearchParams(location.search)
     const intentId = params.get('gmPayIntentId')?.trim() || ''
     const resumeCheckout = params.get('gmPay') === '1' || Boolean(intentId)
-    setMinerBuilderOpen(location.pathname === '/home' && params.get('modal') === 'paywall-create' && !resumeCheckout)
+    setMinerBuilderOpen(isAuthenticated && location.pathname === '/home' && params.get('modal') === 'paywall-create' && !resumeCheckout)
     if (!intentId || loading) return
     if (!user || user.isAnonymous) {
       openAuthModal('register')
@@ -192,7 +278,105 @@ function AppContent() {
       currency: 'USD',
       intentId,
     })
-  }, [location.pathname, location.search, user, loading])
+  }, [location.pathname, location.search, user, loading, isAuthenticated])
+
+  // SCRUM-375: Enforce per-account Web3 wallet ownership across logout, switch, and cross-account reload
+  useEffect(() => {
+    if (loading) return
+    if (!isWalletConnected && isWalletReconnecting) return
+    const prevUid = prevWalletGuardUidRef.current
+    const wasWalletConnected = prevWalletConnectedOnGuardRef.current
+    prevWalletGuardUidRef.current = activeUid
+    prevWalletConnectedOnGuardRef.current = isWalletConnected
+    if (!isWalletConnected) {
+      pendingResidualWalletRef.current = false
+    }
+    const storedOwnerUid = readStoredWalletOwnerUid()
+    if (
+      preservedRemoteOwnerUidRef.current &&
+      (!storedOwnerUid || storedOwnerUid === activeUid || storedOwnerUid !== preservedRemoteOwnerUidRef.current)
+    ) {
+      preservedRemoteOwnerUidRef.current = null
+    }
+    const isPreservingRemoteOwner = Boolean(
+      storedOwnerUid && preservedRemoteOwnerUidRef.current === storedOwnerUid && storedOwnerUid !== activeUid,
+    )
+    const hadUnownedConnectedWallet =
+      pendingResidualWalletRef.current || (prevUid === null && activeUid !== null && wasWalletConnected)
+    const action = evaluateWalletSessionTransition({
+      prevUid,
+      nextUid: activeUid,
+      storedOwnerUid,
+      isWalletConnected,
+      hadUnownedConnectedWallet,
+    })
+    if (action === 'disconnect') {
+      pendingResidualWalletRef.current = true
+      void disconnectWeb3SessionBestEffort({
+        clearOwnerStorage: !isPreservingRemoteOwner,
+        disconnectWagmi: disconnectAllWagmiConnectors,
+      })
+    } else if (action === 'bind_owner' && activeUid) {
+      preservedRemoteOwnerUidRef.current = null
+      writeStoredWalletOwnerUid(activeUid)
+    } else if (action === 'clear_owner' && !isPreservingRemoteOwner) {
+      clearStoredWalletOwnerUid()
+    }
+  }, [loading, activeUid, isWalletConnected, isWalletReconnecting, disconnectAllWagmiConnectors])
+
+  // SCRUM-378: Immediate cross-tab session & Web3 isolation via storage events (zero ping-pong)
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.storageArea) {
+        let localStore: Storage | null = null
+        try {
+          localStore = window.localStorage
+        } catch {
+          return
+        }
+        if (event.storageArea !== localStore) return
+      }
+      const currentlyConnected = isWalletConnectedRef.current
+      const decision = evaluateCrossTabStorageEvent({
+        key: event.key,
+        newValue: event.newValue,
+        activeUid: activeUidRef.current,
+        isWalletConnected: currentlyConnected,
+      })
+      if (decision.shouldResetUiState) {
+        resetAccountTransientUiState()
+      }
+      const remoteOwner = event.key === WALLET_OWNER_UID_STORAGE_KEY
+        ? (event.newValue?.trim() || null)
+        : readStoredWalletOwnerUid()
+      if (event.key === WALLET_OWNER_UID_STORAGE_KEY && remoteOwner && remoteOwner !== activeUidRef.current) {
+        preservedRemoteOwnerUidRef.current = remoteOwner
+      }
+      const shouldFlagReconnectingWallet =
+        !currentlyConnected &&
+        isWalletReconnectingRef.current &&
+        evaluateCrossTabStorageEvent({
+          key: event.key,
+          newValue: event.newValue,
+          activeUid: activeUidRef.current,
+          isWalletConnected: true,
+        }).shouldDisconnectWallet
+      if (decision.shouldDisconnectWallet || shouldFlagReconnectingWallet) {
+        pendingResidualWalletRef.current = true
+        if (!decision.clearOwnerStorage && remoteOwner && remoteOwner !== activeUidRef.current) {
+          preservedRemoteOwnerUidRef.current = remoteOwner
+        }
+        if (decision.shouldDisconnectWallet) {
+          void disconnectWeb3SessionBestEffort({
+            clearOwnerStorage: decision.clearOwnerStorage,
+            disconnectWagmi: disconnectAllWagmiConnectors,
+          })
+        }
+      }
+    }
+    window.addEventListener('storage', handleStorage)
+    return () => window.removeEventListener('storage', handleStorage)
+  }, [resetAccountTransientUiState, disconnectAllWagmiConnectors])
 
   if (loading) {
     if (isPublicAppRoute(location.pathname) || !isAuthenticated) {
@@ -607,7 +791,11 @@ function AppContent() {
         setSessionEvents((items) => [receiptEvent, ...items].slice(0, 5))
         setToast('¡Pago verificado y enviado on-chain! Redirigiendo a customización...')
         if (receipt.minerId) {
-          window.setTimeout(() => {
+          if (paidRedirectTimerRef.current !== null) {
+            window.clearTimeout(paidRedirectTimerRef.current)
+          }
+          paidRedirectTimerRef.current = window.setTimeout(() => {
+            paidRedirectTimerRef.current = null
             setWalletCheckout(null)
             navigate(`/miners/${receipt.minerId}/customize`)
           }, 1400)
@@ -778,7 +966,7 @@ function Page({
           {screen.mode === 'operator' && <BitcoinMiningCalculator />}
           {pathname === '/nft-miners' && <MinerPanel openMinerBuilder={openMinerBuilder} openTopUp={openTopUp} />}
           {pathname.startsWith('/nft-rewards/') && <RewardsPanel pathname={pathname} openAction={openAction} />}
-          {screen.mode === 'table' && !pathname.startsWith('/data-centers') && !pathname.startsWith('/nft-referral') && <DataTable screen={screen} paymentReceipts={paymentReceipts} />}
+          {screen.mode === 'table' && !pathname.startsWith('/data-centers') && !pathname.startsWith('/nft-referral') && <DataTable screen={screen} paymentReceipts={paymentReceipts} isAuthenticated={isAuthenticated} />}
           {pathname === '/marketplace' && <MarketplacePanel addProduct={addProduct} />}
           {pathname !== '/marketplace' && pathname !== '/nft-miners' && pathname !== '/gmt-wallets' && pathname !== '/subscriptions' && pathname !== '/profile' && pathname !== '/launchpad' && !pathname.startsWith('/data-centers') && pathname !== '/nft-referral' && !pathname.startsWith('/nft-referral/') && !pathname.startsWith('/nft-rewards/') && (screen.mode === 'collection' || screen.mode === 'catalog') && <CatalogPanel screen={screen} pathname={pathname} openAction={openAction} addProduct={addProduct} />}
           {(pathname === '/gmt-wallets' || pathname === '/finance/wallets/virtual') && <WalletPanel session={walletSession} />}
@@ -1261,30 +1449,37 @@ function ExploreCard({ icon, title, subtitle, badge, to, onClick }: { icon: stri
   return to ? <Link to={to} className="explore-card">{content}</Link> : <button onClick={onClick} className="explore-card">{content}</button>
 }
 
-function DataTable({ screen, paymentReceipts }: { screen: ScreenDefinition; paymentReceipts: PaymentReceipt[] }) {
+function DataTable({ screen, paymentReceipts, isAuthenticated }: { screen: ScreenDefinition; paymentReceipts: PaymentReceipt[]; isAuthenticated: boolean }) {
   const demo = useDemoSession()
   const isTransactions = screen.title === 'Transacciones'
   const isEarnSummary = screen.title === 'Resumen de ganancias'
+  const { paymentReceipts: visiblePaymentReceipts, demoReceipts: visibleDemoReceipts } = resolveVisibleTransactionRows({
+    isAuthenticated,
+    paymentReceipts,
+    demoReceipts: demo.receipts,
+  })
   if (isEarnSummary) {
-    const mining = getDemoMiningPower(demo)
-    const demoReferralCredits = demo.receipts.filter((receipt) => receipt.kind === 'referral').reduce((total, receipt) => total + receipt.amount, 0)
+    const mining = isAuthenticated ? { total: 0 } : getDemoMiningPower(demo)
+    const visibleLocalMinersCount = isAuthenticated ? 0 : demo.miners.length
+    const demoReferralCredits = visibleDemoReceipts.filter((receipt) => receipt.kind === 'referral').reduce((total, receipt) => total + receipt.amount, 0)
     return <section className="content-panel table-panel earn-summary-panel">
       <div className="panel-toolbar"><div><h2>Resumen de ganancias</h2><p>Panel de minería independiente de Simple Earn.</p></div><span className="checkout-local-badge">MVP</span></div>
       <div className="referral-stats-grid">
-        <div className="stat-item"><span>Potencia minera local</span><strong>{mining.total.toFixed(2)} TH</strong><small>{demo.miners.length} equipos locales</small></div>
+        <div className="stat-item"><span>Potencia minera local</span><strong>{mining.total.toFixed(2)} TH</strong><small>{visibleLocalMinersCount} equipos locales</small></div>
         <div className="stat-item"><span>Liquidaciones de pool verificadas</span><strong>Sin datos</strong><small>La réplica aún no concilia recompensas</small></div>
         <div className="stat-item"><span>Recompensas locales de referido</span><strong>{formatDemoCurrency(demoReferralCredits)}</strong><small>Simulación local; no son pagos de minería</small></div>
       </div>
       <p className="demo-disclaimer">Cuando se conecte una fuente de liquidaciones, esta vista podrá resumir ingresos por periodo. Por ahora no transforma estimaciones del pool ni acciones locales en ganancias reales.</p>
     </section>
   }
+  const hasTransactionRows = visiblePaymentReceipts.length > 0 || visibleDemoReceipts.length > 0
   return (
     <section className="content-panel table-panel">
-      <div className="panel-toolbar"><div><h2>{screen.title}</h2><p>{isTransactions ? "Movimientos creados en esta sesión de simulación." : 'Datos sintéticos de esta vista local.'}</p></div><span className="checkout-local-badge">LOCAL</span></div>
-      {isTransactions && (demo.receipts.length > 0 || paymentReceipts.length > 0) ? <div className="table-scroll"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Activo</th><th>Importe</th><th>Estado</th><th>Hash</th></tr></thead><tbody>
-        {paymentReceipts.map((receipt) => <tr key={receipt.id}><td>{new Date(receipt.sentAt).toLocaleString('es-MX')}</td><td>Wallet · {receipt.productName}</td><td>{receipt.quote.networkName}</td><td>{formatAssetAmount(receipt.quote.amount, receipt.quote.asset)}</td><td>{receipt.bridgeStatus === 'pending' ? 'Enviado · Bridge pendiente' : 'Enviado · confirmación no verificada'}</td><td><code className="payment-hash-cell">{receipt.transactionHash}</code></td></tr>)}
-        {demo.receipts.map((receipt) => <tr key={receipt.id}><td>{receipt.createdAt}</td><td>{receipt.kind}</td><td>{receipt.label}</td><td>{formatDemoCurrency(receipt.amount)}</td><td><span className="table-demo-status">Local</span></td><td>—</td></tr>)}
-      </tbody></table></div> : <div className="empty-state"><div className="empty-illustration">▤</div><strong>{isTransactions ? 'Aún no hay movimientos' : 'No hay filas en esta vista'}</strong><span>{isTransactions ? 'Los pagos con wallet y las acciones locales aparecerán en esta sesión.' : "La tabla está lista para datos de simulación cuando existan."}</span></div>}
+      <div className="panel-toolbar"><div><h2>{screen.title}</h2><p>{isTransactions ? (isAuthenticated ? 'Pagos verificados realizados durante esta sesión.' : 'Movimientos creados en esta sesión de simulación.') : 'Datos sintéticos de esta vista local.'}</p></div><span className="checkout-local-badge">{isTransactions && isAuthenticated ? 'SESIÓN' : 'LOCAL'}</span></div>
+      {isTransactions && hasTransactionRows ? <div className="table-scroll"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Activo</th><th>Importe</th><th>Estado</th><th>Hash</th></tr></thead><tbody>
+        {visiblePaymentReceipts.map((receipt) => <tr key={receipt.id}><td>{new Date(receipt.sentAt).toLocaleString('es-MX')}</td><td>Wallet · {receipt.productName}</td><td>{receipt.quote.networkName}</td><td>{formatAssetAmount(receipt.quote.amount, receipt.quote.asset)}</td><td>{receipt.bridgeStatus === 'pending' ? 'Enviado · Bridge pendiente' : (isAuthenticated ? 'Liquidado · Confirmado on-chain' : 'Enviado · confirmación no verificada')}</td><td><code className="payment-hash-cell">{receipt.transactionHash}</code></td></tr>)}
+        {visibleDemoReceipts.map((receipt) => <tr key={receipt.id}><td>{receipt.createdAt}</td><td>{receipt.kind}</td><td>{receipt.label}</td><td>{formatDemoCurrency(receipt.amount)}</td><td><span className="table-demo-status">Local</span></td><td>—</td></tr>)}
+      </tbody></table></div> : <div className="empty-state"><div className="empty-illustration">▤</div><strong>{isTransactions ? 'Aún no hay movimientos' : 'No hay filas en esta vista'}</strong><span>{isTransactions ? (isAuthenticated ? 'Los pagos realizados en esta sesión aparecerán aquí. Tu historial oficial persistido está disponible en Cartera / Historial de Pagos.' : 'Los pagos con wallet y las acciones locales aparecerán en esta sesión.') : 'La tabla está lista para datos de simulación cuando existan.'}</span></div>}
     </section>
   )
 }
@@ -1587,24 +1782,26 @@ function AuthorizedWithdrawalView({
   connectedWalletAddress: string | null
 }) {
   const { user, openAuthModal } = useAuth()
-  const [idToken, setIdToken] = useState<string | null>(null)
+  const [tokenState, setTokenState] = useState<{ uid: string; token: string } | null>(null)
   const [historyRefreshTick, setHistoryRefreshTick] = useState(0)
 
   useEffect(() => {
     let cancelled = false
     if (!user || user.isAnonymous) {
-      setIdToken(null)
+      setTokenState(null)
       return () => {
         cancelled = true
       }
     }
+    const activeUserUid = user.uid
+    setTokenState((prev) => (prev?.uid === activeUserUid ? prev : null))
     user
       .getIdToken()
       .then((tok) => {
-        if (!cancelled) setIdToken(tok)
+        if (!cancelled) setTokenState({ uid: activeUserUid, token: tok })
       })
       .catch(() => {
-        if (!cancelled) setIdToken(null)
+        if (!cancelled) setTokenState(null)
       })
     return () => {
       cancelled = true
@@ -1613,15 +1810,15 @@ function AuthorizedWithdrawalView({
 
   const session = useMemo<ClientWithdrawalAuthSession | null>(
     () =>
-      user && !user.isAnonymous && idToken
+      user && !user.isAnonymous && tokenState?.uid === user.uid
         ? {
             uid: user.uid,
             email: user.email,
             isAnonymous: user.isAnonymous,
-            idToken,
+            idToken: tokenState.token,
           }
         : null,
-    [user, idToken],
+    [user, tokenState],
   )
 
   return (
@@ -1646,12 +1843,14 @@ function AuthorizedWithdrawalView({
       ) : (
         <>
           <WithdrawalForm
+            key={user.uid}
             session={session}
             apiOptions={WITHDRAWAL_API_OPTIONS}
             connectedWalletAddress={connectedWalletAddress}
             onWithdrawalSuccess={() => setHistoryRefreshTick((tick) => tick + 1)}
           />
           <WithdrawalHistoryPanel
+            key={user.uid}
             session={session}
             apiOptions={WITHDRAWAL_API_OPTIONS}
             refreshTrigger={historyRefreshTick}
