@@ -13,7 +13,7 @@ import {
 } from '../src/paymentDestinations.ts'
 
 const projectRoot = path.resolve(import.meta.dirname, '..')
-const EXPECTED_RULES_SHA256 = 'EA8F0C18923E1B2D25ED1C9D2599858475ADDDB06E6677667F29EC594F90705C'
+const EXPECTED_RULES_SHA256 = 'F4313C04DD7595E1C84D8977299169EEA38C2B250F96E6916D68959CDAAA6779'
 
 function readText(relPath: string): string {
   return fs.readFileSync(path.resolve(projectRoot, relPath), 'utf8')

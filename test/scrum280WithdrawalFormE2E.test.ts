@@ -623,7 +623,7 @@ test('SCRUM-280 (W05.5 — Regresión e Integración Acumulada W01..W05 + Reglas
   );
   assert.equal(
     sha256Of('firestore.rules'),
-    'EA8F0C18923E1B2D25ED1C9D2599858475ADDDB06E6677667F29EC594F90705C',
+    'F4313C04DD7595E1C84D8977299169EEA38C2B250F96E6916D68959CDAAA6779',
     'W02 firestore.rules must remain byte-identical',
   );
   assert.equal(

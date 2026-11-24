@@ -83,7 +83,8 @@ service cloud.firestore {
         'receivedUnilevelCommissionTotal',
         'purchasesCount',
         'lastPurchaseAt',
-        'firstPurchaseAt'
+        'firstPurchaseAt',
+        'status'
       ]);
     }
 
@@ -96,7 +97,8 @@ service cloud.firestore {
         && (!('totalWithdrawnMicros' in request.resource.data) || request.resource.data.totalWithdrawnMicros == 0)
         && (!('ownMiningProfitTotal' in request.resource.data) || request.resource.data.ownMiningProfitTotal == 0)
         && (!('unilevelBalance' in request.resource.data) || request.resource.data.unilevelBalance == 0)
-        && (!('receivedUnilevelCommissionTotal' in request.resource.data) || request.resource.data.receivedUnilevelCommissionTotal == 0);
+        && (!('receivedUnilevelCommissionTotal' in request.resource.data) || request.resource.data.receivedUnilevelCommissionTotal == 0)
+        && (!('status' in request.resource.data) || request.resource.data.status == 'active');
     }
 
     function validDemoSnapshot() {

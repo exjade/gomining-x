@@ -142,10 +142,13 @@ export interface UserReferralData {
   joinDate?: FirestoreTimestamp
 }
 
+export type AccountStatus = 'active' | 'inactive' | 'suspended' | 'blocked'
+
 export interface UserProfile {
   uid: string
   email: string
   username: string
+  status?: AccountStatus
   createdAt?: FirestoreTimestamp
   emailVerified: boolean
   walletAddress?: string
@@ -440,6 +443,7 @@ export async function registerWithEmail(email: string, password: string, referra
     uid: user.uid,
     email: cleanEmail,
     username,
+    status: 'active',
     createdAt: serverTimestamp(),
     emailVerified: false,
     walletAddress: '',
@@ -542,6 +546,7 @@ export async function ensureUserProfile(user: User): Promise<UserProfile | null>
     uid: user.uid,
     email: cleanEmail,
     username,
+    status: 'active',
     createdAt: serverTimestamp(),
     emailVerified: user.emailVerified,
     walletAddress: '',
