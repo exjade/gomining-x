@@ -17,11 +17,13 @@ const {
 } = require('./paymentConfig');
 
 const CANCELLABLE_STATUS_SET = new Set(CANCELLABLE_STATUSES);
+const SELECTABLE_METHOD_STATUS_SET = new Set([PAYMENT_STATUSES.OPEN, PAYMENT_STATUSES.AWAITING]);
 const PRODUCT_TYPE_SET = new Set(SUPPORTED_PRODUCT_TYPES);
 const CUSTOM_TIER_BY_POWER = new Map(
   CANONICAL_CUSTOM_MINER_TIERS.map((tier) => [tier.powerTh, tier])
 );
 const SAFE_DOC_ID_PATTERN = /^[a-zA-Z0-9_.:@-]+$/;
+const IDEMPOTENCY_KEY_PATTERN = /^[a-zA-Z0-9._:-]{8,128}$/;
 const CONTROL_CHAR_PATTERN = /[\u0000-\u001F\u007F]/;
 const MAX_CANCEL_REASON_LENGTH = 200;
 const DEFAULT_SPOT_TIMEOUT_MS = 5000;
@@ -212,6 +214,64 @@ function assertSenderWalletStringOrEmpty(senderWallet) {
   }
   const trimmed = senderWallet.trim();
   return trimmed || null;
+}
+
+function normalizeOptionalIdempotencyKey(rawKey) {
+  if (rawKey === undefined || rawKey === null) {
+    return null;
+  }
+  if (typeof rawKey !== 'string' || CONTROL_CHAR_PATTERN.test(rawKey)) {
+    throw new PaymentIntentError(
+      'INVALID_IDEMPOTENCY_KEY',
+      'idempotencyKey must be a valid string without control characters',
+      400
+    );
+  }
+  const trimmed = rawKey.trim();
+  if (!IDEMPOTENCY_KEY_PATTERN.test(trimmed)) {
+    throw new PaymentIntentError(
+      'INVALID_IDEMPOTENCY_KEY',
+      'idempotencyKey must be 8-128 characters matching /^[a-zA-Z0-9._:-]{8,128}$/',
+      400
+    );
+  }
+  return trimmed;
+}
+
+function deriveIdempotentIntentId(buyerUid, cleanKey) {
+  const digest = crypto
+    .createHash('sha256')
+    .update(`${buyerUid}:${cleanKey}`)
+    .digest('hex')
+    .slice(0, 32);
+  return `pi_${digest}`;
+}
+
+function assertIdempotentPayloadMatches(existing, buyerUid, product, amountMicroUsdtStr) {
+  if (!existing || existing.buyerUid !== buyerUid) {
+    throw new PaymentIntentError(
+      'FORBIDDEN',
+      'Not authorized to access this payment intent',
+      403
+    );
+  }
+  const existingPackageId = existing.packageId ?? null;
+  const expectedPackageId = product.packageId ?? null;
+  const existingPowerTh = Number(existing.powerTh ?? 0);
+  const expectedPowerTh = Number(product.powerTh ?? 0);
+  const existingMicroUsdt = String(existing.amountMicroUsdt ?? '');
+  if (
+    existing.productType !== product.productType ||
+    existingPackageId !== expectedPackageId ||
+    existingPowerTh !== expectedPowerTh ||
+    existingMicroUsdt !== amountMicroUsdtStr
+  ) {
+    throw new PaymentIntentError(
+      'IDEMPOTENCY_KEY_CONFLICT',
+      'idempotencyKey was already used for a different product or amount',
+      409
+    );
+  }
 }
 
 function extractCanonicalPackagePrice(pkgData) {
@@ -456,10 +516,12 @@ function createPaymentIntentService({
       networkId: rawNetworkId,
       assetSymbol: rawAssetSymbol,
       asset: rawAssetAlias,
-      senderWallet
+      senderWallet,
+      idempotencyKey: rawIdempotencyKey
     } = rawInput;
 
     const buyerUid = assertValidDocId(rawBuyerUid, 'INVALID_BUYER_UID', 'buyerUid');
+    const cleanIdempotencyKey = normalizeOptionalIdempotencyKey(rawIdempotencyKey);
     const networkMode = resolveNetworkMode(env);
     const ttlMs = resolveIntentTtlMs(env);
     const powerTh = rawPowerTh !== undefined ? rawPowerTh : customPowerTh;
@@ -479,13 +541,37 @@ function createPaymentIntentService({
     const createdAtIso = new Date(createdAtMs).toISOString();
     const expiresAtIso = new Date(createdAtMs + ttlMs).toISOString();
 
-    const [product, buyerContext] = await Promise.all([
-      resolveAuthoritativeProduct({ requestedProductType, packageId, powerTh }),
-      resolveBuyerAndReferralSnapshot(buyerUid, createdAtMs, createdAtIso)
-    ]);
-
+    const product = await resolveAuthoritativeProduct({ requestedProductType, packageId, powerTh });
     const amountInternal = parseUsdtToInternal(product.amountUsd);
     const { microUsdt, usdt6 } = roundInternalToUsdt6(amountInternal);
+    const amountMicroUsdtStr = microUsdt.toString();
+
+    const deterministicIntentId = cleanIdempotencyKey
+      ? deriveIdempotentIntentId(buyerUid, cleanIdempotencyKey)
+      : null;
+
+    if (deterministicIntentId) {
+      const preExistingSnap = await db.collection('payment_intents').doc(deterministicIntentId).get();
+      if (snapExists(preExistingSnap)) {
+        const existing = snapData(preExistingSnap);
+        assertIdempotentPayloadMatches(existing, buyerUid, product, amountMicroUsdtStr);
+        return structuredClone(existing);
+      }
+    }
+
+    // External I/O (buyer referral snapshot + optional spot price quote) stays strictly outside db.runTransaction.
+    const [buyerContext, resolved] = await Promise.all([
+      resolveBuyerAndReferralSnapshot(buyerUid, createdAtMs, createdAtIso),
+      hasNetwork
+        ? resolveRouteAndQuote({
+            networkId: rawNetworkId,
+            assetSymbol,
+            senderWallet,
+            amountUsd: usdt6,
+            quotedAtIso: createdAtIso
+          })
+        : Promise.resolve(null)
+    ]);
 
     let status = PAYMENT_STATUSES.OPEN;
     let paymentFields = {
@@ -505,14 +591,7 @@ function createPaymentIntentService({
       requiredConfirmations: 0
     };
 
-    if (hasNetwork) {
-      const resolved = await resolveRouteAndQuote({
-        networkId: rawNetworkId,
-        assetSymbol,
-        senderWallet,
-        amountUsd: usdt6,
-        quotedAtIso: createdAtIso
-      });
+    if (resolved) {
       status = PAYMENT_STATUSES.AWAITING;
       paymentFields = {
         networkMode: resolved.route.networkMode,
@@ -532,12 +611,14 @@ function createPaymentIntentService({
       };
     }
 
-    const intentId = generateId();
+    const intentId = deterministicIntentId || generateId();
     const orderId = intentId;
+    const storedIdempotencyKey = cleanIdempotencyKey || intentId;
 
     const baseDoc = {
       intentId,
       orderId,
+      idempotencyKey: storedIdempotencyKey,
       userId: buyerUid,
       buyerUid,
       status,
@@ -548,7 +629,7 @@ function createPaymentIntentService({
       powerTh: product.powerTh,
       efficiencyWattsPerTh: product.efficiencyWattsPerTh,
       amountUsd: product.amountUsd,
-      amountMicroUsdt: microUsdt.toString(),
+      amountMicroUsdt: amountMicroUsdtStr,
       netPaidUsdt: usdt6,
       ...paymentFields,
       confirmations: 0,
@@ -563,7 +644,7 @@ function createPaymentIntentService({
     const orderDoc = {
       ...baseDoc,
       attemptId: intentId,
-      idempotencyKey: intentId,
+      idempotencyKey: storedIdempotencyKey,
       userEmail: buyerContext.userEmail,
       userName: buyerContext.userName,
       contractedTh: product.powerTh,
@@ -577,6 +658,21 @@ function createPaymentIntentService({
 
     const intentRef = db.collection('payment_intents').doc(intentId);
     const orderRef = db.collection('admin_orders').doc(orderId);
+
+    if (cleanIdempotencyKey) {
+      return db.runTransaction(async (tx) => {
+        const txExistingSnap = await tx.get(intentRef);
+        if (snapExists(txExistingSnap)) {
+          const existing = snapData(txExistingSnap);
+          assertIdempotentPayloadMatches(existing, buyerUid, product, amountMicroUsdtStr);
+          return structuredClone(existing);
+        }
+        tx.set(intentRef, baseDoc);
+        tx.set(orderRef, orderDoc);
+        return structuredClone(baseDoc);
+      });
+    }
+
     await commitDualCreate(intentRef, baseDoc, orderRef, orderDoc);
 
     return structuredClone(baseDoc);
@@ -611,7 +707,7 @@ function createPaymentIntentService({
     if (preData.buyerUid !== actorUid && isAdmin !== true) {
       throw new PaymentIntentError('FORBIDDEN', 'Not authorized to modify this payment intent', 403);
     }
-    if (preData.status !== PAYMENT_STATUSES.OPEN || preData.txHash) {
+    if (!SELECTABLE_METHOD_STATUS_SET.has(preData.status) || Boolean(preData.txHash)) {
       throw new PaymentIntentError(
         'INVALID_STATUS_TRANSITION',
         `Cannot select payment method when status is '${preData.status}'`,
@@ -642,7 +738,7 @@ function createPaymentIntentService({
       if (current.buyerUid !== actorUid && isAdmin !== true) {
         throw new PaymentIntentError('FORBIDDEN', 'Not authorized to modify this payment intent', 403);
       }
-      if (current.status !== PAYMENT_STATUSES.OPEN || current.txHash) {
+      if (!SELECTABLE_METHOD_STATUS_SET.has(current.status) || Boolean(current.txHash)) {
         throw new PaymentIntentError(
           'INVALID_STATUS_TRANSITION',
           `Cannot select payment method when status is '${current.status}'`,

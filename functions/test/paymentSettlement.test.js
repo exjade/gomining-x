@@ -1602,3 +1602,147 @@ test('paymentSettlement [9] [ITER-1]: settled miner matches dailyMiningProfitSer
   assert.equal(warnLogs[0].meta.message.includes('SECRET_KEY_12345'), false);
   assert.equal(warnLogs[0].meta.message.includes('10.0.0.9'), false);
 });
+
+// ============================================================================
+// 10. SCRUM-373 SECURITY HARDENING (HIGH-01): TERM DRIFT DURING VERIFICATION
+// ============================================================================
+
+test('SCRUM-373 [HIGH-01]: rejects INTENT_CHANGED_DURING_VERIFICATION (409) across PROCESSING, FAILED, UNDERPAID, and READY_TO_SETTLE when in-place selectPaymentMethod mutates an AWAITING intent mid-verification', async () => {
+  const nowMs = Date.parse('2026-11-24T12:00:00.000Z');
+  const env = buildEnv();
+
+  async function runRaceCase({ label, verificationStatus, mutateIntent }) {
+    const db = createStrictFirestoreDb(
+      {
+        'commercial_packages/pkg_race': {
+          id: 'pkg_race',
+          name: 'Race Miner',
+          status: 'ACTIVE',
+          isPublished: true,
+          powerTh: 16,
+          priceUsdt: 100
+        },
+        'users/u_race': { uid: 'u_race', email: 'race@example.com', status: 'active' }
+      },
+      { nowIso: () => new Date(nowMs).toISOString() }
+    );
+    const intentService = createPaymentIntentService({
+      db,
+      env,
+      now: () => nowMs,
+      idGenerator: () => `pi_race_${label}`
+    });
+
+    await intentService.createPaymentIntent({
+      buyerUid: 'u_race',
+      packageId: 'pkg_race',
+      networkId: 'bsc',
+      assetSymbol: 'USDT',
+      senderWallet: SENDER_EVM
+    });
+
+    const intentId = `pi_race_${label}`;
+    const settlementService = createPaymentSettlementService({
+      db,
+      env,
+      now: () => nowMs,
+      onChainVerifier: {
+        async verifyIntentPayment({ intent, txHash }) {
+          await mutateIntent({ intentService, intentId, db });
+          return {
+            verificationStatus,
+            intentId: intent.intentId,
+            paymentNetwork: intent.paymentNetwork,
+            networkMode: intent.networkMode,
+            chainId: intent.chainId,
+            paymentAsset: intent.paymentAsset,
+            expectedAmountAtomic: intent.expectedAmountAtomic,
+            receivedAmountAtomic: verificationStatus === 'UNDERPAID' ? '50000000000000000000' : intent.expectedAmountAtomic,
+            shortfallAtomic: verificationStatus === 'UNDERPAID' ? '50000000000000000000' : null,
+            confirmations: verificationStatus === 'READY_TO_SETTLE' ? 15 : 1,
+            requiredConfirmations: 15,
+            txHash,
+            usedTxKey: buildUsedTxHashKey(intent.chainId, txHash),
+            fromAddress: SENDER_EVM,
+            reason: verificationStatus === 'FAILED' ? 'TX_REVERTED' : null
+          };
+        },
+        async discoverAndVerifyIncomingPayment() {
+          throw new Error('not used');
+        }
+      }
+    });
+
+    await assert.rejects(
+      () =>
+        settlementService.processIntentVerificationAndSettlement({
+          intentId,
+          txHash: TX_HASH_1,
+          requesterUid: 'u_race'
+        }),
+      (err) => err instanceof PaymentSettlementError && err.code === 'INTENT_CHANGED_DURING_VERIFICATION' && err.statusCode === 409,
+      `Expected 409 INTENT_CHANGED_DURING_VERIFICATION for ${label}`
+    );
+
+    const afterIntent = db._store.get(`payment_intents/${intentId}`);
+    assert.equal(afterIntent.status, PAYMENT_STATUSES.AWAITING, `${label}: intent must remain AWAITING untouched`);
+    assert.equal(afterIntent.txHash, null, `${label}: stale txHash from old route must NOT be written`);
+    assert.equal(db._store.has(`miners/u_race/miner/miner_${intentId}`), false, `${label}: must not provision miner`);
+  }
+
+  // Case 1: PROCESSING verification raced by selectPaymentMethod bsc -> polygon
+  await runRaceCase({
+    label: 'proc_cross_chain',
+    verificationStatus: 'PROCESSING',
+    mutateIntent: ({ intentService, intentId }) =>
+      intentService.selectPaymentMethod({
+        intentId,
+        requesterUid: 'u_race',
+        networkId: 'polygon',
+        assetSymbol: 'USDT',
+        senderWallet: SENDER_EVM
+      })
+  });
+
+  // Case 2: FAILED verification raced by selectPaymentMethod bsc -> polygon
+  await runRaceCase({
+    label: 'failed_cross_chain',
+    verificationStatus: 'FAILED',
+    mutateIntent: ({ intentService, intentId }) =>
+      intentService.selectPaymentMethod({
+        intentId,
+        requesterUid: 'u_race',
+        networkId: 'polygon',
+        assetSymbol: 'USDT',
+        senderWallet: SENDER_EVM
+      })
+  });
+
+  // Case 3: UNDERPAID verification raced by selectPaymentMethod bsc -> polygon
+  await runRaceCase({
+    label: 'underpaid_cross_chain',
+    verificationStatus: 'UNDERPAID',
+    mutateIntent: ({ intentService, intentId }) =>
+      intentService.selectPaymentMethod({
+        intentId,
+        requesterUid: 'u_race',
+        networkId: 'polygon',
+        assetSymbol: 'USDT',
+        senderWallet: SENDER_EVM
+      })
+  });
+
+  // Case 4: READY_TO_SETTLE raced by in-place senderWallet change on same route
+  await runRaceCase({
+    label: 'settle_sender_drift',
+    verificationStatus: 'READY_TO_SETTLE',
+    mutateIntent: ({ intentService, intentId }) =>
+      intentService.selectPaymentMethod({
+        intentId,
+        requesterUid: 'u_race',
+        networkId: 'bsc',
+        assetSymbol: 'USDT',
+        senderWallet: OTHER_EVM
+      })
+  });
+});

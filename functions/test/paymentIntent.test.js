@@ -405,6 +405,8 @@ function createInMemoryFirestore(initialDocs = {}) {
     };
   }
 
+  let txChain = Promise.resolve();
+
   const db = {
     collection(name) {
       return makeCollectionRef(name);
@@ -426,37 +428,42 @@ function createInMemoryFirestore(initialDocs = {}) {
       };
     },
     async runTransaction(fn) {
-      let writeStarted = false;
-      const pending = [];
-      const tx = {
-        async get(target) {
-          if (writeStarted) {
-            throw new Error('Firestore transactions require all reads before all writes');
+      const run = async () => {
+        let writeStarted = false;
+        const pending = [];
+        const tx = {
+          async get(target) {
+            if (writeStarted) {
+              throw new Error('Firestore transactions require all reads before all writes');
+            }
+            if (target && target.__isQuery) {
+              return target.get();
+            }
+            const data = store.get(target.path);
+            return {
+              exists: data !== undefined,
+              id: target.id,
+              data: () => (data !== undefined ? structuredClone(data) : undefined)
+            };
+          },
+          set(docRef, data, options = {}) {
+            writeStarted = true;
+            pending.push({ path: docRef.path, data, merge: Boolean(options.merge) });
+            return tx;
+          },
+          update(docRef, data) {
+            writeStarted = true;
+            pending.push({ path: docRef.path, data, merge: true, requireExists: true });
+            return tx;
           }
-          if (target && target.__isQuery) {
-            return target.get();
-          }
-          const data = store.get(target.path);
-          return {
-            exists: data !== undefined,
-            id: target.id,
-            data: () => (data !== undefined ? structuredClone(data) : undefined)
-          };
-        },
-        set(docRef, data, options = {}) {
-          writeStarted = true;
-          pending.push({ path: docRef.path, data, merge: Boolean(options.merge) });
-          return tx;
-        },
-        update(docRef, data) {
-          writeStarted = true;
-          pending.push({ path: docRef.path, data, merge: true, requireExists: true });
-          return tx;
-        }
+        };
+        const result = await fn(tx);
+        applyWrites(pending);
+        return result;
       };
-      const result = await fn(tx);
-      applyWrites(pending);
-      return result;
+      const next = txChain.then(run, run);
+      txChain = next.catch(() => {});
+      return next;
     }
   };
 
@@ -1252,11 +1259,56 @@ test('IMP-6: selectPaymentMethod enforces authz, state guards, expiry, external 
   assert.equal(selected.status, PAYMENT_STATUSES.AWAITING);
   assert.equal(spotCalledInsideTx, false);
 
-  // Calling selectPaymentMethod again on AWAITING -> INVALID_STATUS_TRANSITION
+  // SCRUM-373 / ADR-0010: Re-selecting payment method in-place on AWAITING (txHash == null, unexpired)
+  // succeeds, updates route/quote/treasury/expiresAt & /admin_orders, and preserves intentId, createdAt & sponsorUid
+  currentNow += 2000;
+  const reselected = await service.selectPaymentMethod({
+    intentId: 'pi_sel_1',
+    requesterUid: 'u1',
+    networkId: 'bsc',
+    assetSymbol: 'USDT'
+  });
+  assert.equal(reselected.intentId, 'pi_sel_1');
+  assert.equal(reselected.status, PAYMENT_STATUSES.AWAITING);
+  assert.equal(reselected.paymentNetwork, 'bsc');
+  assert.equal(reselected.paymentAsset, 'USDT');
+  assert.equal(reselected.expectedAmountAtomic, '99990000000000000000');
+  assert.equal(reselected.createdAt, selected.createdAt);
+  assert.equal(reselected.sponsorUid, selected.sponsorUid);
+  assert.equal(reselected.referralSnapshotLocked, true);
+  assert.notEqual(reselected.expiresAt, selected.expiresAt);
+  const mirroredOrder = store.get('admin_orders/pi_sel_1');
+  assert.equal(mirroredOrder.cryptoAsset, 'USDT');
+  assert.equal(mirroredOrder.cryptoAmount, '99.99 USDT');
+  assert.equal(mirroredOrder.recipientAddress, VALID_EVM_TREASURY);
+
+  // Calling selectPaymentMethod when txHash is present or in any non-selectable status -> 409 INVALID_STATUS_TRANSITION
+  store.set('payment_intents/pi_sel_1', {
+    ...store.get('payment_intents/pi_sel_1'),
+    txHash: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  });
   await assert.rejects(
-    () => service.selectPaymentMethod({ intentId: 'pi_sel_1', requesterUid: 'u1', networkId: 'bsc', assetSymbol: 'USDT' }),
-    (err) => err instanceof PaymentIntentError && err.code === 'INVALID_STATUS_TRANSITION'
+    () => service.selectPaymentMethod({ intentId: 'pi_sel_1', requesterUid: 'u1', networkId: 'polygon', assetSymbol: 'USDT' }),
+    (err) => err instanceof PaymentIntentError && err.code === 'INVALID_STATUS_TRANSITION' && err.statusCode === 409
   );
+  for (const lockedStatus of [
+    PAYMENT_STATUSES.PROCESSING,
+    PAYMENT_STATUSES.SETTLED,
+    PAYMENT_STATUSES.CANCELLED,
+    PAYMENT_STATUSES.EXPIRED,
+    PAYMENT_STATUSES.UNDERPAID,
+    PAYMENT_STATUSES.FAILED
+  ]) {
+    store.set('payment_intents/pi_sel_1', {
+      ...store.get('payment_intents/pi_sel_1'),
+      status: lockedStatus,
+      txHash: null
+    });
+    await assert.rejects(
+      () => service.selectPaymentMethod({ intentId: 'pi_sel_1', requesterUid: 'u1', networkId: 'polygon', assetSymbol: 'USDT' }),
+      (err) => err instanceof PaymentIntentError && err.code === 'INVALID_STATUS_TRANSITION' && err.statusCode === 409
+    );
+  }
 
   // 2. TOCTOU race: intent cancelled while awaiting slow spotPriceProvider -> tx rejects INVALID_STATUS_TRANSITION
   await service.createPaymentIntent({ buyerUid: 'u1', productType: 'miner', packageId: 'minerx-02' });
@@ -1720,4 +1772,408 @@ test('ITER1-5: rejects/neutralizes invalid Firestore doc-ID sponsorUid and cover
     reason: '   '
   });
   assert.equal(cancelledDefault.cancelReason, 'USER_CANCELLED');
+});
+
+// ============================================================================
+// 9. SCRUM-373: DETERMINISTIC IDEMPOTENCY & IN-PLACE METHOD RE-SELECTION
+// ============================================================================
+
+test('SCRUM-373-1: createPaymentIntent deduplicates sequential and concurrent (Promise.all) calls with same (buyerUid, idempotencyKey) and preserves sponsorUid', async () => {
+  const docs = buildSeededDocs();
+  docs['users/u1'] = {
+    ...docs['users/u1'],
+    sponsorId: 'u2',
+    sponsorLinkedAt: '2026-11-20T00:00:00.000Z'
+  };
+  const { db, store } = createInMemoryFirestore(docs);
+  let currentNow = Date.parse('2026-11-24T10:00:00.000Z');
+  let spotCalls = 0;
+  let txWriteCount = 0;
+  const origRunTx = db.runTransaction.bind(db);
+  db.runTransaction = (fn) =>
+    origRunTx((tx) => {
+      const wrappedTx = {
+        get: tx.get.bind(tx),
+        set(docRef, data, opts) {
+          txWriteCount += 1;
+          return tx.set(docRef, data, opts);
+        },
+        update(docRef, data) {
+          txWriteCount += 1;
+          return tx.update(docRef, data);
+        }
+      };
+      return fn(wrappedTx);
+    });
+
+  const service = createPaymentIntentService({
+    db,
+    env: buildTestEnv(),
+    now: () => {
+      currentNow += 1;
+      return currentNow;
+    },
+    spotPriceProvider: async () => {
+      spotCalls += 1;
+      await new Promise((r) => setTimeout(r, 15));
+      return { priceUsd: '600', source: 'TEST_ORACLE' };
+    }
+  });
+
+  const key = 'chk_a1b2c3d4e5f60718293a4b5c6d7e8f90';
+
+  // Concurrent calls (both miss pre-read and race into db.runTransaction)
+  const [first, second] = await Promise.all([
+    service.createPaymentIntent({
+      buyerUid: 'u1',
+      productType: 'miner',
+      packageId: 'minerx-02',
+      networkId: 'bsc',
+      assetSymbol: 'BNB',
+      idempotencyKey: key
+    }),
+    service.createPaymentIntent({
+      buyerUid: 'u1',
+      productType: 'miner',
+      packageId: 'minerx-02',
+      networkId: 'bsc',
+      assetSymbol: 'BNB',
+      idempotencyKey: key
+    })
+  ]);
+
+  assert.match(first.intentId, /^pi_[a-f0-9]{32}$/);
+  assert.equal(second.intentId, first.intentId);
+  assert.equal(first.status, PAYMENT_STATUSES.AWAITING);
+  assert.equal(first.idempotencyKey, key);
+  assert.equal(second.idempotencyKey, key);
+  assert.equal(first.sponsorUid, 'u2');
+  assert.equal(second.sponsorUid, 'u2');
+  assert.equal(second.createdAt, first.createdAt);
+
+  const intentDocs = [...store.keys()].filter((k) => k.startsWith('payment_intents/'));
+  const orderDocs = [...store.keys()].filter((k) => k.startsWith('admin_orders/'));
+  assert.equal(intentDocs.length, 1);
+  assert.equal(orderDocs.length, 1);
+  assert.equal(txWriteCount, 2, 'concurrent loser transaction must execute 0 writes (only winner writes intent + order)');
+  assert.equal(store.get(`admin_orders/${first.intentId}`).idempotencyKey, key);
+
+  // Mutate user's sponsor later and call sequentially -> pre-read hit returns original doc, 0 extra spot calls
+  store.set('users/u1', { ...store.get('users/u1'), sponsorId: 'u_other_later' });
+  const spotCallsBeforeReplay = spotCalls;
+  currentNow += 5000;
+  const third = await service.createPaymentIntent({
+    buyerUid: 'u1',
+    productType: 'miner',
+    packageId: 'minerx-02',
+    networkId: 'bsc',
+    assetSymbol: 'BNB',
+    idempotencyKey: `  ${key}  `
+  });
+
+  assert.equal(third.intentId, first.intentId);
+  assert.equal(third.sponsorUid, 'u2');
+  assert.equal(third.createdAt, first.createdAt);
+  assert.equal(spotCalls, spotCallsBeforeReplay, 'pre-read idempotent hit must not invoke spot oracle');
+  assert.equal([...store.keys()].filter((k) => k.startsWith('payment_intents/')).length, 1);
+  assert.equal([...store.keys()].filter((k) => k.startsWith('admin_orders/')).length, 1);
+});
+
+test('SCRUM-373-2: isolates identical idempotencyKey across distinct buyerUids', async () => {
+  const { db, store } = createInMemoryFirestore(buildSeededDocs());
+  const service = createPaymentIntentService({
+    db,
+    env: buildTestEnv(),
+    now: () => Date.parse('2026-11-24T10:05:00.000Z')
+  });
+
+  const sharedKey = 'chk_shared_key_across_two_buyers_01';
+  const intentU1 = await service.createPaymentIntent({
+    buyerUid: 'u1',
+    productType: 'miner',
+    packageId: 'minerx-02',
+    idempotencyKey: sharedKey
+  });
+  const intentU2 = await service.createPaymentIntent({
+    buyerUid: 'u2',
+    productType: 'miner',
+    packageId: 'minerx-02',
+    idempotencyKey: sharedKey
+  });
+
+  assert.notEqual(intentU1.intentId, intentU2.intentId);
+  assert.match(intentU1.intentId, /^pi_[a-f0-9]{32}$/);
+  assert.match(intentU2.intentId, /^pi_[a-f0-9]{32}$/);
+  assert.equal(intentU1.buyerUid, 'u1');
+  assert.equal(intentU2.buyerUid, 'u2');
+  assert.equal([...store.keys()].filter((k) => k.startsWith('payment_intents/')).length, 2);
+
+  // Defense-in-depth: if a pre-existing doc at the deterministic path belongs to another buyerUid -> 403 FORBIDDEN
+  store.set(`payment_intents/${intentU1.intentId}`, {
+    ...store.get(`payment_intents/${intentU1.intentId}`),
+    buyerUid: 'u2'
+  });
+  await assert.rejects(
+    () => service.createPaymentIntent({
+      buyerUid: 'u1',
+      productType: 'miner',
+      packageId: 'minerx-02',
+      idempotencyKey: sharedKey
+    }),
+    (err) => err instanceof PaymentIntentError && err.code === 'FORBIDDEN' && err.statusCode === 403
+  );
+});
+
+test('SCRUM-373-3: rejects 409 IDEMPOTENCY_KEY_CONFLICT when reusing key with different product/package/powerTh/amount', async () => {
+  const { db, store } = createInMemoryFirestore(buildSeededDocs());
+  const service = createPaymentIntentService({
+    db,
+    env: buildTestEnv(),
+    now: () => Date.parse('2026-11-24T10:10:00.000Z')
+  });
+
+  const key = 'chk_conflict_guard_12345678';
+  await service.createPaymentIntent({
+    buyerUid: 'u1',
+    productType: 'miner',
+    packageId: 'minerx-02',
+    idempotencyKey: key
+  });
+
+  // Different productType / packageId
+  await assert.rejects(
+    () => service.createPaymentIntent({
+      buyerUid: 'u1',
+      productType: 'subscription',
+      packageId: 'mensual-plus',
+      idempotencyKey: key
+    }),
+    (err) => err instanceof PaymentIntentError && err.code === 'IDEMPOTENCY_KEY_CONFLICT' && err.statusCode === 409
+  );
+
+  // Different custom powerTh
+  await assert.rejects(
+    () => service.createPaymentIntent({
+      buyerUid: 'u1',
+      productType: 'miner',
+      powerTh: 16,
+      idempotencyKey: key
+    }),
+    (err) => err instanceof PaymentIntentError && err.code === 'IDEMPOTENCY_KEY_CONFLICT' && err.statusCode === 409
+  );
+
+  // Changed catalog price (amountMicroUsdt mismatch)
+  store.set('commercial_packages/minerx-02', {
+    ...store.get('commercial_packages/minerx-02'),
+    priceUsdt: 149.99
+  });
+  await assert.rejects(
+    () => service.createPaymentIntent({
+      buyerUid: 'u1',
+      productType: 'miner',
+      packageId: 'minerx-02',
+      idempotencyKey: key
+    }),
+    (err) => err instanceof PaymentIntentError && err.code === 'IDEMPOTENCY_KEY_CONFLICT' && err.statusCode === 409
+  );
+
+  // Concurrent tx-level conflict: two different products race from cold store with the same idempotencyKey
+  const raceKey = 'chk_concurrent_conflict_9999';
+  const raceResults = await Promise.allSettled([
+    service.createPaymentIntent({
+      buyerUid: 'u1',
+      productType: 'miner',
+      packageId: 'minerx-02',
+      idempotencyKey: raceKey
+    }),
+    service.createPaymentIntent({
+      buyerUid: 'u1',
+      productType: 'subscription',
+      packageId: 'mensual-plus',
+      idempotencyKey: raceKey
+    })
+  ]);
+  const fulfilled = raceResults.filter((r) => r.status === 'fulfilled');
+  const rejected = raceResults.filter((r) => r.status === 'rejected');
+  assert.equal(fulfilled.length, 1);
+  assert.equal(rejected.length, 1);
+  assert.ok(rejected[0].reason instanceof PaymentIntentError);
+  assert.equal(rejected[0].reason.code, 'IDEMPOTENCY_KEY_CONFLICT');
+  assert.equal(rejected[0].reason.statusCode, 409);
+});
+
+test('SCRUM-373-4: rejects 400 INVALID_IDEMPOTENCY_KEY for malformed keys and preserves backward compatibility when omitted', async () => {
+  const { db } = createInMemoryFirestore(buildSeededDocs());
+  let seq = 0;
+  const service = createPaymentIntentService({
+    db,
+    env: buildTestEnv(),
+    now: () => Date.parse('2026-11-24T10:15:00.000Z'),
+    idGenerator: () => `pi_compat_${++seq}`
+  });
+
+  for (const badKey of [
+    '',
+    '       ',
+    'short7_',
+    'a'.repeat(129),
+    'bad/slash_key_123',
+    'bad\\back_key_123',
+    'bad space key 123',
+    'bad\nnewline_123',
+    'bad\x00null_123',
+    12345678,
+    true,
+    {},
+    []
+  ]) {
+    await assert.rejects(
+      () => service.createPaymentIntent({
+        buyerUid: 'u1',
+        productType: 'miner',
+        packageId: 'minerx-02',
+        idempotencyKey: badKey
+      }),
+      (err) => err instanceof PaymentIntentError && err.code === 'INVALID_IDEMPOTENCY_KEY' && err.statusCode === 400
+    );
+  }
+
+  // Omitted / null idempotencyKey preserves generateId() backward compatibility
+  const compat1 = await service.createPaymentIntent({
+    buyerUid: 'u1',
+    productType: 'miner',
+    packageId: 'minerx-02'
+  });
+  const compat2 = await service.createPaymentIntent({
+    buyerUid: 'u1',
+    productType: 'miner',
+    packageId: 'minerx-02',
+    idempotencyKey: null
+  });
+  assert.equal(compat1.intentId, 'pi_compat_1');
+  assert.equal(compat1.idempotencyKey, 'pi_compat_1');
+  assert.equal(compat2.intentId, 'pi_compat_2');
+  assert.equal(compat2.idempotencyKey, 'pi_compat_2');
+});
+
+test('SCRUM-373-5: multiple in-place method switches (bsc/USDT -> polygon/POL -> solana/SOL -> bsc/BNB) keep 1 intent, 0 CANCELLED orders, sync /admin_orders, and block TOCTOU txHash race', async () => {
+  const docs = buildSeededDocs();
+  docs['users/u1'] = {
+    ...docs['users/u1'],
+    sponsorId: 'u2',
+    sponsorLinkedAt: '2026-11-20T00:00:00.000Z'
+  };
+  const { db, store } = createInMemoryFirestore(docs);
+  let currentNow = Date.parse('2026-11-24T10:20:00.000Z');
+  const spotPrices = { BNB: '600', POL: '0.50', SOL: '200' };
+  let onQuote = null;
+
+  const service = createPaymentIntentService({
+    db,
+    env: buildTestEnv(),
+    now: () => currentNow,
+    spotPriceProvider: async ({ assetSymbol }) => {
+      if (onQuote) await onQuote();
+      return { priceUsd: spotPrices[assetSymbol], source: 'TEST_ORACLE' };
+    }
+  });
+
+  const evmWallet = '0x9999999999999999999999999999999999999999';
+  const solWallet = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
+  const key = 'chk_inplace_multinet_12345678';
+
+  const initial = await service.createPaymentIntent({
+    buyerUid: 'u1',
+    productType: 'miner',
+    packageId: 'minerx-02',
+    networkId: 'bsc',
+    assetSymbol: 'USDT',
+    senderWallet: evmWallet,
+    idempotencyKey: key
+  });
+  assert.equal(initial.status, PAYMENT_STATUSES.AWAITING);
+
+  // Switch 1: bsc/USDT -> polygon/POL
+  currentNow += 5000;
+  const polyPol = await service.selectPaymentMethod({
+    intentId: initial.intentId,
+    requesterUid: 'u1',
+    networkId: 'polygon',
+    assetSymbol: 'POL',
+    senderWallet: evmWallet
+  });
+  assert.equal(polyPol.intentId, initial.intentId);
+  assert.equal(polyPol.paymentNetwork, 'polygon');
+  assert.equal(polyPol.chainId, 80002);
+  assert.equal(polyPol.paymentAsset, 'POL');
+  assert.equal(polyPol.senderWallet, evmWallet);
+  assert.equal(polyPol.createdAt, initial.createdAt);
+  assert.equal(polyPol.idempotencyKey, key);
+  assert.equal(polyPol.sponsorUid, 'u2');
+  assert.equal(store.get(`admin_orders/${initial.intentId}`).cryptoAsset, 'POL');
+  assert.equal(store.get(`admin_orders/${initial.intentId}`).paymentNetwork, 'polygon');
+
+  // Switch 2: polygon/POL -> solana/SOL
+  currentNow += 5000;
+  const solSol = await service.selectPaymentMethod({
+    intentId: initial.intentId,
+    requesterUid: 'u1',
+    networkId: 'solana',
+    assetSymbol: 'SOL',
+    senderWallet: solWallet
+  });
+  assert.equal(solSol.intentId, initial.intentId);
+  assert.equal(solSol.paymentNetwork, 'solana');
+  assert.equal(solSol.chainId, 'solana-devnet');
+  assert.equal(solSol.paymentAsset, 'SOL');
+  assert.equal(solSol.treasuryAddress, VALID_SOL_TREASURY);
+  assert.equal(solSol.senderWallet, solWallet);
+  assert.equal(store.get(`admin_orders/${initial.intentId}`).recipientAddress, VALID_SOL_TREASURY);
+  assert.equal(store.get(`admin_orders/${initial.intentId}`).cryptoAsset, 'SOL');
+
+  // Switch 3: solana/SOL -> bsc/BNB
+  currentNow += 5000;
+  const bscBnb = await service.selectPaymentMethod({
+    intentId: initial.intentId,
+    requesterUid: 'u1',
+    networkId: 'bsc',
+    assetSymbol: 'BNB',
+    senderWallet: evmWallet
+  });
+  assert.equal(bscBnb.intentId, initial.intentId);
+  assert.equal(bscBnb.paymentNetwork, 'bsc');
+  assert.equal(bscBnb.paymentAsset, 'BNB');
+  assert.equal(bscBnb.treasuryAddress, VALID_EVM_TREASURY);
+  assert.equal(bscBnb.sponsorUid, 'u2');
+  assert.equal(bscBnb.referralSnapshotLocked, true);
+
+  // Verify 1 intent, 1 order, 0 CANCELLED orders
+  const allIntents = [...store.entries()].filter(([k]) => k.startsWith('payment_intents/'));
+  const allOrders = [...store.entries()].filter(([k]) => k.startsWith('admin_orders/'));
+  assert.equal(allIntents.length, 1);
+  assert.equal(allOrders.length, 1);
+  assert.equal(allOrders.filter(([, v]) => v.status === PAYMENT_STATUSES.CANCELLED).length, 0);
+
+  // TOCTOU race safety: txHash + PROCESSING status arrive while awaiting slow spot quote -> transaction MUST reject 409
+  onQuote = async () => {
+    store.set(`payment_intents/${initial.intentId}`, {
+      ...store.get(`payment_intents/${initial.intentId}`),
+      status: PAYMENT_STATUSES.PROCESSING,
+      txHash: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+    });
+  };
+  await assert.rejects(
+    () => service.selectPaymentMethod({
+      intentId: initial.intentId,
+      requesterUid: 'u1',
+      networkId: 'polygon',
+      assetSymbol: 'POL',
+      senderWallet: evmWallet
+    }),
+    (err) => err instanceof PaymentIntentError && err.code === 'INVALID_STATUS_TRANSITION' && err.statusCode === 409
+  );
+  onQuote = null;
+  // Route remained bsc/BNB untouched after rejected TOCTOU race
+  assert.equal(store.get(`payment_intents/${initial.intentId}`).paymentNetwork, 'bsc');
+  assert.equal(store.get(`payment_intents/${initial.intentId}`).paymentAsset, 'BNB');
 });

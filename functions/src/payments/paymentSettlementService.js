@@ -97,6 +97,24 @@ function buildAlreadySettledResult(intentId, orderId, current) {
   };
 }
 
+function assertVerificationMatchesIntentTerms(current, verifiedIntent, verification, intentId) {
+  if (
+    current.paymentNetwork !== verification.paymentNetwork ||
+    current.networkMode !== verification.networkMode ||
+    String(current.chainId) !== String(verification.chainId) ||
+    current.paymentAsset !== verification.paymentAsset ||
+    current.expectedAmountAtomic !== verification.expectedAmountAtomic ||
+    (current.treasuryAddress ?? null) !== (verifiedIntent.treasuryAddress ?? null) ||
+    (current.senderWallet ?? null) !== (verifiedIntent.senderWallet ?? null)
+  ) {
+    throw new PaymentSettlementError(
+      'INTENT_CHANGED_DURING_VERIFICATION',
+      `Payment intent '${intentId}' payment terms changed during on-chain verification`,
+      409
+    );
+  }
+}
+
 function createPaymentSettlementService({
   db,
   env = process.env,
@@ -345,6 +363,8 @@ function createPaymentSettlementService({
           };
         }
 
+        assertVerificationMatchesIntentTerms(current, intent, verification, intentId);
+
         const orderRef = db.collection('admin_orders').doc(currentOrderId);
         const orderSnap = await tx.get(orderRef);
 
@@ -416,6 +436,8 @@ function createPaymentSettlementService({
           };
         }
 
+        assertVerificationMatchesIntentTerms(current, intent, verification, intentId);
+
         const orderRef = db.collection('admin_orders').doc(currentOrderId);
         const orderSnap = await tx.get(orderRef);
 
@@ -486,19 +508,7 @@ function createPaymentSettlementService({
         );
       }
 
-      if (
-        current.paymentNetwork !== verification.paymentNetwork ||
-        current.networkMode !== verification.networkMode ||
-        String(current.chainId) !== String(verification.chainId) ||
-        current.paymentAsset !== verification.paymentAsset ||
-        current.expectedAmountAtomic !== verification.expectedAmountAtomic
-      ) {
-        throw new PaymentSettlementError(
-          'INTENT_CHANGED_DURING_VERIFICATION',
-          `Payment intent '${intentId}' payment terms changed during on-chain verification`,
-          409
-        );
-      }
+      assertVerificationMatchesIntentTerms(current, intent, verification, intentId);
 
       const orderRef = db.collection('admin_orders').doc(currentOrderId);
       const usedTxRef = db.collection('usedTxHashes').doc(usedTxKey);
