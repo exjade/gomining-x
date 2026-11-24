@@ -2,6 +2,7 @@
 
 const { PLAN_VERSION_V1, MAX_UNILEVEL_DEPTH } = require('./unilevelRates');
 const { isUplineEligible } = require('./calculateDistribution');
+const { normalizeAccountStatus, isAccountStatusActive } = require('../shared/accountStatus');
 
 function loadOptionalSdk(moduleName) {
   try {
@@ -85,7 +86,7 @@ async function getUnilevelStatsForUser({ db, uid }) {
     totalTeamCount: Number.isInteger(unilevelData.totalTeamCount) ? unilevelData.totalTeamCount : 0,
     activeReferredMinersCount,
     eligibleForUnilevel: isUplineEligible({
-      status: userData.status,
+      status: normalizeAccountStatus(userData.status, { exists: userSnap.exists }),
       emailVerified: userData.emailVerified === true,
       activeReferredMinersCount
     }),
@@ -143,7 +144,7 @@ async function getUnilevelTreeForUser({ db, uid }) {
         upUserData.referral && typeof upUserData.referral.referralCode === 'string'
           ? upUserData.referral.referralCode
           : null,
-      active: upUserData.status === 'active'
+      active: isAccountStatusActive(upUserData.status, { exists: upUserSnap.exists })
     });
 
     nextSponsorId =

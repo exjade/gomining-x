@@ -1,6 +1,7 @@
 'use strict';
 
 const { roundInternalToUsdt6 } = require('../shared/money');
+const { normalizeAccountStatus } = require('../shared/accountStatus');
 const { PLAN_VERSION_V1, getRatePlan } = require('./unilevelRates');
 const { calculateUnilevelDistribution } = require('./calculateDistribution');
 
@@ -182,15 +183,19 @@ async function settleUnilevelDistribution({
       }
       visited.add(nextUid);
 
+      const uplineUserSnap = next.prefetchedUserData
+        ? null
+        : await tx.get(db.collection('users').doc(nextUid));
+      const uplineUserExists = Boolean(next.prefetchedUserData) || Boolean(uplineUserSnap && uplineUserSnap.exists);
       const uplineUserData = next.prefetchedUserData
         ? next.prefetchedUserData
-        : (await tx.get(db.collection('users').doc(nextUid))).data() || {};
+        : (uplineUserSnap && uplineUserSnap.exists ? uplineUserSnap.data() : {}) || {};
       const uplineUnilevelSnap = await tx.get(db.collection('unilevel').doc(nextUid));
       const uplineUnilevelData = uplineUnilevelSnap.exists ? uplineUnilevelSnap.data() : {};
 
       uplines.push({
         uid: nextUid,
-        status: uplineUserData.status || 'inactive',
+        status: normalizeAccountStatus(uplineUserData.status, { exists: uplineUserExists }),
         emailVerified: uplineUserData.emailVerified === true,
         activeReferredMinersCount: Number.isInteger(uplineUnilevelData.activeReferredMinersCount)
           ? uplineUnilevelData.activeReferredMinersCount

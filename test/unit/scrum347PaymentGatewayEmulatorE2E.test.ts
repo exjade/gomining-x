@@ -2,7 +2,7 @@
  * SCRUM-347 (PG-05) — Real Firebase Auth + Firestore Emulator Security & Query Parity E2E
  *
  * Verifies against live Firebase Auth + Firestore Emulators loaded with `firestore.rules`:
- *  1. Pure LF `firestore.rules` SHA-256 = EA8F0C18923E1B2D25ED1C9D2599858475ADDDB06E6677667F29EC594F90705C.
+ *  1. Pure LF `firestore.rules` SHA-256 = F4313C04DD7595E1C84D8977299169EEA38C2B250F96E6916D68959CDAAA6779.
  *  2. PERMISSION_DENIED on direct browser writes (setDoc, updateDoc, deleteDoc) from registered and
  *     anonymous sessions across all 6 financial collections:
  *     /admin_orders, /admin_contracts, /miners/{uid}/miner/{minerId} (except strictly cosmetic owner update),
@@ -50,7 +50,7 @@ const projectRoot = path.resolve(__dirname, '..', '..');
 const PROJECT_ID = process.env.GCLOUD_PROJECT || 'salad-miners';
 const FIRESTORE_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
 const AUTH_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST || '127.0.0.1:9099';
-const EXPECTED_RULES_SHA256 = 'EA8F0C18923E1B2D25ED1C9D2599858475ADDDB06E6677667F29EC594F90705C';
+const EXPECTED_RULES_SHA256 = 'F4313C04DD7595E1C84D8977299169EEA38C2B250F96E6916D68959CDAAA6779';
 
 function parseHostPort(raw: string, defaultPort: number): { host: string; port: number } {
   const [host, portStr] = raw.split(':');

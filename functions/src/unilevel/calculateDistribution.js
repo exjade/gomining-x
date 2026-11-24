@@ -17,7 +17,8 @@ function isUplineEligible(upline) {
     return false;
   }
   return (
-    upline.status === 'active' &&
+    typeof upline.status === 'string' &&
+    upline.status.trim().toLowerCase() === 'active' &&
     upline.emailVerified === true &&
     Number.isInteger(upline.activeReferredMinersCount) &&
     upline.activeReferredMinersCount >= 1

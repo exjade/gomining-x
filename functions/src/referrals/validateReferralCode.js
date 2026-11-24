@@ -1,5 +1,7 @@
 'use strict';
 
+const { isAccountStatusActive } = require('../shared/accountStatus');
+
 function loadOptionalSdk(moduleName) {
   try {
     return require(moduleName);
@@ -16,8 +18,6 @@ const onCall = httpsV2 && typeof httpsV2.onCall === 'function'
   ? httpsV2.onCall
   : (_options, handler) => handler;
 
-const BLOCKED_SPONSOR_STATUSES = new Set(['blocked', 'inactive']);
-
 function normalizeReferralCode(referralCode) {
   if (typeof referralCode !== 'string') {
     return '';
@@ -26,11 +26,10 @@ function normalizeReferralCode(referralCode) {
 }
 
 function isSponsorAccountActive(data) {
-  if (!data || typeof data !== 'object') {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
     return false;
   }
-  const status = typeof data.status === 'string' ? data.status.trim().toLowerCase() : '';
-  return !BLOCKED_SPONSOR_STATUSES.has(status);
+  return isAccountStatusActive(data.status, { exists: true });
 }
 
 async function checkReferralCodeExists({ db, referralCode }) {

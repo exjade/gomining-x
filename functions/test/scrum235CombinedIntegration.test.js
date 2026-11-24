@@ -318,3 +318,116 @@ test('SCRUM-235 E2E chain: SCRUM-229 purchase settlement -> SCRUM-327 daily mini
     true
   );
 });
+
+test('SCRUM-374 E2E parity: Admin uppercase ACTIVE sponsor and legacy accounts without status pass SCRUM-229 -> SCRUM-327 -> SCRUM-230', async () => {
+  const { db, FieldValue, store } = createUnifiedInMemoryFirestore({
+    'operatorConfig/mining': {
+      baseElectricityUsdPerKwh: '0.01',
+      grossRevenuePerThUsdt: '0.02375'
+    },
+    // L2 upline: legacy account without status field
+    'users/grand-legacy': {
+      uid: 'grand-legacy',
+      emailVerified: true,
+      balance: 0,
+      referral: { referralCode: 'GRAND_LEG' }
+    },
+    'unilevel/grand-legacy': {
+      uid: 'grand-legacy',
+      activeReferredMinersCount: 1,
+      directCount: 1,
+      totalTeamCount: 2
+    },
+    // L1 sponsor: Admin uppercase 'ACTIVE'
+    'users/sponsor-upper': {
+      uid: 'sponsor-upper',
+      status: 'ACTIVE',
+      emailVerified: true,
+      sponsorId: 'grand-legacy',
+      balance: 0,
+      commissionBalance: 0,
+      totalCommissionsEarned: 0,
+      referral: { referralCode: 'SPON_UPPER' }
+    },
+    'unilevel/sponsor-upper': {
+      uid: 'sponsor-upper',
+      sponsorId: 'grand-legacy',
+      activeReferredMinersCount: 0,
+      directCount: 1,
+      totalTeamCount: 1
+    },
+    // Buyer: legacy account without status field
+    'users/buyer-legacy': {
+      uid: 'buyer-legacy',
+      emailVerified: true,
+      balance: 0,
+      purchasesCount: 0,
+      referral: { referralCode: 'BUYER_LEG', referrerBy: 'spon_upper' }
+    },
+    'unilevel/buyer-legacy': {
+      uid: 'buyer-legacy',
+      activeReferredMinersCount: 0
+    },
+    'miners/buyer-legacy/miner/MINER_374_120TH': {
+      id: 'MINER_374_120TH',
+      uid: 'buyer-legacy',
+      packageId: 'pkg-120th',
+      powerTh: 120,
+      efficiency: 15,
+      efficiencyWattsPerTh: 15,
+      status: 'active',
+      network: 'PLATFORM_BALANCE'
+    }
+  });
+
+  // 1. SCRUM-229 Direct Referral 10%
+  const directRes = await handlePurchaseSettledEvent({
+    orderId: 'ORD-374-1',
+    beforeData: null,
+    afterData: {
+      orderId: 'ORD-374-1',
+      userId: 'buyer-legacy',
+      amountUsd: 249.99,
+      paymentNetwork: 'PLATFORM_BALANCE',
+      status: 'SETTLED',
+      activatedMinerId: 'MINER_374_120TH',
+      settledAt: '2026-11-24T12:00:00Z'
+    },
+    db,
+    FieldValue
+  });
+  assert.equal(directRes.status, 'credited');
+  assert.equal(directRes.sponsorUid, 'sponsor-upper');
+  assert.equal(directRes.commissionUsdt6, '24.999000');
+  assert.equal(store.get('unilevel/sponsor-upper').activeReferredMinersCount, 1);
+
+  // 2. SCRUM-327 Daily Mining Profit
+  const batchRes = await runFinalizeDailyMiningProfitBatch({
+    db,
+    FieldValue,
+    periodDate: '2026-11-24',
+    finalizedAt: '2026-11-25T00:05:00Z'
+  });
+  assert.equal(batchRes.finalizedCount, 1);
+  const profitSnap = store.get('mining_daily_profit/MINER_374_120TH_2026-11-24');
+  assert.equal(profitSnap.eligibleProfitUsdt6, '2.176200');
+
+  // 3. SCRUM-230 Unilevel V1 distribution credits both L1 ('ACTIVE') and L2 (legacy missing status)
+  const unilevelRes = await handleMiningProfitFinalizedEvent({
+    dailyProfitId: 'MINER_374_120TH_2026-11-24',
+    beforeData: null,
+    afterData: profitSnap,
+    db,
+    FieldValue
+  });
+  assert.equal(unilevelRes.status, 'distributed');
+  // L1 1.95% (0.042435) + L2 1.85% (0.040259) = 0.082694
+  assert.equal(unilevelRes.distributedUsdt6, '0.082694');
+  assert.equal(store.get('userBalances/sponsor-upper').usdtAvailable, 25.041435);
+  assert.equal(store.get('userBalances/grand-legacy').usdtAvailable, 0.040259);
+
+  const sponsorStats = await getUnilevelStatsForUser({ db, uid: 'sponsor-upper' });
+  assert.equal(sponsorStats.eligibleForUnilevel, true);
+  const grandStats = await getUnilevelStatsForUser({ db, uid: 'grand-legacy' });
+  assert.equal(grandStats.eligibleForUnilevel, true);
+});

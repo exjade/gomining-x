@@ -6,10 +6,10 @@ const {
   calculateDirectReferralCommission,
   createReversalEntry
 } = require('./calculateDirectReferral');
+const { isAccountStatusActive } = require('../shared/accountStatus');
 
 const CANONICAL_MINER_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const SAFE_SPONSOR_DOC_ID_PATTERN = /^[a-zA-Z0-9_.:@-]+$/;
-const INACTIVE_SPONSOR_STATUSES = new Set(['blocked', 'inactive']);
 const UNSIGNED_INT_PATTERN = /^\d+$/;
 
 function isValidSponsorDocId(value) {
@@ -40,11 +40,10 @@ function extractReferrerCode(buyerData) {
 }
 
 function isSponsorActive(sponsorData) {
-  if (!sponsorData || typeof sponsorData !== 'object') {
+  if (!sponsorData || typeof sponsorData !== 'object' || Array.isArray(sponsorData)) {
     return false;
   }
-  const status = typeof sponsorData.status === 'string' ? sponsorData.status.trim().toLowerCase() : '';
-  return !INACTIVE_SPONSOR_STATUSES.has(status);
+  return isAccountStatusActive(sponsorData.status, { exists: true });
 }
 
 function microUsdtToNumber(microUsdtBigInt) {

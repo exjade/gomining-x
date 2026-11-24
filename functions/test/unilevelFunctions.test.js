@@ -496,3 +496,112 @@ test('authenticated read APIs (stats, tree, history) reject unauthenticated call
   assert.equal(u1Hist.receivedCommissions.length, 1);
   assert.equal(u1Hist.receivedCommissions[0].creditedUsdt6, '0.042435');
 });
+
+test('SCRUM-374: normalizes legacy missing status, uppercase ACTIVE, non-existent docs (!exists), and blocks INACTIVE/SUSPENDED/BLOCKED/non-string across settlement, stats, and tree', async () => {
+  const { db, FieldValue, store } = createInMemoryFirestore({
+    'users/owner-leg': { uid: 'owner-leg', emailVerified: true, sponsorId: 'u-leg' },
+    'unilevel/owner-leg': { uid: 'owner-leg', sponsorId: 'u-leg', activeReferredMinersCount: 1 },
+
+    // L1: legacy account without status field (exists === true) -> ACTIVE
+    'users/u-leg': { uid: 'u-leg', emailVerified: true, sponsorId: 'u-upper', referral: { referralCode: 'LEG1' } },
+    'unilevel/u-leg': { uid: 'u-leg', sponsorId: 'u-upper', activeReferredMinersCount: 1 },
+
+    // L2: Admin uppercase status 'ACTIVE' -> ACTIVE
+    'users/u-upper': { uid: 'u-upper', status: 'ACTIVE', emailVerified: true, sponsorId: 'u-inact', referral: { referralCode: 'UPP2' } },
+    'unilevel/u-upper': { uid: 'u-upper', sponsorId: 'u-inact', activeReferredMinersCount: 2 },
+
+    // L3: 'INACTIVE' -> INELIGIBLE
+    'users/u-inact': { uid: 'u-inact', status: 'INACTIVE', emailVerified: true, sponsorId: 'u-susp', referral: { referralCode: 'INA3' } },
+    'unilevel/u-inact': { uid: 'u-inact', sponsorId: 'u-susp', activeReferredMinersCount: 2 },
+
+    // L4: 'SUSPENDED' -> INELIGIBLE
+    'users/u-susp': { uid: 'u-susp', status: 'SUSPENDED', emailVerified: true, sponsorId: 'u-block', referral: { referralCode: 'SUS4' } },
+    'unilevel/u-susp': { uid: 'u-susp', sponsorId: 'u-block', activeReferredMinersCount: 2 },
+
+    // L5: 'BLOCKED' -> INELIGIBLE
+    'users/u-block': { uid: 'u-block', status: 'BLOCKED', emailVerified: true, sponsorId: 'u-bool', referral: { referralCode: 'BLK5' } },
+    'unilevel/u-block': { uid: 'u-block', sponsorId: 'u-bool', activeReferredMinersCount: 2 },
+
+    // L6: boolean true -> fail-closed INELIGIBLE
+    'users/u-bool': { uid: 'u-bool', status: true, emailVerified: true, sponsorId: 'u-unk', referral: { referralCode: 'BOL6' } },
+    'unilevel/u-bool': { uid: 'u-bool', sponsorId: 'u-unk', activeReferredMinersCount: 2 },
+
+    // L7: unknown string -> fail-closed INELIGIBLE
+    'users/u-unk': { uid: 'u-unk', status: 'unknown', emailVerified: true, sponsorId: 'u-ghost', referral: { referralCode: 'UNK7' } },
+    'unilevel/u-unk': { uid: 'u-unk', sponsorId: 'u-ghost', activeReferredMinersCount: 2 },
+
+    // L8: /users/u-ghost does NOT exist (!exists), only /unilevel/u-ghost exists -> fail-closed INELIGIBLE
+    'unilevel/u-ghost': { uid: 'u-ghost', activeReferredMinersCount: 5 }
+  });
+
+  const res = await settleUnilevelDistribution({
+    db,
+    FieldValue,
+    dailyProfit: {
+      dailyProfitId: 'MINER-374_2026-11-24',
+      minerId: 'MINER-374',
+      minerUid: 'owner-leg',
+      periodDate: '2026-11-24',
+      eligibleProfitUsdt6: '2.176200'
+    }
+  });
+
+  assert.equal(res.status, 'distributed');
+  // L1 (1.95% -> 0.042435) + L2 (1.85% -> 0.040259) = 0.082694
+  assert.equal(res.distributedUsdt6, '0.082694');
+  assert.equal(store.get('userBalances/u-leg').usdtAvailable, 0.042435);
+  assert.equal(store.get('userBalances/u-upper').usdtAvailable, 0.040259);
+  for (const blockedUid of ['u-inact', 'u-susp', 'u-block', 'u-bool', 'u-unk', 'u-ghost']) {
+    assert.equal(store.has(`userBalances/${blockedUid}`), false, `${blockedUid} must not receive Unilevel commission`);
+  }
+
+  const distDoc = store.get('unilevel_distributions/2026-11-24_MINER-374_UNILEVEL_V1');
+  assert.equal(distDoc.levels[0].status, 'CREDITED');
+  assert.equal(distDoc.levels[1].status, 'CREDITED');
+  for (let idx = 2; idx <= 7; idx += 1) {
+    assert.equal(distDoc.levels[idx].status, 'INELIGIBLE', `level ${idx + 1} must be INELIGIBLE`);
+  }
+
+  // getUnilevelStatsForUser
+  assert.equal((await getUnilevelStatsForUser({ db, uid: 'u-leg' })).eligibleForUnilevel, true);
+  assert.equal((await getUnilevelStatsForUser({ db, uid: 'u-upper' })).eligibleForUnilevel, true);
+  for (const blockedUid of ['u-inact', 'u-susp', 'u-block', 'u-bool', 'u-unk', 'u-ghost']) {
+    assert.equal(
+      (await getUnilevelStatsForUser({ db, uid: blockedUid })).eligibleForUnilevel,
+      false,
+      `getUnilevelStatsForUser(${blockedUid}) must be ineligible`
+    );
+  }
+
+  // getUnilevelTreeForUser
+  const tree = await getUnilevelTreeForUser({ db, uid: 'owner-leg' });
+  assert.equal(tree.uplines.length, 8);
+  assert.equal(tree.uplines[0].uid, 'u-leg');
+  assert.equal(tree.uplines[0].active, true);
+  assert.equal(tree.uplines[1].uid, 'u-upper');
+  assert.equal(tree.uplines[1].active, true);
+  for (let idx = 2; idx <= 7; idx += 1) {
+    assert.equal(tree.uplines[idx].active, false, `tree.uplines[${idx}] (${tree.uplines[idx].uid}) must have active: false`);
+  }
+
+  // Legacy upline resolved via referral.referrerBy code (prefetchedUserData path)
+  const prefetched = createInMemoryFirestore({
+    'users/buyer-ref': { uid: 'buyer-ref', emailVerified: true, referral: { referrerBy: 'code_leg' } },
+    'unilevel/buyer-ref': { uid: 'buyer-ref' },
+    'users/spon-leg-code': { uid: 'spon-leg-code', emailVerified: true, referral: { referralCode: 'CODE_LEG' } },
+    'unilevel/spon-leg-code': { uid: 'spon-leg-code', activeReferredMinersCount: 1 }
+  });
+  const prefRes = await settleUnilevelDistribution({
+    db: prefetched.db,
+    FieldValue: prefetched.FieldValue,
+    dailyProfit: {
+      dailyProfitId: 'MINER-PREF_2026-11-24',
+      minerId: 'MINER-PREF',
+      minerUid: 'buyer-ref',
+      periodDate: '2026-11-24',
+      eligibleProfitUsdt6: '2.176200'
+    }
+  });
+  assert.equal(prefRes.distributedUsdt6, '0.042435');
+  assert.equal(prefetched.store.get('userBalances/spon-leg-code').usdtAvailable, 0.042435);
+});

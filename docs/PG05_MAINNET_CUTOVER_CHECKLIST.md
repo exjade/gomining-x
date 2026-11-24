@@ -109,7 +109,7 @@ Ejecutar en **BSC Testnet (97)** y **Solana Devnet**:
      `createPaymentIntent`, `selectPaymentMethod`, `getPaymentIntent`, `cancelPaymentIntent`, `confirmPaymentIntent`, `reconcilePendingPayments`.
    - Confirmar que los triggers existentes `onPurchaseSettled` (`SCRUM-229`), `finalizeDailyMiningProfit` (`SCRUM-327`) y `onMiningProfitFinalized` (`SCRUM-230`) siguen activos.
 2. **Paso 2 — Reglas e Índices de Firestore:**
-   - Verificar antes de desplegar: `firestore.rules` en LF puro con SHA-256 exacto `EA8F0C18923E1B2D25ED1C9D2599858475ADDDB06E6677667F29EC594F90705C`.
+   - Verificar antes de desplegar: `firestore.rules` en LF puro con SHA-256 exacto `F4313C04DD7595E1C84D8977299169EEA38C2B250F96E6916D68959CDAAA6779`.
    - Desplegar `firestore.rules` (cierre `allow create, update, delete: if false;` sobre `/admin_orders`, `/admin_contracts`, `/payment_intents`, `/usedTxHashes`, `/referrals`, y `allow create, delete: if false;` + cosmetic-only update en `/miners/{uid}/miner/{minerId}`).
    - Confirmar que `firestore.indexes.json` mantiene el `COLLECTION_GROUP` fieldOverride en `miner.status` (0 índices nuevos requeridos por `SCRUM-370`).
 3. **Paso 3 — Admin Dashboard y App Cliente:**

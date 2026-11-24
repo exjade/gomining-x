@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 
 const {
   checkReferralCodeExists,
+  isSponsorAccountActive,
   normalizeReferralCode
 } = require('../src/referrals/validateReferralCode');
 const {
@@ -668,4 +669,108 @@ test('PouwMiner schema alignment: nested referral.referralCode lookup, referrerB
     reason: 'REFUND'
   });
   assert.equal(store.get('unilevel/sponsor-real-uid').activeReferredMinersCount, 0);
+});
+
+test('SCRUM-374: blocks suspended/SUSPENDED/non-string/unknown/missing-doc sponsors and allows legacy/ACTIVE sponsors in validateReferralCode and settleDirectReferralCommission', async () => {
+  // Direct unit checks on isSponsorAccountActive
+  assert.equal(isSponsorAccountActive(null), false);
+  assert.equal(isSponsorAccountActive(undefined), false);
+  assert.equal(isSponsorAccountActive([]), false);
+  assert.equal(isSponsorAccountActive({ status: 'suspended' }), false);
+  assert.equal(isSponsorAccountActive({ status: 'SUSPENDED' }), false);
+  assert.equal(isSponsorAccountActive({ status: 'inactive' }), false);
+  assert.equal(isSponsorAccountActive({ status: 'blocked' }), false);
+  assert.equal(isSponsorAccountActive({ status: true }), false);
+  assert.equal(isSponsorAccountActive({ status: 'unknown' }), false);
+  assert.equal(isSponsorAccountActive({ status: 'ACTIVE' }), true);
+  assert.equal(isSponsorAccountActive({ status: ' active ' }), true);
+  assert.equal(isSponsorAccountActive({}), true);
+  assert.equal(isSponsorAccountActive({ status: '' }), true);
+
+  const { db, FieldValue, store } = createInMemoryFirestore({
+    'users/spon-susp-lower': { uid: 'spon-susp-lower', status: 'suspended', referral: { referralCode: 'SUSPLOW' } },
+    'users/spon-susp-upper': { uid: 'spon-susp-upper', status: 'SUSPENDED', referral: { referralCode: 'SUSPUPPER' } },
+    'users/spon-bool': { uid: 'spon-bool', status: true, referral: { referralCode: 'BOOLSPON' } },
+    'users/spon-unknown': { uid: 'spon-unknown', status: 'unknown', referral: { referralCode: 'UNKSPON' } },
+    'users/spon-admin-upper': { uid: 'spon-admin-upper', status: 'ACTIVE', balance: 0, commissionBalance: 0, totalCommissionsEarned: 0, referral: { referralCode: 'ADMINACT' } },
+    'users/spon-legacy': { uid: 'spon-legacy', balance: 0, commissionBalance: 0, totalCommissionsEarned: 0, referral: { referralCode: 'LEGACYSP' } },
+    'users/buyer-susp-low': { uid: 'buyer-susp-low', sponsorId: 'spon-susp-lower', purchasesCount: 0 },
+    'users/buyer-susp-up': { uid: 'buyer-susp-up', sponsorId: 'spon-susp-upper', purchasesCount: 0 },
+    'users/buyer-bool': { uid: 'buyer-bool', sponsorId: 'spon-bool', purchasesCount: 0 },
+    'users/buyer-unk': { uid: 'buyer-unk', sponsorId: 'spon-unknown', purchasesCount: 0 },
+    'users/buyer-ghost': { uid: 'buyer-ghost', sponsorId: 'spon-missing-doc', purchasesCount: 0 },
+    'users/buyer-admin-act': { uid: 'buyer-admin-act', sponsorId: 'spon-admin-upper', purchasesCount: 0 },
+    'users/buyer-legacy': { uid: 'buyer-legacy', sponsorId: 'spon-legacy', purchasesCount: 0 }
+  });
+
+  // 1. validateReferralCode (checkReferralCodeExists)
+  for (const blockedCode of ['SUSPLOW', 'SUSPUPPER', 'BOOLSPON', 'UNKSPON']) {
+    assert.deepEqual(
+      await checkReferralCodeExists({ db, referralCode: blockedCode }),
+      { exists: false },
+      `validateReferralCode must reject ${blockedCode}`
+    );
+  }
+  for (const allowedCode of ['ADMINACT', 'LEGACYSP']) {
+    assert.deepEqual(
+      await checkReferralCodeExists({ db, referralCode: allowedCode }),
+      { exists: true },
+      `validateReferralCode must accept ${allowedCode}`
+    );
+  }
+
+  // 2. settleDirectReferralCommission — blocked statuses & missing doc
+  const blockedBuyers = [
+    ['buyer-susp-low', 'MINER-S374-SL'],
+    ['buyer-susp-up', 'MINER-S374-SU'],
+    ['buyer-bool', 'MINER-S374-BL'],
+    ['buyer-unk', 'MINER-S374-UK'],
+    ['buyer-ghost', 'MINER-S374-GH']
+  ];
+  for (const [buyerUid, minerId] of blockedBuyers) {
+    const res = await settleDirectReferralCommission({
+      db,
+      FieldValue,
+      purchase: {
+        orderId: `ORD-${minerId}`,
+        minerId,
+        productType: 'miner',
+        netPaidUsdt: '100.00',
+        buyerUid
+      }
+    });
+    assert.equal(res.status, 'rejected', `${buyerUid} must be rejected`);
+    assert.equal(res.reason, 'INACTIVE_SPONSOR', `${buyerUid} must reject with INACTIVE_SPONSOR`);
+  }
+
+  // 3. settleDirectReferralCommission — uppercase 'ACTIVE' and legacy missing status credited 10%
+  const activeRes = await settleDirectReferralCommission({
+    db,
+    FieldValue,
+    purchase: {
+      orderId: 'ORD-S374-AA',
+      minerId: 'MINER-S374-AA',
+      productType: 'miner',
+      netPaidUsdt: '100.00',
+      buyerUid: 'buyer-admin-act'
+    }
+  });
+  assert.equal(activeRes.status, 'credited');
+  assert.equal(activeRes.commissionUsdt6, '10.000000');
+  assert.equal(store.get('userBalances/spon-admin-upper').usdtAvailable, 10);
+
+  const legacyRes = await settleDirectReferralCommission({
+    db,
+    FieldValue,
+    purchase: {
+      orderId: 'ORD-S374-LG',
+      minerId: 'MINER-S374-LG',
+      productType: 'miner',
+      netPaidUsdt: '100.00',
+      buyerUid: 'buyer-legacy'
+    }
+  });
+  assert.equal(legacyRes.status, 'credited');
+  assert.equal(legacyRes.commissionUsdt6, '10.000000');
+  assert.equal(store.get('userBalances/spon-legacy').usdtAvailable, 10);
 });

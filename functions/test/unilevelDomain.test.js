@@ -431,12 +431,26 @@ describe('unilevel/calculateDistribution (eligibility, anti-cycle, depth 20, Opt
   it('enforces strict upline eligibility criteria', () => {
     assert.equal(isUplineEligible(makeEligibleUpline('u1')), true);
     assert.equal(isUplineEligible(makeEligibleUpline('u1', { activeReferredMinersCount: 5 })), true);
+    assert.equal(isUplineEligible(makeEligibleUpline('u1', { status: 'ACTIVE' })), true);
+    assert.equal(isUplineEligible(makeEligibleUpline('u1', { status: 'Active' })), true);
+    assert.equal(isUplineEligible(makeEligibleUpline('u1', { status: ' active ' })), true);
 
     assert.equal(isUplineEligible(null), false);
     assert.equal(isUplineEligible(undefined), false);
     assert.equal(isUplineEligible(makeEligibleUpline('u1', { status: 'inactive' })), false);
+    assert.equal(isUplineEligible(makeEligibleUpline('u1', { status: 'INACTIVE' })), false);
     assert.equal(isUplineEligible(makeEligibleUpline('u1', { status: 'blocked' })), false);
+    assert.equal(isUplineEligible(makeEligibleUpline('u1', { status: 'BLOCKED' })), false);
     assert.equal(isUplineEligible(makeEligibleUpline('u1', { status: 'suspended' })), false);
+    assert.equal(isUplineEligible(makeEligibleUpline('u1', { status: 'SUSPENDED' })), false);
+    assert.equal(isUplineEligible(makeEligibleUpline('u1', { status: undefined })), false);
+    assert.equal(isUplineEligible(makeEligibleUpline('u1', { status: null })), false);
+    assert.equal(isUplineEligible(makeEligibleUpline('u1', { status: '' })), false);
+    assert.equal(isUplineEligible(makeEligibleUpline('u1', { status: '   ' })), false);
+    assert.equal(isUplineEligible(makeEligibleUpline('u1', { status: true })), false);
+    assert.equal(isUplineEligible(makeEligibleUpline('u1', { status: 1 })), false);
+    assert.equal(isUplineEligible(makeEligibleUpline('u1', { status: {} })), false);
+    assert.equal(isUplineEligible(makeEligibleUpline('u1', { status: 'unknown' })), false);
     assert.equal(isUplineEligible(makeEligibleUpline('u1', { emailVerified: false })), false);
     assert.equal(isUplineEligible(makeEligibleUpline('u1', { emailVerified: 'true' })), false);
     assert.equal(isUplineEligible(makeEligibleUpline('u1', { activeReferredMinersCount: 0 })), false);
@@ -772,5 +786,59 @@ describe('unilevel/calculateDistribution (eligibility, anti-cycle, depth 20, Opt
     }
 
     assert.ok(caseCount >= 60, `Expected >= 60 PBT cases, executed ${caseCount}`);
+  });
+});
+
+describe('shared/accountStatus (ADR-0009 canonical normalization & fail-closed boundaries)', () => {
+  it('exports canonical statuses and normalizes legacy, casing, !exists, non-string, and unknown values', () => {
+    const {
+      CANONICAL_ACCOUNT_STATUSES,
+      KNOWN_ACCOUNT_STATUS_SET,
+      INACTIVE_ACCOUNT_STATUSES,
+      normalizeAccountStatus,
+      isAccountStatusActive
+    } = require('../src/shared/accountStatus');
+
+    assert.deepEqual(CANONICAL_ACCOUNT_STATUSES, {
+      ACTIVE: 'active',
+      INACTIVE: 'inactive',
+      SUSPENDED: 'suspended',
+      BLOCKED: 'blocked'
+    });
+    assert.equal(Object.isFrozen(CANONICAL_ACCOUNT_STATUSES), true);
+    assert.deepEqual([...KNOWN_ACCOUNT_STATUS_SET].sort(), ['active', 'blocked', 'inactive', 'suspended']);
+    assert.deepEqual([...INACTIVE_ACCOUNT_STATUSES].sort(), ['blocked', 'inactive', 'suspended']);
+
+    // Fail-closed when document does not exist
+    for (const raw of [undefined, null, '', '   ', 'active', 'ACTIVE', 'suspended', true]) {
+      assert.equal(normalizeAccountStatus(raw, { exists: false }), 'inactive');
+      assert.equal(isAccountStatusActive(raw, { exists: false }), false);
+    }
+
+    // Legacy compatibility on existing documents
+    for (const legacyRaw of [undefined, null, '', '   ']) {
+      assert.equal(normalizeAccountStatus(legacyRaw), 'active');
+      assert.equal(normalizeAccountStatus(legacyRaw, { exists: true }), 'active');
+      assert.equal(isAccountStatusActive(legacyRaw), true);
+    }
+
+    // Case-insensitive + trimmed canonical strings
+    for (const activeRaw of ['active', 'ACTIVE', 'Active', '  aCtIvE  ']) {
+      assert.equal(normalizeAccountStatus(activeRaw), 'active');
+      assert.equal(isAccountStatusActive(activeRaw), true);
+    }
+    assert.equal(normalizeAccountStatus('INACTIVE'), 'inactive');
+    assert.equal(normalizeAccountStatus(' suspended '), 'suspended');
+    assert.equal(normalizeAccountStatus('SUSPENDED'), 'suspended');
+    assert.equal(normalizeAccountStatus('BLOCKED'), 'blocked');
+    assert.equal(isAccountStatusActive('INACTIVE'), false);
+    assert.equal(isAccountStatusActive('SUSPENDED'), false);
+    assert.equal(isAccountStatusActive('BLOCKED'), false);
+
+    // Fail-closed on non-strings and unknown strings
+    for (const invalidRaw of [true, false, 0, 1, {}, [], 'unknown', 'pending', 'deleted']) {
+      assert.equal(normalizeAccountStatus(invalidRaw), 'inactive');
+      assert.equal(isAccountStatusActive(invalidRaw), false);
+    }
   });
 });
