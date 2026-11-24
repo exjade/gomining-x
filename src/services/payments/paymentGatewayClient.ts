@@ -18,6 +18,7 @@ export type PaymentAssetSymbol = 'USDT' | 'BNB' | 'POL' | 'ETH' | 'SOL'
 export interface PaymentIntentRecord {
   intentId: string
   orderId: string
+  idempotencyKey?: string
   userId: string
   buyerUid: string
   status: PaymentIntentStatus
@@ -64,6 +65,7 @@ export interface CreatePaymentIntentInput {
   networkId?: BackendPaymentNetworkId
   assetSymbol?: PaymentAssetSymbol
   senderWallet?: string
+  idempotencyKey?: string
 }
 
 export interface SelectPaymentMethodInput {
@@ -123,6 +125,7 @@ export async function createPaymentIntent(input: CreatePaymentIntentInput): Prom
   if (input.networkId) payload.networkId = input.networkId
   if (input.assetSymbol) payload.assetSymbol = input.assetSymbol
   if (input.senderWallet?.trim()) payload.senderWallet = input.senderWallet.trim()
+  if (input.idempotencyKey?.trim()) payload.idempotencyKey = input.idempotencyKey.trim()
 
   const response = await createPaymentIntentCallable(payload)
   return response.data

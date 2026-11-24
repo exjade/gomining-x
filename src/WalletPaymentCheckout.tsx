@@ -27,7 +27,15 @@ import {
   selectPaymentMethod,
   type PaymentAssetSymbol,
   type PaymentIntentRecord,
+  type PaymentProductType,
 } from './services/payments/paymentGatewayClient'
+import {
+  buildCheckoutProductSignature,
+  canMutateIntentMethodInPlace,
+  generateCheckoutIdempotencyKey,
+  resolvePendingMethodSyncKey,
+  runDeduplicatedIntentInit,
+} from './services/payments/checkoutIntentCoordinator'
 
 export type { PostTxPendingState, PackageSnapshot }
 
@@ -342,12 +350,37 @@ export function WalletPaymentCheckout({
   const [useUsdt, setUseUsdt] = useState(true)
   const [intent, setIntent] = useState<PaymentIntentRecord | null>(null)
   const [loadingIntent, setLoadingIntent] = useState(false)
+  const [methodUpdating, setMethodUpdating] = useState(false)
   const [paying, setPaying] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [error, setError] = useState('')
   const [copyStatus, setCopyStatus] = useState('')
   const [nowMs, setNowMs] = useState(() => Date.now())
   const settledNotifiedRef = useRef<string | null>(null)
+  const isMountedRef = useRef(true)
+  const methodSeqRef = useRef(0)
+  const methodInFlightRef = useRef(false)
+  const freshInFlightRef = useRef(false)
+  const failedSyncKeyRef = useRef<string | null>(null)
+
+  const userUid = user?.uid ?? ''
+  const productType: PaymentProductType = purchaseMode === 'monthly' || !isMinerProduct(productName) ? 'subscription' : 'miner'
+  const cleanPackageId = packageId?.trim() || ''
+  const isCustomMiner = !cleanPackageId || cleanPackageId === 'minerx-custom'
+  const resolvedPackageId = !isCustomMiner ? cleanPackageId : undefined
+  const resolvedPowerTh = isCustomMiner && productType === 'miner' ? parseMinerPowerTh(productName, amount) : undefined
+  const productSignature = buildCheckoutProductSignature({
+    uid: userUid,
+    productType,
+    packageId: resolvedPackageId,
+    powerTh: resolvedPowerTh,
+  })
+  const productSignatureRef = useRef(productSignature)
+  const sessionKeyRef = useRef('')
+  if (!sessionKeyRef.current || productSignatureRef.current !== productSignature) {
+    productSignatureRef.current = productSignature
+    sessionKeyRef.current = generateCheckoutIdempotencyKey()
+  }
 
   const activeAddress = evmAddress || appKitAccount.address || session?.connection?.address || ''
   const isWalletConnected = Boolean(activeAddress && (isEvmConnected || appKitAccount.isConnected || Boolean(session?.connection)))
@@ -369,13 +402,41 @@ export function WalletPaymentCheckout({
     ? networkId
     : (availableNetworks[0]?.id ?? 'bnb')
 
-  const isSolana = effectiveNetworkId === 'solana'
-  const activeDestination = destinations.find((d) => d.id === effectiveNetworkId) ?? destinations[0]
-  const activeNetworkConfig = getPaymentNetworkConfig(effectiveNetworkId, intent?.networkMode)
+  const authoritativeNetworkId: PaymentNetworkId = intent?.paymentNetwork
+    ? toClientPaymentNetworkId(intent.paymentNetwork)
+    : effectiveNetworkId
+  const isSolana = authoritativeNetworkId === 'solana'
+  const activeDestination = destinations.find((d) => d.id === authoritativeNetworkId) ?? destinations[0]
+  const activeNetworkConfig = getPaymentNetworkConfig(authoritativeNetworkId, intent?.networkMode)
   const selectedAsset: PaymentAssetSymbol = useUsdt ? 'USDT' : NATIVE_SYMBOL_BY_NETWORK[effectiveNetworkId]
   const numericChainId = Number(wagmiChainId || appKitChainId || 0) || 0
-  const expectedEvmChainId = typeof activeNetworkConfig.chainId === 'number' ? activeNetworkConfig.chainId : activeDestination.chainId
+  const expectedEvmChainId = typeof intent?.chainId === 'number'
+    ? intent.chainId
+    : (typeof activeNetworkConfig.chainId === 'number' ? activeNetworkConfig.chainId : activeDestination.chainId)
   const isWrongEvmChain = !isSolana && isWalletConnected && numericChainId > 0 && numericChainId !== expectedEvmChainId
+  const hasNetworkSelectionMismatch = Boolean(
+    intent?.paymentNetwork && intent.paymentNetwork !== toBackendPaymentNetworkId(effectiveNetworkId),
+  )
+
+  const latestSelectionRef = useRef({
+    isWalletConnected,
+    effectiveNetworkId,
+    selectedAsset,
+    activeAddress,
+    destinationName: activeDestination.name,
+  })
+  latestSelectionRef.current = {
+    isWalletConnected,
+    effectiveNetworkId,
+    selectedAsset,
+    activeAddress,
+    destinationName: activeDestination.name,
+  }
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => { isMountedRef.current = false }
+  }, [])
 
   const expiresAtMs = intent?.expiresAt ? Date.parse(intent.expiresAt) : Number.NaN
   const remainingMs = Number.isFinite(expiresAtMs) ? Math.max(0, expiresAtMs - nowMs) : 0
@@ -391,41 +452,59 @@ export function WalletPaymentCheckout({
     intent && (intent.status === 'OPEN' || intent.status === 'AWAITING') && !intent.txHash && !isIntentExpired,
   )
 
+  // Used exclusively by "Generar nueva cotización" after CANCELLED/EXPIRED/FAILED/UNDERPAID
   const createFreshIntent = useCallback(async (
     targetNet: PaymentNetworkId,
     targetAsset: PaymentAssetSymbol,
     walletAddr: string,
   ) => {
-    if (!isAuthenticated || !user) return
+    if (!isAuthenticated || !userUid || loadingIntent || freshInFlightRef.current || methodInFlightRef.current) return
+    freshInFlightRef.current = true
+    failedSyncKeyRef.current = null
+    const nextSessionKey = generateCheckoutIdempotencyKey()
+    sessionKeyRef.current = nextSessionKey
+    const seq = ++methodSeqRef.current
     setLoadingIntent(true)
     setError('')
     try {
-      const productType = purchaseMode === 'monthly' || !isMinerProduct(productName) ? 'subscription' : 'miner'
-      const cleanPkg = packageId?.trim()
-      const isCustom = !cleanPkg || cleanPkg === 'minerx-custom'
       const created = await createPaymentIntent({
         productType,
-        ...(cleanPkg && !isCustom ? { packageId: cleanPkg } : {}),
-        ...(isCustom && productType === 'miner' ? { powerTh: parseMinerPowerTh(productName, amount) } : {}),
-      })
-      const awaiting = await selectPaymentMethod({
-        intentId: created.intentId,
+        ...(resolvedPackageId ? { packageId: resolvedPackageId } : {}),
+        ...(resolvedPowerTh !== undefined ? { powerTh: resolvedPowerTh } : {}),
+        idempotencyKey: nextSessionKey,
         networkId: toBackendPaymentNetworkId(targetNet),
         assetSymbol: targetAsset,
         ...(walletAddr ? { senderWallet: walletAddr } : {}),
       })
-      setIntent(awaiting)
+      if (isMountedRef.current && methodSeqRef.current === seq) {
+        setIntent(created)
+        if (created.paymentNetwork) {
+          setNetworkId(toClientPaymentNetworkId(created.paymentNetwork))
+        }
+        if (created.paymentAsset) {
+          setUseUsdt(created.paymentAsset === 'USDT')
+        }
+      }
     } catch (err) {
-      setError(classifyPaymentError(err, activeDestination.name).message)
+      if (isMountedRef.current && methodSeqRef.current === seq) {
+        setError(classifyPaymentError(err, latestSelectionRef.current.destinationName).message)
+      }
     } finally {
-      setLoadingIntent(false)
+      freshInFlightRef.current = false
+      if (isMountedRef.current) {
+        setLoadingIntent(false)
+      }
     }
-  }, [isAuthenticated, user, purchaseMode, productName, packageId, amount, activeDestination.name])
+  }, [isAuthenticated, userUid, loadingIntent, productType, resolvedPackageId, resolvedPowerTh])
 
-  // Step 1: Hydrate existing intent via gmPayIntentId OR create a fresh server-authoritative PaymentIntent
+  // Step 1: Hydrate existing intent via gmPayIntentId OR create 1 idempotent PaymentIntent (directly AWAITING if wallet is already connected)
   useEffect(() => {
-    if (!isAuthenticated || !user) return
+    if (!isAuthenticated || !userUid) return
     let cancelled = false
+    const initSeq = ++methodSeqRef.current
+    methodInFlightRef.current = false
+    failedSyncKeyRef.current = null
+    setMethodUpdating(false)
 
     const init = async () => {
       setLoadingIntent(true)
@@ -433,7 +512,7 @@ export function WalletPaymentCheckout({
       try {
         if (initialIntentId?.trim()) {
           const existing = await getPaymentIntent(initialIntentId.trim())
-          if (cancelled) return
+          if (cancelled || !isMountedRef.current) return
           setIntent(existing)
           if (existing.paymentNetwork) {
             setNetworkId(toClientPaymentNetworkId(existing.paymentNetwork))
@@ -444,53 +523,117 @@ export function WalletPaymentCheckout({
           return
         }
 
-        const productType = purchaseMode === 'monthly' || !isMinerProduct(productName) ? 'subscription' : 'miner'
-        const cleanPkg = packageId?.trim()
-        const isCustom = !cleanPkg || cleanPkg === 'minerx-custom'
-        const created = await createPaymentIntent({
-          productType,
-          ...(cleanPkg && !isCustom ? { packageId: cleanPkg } : {}),
-          ...(isCustom && productType === 'miner' ? { powerTh: parseMinerPowerTh(productName, amount) } : {}),
-        })
-        if (cancelled) return
+        const sessionKey = sessionKeyRef.current
+        const sel = latestSelectionRef.current
+        const created = await runDeduplicatedIntentInit(sessionKey, () =>
+          createPaymentIntent({
+            productType,
+            ...(resolvedPackageId ? { packageId: resolvedPackageId } : {}),
+            ...(resolvedPowerTh !== undefined ? { powerTh: resolvedPowerTh } : {}),
+            idempotencyKey: sessionKey,
+            ...(sel.isWalletConnected
+              ? {
+                  networkId: toBackendPaymentNetworkId(sel.effectiveNetworkId),
+                  assetSymbol: sel.selectedAsset,
+                  ...(sel.activeAddress ? { senderWallet: sel.activeAddress } : {}),
+                }
+              : {}),
+          }),
+        )
+        if (cancelled || !isMountedRef.current || methodSeqRef.current !== initSeq) return
         setIntent(created)
+        if (created.paymentNetwork) {
+          setNetworkId(toClientPaymentNetworkId(created.paymentNetwork))
+        }
+        if (created.paymentAsset) {
+          setUseUsdt(created.paymentAsset === 'USDT')
+        }
       } catch (err) {
-        if (!cancelled) setError(classifyPaymentError(err, activeDestination.name).message)
+        if (!cancelled && isMountedRef.current) {
+          setError(classifyPaymentError(err, latestSelectionRef.current.destinationName).message)
+        }
       } finally {
-        if (!cancelled) setLoadingIntent(false)
+        if (!cancelled && isMountedRef.current) setLoadingIntent(false)
       }
     }
 
     void init()
     return () => { cancelled = true }
-  }, [isAuthenticated, user?.uid, initialIntentId, packageId, productName, purchaseMode, amount])
+  }, [isAuthenticated, userUid, initialIntentId, productSignature, productType, resolvedPackageId, resolvedPowerTh])
 
-  // Step 2: Transition OPEN -> AWAITING when wallet connects or method is selected
+  // Step 2: Transition OPEN -> AWAITING when wallet connects, or sync senderWallet in-place on AWAITING
   useEffect(() => {
-    if (!isAuthenticated || !intent || intent.status !== 'OPEN' || loadingIntent) return
-    let cancelled = false
+    if (!isAuthenticated || !intent || !isWalletConnected || loadingIntent || methodUpdating || paying || cancelling || methodInFlightRef.current) {
+      return
+    }
 
-    const selectMethod = async () => {
-      setLoadingIntent(true)
-      setError('')
+    const sel = latestSelectionRef.current
+    const targetBackendNet = toBackendPaymentNetworkId(sel.effectiveNetworkId)
+    const syncKey = resolvePendingMethodSyncKey({
+      intent,
+      isWalletConnected,
+      isEvmWallet,
+      activeAddress,
+      targetNetworkId: targetBackendNet,
+      targetAsset: sel.selectedAsset,
+      failedSyncKey: failedSyncKeyRef.current,
+    })
+    if (!syncKey) return
+
+    const seq = ++methodSeqRef.current
+    methodInFlightRef.current = true
+    setMethodUpdating(true)
+    setError('')
+
+    const syncMethod = async () => {
       try {
         const updated = await selectPaymentMethod({
           intentId: intent.intentId,
-          networkId: toBackendPaymentNetworkId(effectiveNetworkId),
-          assetSymbol: selectedAsset,
+          networkId: targetBackendNet,
+          assetSymbol: sel.selectedAsset,
           ...(activeAddress ? { senderWallet: activeAddress } : {}),
         })
-        if (!cancelled) setIntent(updated)
+        if (isMountedRef.current && methodSeqRef.current === seq) {
+          failedSyncKeyRef.current = null
+          setIntent(updated)
+          if (updated.paymentNetwork) {
+            setNetworkId(toClientPaymentNetworkId(updated.paymentNetwork))
+          }
+          if (updated.paymentAsset) {
+            setUseUsdt(updated.paymentAsset === 'USDT')
+          }
+        }
       } catch (err) {
-        if (!cancelled) setError(classifyPaymentError(err, activeDestination.name).message)
+        if (isMountedRef.current && methodSeqRef.current === seq) {
+          failedSyncKeyRef.current = syncKey
+          setError(classifyPaymentError(err, sel.destinationName).message)
+        }
       } finally {
-        if (!cancelled) setLoadingIntent(false)
+        if (methodSeqRef.current === seq) {
+          methodInFlightRef.current = false
+          if (isMountedRef.current) setMethodUpdating(false)
+        }
       }
     }
 
-    void selectMethod()
-    return () => { cancelled = true }
-  }, [isAuthenticated, intent?.intentId, intent?.status, effectiveNetworkId, selectedAsset, activeAddress])
+    void syncMethod()
+  }, [
+    isAuthenticated,
+    intent?.intentId,
+    intent?.status,
+    intent?.senderWallet,
+    intent?.txHash,
+    intent?.expiresAt,
+    intent?.isExpired,
+    isIntentExpired,
+    isWalletConnected,
+    isEvmWallet,
+    activeAddress,
+    loadingIntent,
+    methodUpdating,
+    paying,
+    cancelling,
+  ])
 
   // Real TTL countdown timer while OPEN or AWAITING
   useEffect(() => {
@@ -565,13 +708,50 @@ export function WalletPaymentCheckout({
   }, [intent, effectiveNetworkId, activeDestination.blockExplorer, activeNetworkConfig.name, selectedAsset, activeAddress, productName, onPaid])
 
   const handleSelectNetworkOrAsset = async (nextNet: PaymentNetworkId, nextUseUsdt: boolean) => {
-    setNetworkId(nextNet)
-    setUseUsdt(nextUseUsdt)
+    if (loadingIntent || methodUpdating || methodInFlightRef.current || freshInFlightRef.current || paying || cancelling) return
     const nextAsset: PaymentAssetSymbol = nextUseUsdt ? 'USDT' : NATIVE_SYMBOL_BY_NETWORK[nextNet]
-    if (!intent || intent.txHash || intent.status === 'PROCESSING' || intent.status === 'SETTLED') return
-    if (intent.status === 'AWAITING') {
-      await cancelPaymentIntent(intent.intentId, 'METHOD_CHANGED').catch(() => undefined)
-      await createFreshIntent(nextNet, nextAsset, activeAddress)
+    const nextBackendNet = toBackendPaymentNetworkId(nextNet)
+    if (
+      nextNet === effectiveNetworkId &&
+      nextUseUsdt === useUsdt &&
+      intent?.paymentNetwork === nextBackendNet &&
+      intent?.paymentAsset === nextAsset
+    ) {
+      return
+    }
+    if (!intent || !canMutateIntentMethodInPlace(intent, Date.now())) {
+      setNetworkId(nextNet)
+      setUseUsdt(nextUseUsdt)
+      return
+    }
+
+    const targetDestinationName = (destinations.find((d) => d.id === nextNet) ?? activeDestination).name
+    const seq = ++methodSeqRef.current
+    methodInFlightRef.current = true
+    failedSyncKeyRef.current = null
+    setMethodUpdating(true)
+    setError('')
+    try {
+      const updated = await selectPaymentMethod({
+        intentId: intent.intentId,
+        networkId: nextBackendNet,
+        assetSymbol: nextAsset,
+        ...(activeAddress ? { senderWallet: activeAddress } : {}),
+      })
+      if (isMountedRef.current && methodSeqRef.current === seq) {
+        setNetworkId(nextNet)
+        setUseUsdt(nextUseUsdt)
+        setIntent(updated)
+      }
+    } catch (err) {
+      if (isMountedRef.current && methodSeqRef.current === seq) {
+        setError(classifyPaymentError(err, targetDestinationName).message)
+      }
+    } finally {
+      if (methodSeqRef.current === seq) {
+        methodInFlightRef.current = false
+        if (isMountedRef.current) setMethodUpdating(false)
+      }
     }
   }
 
@@ -698,6 +878,7 @@ export function WalletPaymentCheckout({
             abi: ERC20_ABI,
             functionName: 'transfer',
             args: [recipient, atomicAmount],
+            ...(expectedEvmChainId > 0 ? { chainId: expectedEvmChainId } : {}),
           })
         } else {
           if (!isEvmConnected || !sendTransactionAsync) {
@@ -706,6 +887,7 @@ export function WalletPaymentCheckout({
           txHash = await sendTransactionAsync({
             to: recipient,
             value: atomicAmount,
+            ...(expectedEvmChainId > 0 ? { chainId: expectedEvmChainId } : {}),
           })
         }
       }
@@ -917,7 +1099,7 @@ export function WalletPaymentCheckout({
               <button
                 type="button"
                 className="button button-primary"
-                disabled={loadingIntent}
+                disabled={loadingIntent || methodUpdating}
                 onClick={() => void createFreshIntent(effectiveNetworkId, selectedAsset, activeAddress)}
               >
                 Generar nueva cotización
@@ -982,7 +1164,7 @@ export function WalletPaymentCheckout({
                         key={net.id}
                         type="button"
                         className={`network-chip-btn ${effectiveNetworkId === net.id ? 'network-chip-active' : ''}`}
-                        disabled={loadingIntent || paying}
+                        disabled={loadingIntent || methodUpdating || paying || cancelling}
                         onClick={() => void handleSelectNetworkOrAsset(net.id, useUsdt)}
                       >
                         <CryptoIcon symbol={net.icon} size="sm" />
@@ -998,7 +1180,7 @@ export function WalletPaymentCheckout({
                     <button
                       type="button"
                       className={`currency-pill-btn ${useUsdt ? 'currency-pill-active' : ''}`}
-                      disabled={loadingIntent || paying}
+                      disabled={loadingIntent || methodUpdating || paying || cancelling}
                       onClick={() => void handleSelectNetworkOrAsset(effectiveNetworkId, true)}
                     >
                       <CryptoIcon symbol="USDT" size="sm" />
@@ -1007,7 +1189,7 @@ export function WalletPaymentCheckout({
                     <button
                       type="button"
                       className={`currency-pill-btn ${!useUsdt ? 'currency-pill-active' : ''}`}
-                      disabled={loadingIntent || paying}
+                      disabled={loadingIntent || methodUpdating || paying || cancelling}
                       onClick={() => void handleSelectNetworkOrAsset(effectiveNetworkId, false)}
                     >
                       <CryptoIcon symbol={NATIVE_SYMBOL_BY_NETWORK[effectiveNetworkId] as CryptoSymbol} size="sm" />
@@ -1017,7 +1199,7 @@ export function WalletPaymentCheckout({
                 </div>
 
                 <div className="checkout-quote-card">
-                  {loadingIntent ? (
+                  {loadingIntent || methodUpdating ? (
                     <QuoteDetailsSkeleton />
                   ) : intent && intent.status === 'AWAITING' && intent.treasuryAddress ? (
                     <>
@@ -1068,7 +1250,7 @@ export function WalletPaymentCheckout({
                       <button
                         type="button"
                         className="button button-primary checkout-action-btn"
-                        disabled={!intent || intent.status !== 'AWAITING' || loadingIntent || paying || isIntentExpired}
+                        disabled={!intent || intent.status !== 'AWAITING' || hasNetworkSelectionMismatch || loadingIntent || methodUpdating || paying || cancelling || isIntentExpired}
                         onClick={handlePay}
                       >
                         {paying
@@ -1080,7 +1262,7 @@ export function WalletPaymentCheckout({
                           type="button"
                           className="button button-secondary checkout-action-btn"
                           style={{ marginTop: 8 }}
-                          disabled={cancelling || paying}
+                          disabled={cancelling || paying || loadingIntent || methodUpdating}
                           onClick={handleCancelIntent}
                         >
                           {cancelling ? 'Cancelando orden...' : 'Cancelar orden de pago'}
