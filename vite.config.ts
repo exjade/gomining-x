@@ -22,7 +22,7 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: process.env.VITE_API_PROXY_TARGET?.trim() || `http://localhost:${process.env.PORT?.trim() || 3001}`,
         changeOrigin: true,
       },
     },

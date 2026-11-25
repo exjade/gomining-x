@@ -3757,12 +3757,20 @@ const isTestEnv = process.env.NODE_ENV === 'test' ||
   process.argv.some(a => a.includes('test') || a.includes('--test') || a.includes('node:test'));
 
 if (isMainModule && !isTestEnv) {
-  // 1. Autonomous Surveillance Loop every 60 seconds
-  setInterval(runAutonomousBackgroundWatcher, 60000);
-  // 2. Interactive Telegram Commands Poller every 8 seconds
-  setInterval(pollTelegramCommands, 8000);
+  app.listen(PORT, (err?: Error) => {
+    if (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      const codeSuffix = code && !err.message.includes(code) ? ` (${code})` : '';
+      console.error(`[MinerX Engine] Failed to bind port ${PORT}: ${err.message}${codeSuffix}`);
+      process.exit(1);
+      return;
+    }
 
-  app.listen(PORT, () => {
+    // 1. Autonomous Surveillance Loop every 60 seconds
+    setInterval(runAutonomousBackgroundWatcher, 60000);
+    // 2. Interactive Telegram Commands Poller every 8 seconds
+    setInterval(pollTelegramCommands, 8000);
+
     console.log(`[MinerX Engine v1.2] Proxy Server listening on http://localhost:${PORT}`);
     console.log(`[MinerX Engine] Autonomous Telegram background watcher & interactive command listener initialized`);
   });

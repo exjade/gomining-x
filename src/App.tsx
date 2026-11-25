@@ -234,6 +234,10 @@ export const App: React.FC = () => {
             setAuthInfrastructureError('La autoridad de autorización administrativa no está disponible.');
             return null;
           }
+          if (res.status >= 500) {
+            setAuthInfrastructureError('El servidor backend de administración no está disponible.');
+            return null;
+          }
           handleLogout();
           return null;
         }
@@ -279,6 +283,9 @@ export const App: React.FC = () => {
       if (!res.ok) {
         if (res.status === 503) {
           throw new Error('La autoridad de autorización administrativa no está disponible.');
+        }
+        if (res.status >= 500) {
+          throw new Error('El servidor backend de administración no está disponible. Verifica que el backend esté activo.');
         }
         throw new Error('Sesión no autorizada para el panel de administración.');
       }
