@@ -113,6 +113,10 @@ function readOnlyPoolApi(): Plugin {
   }
 }
 
+const apiProxyTarget =
+  process.env.VITE_API_PROXY_TARGET?.trim() ||
+  `http://127.0.0.1:${process.env.PORT?.trim() || 3001}`
+
 export default defineConfig({
   plugins: [react(), readOnlyPoolApi()],
   server: {
@@ -120,15 +124,15 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api/catalog': {
-        target: 'http://127.0.0.1:3001',
+        target: apiProxyTarget,
         changeOrigin: true,
       },
       '/api/purchases': {
-        target: 'http://127.0.0.1:3001',
+        target: apiProxyTarget,
         changeOrigin: true,
       },
       '/api/withdrawals': {
-        target: 'http://127.0.0.1:3001',
+        target: apiProxyTarget,
         changeOrigin: true,
       },
     },
@@ -148,15 +152,15 @@ export default defineConfig({
     port: 4174,
     proxy: {
       '/api/catalog': {
-        target: 'http://127.0.0.1:3001',
+        target: apiProxyTarget,
         changeOrigin: true,
       },
       '/api/purchases': {
-        target: 'http://127.0.0.1:3001',
+        target: apiProxyTarget,
         changeOrigin: true,
       },
       '/api/withdrawals': {
-        target: 'http://127.0.0.1:3001',
+        target: apiProxyTarget,
         changeOrigin: true,
       },
     },
