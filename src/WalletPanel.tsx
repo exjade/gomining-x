@@ -1,26 +1,38 @@
 import { useState } from 'react'
-import { useAppKit, useAppKitAccount, useDisconnect } from '@reown/appkit/react'
+import { useAppKit, useAppKitAccount, useAppKitNetwork, useDisconnect } from '@reown/appkit/react'
 import { useAccount, useBalance } from 'wagmi'
 import { useAuth } from './AuthContext'
 import { ClientPaymentHistory } from './components/payments/ClientPaymentHistory'
+import { resolveActiveMultichainWallet } from './services/payments/checkoutIntentCoordinator'
 import type { WalletSession } from './walletSession'
 
 export function WalletPanel({ session }: { session?: WalletSession }) {
   const { user } = useAuth()
   const { open } = useAppKit()
-  const { address: appKitAddress, isConnected: isAppKitConnected } = useAppKitAccount()
+  const { address: appKitAddress, caipAddress: appKitCaipAddress, isConnected: isAppKitConnected } = useAppKitAccount()
+  const { caipNetwork } = useAppKitNetwork()
   const { address: wagmiAddress, isConnected: isWagmiConnected, chain } = useAccount()
   const { disconnect: disconnectAppKit } = useDisconnect()
 
   const [copied, setCopied] = useState(false)
   const authenticatedUid = user && !user.isAnonymous ? user.uid : ''
 
-  const activeAddress = wagmiAddress || appKitAddress || session?.connection?.address || ''
-  const isConnected = Boolean(activeAddress && (isWagmiConnected || isAppKitConnected || Boolean(session?.connection)))
-  const currentNetwork = chain?.name ?? (session?.connection?.network ?? (activeAddress.startsWith('0x') ? 'EVM' : 'Solana'))
+  const resolvedWallet = resolveActiveMultichainWallet({
+    appKitAddress,
+    isAppKitConnected,
+    appKitCaipAddress,
+    caipNamespace: caipNetwork?.chainNamespace,
+    wagmiAddress,
+    isWagmiConnected,
+    fallbackAddress: session?.connection?.address,
+  })
+  const activeAddress = session?.connection?.address || resolvedWallet.activeAddress
+  const isConnected = Boolean(activeAddress && (Boolean(session?.connection) || resolvedWallet.isWalletConnected))
+  const isEvmActive = activeAddress.startsWith('0x')
+  const currentNetwork = session?.connection?.network ?? (isEvmActive ? (chain?.name ?? 'EVM') : 'Solana')
 
   const { data: balanceData } = useBalance({
-    address: wagmiAddress,
+    address: isEvmActive ? (activeAddress as `0x${string}`) : undefined,
   })
 
   const handleCopy = async () => {
@@ -101,7 +113,7 @@ export function WalletPanel({ session }: { session?: WalletSession }) {
               <strong className="network-pill">{currentNetwork}</strong>
             </div>
 
-            {balanceData && (
+            {isEvmActive && balanceData && (
               <div className="wallet-info-item">
                 <span className="wallet-info-label">Saldo:</span>
                 <strong>

@@ -1,8 +1,9 @@
 import { useCallback, useMemo } from 'react'
-import { useAppKit, useAppKitAccount, useDisconnect } from '@reown/appkit/react'
+import { useAppKit, useAppKitAccount, useAppKitNetwork, useDisconnect } from '@reown/appkit/react'
 import { useAccount } from 'wagmi'
 import type { PaymentNetworkId } from './paymentDestinations'
 import type { PaymentQuote } from './paymentQuote'
+import { resolveActiveMultichainWallet } from './services/payments/checkoutIntentCoordinator'
 
 export type WalletId =
   | 'reown'
@@ -46,12 +47,19 @@ function formatShortAddress(address: string): string {
 /** Thin Reown AppKit + Wagmi session adapter (ADR-0006: Reown AppKit Only). */
 export function useWalletSession(): WalletSession {
   const { open } = useAppKit()
-  const { address: appKitAddress, isConnected: isAppKitConnected, status: appKitStatus } = useAppKitAccount()
+  const { address: appKitAddress, caipAddress: appKitCaipAddress, isConnected: isAppKitConnected, status: appKitStatus } = useAppKitAccount()
+  const { caipNetwork } = useAppKitNetwork()
   const { address: wagmiAddress, isConnected: isWagmiConnected, chain } = useAccount()
   const { disconnect: appKitDisconnect } = useDisconnect()
 
-  const activeAddress = wagmiAddress || appKitAddress || ''
-  const isConnected = Boolean(activeAddress && (isWagmiConnected || isAppKitConnected))
+  const { activeAddress, isWalletConnected: isConnected, isEvmWallet: isEvm } = resolveActiveMultichainWallet({
+    appKitAddress,
+    isAppKitConnected,
+    appKitCaipAddress,
+    caipNamespace: caipNetwork?.chainNamespace,
+    wagmiAddress,
+    isWagmiConnected,
+  })
 
   const disconnect = useCallback(async () => {
     await appKitDisconnect()
@@ -70,7 +78,6 @@ export function useWalletSession(): WalletSession {
 
   const connection = useMemo<ConnectedWallet | null>(() => {
     if (!isConnected || !activeAddress) return null
-    const isEvm = activeAddress.startsWith('0x') || isWagmiConnected
     return {
       id: 'reown',
       name: isEvm ? (chain?.name ?? 'Reown AppKit (EVM)') : 'Reown AppKit (Solana)',
@@ -83,7 +90,7 @@ export function useWalletSession(): WalletSession {
         throw new Error('Los pagos Web3 deben ejecutarse desde el checkout oficial con Reown AppKit.')
       },
     }
-  }, [isConnected, activeAddress, isWagmiConnected, chain?.name, disconnect])
+  }, [isConnected, activeAddress, isEvm, chain?.name, disconnect])
 
   return useMemo<WalletSession>(() => ({
     connection,

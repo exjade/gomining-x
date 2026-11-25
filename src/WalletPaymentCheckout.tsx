@@ -33,9 +33,12 @@ import {
   buildCheckoutProductSignature,
   canMutateIntentMethodInPlace,
   generateCheckoutIdempotencyKey,
+  resolveActiveMultichainWallet,
   resolvePendingMethodSyncKey,
   runDeduplicatedIntentInit,
+  submitSolanaTransactionViaProvider,
 } from './services/payments/checkoutIntentCoordinator'
+import { appKitNetworks } from './appkitConfig'
 
 export type { PostTxPendingState, PackageSnapshot }
 
@@ -90,11 +93,25 @@ const ERC20_ABI = [
 type SolanaAppKitProvider = {
   signAndSendTransaction?: (transaction: unknown) => Promise<string | { signature?: string }>
   sendTransaction?: (transaction: unknown, connection: unknown) => Promise<string>
+  signTransaction?: (transaction: unknown) => Promise<{ serialize: () => Uint8Array }>
 }
 
 export function sanitizeErrorReason(raw: unknown): string {
   if (!raw) return ''
-  return String(raw)
+  let text = ''
+  if (typeof raw === 'string') {
+    text = raw
+  } else if (raw instanceof Error) {
+    text = raw.message
+  } else if (typeof raw === 'object') {
+    const obj = raw as { message?: unknown; reason?: unknown; reasonCode?: unknown; code?: unknown }
+    const candidate = obj.message ?? obj.reason ?? obj.reasonCode ?? obj.code
+    text = typeof candidate === 'string' || typeof candidate === 'number' ? String(candidate) : ''
+  } else {
+    text = String(raw)
+  }
+  if (!text || text === '[object Object]') return ''
+  return text
     .replace(/https?:\/\/[^\s'")]+/g, '[rpc-endpoint]')
     .replace(/0x[a-fA-F0-9]{10,}/g, '[hash/data]')
     .replace(/bearer\s+[a-z0-9._-]+/gi, '[token]')
@@ -102,6 +119,19 @@ export function sanitizeErrorReason(raw: unknown): string {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 120)
+}
+
+function extractDetailsString(details: unknown): string {
+  if (typeof details === 'string') return details
+  return ''
+}
+
+function extractDetailsReasonCode(details: unknown): string {
+  if (details && typeof details === 'object') {
+    const code = (details as { reasonCode?: unknown }).reasonCode
+    if (typeof code === 'string' && code.trim()) return code.trim()
+  }
+  return ''
 }
 
 export type ClassifiedPaymentError = {
@@ -118,6 +148,7 @@ export function classifyPaymentError(
   networkName: string,
 ): ClassifiedPaymentError {
   let rawReason = ''
+  let reasonCode = ''
   let rootName = (err as { name?: string })?.name || ''
   let code = (err as { code?: number | string })?.code ?? (err as { cause?: { code?: number | string } })?.cause?.code
   let causeMessages = ''
@@ -125,21 +156,29 @@ export function classifyPaymentError(
   if (err && typeof err === 'object') {
     const baseErr = err as {
       shortMessage?: string
-      details?: string
+      details?: unknown
       message?: string
       cause?: unknown
       walk?: (fn?: (e: unknown) => boolean) => unknown
       data?: { message?: string }
     }
-    rawReason = baseErr.shortMessage || baseErr.details || baseErr.data?.message || baseErr.message || ''
+    reasonCode = extractDetailsReasonCode(baseErr.details)
+    rawReason =
+      baseErr.shortMessage ||
+      extractDetailsString(baseErr.details) ||
+      baseErr.data?.message ||
+      baseErr.message ||
+      reasonCode ||
+      ''
     if (typeof baseErr.walk === 'function') {
       try {
         const root = baseErr.walk()
         if (root && root !== err) {
-          const r = root as { name?: string; code?: number | string; details?: string; shortMessage?: string; data?: { message?: string }; message?: string }
+          const r = root as { name?: string; code?: number | string; details?: unknown; shortMessage?: string; data?: { message?: string }; message?: string }
           rootName = r.name || rootName
           code = r.code ?? code
-          if (!rawReason) rawReason = r.details || r.shortMessage || r.data?.message || r.message || ''
+          if (!reasonCode) reasonCode = extractDetailsReasonCode(r.details)
+          if (!rawReason) rawReason = extractDetailsString(r.details) || r.shortMessage || r.data?.message || r.message || ''
         }
       } catch {
         // ignore walk errors
@@ -156,15 +195,16 @@ export function classifyPaymentError(
         cause?: unknown
         message?: string
         shortMessage?: string
-        details?: string
+        details?: unknown
         data?: { message?: string }
       }
       if (code === undefined && cObj.code !== undefined) code = cObj.code
       if ((!rootName || rootName === 'Error') && cObj.name && cObj.name !== 'Error') {
         rootName = cObj.name
       }
+      if (!reasonCode) reasonCode = extractDetailsReasonCode(cObj.details)
       if (!rawReason) {
-        rawReason = cObj.shortMessage || cObj.details || cObj.data?.message || cObj.message || ''
+        rawReason = cObj.shortMessage || extractDetailsString(cObj.details) || cObj.data?.message || cObj.message || ''
       }
       if (cObj.message) causeMessages += ' ' + cObj.message
       if (cObj.data?.message) causeMessages += ' ' + cObj.data.message
@@ -181,7 +221,22 @@ export function classifyPaymentError(
   const cleanReason = sanitizeErrorReason(rawReason)
   const safeName = rootName ? sanitizeErrorReason(rootName) : undefined
   const safeShortMessage = cleanReason || undefined
-  const checkText = `${cleanReason} ${rootName} ${codeStr} ${(err as Error)?.message || ''}${causeMessages}`.toLowerCase()
+  const checkText = `${cleanReason} ${reasonCode} ${rootName} ${codeStr} ${(err as Error)?.message || ''}${causeMessages}`.toLowerCase()
+
+  if (
+    reasonCode === 'TOKEN_CONTRACT_NOT_CONFIGURED' ||
+    reasonCode === 'SOLANA_USDT_MINT_NOT_CONFIGURED' ||
+    reasonCode === 'INVALID_TOKEN_CONTRACT'
+  ) {
+    return {
+      message: `USDT no está disponible en ${networkName} (contrato testnet no configurado en el servidor). Selecciona la moneda nativa para continuar.`,
+      kind: 'ASSET_NOT_CONFIGURED',
+      name: safeName,
+      code: reasonCode,
+      shortMessage: reasonCode,
+      category: 'ASSET_NOT_CONFIGURED',
+    }
+  }
 
   const isExplicitUserRejection =
     code === 4001 ||
@@ -333,7 +388,7 @@ export function WalletPaymentCheckout({
   const navigate = useNavigate()
   const { open: openAppKit } = useAppKit()
   const appKitAccount = useAppKitAccount()
-  const { switchNetwork, chainId: appKitChainId } = useAppKitNetwork()
+  const { switchNetwork, chainId: appKitChainId, caipNetwork } = useAppKitNetwork()
   const { walletProvider: solanaProvider } = useAppKitProvider<SolanaAppKitProvider>('solana')
   const { address: evmAddress, isConnected: isEvmConnected, chainId: wagmiChainId } = useAccount()
   const { switchChainAsync } = useSwitchChain()
@@ -344,11 +399,27 @@ export function WalletPaymentCheckout({
   const isAuthenticated = Boolean(user && !user.isAnonymous)
   const ethereumEnabled = isEthereumPaymentEnabled()
 
+  const { activeAddress, isWalletConnected, isEvmWallet, isSolanaWallet } = resolveActiveMultichainWallet({
+    appKitAddress: appKitAccount.address,
+    isAppKitConnected: appKitAccount.isConnected,
+    appKitCaipAddress: appKitAccount.caipAddress,
+    caipNamespace: caipNetwork?.chainNamespace,
+    wagmiAddress: evmAddress,
+    isWagmiConnected: isEvmConnected,
+    fallbackAddress: session?.connection?.address,
+  })
+
   const [networkId, setNetworkId] = useState<PaymentNetworkId>(() =>
     initialNetworkId === 'ethereum' && !ethereumEnabled ? 'bnb' : initialNetworkId,
   )
-  const [useUsdt, setUseUsdt] = useState(true)
+  const [useUsdt, setUseUsdt] = useState<boolean>(() => {
+    const initialNet: PaymentNetworkId = isSolanaWallet
+      ? 'solana'
+      : (initialNetworkId === 'ethereum' && !ethereumEnabled ? 'bnb' : initialNetworkId)
+    return Boolean(getPaymentNetworkConfig(initialNet).usdtContractAddress)
+  })
   const [intent, setIntent] = useState<PaymentIntentRecord | null>(null)
+  const [initRetryNonce, setInitRetryNonce] = useState(0)
   const [loadingIntent, setLoadingIntent] = useState(false)
   const [methodUpdating, setMethodUpdating] = useState(false)
   const [paying, setPaying] = useState(false)
@@ -382,11 +453,6 @@ export function WalletPaymentCheckout({
     sessionKeyRef.current = generateCheckoutIdempotencyKey()
   }
 
-  const activeAddress = evmAddress || appKitAccount.address || session?.connection?.address || ''
-  const isWalletConnected = Boolean(activeAddress && (isEvmConnected || appKitAccount.isConnected || Boolean(session?.connection)))
-  const isEvmWallet = Boolean((activeAddress && activeAddress.startsWith('0x')) || isEvmConnected)
-  const isSolanaWallet = Boolean(activeAddress && !activeAddress.startsWith('0x') && !isEvmConnected)
-
   const destinations = useMemo(() => getPaymentDestinations(), [])
   const enabledNetworks = useMemo(
     () => networks.filter((n) => n.id !== 'ethereum' || ethereumEnabled),
@@ -409,14 +475,19 @@ export function WalletPaymentCheckout({
   const activeDestination = destinations.find((d) => d.id === authoritativeNetworkId) ?? destinations[0]
   const activeNetworkConfig = getPaymentNetworkConfig(authoritativeNetworkId, intent?.networkMode)
   const selectedAsset: PaymentAssetSymbol = useUsdt ? 'USDT' : NATIVE_SYMBOL_BY_NETWORK[effectiveNetworkId]
-  const numericChainId = Number(wagmiChainId || appKitChainId || 0) || 0
+  const numericChainId = isEvmWallet ? (Number(wagmiChainId || appKitChainId || 0) || 0) : 0
   const expectedEvmChainId = typeof intent?.chainId === 'number'
     ? intent.chainId
     : (typeof activeNetworkConfig.chainId === 'number' ? activeNetworkConfig.chainId : activeDestination.chainId)
-  const isWrongEvmChain = !isSolana && isWalletConnected && numericChainId > 0 && numericChainId !== expectedEvmChainId
   const hasNetworkSelectionMismatch = Boolean(
     intent?.paymentNetwork && intent.paymentNetwork !== toBackendPaymentNetworkId(effectiveNetworkId),
   )
+  const isWrongEvmChain =
+    !isSolana &&
+    isEvmWallet &&
+    !hasNetworkSelectionMismatch &&
+    numericChainId > 0 &&
+    numericChainId !== expectedEvmChainId
 
   const latestSelectionRef = useRef({
     isWalletConnected,
@@ -523,6 +594,9 @@ export function WalletPaymentCheckout({
           return
         }
 
+        if (initRetryNonce > 0) {
+          sessionKeyRef.current = generateCheckoutIdempotencyKey()
+        }
         const sessionKey = sessionKeyRef.current
         const sel = latestSelectionRef.current
         const created = await runDeduplicatedIntentInit(sessionKey, () =>
@@ -559,7 +633,7 @@ export function WalletPaymentCheckout({
 
     void init()
     return () => { cancelled = true }
-  }, [isAuthenticated, userUid, initialIntentId, productSignature, productType, resolvedPackageId, resolvedPowerTh])
+  }, [isAuthenticated, userUid, initialIntentId, productSignature, productType, resolvedPackageId, resolvedPowerTh, initRetryNonce])
 
   // Step 2: Transition OPEN -> AWAITING when wallet connects, or sync senderWallet in-place on AWAITING
   useEffect(() => {
@@ -569,13 +643,19 @@ export function WalletPaymentCheckout({
 
     const sel = latestSelectionRef.current
     const targetBackendNet = toBackendPaymentNetworkId(sel.effectiveNetworkId)
+    const targetAsset: PaymentAssetSymbol =
+      intent.status === 'OPEN' &&
+      sel.selectedAsset === 'USDT' &&
+      !getPaymentNetworkConfig(sel.effectiveNetworkId, intent.networkMode).usdtContractAddress
+        ? NATIVE_SYMBOL_BY_NETWORK[sel.effectiveNetworkId]
+        : sel.selectedAsset
     const syncKey = resolvePendingMethodSyncKey({
       intent,
       isWalletConnected,
       isEvmWallet,
       activeAddress,
       targetNetworkId: targetBackendNet,
-      targetAsset: sel.selectedAsset,
+      targetAsset,
       failedSyncKey: failedSyncKeyRef.current,
     })
     if (!syncKey) return
@@ -590,7 +670,7 @@ export function WalletPaymentCheckout({
         const updated = await selectPaymentMethod({
           intentId: intent.intentId,
           networkId: targetBackendNet,
-          assetSymbol: sel.selectedAsset,
+          assetSymbol: targetAsset,
           ...(activeAddress ? { senderWallet: activeAddress } : {}),
         })
         if (isMountedRef.current && methodSeqRef.current === seq) {
@@ -621,6 +701,7 @@ export function WalletPaymentCheckout({
     isAuthenticated,
     intent?.intentId,
     intent?.status,
+    intent?.networkMode,
     intent?.senderWallet,
     intent?.txHash,
     intent?.expiresAt,
@@ -714,12 +795,21 @@ export function WalletPaymentCheckout({
     if (
       nextNet === effectiveNetworkId &&
       nextUseUsdt === useUsdt &&
+      intent?.status === 'AWAITING' &&
+      Boolean(intent?.treasuryAddress) &&
       intent?.paymentNetwork === nextBackendNet &&
       intent?.paymentAsset === nextAsset
     ) {
       return
     }
-    if (!intent || !canMutateIntentMethodInPlace(intent, Date.now())) {
+    if (!intent) {
+      setNetworkId(nextNet)
+      setUseUsdt(nextUseUsdt)
+      setError('')
+      setInitRetryNonce((n) => n + 1)
+      return
+    }
+    if (!canMutateIntentMethodInPlace(intent, Date.now())) {
       setNetworkId(nextNet)
       setUseUsdt(nextUseUsdt)
       return
@@ -728,7 +818,6 @@ export function WalletPaymentCheckout({
     const targetDestinationName = (destinations.find((d) => d.id === nextNet) ?? activeDestination).name
     const seq = ++methodSeqRef.current
     methodInFlightRef.current = true
-    failedSyncKeyRef.current = null
     setMethodUpdating(true)
     setError('')
     try {
@@ -739,12 +828,24 @@ export function WalletPaymentCheckout({
         ...(activeAddress ? { senderWallet: activeAddress } : {}),
       })
       if (isMountedRef.current && methodSeqRef.current === seq) {
+        failedSyncKeyRef.current = null
         setNetworkId(nextNet)
         setUseUsdt(nextUseUsdt)
         setIntent(updated)
       }
     } catch (err) {
       if (isMountedRef.current && methodSeqRef.current === seq) {
+        failedSyncKeyRef.current =
+          failedSyncKeyRef.current ??
+          resolvePendingMethodSyncKey({
+            intent,
+            isWalletConnected,
+            isEvmWallet,
+            activeAddress,
+            targetNetworkId: nextBackendNet,
+            targetAsset: nextAsset,
+            failedSyncKey: null,
+          })
         setError(classifyPaymentError(err, targetDestinationName).message)
       }
     } finally {
@@ -768,10 +869,14 @@ export function WalletPaymentCheckout({
   const handleSwitchNetwork = async () => {
     setError('')
     try {
-      if (isEvmConnected && switchChainAsync) {
+      if (isEvmWallet && isEvmConnected && switchChainAsync) {
         await switchChainAsync({ chainId: expectedEvmChainId })
       } else if (switchNetwork) {
-        await switchNetwork(expectedEvmChainId as never)
+        const targetAppKitNet = appKitNetworks.find((net) => Number(net.id) === expectedEvmChainId)
+        if (!targetAppKitNet) {
+          throw new Error(`Red objetivo no configurada en Reown AppKit (chainId ${expectedEvmChainId}).`)
+        }
+        await switchNetwork(targetAppKitNet)
       }
     } catch {
       setError(`Por favor confirma el cambio de red a ${activeNetworkConfig.name} en tu billetera.`)
@@ -800,6 +905,10 @@ export function WalletPaymentCheckout({
     }
     if (!intent || intent.status !== 'AWAITING') {
       setError('La orden de pago aún no está lista. Selecciona red y moneda para continuar.')
+      return
+    }
+    if (hasNetworkSelectionMismatch) {
+      setError('La red seleccionada no coincide con la cotización actual. Actualiza la red o moneda para continuar.')
       return
     }
     if (isIntentExpired) {
@@ -852,15 +961,11 @@ export function WalletPaymentCheckout({
             networkMode: intent.networkMode,
           },
         )
-        if (typeof solanaProvider.signAndSendTransaction === 'function') {
-          const res = await solanaProvider.signAndSendTransaction(tx)
-          txHash = typeof res === 'string' ? res : (res?.signature ?? '')
-        } else if (typeof solanaProvider.sendTransaction === 'function') {
-          const connection = await getSolanaConnection(intent.networkMode)
-          txHash = await solanaProvider.sendTransaction(tx, connection)
-        } else {
-          throw new Error('La billetera Solana conectada no soporta firma directa en Reown AppKit.')
-        }
+        txHash = await submitSolanaTransactionViaProvider(
+          solanaProvider,
+          tx,
+          () => getSolanaConnection(intent.networkMode),
+        )
       } else {
         const recipient = requireTreasuryAddress(intent.treasuryAddress, 'evm') as `0x${string}`
         const atomicAmount = BigInt(intent.expectedAmountAtomic)
@@ -870,7 +975,7 @@ export function WalletPaymentCheckout({
           if (!tokenAddress) {
             throw new Error('El servidor no devolvió el contrato USDT autoritativo para esta red.')
           }
-          if (!isEvmConnected || !writeContractAsync) {
+          if (!isEvmWallet || !isEvmConnected || !writeContractAsync) {
             throw new Error('No hay una wallet EVM conectada vía Reown AppKit para autorizar el pago en USDT.')
           }
           txHash = await writeContractAsync({
@@ -881,7 +986,7 @@ export function WalletPaymentCheckout({
             ...(expectedEvmChainId > 0 ? { chainId: expectedEvmChainId } : {}),
           })
         } else {
-          if (!isEvmConnected || !sendTransactionAsync) {
+          if (!isEvmWallet || !isEvmConnected || !sendTransactionAsync) {
             throw new Error('No hay una wallet EVM conectada vía Reown AppKit para autorizar la transacción.')
           }
           txHash = await sendTransactionAsync({
@@ -1228,6 +1333,32 @@ export function WalletPaymentCheckout({
                         </div>
                       </div>
                     </>
+                  ) : error ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <p className="quote-error-text">No se pudo obtener la cotización autoritativa del servidor.</p>
+                      <button
+                        type="button"
+                        className="button button-secondary"
+                        disabled={loadingIntent || methodUpdating}
+                        onClick={() => {
+                          if (!intent) {
+                            setError('')
+                            setInitRetryNonce((n) => n + 1)
+                            return
+                          }
+                          if (canMutateIntentMethodInPlace(intent, Date.now())) {
+                            failedSyncKeyRef.current = null
+                            const retryUseUsdt =
+                              useUsdt && Boolean(getPaymentNetworkConfig(effectiveNetworkId, intent.networkMode).usdtContractAddress)
+                            void handleSelectNetworkOrAsset(effectiveNetworkId, retryUseUsdt)
+                            return
+                          }
+                          setNowMs(Date.now())
+                        }}
+                      >
+                        Reintentar cotización
+                      </button>
+                    </div>
                   ) : (
                     <p className="quote-error-text">Preparando cotización autoritativa del servidor...</p>
                   )}

@@ -184,7 +184,7 @@ function AppContent() {
   const isWalletReconnectingRef = useRef(isWalletReconnecting)
   isWalletReconnectingRef.current = isWalletReconnecting
 
-  const activeWalletAddress = wagmiAddress || appKitAddress || walletSession.connection?.address || ''
+  const activeWalletAddress = walletSession.connection?.address || appKitAddress || wagmiAddress || ''
   const isWalletConnected = isWagmiConnected || isAppKitConnected || Boolean(walletSession.connection)
   const isWalletConnectedRef = useRef(isWalletConnected)
   isWalletConnectedRef.current = isWalletConnected
@@ -216,24 +216,24 @@ function AppContent() {
     : ''
 
   const unifiedConnection = useMemo(() => {
-    if (walletSession.connection && (!wagmiAddress || walletSession.connection.address.toLowerCase() === wagmiAddress.toLowerCase())) {
+    if (walletSession.connection) {
       return walletSession.connection
     }
     if (activeWalletAddress) {
       const short = `${activeWalletAddress.slice(0, 6)}...${activeWalletAddress.slice(-4)}`
+      const isSol = !activeWalletAddress.startsWith('0x')
       return {
-        id: (walletSession.connection?.id ?? 'metamask') as WalletId,
-        name: chain?.name ?? (walletSession.connection?.name ?? 'Wallet Web3'),
-        protocol: (walletSession.connection?.protocol ?? 'EIP-1193') as 'Solana' | 'EIP-1193' | 'Bitcoin' | 'TRON' | 'Cosmos',
-        network: chain?.name ?? (walletSession.connection?.network ?? 'EVM'),
+        id: 'reown' as WalletId,
+        name: isSol ? 'Reown AppKit (Solana)' : (chain?.name ?? 'Wallet Web3'),
+        protocol: (isSol ? 'Solana' : 'EIP-1193') as 'Solana' | 'EIP-1193' | 'Bitcoin' | 'TRON' | 'Cosmos',
+        network: isSol ? 'Solana' : (chain?.name ?? 'EVM'),
         address: activeWalletAddress,
         shortAddress: short,
         disconnectProvider: async () => {
           try { await disconnectWagmi() } catch { /* ignore */ }
           try { await walletSession.disconnect() } catch { /* ignore */ }
         },
-        sendPayment: async (quote: any, context?: any) => {
-          if (walletSession.connection) return walletSession.connection.sendPayment(quote, context)
+        sendPayment: async () => {
           throw new Error('Usa el checkout directo para pagar.')
         },
       }
@@ -241,7 +241,6 @@ function AppContent() {
     return null
   }, [
     walletSession.connection,
-    wagmiAddress,
     activeWalletAddress,
     chain?.name,
     disconnectWagmi,

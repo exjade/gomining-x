@@ -127,3 +127,128 @@ export function runDeduplicatedIntentInit<T>(
   inFlightIntentInits.set(cleanKey, tracked)
   return tracked
 }
+
+export interface MultichainWalletInput {
+  appKitAddress?: string | null
+  isAppKitConnected: boolean
+  appKitCaipAddress?: string | null
+  caipNamespace?: string | null
+  wagmiAddress?: string | null
+  isWagmiConnected: boolean
+  fallbackAddress?: string | null
+}
+
+export interface ResolvedMultichainWallet {
+  activeAddress: string
+  isWalletConnected: boolean
+  isEvmWallet: boolean
+  isSolanaWallet: boolean
+}
+
+/**
+ * Resolves the active multichain wallet (Wagmi EVM vs Reown AppKit Solana) without letting a dormant
+ * Wagmi connection hijack an active Solana session in AppKit.
+ */
+export function resolveActiveMultichainWallet(input: MultichainWalletInput): ResolvedMultichainWallet {
+  const appKitAddr = input.appKitAddress?.trim() || ''
+  const wagmiAddr = input.wagmiAddress?.trim() || ''
+  const fallbackAddr = input.fallbackAddress?.trim() || ''
+
+  if (input.isAppKitConnected && appKitAddr) {
+    const isSolanaActive =
+      input.caipNamespace === 'solana' ||
+      Boolean(input.appKitCaipAddress?.startsWith('solana:')) ||
+      !appKitAddr.startsWith('0x')
+    return {
+      activeAddress: appKitAddr,
+      isWalletConnected: true,
+      isEvmWallet: !isSolanaActive,
+      isSolanaWallet: isSolanaActive,
+    }
+  }
+
+  if (input.isWagmiConnected && wagmiAddr) {
+    return {
+      activeAddress: wagmiAddr,
+      isWalletConnected: true,
+      isEvmWallet: true,
+      isSolanaWallet: false,
+    }
+  }
+
+  if (fallbackAddr) {
+    const isSolanaFallback = !fallbackAddr.startsWith('0x')
+    return {
+      activeAddress: fallbackAddr,
+      isWalletConnected: true,
+      isEvmWallet: !isSolanaFallback,
+      isSolanaWallet: isSolanaFallback,
+    }
+  }
+
+  return {
+    activeAddress: '',
+    isWalletConnected: false,
+    isEvmWallet: false,
+    isSolanaWallet: false,
+  }
+}
+
+export interface SolanaWalletProviderLike {
+  signAndSendTransaction?: (transaction: unknown) => Promise<string | { signature?: string }>
+  sendTransaction?: (transaction: unknown, connection: unknown) => Promise<string>
+  signTransaction?: (transaction: unknown) => Promise<{ serialize: () => Uint8Array }>
+}
+
+export interface SolanaConnectionLike {
+  sendRawTransaction: (rawTransaction: Uint8Array) => Promise<string>
+}
+
+function isUnsupportedSolanaMethodError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  const errObj = err as { name?: unknown; message?: unknown; constructor?: { name?: unknown } }
+  const ctorName = typeof errObj.constructor?.name === 'string' ? errObj.constructor.name : ''
+  const errName = typeof errObj.name === 'string' ? errObj.name : ''
+  const msg = typeof errObj.message === 'string' ? errObj.message : ''
+  return (
+    ctorName === 'WalletStandardFeatureNotSupportedError' ||
+    ctorName === 'WalletConnectMethodNotSupportedError' ||
+    errName === 'WalletStandardFeatureNotSupportedError' ||
+    errName === 'WalletConnectMethodNotSupportedError' ||
+    /does not support the ["'][^"']+["'] feature|method ["'][^"']+["'] is not supported/i.test(msg)
+  )
+}
+
+/**
+ * Submits a Solana transaction via a Reown AppKit provider, falling back to sendTransaction or
+ * signTransaction + sendRawTransaction strictly when the wallet reports an unsupported feature/method
+ * (never on user rejection or post-sign RPC failure).
+ */
+export async function submitSolanaTransactionViaProvider(
+  provider: SolanaWalletProviderLike,
+  transaction: unknown,
+  getConnection: () => Promise<SolanaConnectionLike>,
+): Promise<string> {
+  if (typeof provider.signAndSendTransaction === 'function') {
+    try {
+      const res = await provider.signAndSendTransaction(transaction)
+      return typeof res === 'string' ? res : (res?.signature ?? '')
+    } catch (err) {
+      if (!isUnsupportedSolanaMethodError(err)) throw err
+    }
+  }
+  if (typeof provider.sendTransaction === 'function') {
+    try {
+      const connection = await getConnection()
+      return await provider.sendTransaction(transaction, connection)
+    } catch (err) {
+      if (!isUnsupportedSolanaMethodError(err)) throw err
+    }
+  }
+  if (typeof provider.signTransaction === 'function') {
+    const connection = await getConnection()
+    const signedTx = await provider.signTransaction(transaction)
+    return await connection.sendRawTransaction(signedTx.serialize())
+  }
+  throw new Error('La billetera Solana conectada no soporta firma directa en Reown AppKit.')
+}
