@@ -390,9 +390,9 @@ export interface PackageOrderPayment {
   productType?: 'miner' | 'subscription';
   contractedTh: number;
   amountUsd: number;
-  cryptoAsset: 'USDT' | 'BNB' | 'POL' | 'ETH' | 'SOL' | 'BTC' | string;
+  cryptoAsset: 'USDT' | 'BNB' | 'POL' | 'ETH' | 'SOL' | 'TRX' | 'AVAX' | 'BTC' | string;
   cryptoAmount: string;
-  paymentNetwork: 'BSC' | 'POLYGON' | 'ETHEREUM' | 'SOLANA' | 'LOCAL_BALANCE' | string;
+  paymentNetwork: 'BSC' | 'TRON' | 'POLYGON' | 'SOLANA' | 'ARBITRUM' | 'OPTIMISM' | 'AVALANCHE' | 'ETHEREUM' | 'LOCAL_BALANCE' | string;
   networkMode?: 'testnet' | 'mainnet';
   recipientAddress: string;
   txHash?: string;

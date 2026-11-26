@@ -3,8 +3,7 @@
 const {
   NETWORK_CATALOG,
   PAYMENT_STATUSES,
-  isValidEvmAddress,
-  isValidSolanaAddress
+  isAddressValidForFamily
 } = require('./paymentConfig');
 const {
   EVM_TX_HASH_PATTERN,
@@ -16,6 +15,11 @@ const {
   verifySolanaTransaction,
   findIncomingSolanaTransfer
 } = require('./solanaVerifier');
+const {
+  TRON_TX_HASH_PATTERN,
+  verifyTronTransaction,
+  findIncomingTronTransfer
+} = require('./tronVerifier');
 
 // Canonical verifier result states: CONFIRMED is strictly forbidden (SCRUM-229).
 const VERIFICATION_STATUSES = Object.freeze({
@@ -35,8 +39,22 @@ const TERMINAL_INTENT_STATUS_SET = new Set([
   PAYMENT_STATUSES.FAILED
 ]);
 
-const EVM_CHAIN_IDS = new Set(['56', '97', '137', '80002', '1', '11155111']);
+const EVM_CHAIN_IDS = new Set([
+  '56',
+  '97',
+  '137',
+  '80002',
+  '1',
+  '11155111',
+  '42161',
+  '421614',
+  '10',
+  '11155420',
+  '43114',
+  '43113'
+]);
 const SOLANA_CHAIN_IDS = new Set(['solana-devnet', 'solana-mainnet']);
+const TRON_CHAIN_IDS = new Set(['tron-mainnet', 'tron-nile']);
 const SAFE_DOC_ID_PATTERN = /^[a-zA-Z0-9_.:@-]+$/;
 const SAFE_USED_TX_KEY_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const POSITIVE_INT_PATTERN = /^\d+$/;
@@ -103,6 +121,11 @@ function buildUsedTxHashKey(chainId, txHash) {
     }
     // Preserve Base58 case-sensitivity on Solana signatures.
     normalizedTxHash = trimmedHash;
+  } else if (TRON_CHAIN_IDS.has(normalizedChainId)) {
+    if (!TRON_TX_HASH_PATTERN.test(trimmedHash)) {
+      throw new OnChainVerifierError('INVALID_TX_HASH', 'Invalid TRON 64-hex txHash format', 400);
+    }
+    normalizedTxHash = trimmedHash.toLowerCase();
   } else {
     throw new OnChainVerifierError('UNSUPPORTED_CHAIN_ID', `Unsupported chainId: ${chainId}`, 400);
   }
@@ -176,20 +199,12 @@ function validateIntentForVerification(intent) {
     throw new OnChainVerifierError('INVALID_INTENT', 'intent.expectedAmountAtomic must be greater than zero', 400);
   }
 
-  const validTreasury =
-    networkSpec.family === 'evm'
-      ? isValidEvmAddress(intent.treasuryAddress)
-      : isValidSolanaAddress(intent.treasuryAddress);
-  if (!validTreasury) {
+  if (!isAddressValidForFamily(intent.treasuryAddress, networkSpec.family)) {
     throw new OnChainVerifierError('INVALID_INTENT', `Invalid ${networkSpec.family} intent.treasuryAddress`, 400);
   }
 
   if (!assetSpec.isNative) {
-    const validContract =
-      networkSpec.family === 'evm'
-        ? isValidEvmAddress(intent.tokenContractAddress)
-        : isValidSolanaAddress(intent.tokenContractAddress);
-    if (!validContract) {
+    if (!isAddressValidForFamily(intent.tokenContractAddress, networkSpec.family)) {
       throw new OnChainVerifierError('INVALID_INTENT', `Invalid ${networkSpec.family} intent.tokenContractAddress`, 400);
     }
   }
@@ -289,10 +304,16 @@ function createOnChainVerifier({
       );
     }
 
-    const rawResult =
-      meta.family === 'evm'
-        ? await verifyEvmTransaction({ intent, txHash, env, fetchImpl })
-        : await verifySolanaTransaction({ intent, txHash, env, fetchImpl });
+    let rawResult;
+    if (meta.family === 'evm') {
+      rawResult = await verifyEvmTransaction({ intent, txHash, env, fetchImpl });
+    } else if (meta.family === 'solana') {
+      rawResult = await verifySolanaTransaction({ intent, txHash, env, fetchImpl });
+    } else if (meta.family === 'tron') {
+      rawResult = await verifyTronTransaction({ intent, txHash, env, fetchImpl });
+    } else {
+      throw new OnChainVerifierError('UNSUPPORTED_NETWORK_FAMILY', `Unsupported network family: ${meta.family}`, 400);
+    }
 
     return formatStructuredResult({
       meta,
@@ -316,24 +337,36 @@ function createOnChainVerifier({
       return replayCheck.usedByOther;
     };
 
-    const candidate =
-      meta.family === 'evm'
-        ? await findIncomingEvmTransfer({
-            intent,
-            fromBlock: scanOptions.fromBlock,
-            toBlock: scanOptions.toBlock,
-            maxBlockRange: scanOptions.maxBlockRange,
-            env,
-            fetchImpl,
-            isTxHashUsed
-          })
-        : await findIncomingSolanaTransfer({
-            intent,
-            limit: scanOptions.limit,
-            env,
-            fetchImpl,
-            isTxHashUsed
-          });
+    let candidate;
+    if (meta.family === 'evm') {
+      candidate = await findIncomingEvmTransfer({
+        intent,
+        fromBlock: scanOptions.fromBlock,
+        toBlock: scanOptions.toBlock,
+        maxBlockRange: scanOptions.maxBlockRange,
+        env,
+        fetchImpl,
+        isTxHashUsed
+      });
+    } else if (meta.family === 'solana') {
+      candidate = await findIncomingSolanaTransfer({
+        intent,
+        limit: scanOptions.limit,
+        env,
+        fetchImpl,
+        isTxHashUsed
+      });
+    } else if (meta.family === 'tron') {
+      candidate = await findIncomingTronTransfer({
+        intent,
+        limit: scanOptions.limit,
+        env,
+        fetchImpl,
+        isTxHashUsed
+      });
+    } else {
+      throw new OnChainVerifierError('UNSUPPORTED_NETWORK_FAMILY', `Unsupported network family: ${meta.family}`, 400);
+    }
 
     const nowMs = now();
     if (candidate) {

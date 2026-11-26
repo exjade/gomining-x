@@ -4,6 +4,7 @@ const paymentConfig = require('./paymentConfig');
 const paymentIntentService = require('./paymentIntentService');
 const evmVerifier = require('./evmVerifier');
 const solanaVerifier = require('./solanaVerifier');
+const tronVerifier = require('./tronVerifier');
 const onChainVerifier = require('./onChainVerifier');
 const paymentSettlementService = require('./paymentSettlementService');
 const paymentReconciler = require('./paymentReconciler');
@@ -12,6 +13,7 @@ const { PaymentConfigError } = paymentConfig;
 const { PaymentIntentError, createPaymentIntentService } = paymentIntentService;
 const { EvmVerifierError } = evmVerifier;
 const { SolanaVerifierError } = solanaVerifier;
+const { TronVerifierError } = tronVerifier;
 const { OnChainVerifierError, createOnChainVerifier } = onChainVerifier;
 const { PaymentSettlementError, createPaymentSettlementService } = paymentSettlementService;
 const { createPaymentReconciler } = paymentReconciler;
@@ -114,7 +116,8 @@ function isDomainError(err) {
     err instanceof OnChainVerifierError ||
     err instanceof PaymentSettlementError ||
     err instanceof EvmVerifierError ||
-    err instanceof SolanaVerifierError
+    err instanceof SolanaVerifierError ||
+    err instanceof TronVerifierError
   );
 }
 

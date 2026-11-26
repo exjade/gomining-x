@@ -79,30 +79,52 @@ const STATUS_META: Record<
   },
 };
 
-function buildAdminExplorerTxUrl(
+export function normalizeAdminNetworkFilterKey(network: string): string {
+  const net = String(network || '').trim().toUpperCase();
+  if (!net) return '';
+  if (net === 'BSC' || net === 'BNB' || net.includes('BNB') || net.includes('BSC')) return 'BSC';
+  if (net.includes('TRON') || net.includes('TRC20') || net === 'TRX') return 'TRON';
+  if (net.includes('POLY') || net === 'POL') return 'POLYGON';
+  if (net.includes('SOL')) return 'SOLANA';
+  if (net.includes('ARB')) return 'ARBITRUM';
+  if (net.includes('OPT') || net === 'OP') return 'OPTIMISM';
+  if (net.includes('AVAX') || net.includes('AVALANCHE')) return 'AVALANCHE';
+  if (net.includes('ETH') || net === 'ERC20') return 'ETHEREUM';
+  if (net.includes('LOCAL') || net.includes('BALANCE')) return 'LOCAL_BALANCE';
+  return net;
+}
+
+export function buildAdminExplorerTxUrl(
   network: string,
   txHash?: string,
   networkMode?: 'testnet' | 'mainnet'
 ): string | null {
   const cleanHash = typeof txHash === 'string' ? txHash.trim() : '';
   if (!cleanHash) return null;
-  const net = String(network || '').toUpperCase();
+  const key = normalizeAdminNetworkFilterKey(network);
   const isMainnet = networkMode === 'mainnet';
   const encoded = encodeURIComponent(cleanHash);
 
-  if (net === 'BSC' || net.includes('BNB')) {
-    return `${isMainnet ? 'https://bscscan.com' : 'https://testnet.bscscan.com'}/tx/${encoded}`;
+  switch (key) {
+    case 'BSC':
+      return `${isMainnet ? 'https://bscscan.com' : 'https://testnet.bscscan.com'}/tx/${encoded}`;
+    case 'TRON':
+      return `${isMainnet ? 'https://tronscan.org' : 'https://nile.tronscan.org'}/#/transaction/${encoded}`;
+    case 'POLYGON':
+      return `${isMainnet ? 'https://polygonscan.com' : 'https://amoy.polygonscan.com'}/tx/${encoded}`;
+    case 'SOLANA':
+      return `https://solscan.io/tx/${encoded}${isMainnet ? '' : '?cluster=devnet'}`;
+    case 'ARBITRUM':
+      return `${isMainnet ? 'https://arbiscan.io' : 'https://sepolia.arbiscan.io'}/tx/${encoded}`;
+    case 'OPTIMISM':
+      return `${isMainnet ? 'https://optimistic.etherscan.io' : 'https://sepolia-optimism.etherscan.io'}/tx/${encoded}`;
+    case 'AVALANCHE':
+      return `${isMainnet ? 'https://snowtrace.io' : 'https://testnet.snowtrace.io'}/tx/${encoded}`;
+    case 'ETHEREUM':
+      return `${isMainnet ? 'https://etherscan.io' : 'https://sepolia.etherscan.io'}/tx/${encoded}`;
+    default:
+      return null;
   }
-  if (net.includes('POLY') || net === 'POL') {
-    return `${isMainnet ? 'https://polygonscan.com' : 'https://amoy.polygonscan.com'}/tx/${encoded}`;
-  }
-  if (net.includes('ETH') || net === 'ERC20') {
-    return `${isMainnet ? 'https://etherscan.io' : 'https://sepolia.etherscan.io'}/tx/${encoded}`;
-  }
-  if (net.includes('SOL')) {
-    return `https://solscan.io/tx/${encoded}${isMainnet ? '' : '?cluster=devnet'}`;
-  }
-  return null;
 }
 
 function renderStatusBadge(status: OrderPaymentStatus) {
@@ -117,48 +139,70 @@ function renderStatusBadge(status: OrderPaymentStatus) {
   );
 }
 
-function renderNetworkBadge(network: PackageOrderPayment['paymentNetwork'] | string) {
-  const net = String(network || '').toUpperCase();
-  if (net.includes('BNB') || net.includes('BSC')) {
-    return (
-      <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-warning admin-text-warning border admin-border-warning">
-        BNB CHAIN
-      </span>
-    );
+export function renderNetworkBadge(network: PackageOrderPayment['paymentNetwork'] | string) {
+  const key = normalizeAdminNetworkFilterKey(String(network || ''));
+  switch (key) {
+    case 'BSC':
+      return (
+        <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-warning admin-text-warning border admin-border-warning">
+          BNB CHAIN
+        </span>
+      );
+    case 'TRON':
+      return (
+        <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-danger admin-text-danger border admin-border-danger">
+          TRON TRC20
+        </span>
+      );
+    case 'POLYGON':
+      return (
+        <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-accent-soft admin-text-accent border admin-border-accent">
+          POLYGON
+        </span>
+      );
+    case 'ARBITRUM':
+      return (
+        <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-info admin-text-accent border admin-border-info">
+          ARBITRUM
+        </span>
+      );
+    case 'OPTIMISM':
+      return (
+        <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-danger admin-text-danger border admin-border-danger">
+          OPTIMISM
+        </span>
+      );
+    case 'AVALANCHE':
+      return (
+        <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-danger admin-text-danger border admin-border-danger">
+          AVALANCHE
+        </span>
+      );
+    case 'ETHEREUM':
+      return (
+        <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-info admin-text-accent border admin-border-info">
+          ETH ERC20
+        </span>
+      );
+    case 'SOLANA':
+      return (
+        <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-subtle admin-text-secondary border admin-border">
+          SOLANA
+        </span>
+      );
+    case 'LOCAL_BALANCE':
+      return (
+        <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-success admin-text-success border admin-border-success">
+          SALDO LOCAL
+        </span>
+      );
+    default:
+      return (
+        <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-subtle admin-text-secondary border admin-border">
+          {network || 'SIN RED'}
+        </span>
+      );
   }
-  if (net.includes('POLY') || net === 'POL') {
-    return (
-      <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-accent-soft admin-text-accent border admin-border-accent">
-        POLYGON
-      </span>
-    );
-  }
-  if (net.includes('ETH') || net === 'ERC20') {
-    return (
-      <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-info admin-text-accent border admin-border-info">
-        ETH ERC20
-      </span>
-    );
-  }
-  if (net.includes('SOL')) {
-    return (
-      <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-subtle admin-text-secondary border admin-border">
-        SOLANA
-      </span>
-    );
-  }
-  if (net.includes('LOCAL') || net.includes('BALANCE')) {
-    return (
-      <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-success admin-text-success border admin-border-success">
-        SALDO LOCAL
-      </span>
-    );
-  }
-  return (
-    <span className="text-xs px-2 py-0.5 admin-radius-card font-semibold admin-bg-subtle admin-text-secondary border admin-border">
-      {network || 'SIN RED'}
-    </span>
-  );
 }
 
 function renderModeBadge(networkMode?: 'testnet' | 'mainnet') {
@@ -246,7 +290,7 @@ export const PackagePaymentsView: React.FC<PackagePaymentsViewProps> = ({ isDark
 
       const matchesStatus = statusFilter === 'ALL' || item.status === statusFilter;
       const matchesNetwork =
-        networkFilter === 'ALL' || String(item.paymentNetwork || '').toUpperCase() === networkFilter;
+        networkFilter === 'ALL' || normalizeAdminNetworkFilterKey(item.paymentNetwork) === networkFilter;
 
       return matchesSearch && matchesStatus && matchesNetwork;
     });
@@ -489,9 +533,13 @@ export const PackagePaymentsView: React.FC<PackagePaymentsViewProps> = ({ isDark
             >
               <option value="ALL">Todas las Redes</option>
               <option value="BSC">BNB Chain (BSC)</option>
+              <option value="TRON">Tron (TRC-20)</option>
               <option value="POLYGON">Polygon</option>
-              <option value="ETHEREUM">Ethereum</option>
               <option value="SOLANA">Solana</option>
+              <option value="ARBITRUM">Arbitrum One</option>
+              <option value="OPTIMISM">Optimism</option>
+              <option value="AVALANCHE">Avalanche C-Chain</option>
+              <option value="ETHEREUM">Ethereum</option>
               <option value="LOCAL_BALANCE">Saldo Local</option>
             </select>
           </div>

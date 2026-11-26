@@ -32,7 +32,9 @@ const COINGECKO_ID_BY_SYMBOL = Object.freeze({
   BNB: 'binancecoin',
   ETH: 'ethereum',
   POL: 'polygon-ecosystem-token',
-  SOL: 'solana'
+  SOL: 'solana',
+  TRX: 'tron',
+  AVAX: 'avalanche-2'
 });
 
 class PaymentIntentError extends Error {

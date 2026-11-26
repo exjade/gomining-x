@@ -1,5 +1,7 @@
 'use strict';
 
+const crypto = require('node:crypto');
+
 const {
   INTERNAL_SCALE,
   USDT_DECIMALS,
@@ -11,6 +13,9 @@ const EVM_ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
 const EVM_ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const SOLANA_ADDRESS_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const SOLANA_ALL_ONES_PATTERN = /^1+$/;
+const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+const TRON_HEX41_PATTERN = /^(?:0x)?41([a-fA-F0-9]{40})$/;
+const TRON_ZERO_HEX20 = '0'.repeat(40);
 const POSITIVE_INT_PATTERN = /^\d+$/;
 const POSITIVE_DECIMAL_OR_SCI_PATTERN = /^(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/;
 const MAX_SPOT_EXPONENT = 30;
@@ -46,7 +51,8 @@ const SUPPORTED_PRODUCT_TYPES = Object.freeze(['miner', 'subscription']);
 
 const TREASURY_ENV_BY_FAMILY = Object.freeze({
   evm: 'TREASURY_EVM_ADDRESS',
-  solana: 'TREASURY_SOLANA_ADDRESS'
+  solana: 'TREASURY_SOLANA_ADDRESS',
+  tron: 'TREASURY_TRON_ADDRESS'
 });
 
 // Verbatim canonical custom miner tiers observed in src/data/seedManifest.ts & src/minerCatalog.ts.
@@ -84,8 +90,8 @@ const NETWORK_CATALOG = Object.freeze({
     commitment: null,
     featureFlagEnv: null,
     modes: Object.freeze({
-      mainnet: Object.freeze({ chainId: 56, explorerBaseUrl: 'https://bscscan.com', explorerQuery: '' }),
-      testnet: Object.freeze({ chainId: 97, explorerBaseUrl: 'https://testnet.bscscan.com', explorerQuery: '' })
+      mainnet: Object.freeze({ chainId: 56, explorerBaseUrl: 'https://bscscan.com', explorerTxPath: '/tx/', explorerQuery: '' }),
+      testnet: Object.freeze({ chainId: 97, explorerBaseUrl: 'https://testnet.bscscan.com', explorerTxPath: '/tx/', explorerQuery: '' })
     }),
     assets: Object.freeze({
       USDT: Object.freeze({
@@ -104,6 +110,34 @@ const NETWORK_CATALOG = Object.freeze({
       })
     })
   }),
+  tron: Object.freeze({
+    id: 'tron',
+    family: 'tron',
+    recommended: true,
+    requiredConfirmations: 20,
+    commitment: null,
+    featureFlagEnv: null,
+    modes: Object.freeze({
+      mainnet: Object.freeze({ chainId: 'tron-mainnet', explorerBaseUrl: 'https://tronscan.org', explorerTxPath: '/#/transaction/', explorerQuery: '' }),
+      testnet: Object.freeze({ chainId: 'tron-nile', explorerBaseUrl: 'https://nile.tronscan.org', explorerTxPath: '/#/transaction/', explorerQuery: '' })
+    }),
+    assets: Object.freeze({
+      USDT: Object.freeze({
+        symbol: 'USDT',
+        decimals: 6,
+        isNative: false,
+        mainnetContract: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+        testnetContractEnv: 'PAYMENT_TESTNET_USDT_TRON_CONTRACT'
+      }),
+      TRX: Object.freeze({
+        symbol: 'TRX',
+        decimals: 6,
+        isNative: true,
+        mainnetContract: null,
+        testnetContractEnv: null
+      })
+    })
+  }),
   polygon: Object.freeze({
     id: 'polygon',
     family: 'evm',
@@ -112,8 +146,8 @@ const NETWORK_CATALOG = Object.freeze({
     commitment: null,
     featureFlagEnv: null,
     modes: Object.freeze({
-      mainnet: Object.freeze({ chainId: 137, explorerBaseUrl: 'https://polygonscan.com', explorerQuery: '' }),
-      testnet: Object.freeze({ chainId: 80002, explorerBaseUrl: 'https://amoy.polygonscan.com', explorerQuery: '' })
+      mainnet: Object.freeze({ chainId: 137, explorerBaseUrl: 'https://polygonscan.com', explorerTxPath: '/tx/', explorerQuery: '' }),
+      testnet: Object.freeze({ chainId: 80002, explorerBaseUrl: 'https://amoy.polygonscan.com', explorerTxPath: '/tx/', explorerQuery: '' })
     }),
     assets: Object.freeze({
       USDT: Object.freeze({
@@ -132,6 +166,90 @@ const NETWORK_CATALOG = Object.freeze({
       })
     })
   }),
+  arbitrum: Object.freeze({
+    id: 'arbitrum',
+    family: 'evm',
+    recommended: true,
+    requiredConfirmations: 20,
+    commitment: null,
+    featureFlagEnv: null,
+    modes: Object.freeze({
+      mainnet: Object.freeze({ chainId: 42161, explorerBaseUrl: 'https://arbiscan.io', explorerTxPath: '/tx/', explorerQuery: '' }),
+      testnet: Object.freeze({ chainId: 421614, explorerBaseUrl: 'https://sepolia.arbiscan.io', explorerTxPath: '/tx/', explorerQuery: '' })
+    }),
+    assets: Object.freeze({
+      USDT: Object.freeze({
+        symbol: 'USDT',
+        decimals: 6,
+        isNative: false,
+        mainnetContract: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
+        testnetContractEnv: 'PAYMENT_TESTNET_USDT_ARBITRUM_CONTRACT'
+      }),
+      ETH: Object.freeze({
+        symbol: 'ETH',
+        decimals: 18,
+        isNative: true,
+        mainnetContract: null,
+        testnetContractEnv: null
+      })
+    })
+  }),
+  optimism: Object.freeze({
+    id: 'optimism',
+    family: 'evm',
+    recommended: true,
+    requiredConfirmations: 20,
+    commitment: null,
+    featureFlagEnv: null,
+    modes: Object.freeze({
+      mainnet: Object.freeze({ chainId: 10, explorerBaseUrl: 'https://optimistic.etherscan.io', explorerTxPath: '/tx/', explorerQuery: '' }),
+      testnet: Object.freeze({ chainId: 11155420, explorerBaseUrl: 'https://sepolia-optimism.etherscan.io', explorerTxPath: '/tx/', explorerQuery: '' })
+    }),
+    assets: Object.freeze({
+      USDT: Object.freeze({
+        symbol: 'USDT',
+        decimals: 6,
+        isNative: false,
+        mainnetContract: '0x94b008aA00579c1307B0EF2c499aD98a8ce58e58',
+        testnetContractEnv: 'PAYMENT_TESTNET_USDT_OPTIMISM_CONTRACT'
+      }),
+      ETH: Object.freeze({
+        symbol: 'ETH',
+        decimals: 18,
+        isNative: true,
+        mainnetContract: null,
+        testnetContractEnv: null
+      })
+    })
+  }),
+  avalanche: Object.freeze({
+    id: 'avalanche',
+    family: 'evm',
+    recommended: true,
+    requiredConfirmations: 12,
+    commitment: null,
+    featureFlagEnv: null,
+    modes: Object.freeze({
+      mainnet: Object.freeze({ chainId: 43114, explorerBaseUrl: 'https://snowtrace.io', explorerTxPath: '/tx/', explorerQuery: '' }),
+      testnet: Object.freeze({ chainId: 43113, explorerBaseUrl: 'https://testnet.snowtrace.io', explorerTxPath: '/tx/', explorerQuery: '' })
+    }),
+    assets: Object.freeze({
+      USDT: Object.freeze({
+        symbol: 'USDT',
+        decimals: 6,
+        isNative: false,
+        mainnetContract: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7',
+        testnetContractEnv: 'PAYMENT_TESTNET_USDT_AVALANCHE_CONTRACT'
+      }),
+      AVAX: Object.freeze({
+        symbol: 'AVAX',
+        decimals: 18,
+        isNative: true,
+        mainnetContract: null,
+        testnetContractEnv: null
+      })
+    })
+  }),
   ethereum: Object.freeze({
     id: 'ethereum',
     family: 'evm',
@@ -140,8 +258,8 @@ const NETWORK_CATALOG = Object.freeze({
     commitment: null,
     featureFlagEnv: 'PAYMENT_ENABLE_ETHEREUM',
     modes: Object.freeze({
-      mainnet: Object.freeze({ chainId: 1, explorerBaseUrl: 'https://etherscan.io', explorerQuery: '' }),
-      testnet: Object.freeze({ chainId: 11155111, explorerBaseUrl: 'https://sepolia.etherscan.io', explorerQuery: '' })
+      mainnet: Object.freeze({ chainId: 1, explorerBaseUrl: 'https://etherscan.io', explorerTxPath: '/tx/', explorerQuery: '' }),
+      testnet: Object.freeze({ chainId: 11155111, explorerBaseUrl: 'https://sepolia.etherscan.io', explorerTxPath: '/tx/', explorerQuery: '' })
     }),
     assets: Object.freeze({
       USDT: Object.freeze({
@@ -168,8 +286,8 @@ const NETWORK_CATALOG = Object.freeze({
     commitment: 'finalized',
     featureFlagEnv: null,
     modes: Object.freeze({
-      mainnet: Object.freeze({ chainId: 'solana-mainnet', explorerBaseUrl: 'https://solscan.io', explorerQuery: '' }),
-      testnet: Object.freeze({ chainId: 'solana-devnet', explorerBaseUrl: 'https://solscan.io', explorerQuery: '?cluster=devnet' })
+      mainnet: Object.freeze({ chainId: 'solana-mainnet', explorerBaseUrl: 'https://solscan.io', explorerTxPath: '/tx/', explorerQuery: '' }),
+      testnet: Object.freeze({ chainId: 'solana-devnet', explorerBaseUrl: 'https://solscan.io', explorerTxPath: '/tx/', explorerQuery: '?cluster=devnet' })
     }),
     assets: Object.freeze({
       USDT: Object.freeze({
@@ -211,9 +329,88 @@ function isValidSolanaAddress(address) {
   return SOLANA_ADDRESS_PATTERN.test(trimmed) && !SOLANA_ALL_ONES_PATTERN.test(trimmed);
 }
 
+function decodeBase58(input) {
+  if (typeof input !== 'string' || input.length === 0) return null;
+  let leadingZeros = 0;
+  while (leadingZeros < input.length && input[leadingZeros] === '1') {
+    leadingZeros += 1;
+  }
+  let value = 0n;
+  for (let i = leadingZeros; i < input.length; i += 1) {
+    const digit = BASE58_ALPHABET.indexOf(input[i]);
+    if (digit < 0) return null;
+    value = value * 58n + BigInt(digit);
+  }
+  const bytes = [];
+  while (value > 0n) {
+    bytes.push(Number(value & 0xffn));
+    value >>= 8n;
+  }
+  bytes.reverse();
+  return Buffer.concat([Buffer.alloc(leadingZeros, 0), Buffer.from(bytes)]);
+}
+
+function encodeBase58(buffer) {
+  let leadingZeros = 0;
+  while (leadingZeros < buffer.length && buffer[leadingZeros] === 0) {
+    leadingZeros += 1;
+  }
+  let value = 0n;
+  for (let i = leadingZeros; i < buffer.length; i += 1) {
+    value = (value << 8n) | BigInt(buffer[i]);
+  }
+  let encoded = '';
+  while (value > 0n) {
+    encoded = BASE58_ALPHABET[Number(value % 58n)] + encoded;
+    value /= 58n;
+  }
+  return '1'.repeat(leadingZeros) + encoded;
+}
+
+function doubleSha256(buffer) {
+  const first = crypto.createHash('sha256').update(buffer).digest();
+  return crypto.createHash('sha256').update(first).digest();
+}
+
+function decodeValidTronPayload(address) {
+  if (typeof address !== 'string') return null;
+  const trimmed = address.trim();
+  if (!trimmed.startsWith('T') || trimmed.length !== 34) return null;
+  const decoded = decodeBase58(trimmed);
+  if (!decoded || decoded.length !== 25 || decoded[0] !== 0x41) return null;
+  const payload = decoded.subarray(0, 21);
+  if (payload.subarray(1).toString('hex') === TRON_ZERO_HEX20) return null;
+  const checksum = decoded.subarray(21, 25);
+  const expected = doubleSha256(payload).subarray(0, 4);
+  return expected.equals(checksum) ? payload : null;
+}
+
+function isValidTronAddress(address) {
+  return decodeValidTronPayload(address) !== null;
+}
+
+function tronBase58ToHex41(address) {
+  const payload = decodeValidTronPayload(address);
+  if (!payload) {
+    throw new PaymentConfigError('INVALID_WALLET_ADDRESS', 'Invalid tron wallet address');
+  }
+  return payload.toString('hex').toLowerCase();
+}
+
+function hex41ToTronBase58(hexAddress) {
+  const match = typeof hexAddress === 'string' ? TRON_HEX41_PATTERN.exec(hexAddress.trim()) : null;
+  if (!match) {
+    throw new PaymentConfigError('INVALID_WALLET_ADDRESS', 'Invalid hex41 tron wallet address');
+  }
+  const payload = Buffer.from(`41${match[1].toLowerCase()}`, 'hex');
+  const checksum = doubleSha256(payload).subarray(0, 4);
+  return encodeBase58(Buffer.concat([payload, checksum]));
+}
+
 function isAddressValidForFamily(address, family) {
   if (family === 'evm') return isValidEvmAddress(address);
   if (family === 'solana') return isValidSolanaAddress(address);
+  if (family === 'tron') return isValidTronAddress(address);
   return false;
 }
 
@@ -355,6 +552,7 @@ function resolvePaymentRoute({ networkId, assetSymbol, env = process.env }) {
     family: network.family,
     chainId: modeSpec.chainId,
     explorerBaseUrl: modeSpec.explorerBaseUrl,
+    explorerTxPath: modeSpec.explorerTxPath || '/tx/',
     explorerQuery: modeSpec.explorerQuery,
     recommended: network.recommended,
     requiredConfirmations: network.requiredConfirmations,
@@ -481,6 +679,10 @@ module.exports = Object.freeze({
   NETWORK_CATALOG,
   isValidEvmAddress,
   isValidSolanaAddress,
+  isValidTronAddress,
+  tronBase58ToHex41,
+  hex41ToTronBase58,
+  isAddressValidForFamily,
   validateWalletAddress,
   resolveNetworkMode,
   resolveIntentTtlMs,

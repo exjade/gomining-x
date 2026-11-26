@@ -22,6 +22,18 @@ const RPC_ENV_BY_NETWORK_AND_MODE = Object.freeze({
     testnet: 'PAYMENT_RPC_URL_POLYGON_TESTNET',
     mainnet: 'PAYMENT_RPC_URL_POLYGON_MAINNET'
   }),
+  arbitrum: Object.freeze({
+    testnet: 'PAYMENT_RPC_URL_ARBITRUM_TESTNET',
+    mainnet: 'PAYMENT_RPC_URL_ARBITRUM_MAINNET'
+  }),
+  optimism: Object.freeze({
+    testnet: 'PAYMENT_RPC_URL_OPTIMISM_TESTNET',
+    mainnet: 'PAYMENT_RPC_URL_OPTIMISM_MAINNET'
+  }),
+  avalanche: Object.freeze({
+    testnet: 'PAYMENT_RPC_URL_AVALANCHE_TESTNET',
+    mainnet: 'PAYMENT_RPC_URL_AVALANCHE_MAINNET'
+  }),
   ethereum: Object.freeze({
     testnet: 'PAYMENT_RPC_URL_ETHEREUM_TESTNET',
     mainnet: 'PAYMENT_RPC_URL_ETHEREUM_MAINNET'
