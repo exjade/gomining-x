@@ -4,6 +4,7 @@ import { useAccount } from 'wagmi'
 import type { PaymentNetworkId } from './paymentDestinations'
 import type { PaymentQuote } from './paymentQuote'
 import { resolveActiveMultichainWallet } from './services/payments/checkoutIntentCoordinator'
+import { disconnectWeb3SessionBestEffort } from './services/session/accountSessionIsolation'
 
 export type WalletId =
   | 'reown'
@@ -62,7 +63,10 @@ export function useWalletSession(): WalletSession {
   })
 
   const disconnect = useCallback(async () => {
-    await appKitDisconnect()
+    await disconnectWeb3SessionBestEffort({
+      disconnectAppKit: () => appKitDisconnect(),
+      clearOwnerStorage: true,
+    })
   }, [appKitDisconnect])
 
   const openModal = useCallback(() => {
@@ -78,11 +82,14 @@ export function useWalletSession(): WalletSession {
 
   const connection = useMemo<ConnectedWallet | null>(() => {
     if (!isConnected || !activeAddress) return null
+    const networkLabel = isEvm
+      ? (chain?.name ?? caipNetwork?.name ?? 'EVM')
+      : (caipNetwork?.name ?? 'Solana')
     return {
       id: 'reown',
-      name: isEvm ? (chain?.name ?? 'Reown AppKit (EVM)') : 'Reown AppKit (Solana)',
+      name: isEvm ? (chain?.name ?? caipNetwork?.name ?? 'Reown AppKit (EVM)') : 'Reown AppKit (Solana)',
       protocol: isEvm ? 'EIP-1193' : 'Solana',
-      network: isEvm ? (chain?.name ?? 'EVM') : 'Solana',
+      network: networkLabel,
       address: activeAddress,
       shortAddress: formatShortAddress(activeAddress),
       disconnectProvider: disconnect,
@@ -90,7 +97,7 @@ export function useWalletSession(): WalletSession {
         throw new Error('Los pagos Web3 deben ejecutarse desde el checkout oficial con Reown AppKit.')
       },
     }
-  }, [isConnected, activeAddress, isEvm, chain?.name, disconnect])
+  }, [isConnected, activeAddress, isEvm, chain?.name, caipNetwork?.name, disconnect])
 
   return useMemo<WalletSession>(() => ({
     connection,

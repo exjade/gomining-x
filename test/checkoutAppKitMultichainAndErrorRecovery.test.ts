@@ -100,7 +100,7 @@ describe('Checkout Error Classification, Deadlock Recovery & AppKit Multichain C
 
       assert.equal(typeof resolveWallet, 'function', 'checkoutIntentCoordinator must export resolveActiveMultichainWallet')
 
-      const solAddr = 'DYz2ewvR8x9q2r5t7y8u9i0o1p2a3s4d5f6g7jZNhkn'
+      const solAddr = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU'
       const evmAddr = '0x9561aA554476A4C7C77f3B82ba2e16727445D58e'
 
       // Both connected, AppKit active namespace is Solana -> Solana MUST win
@@ -195,8 +195,8 @@ describe('Checkout Error Classification, Deadlock Recovery & AppKit Multichain C
       assert.ok(sessionSrc.split(/\r?\n/).length <= 130, 'walletSession.ts must remain <= 130 lines')
 
       assert.ok(
-        appSrc.includes('const activeWalletAddress = walletSession.connection?.address || appKitAddress || wagmiAddress'),
-        'App.tsx must prioritize active walletSession.connection over dormant wagmiAddress',
+        appSrc.includes("const activeWalletAddress = walletSession.connection?.address ?? ''"),
+        'App.tsx must consume walletSession.connection without allowing dormant wagmiAddress hijack',
       )
     })
 
@@ -235,7 +235,7 @@ describe('Checkout Error Classification, Deadlock Recovery & AppKit Multichain C
 
       // Behavioral check on resolvePendingMethodSyncKey with fallback SOL vs USDT
       const validNow = Date.parse('2026-11-24T10:05:00.000Z')
-      const solAddr = 'DYz2ewvR8x9q2r5t7y8u9i0o1p2a3s4d5f6g7jZNhkn'
+      const solAddr = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU'
       const openIntent = {
         intentId: 'pi_open_sol_001',
         status: 'OPEN' as const,
@@ -467,8 +467,8 @@ describe('Checkout Error Classification, Deadlock Recovery & AppKit Multichain C
       )
       assert.match(
         panelSrc,
-        /const isEvmActive = activeAddress\.startsWith\('0x'\)/,
-        'WalletPanel.tsx must derive isEvmActive = activeAddress.startsWith(\'0x\')',
+        /const isEvmActive = resolvedWallet\.isEvmWallet/,
+        'WalletPanel.tsx must derive isEvmActive from resolvedWallet.isEvmWallet',
       )
       assert.equal(
         panelSrc.includes('const currentNetwork = chain?.name ??'),
@@ -477,8 +477,8 @@ describe('Checkout Error Classification, Deadlock Recovery & AppKit Multichain C
       )
       assert.match(
         panelSrc,
-        /const currentNetwork = session\?\.connection\?\.network\s*(?:\?\?|\|\|)\s*\(isEvmActive \? \(chain\?\.name \?\? 'EVM'\) : 'Solana'\)/,
-        'WalletPanel.tsx must derive currentNetwork from active session/family',
+        /const currentNetwork = isEvmActive[\s\S]*?caipNetwork\?\.name[\s\S]*?'Solana'/,
+        'WalletPanel.tsx must derive currentNetwork from active family without prioritizing dormant Wagmi over Solana',
       )
       assert.doesNotMatch(
         panelSrc,

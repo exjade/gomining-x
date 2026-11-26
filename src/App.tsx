@@ -169,10 +169,10 @@ function AppContent() {
   }, [loading, user])
   const { theme, language, toggleTheme, setAppLanguage, t } = usePersonalization()
   const walletSession = useWalletSession()
-  const { address: wagmiAddress, isConnected: isWagmiConnected, status: wagmiStatus, chain } = useAccount()
-  const { address: appKitAddress, isConnected: isAppKitConnected, status: appKitStatus } = useAppKitAccount()
+  const { isConnected: isWagmiConnected, status: wagmiStatus } = useAccount()
+  const { isConnected: isAppKitConnected, status: appKitStatus } = useAppKitAccount()
   const { open: openAppKit } = useAppKit()
-  const { disconnect: disconnectWagmi, disconnectAsync: disconnectWagmiAsync, connectors: wagmiConnectors } = useWagmiDisconnect()
+  const { disconnectAsync: disconnectWagmiAsync, connectors: wagmiConnectors } = useWagmiDisconnect()
   const wagmiConnectorsRef = useRef(wagmiConnectors)
   wagmiConnectorsRef.current = wagmiConnectors
   const isWalletReconnecting =
@@ -184,10 +184,11 @@ function AppContent() {
   const isWalletReconnectingRef = useRef(isWalletReconnecting)
   isWalletReconnectingRef.current = isWalletReconnecting
 
-  const activeWalletAddress = walletSession.connection?.address || appKitAddress || wagmiAddress || ''
-  const isWalletConnected = isWagmiConnected || isAppKitConnected || Boolean(walletSession.connection)
-  const isWalletConnectedRef = useRef(isWalletConnected)
-  isWalletConnectedRef.current = isWalletConnected
+  const activeWalletAddress = walletSession.connection?.address ?? ''
+  const isWalletConnected = Boolean(walletSession.connection)
+  const hasAnyWeb3ProviderConnected = isWalletConnected || isWagmiConnected || isAppKitConnected
+  const hasAnyWeb3ProviderConnectedRef = useRef(hasAnyWeb3ProviderConnected)
+  hasAnyWeb3ProviderConnectedRef.current = hasAnyWeb3ProviderConnected
   const disconnectAllWagmiConnectors = useCallback(async () => {
     const activeConnectors = wagmiConnectorsRef.current
     if (activeConnectors.length > 0) {
@@ -215,42 +216,7 @@ function AppContent() {
     ? `${activeWalletAddress.slice(0, 6)}...${activeWalletAddress.slice(-4)}`
     : ''
 
-  const unifiedConnection = useMemo(() => {
-    if (walletSession.connection) {
-      return walletSession.connection
-    }
-    if (activeWalletAddress) {
-      const short = `${activeWalletAddress.slice(0, 6)}...${activeWalletAddress.slice(-4)}`
-      const isSol = !activeWalletAddress.startsWith('0x')
-      return {
-        id: 'reown' as WalletId,
-        name: isSol ? 'Reown AppKit (Solana)' : (chain?.name ?? 'Wallet Web3'),
-        protocol: (isSol ? 'Solana' : 'EIP-1193') as 'Solana' | 'EIP-1193' | 'Bitcoin' | 'TRON' | 'Cosmos',
-        network: isSol ? 'Solana' : (chain?.name ?? 'EVM'),
-        address: activeWalletAddress,
-        shortAddress: short,
-        disconnectProvider: async () => {
-          try { await disconnectWagmi() } catch { /* ignore */ }
-          try { await walletSession.disconnect() } catch { /* ignore */ }
-        },
-        sendPayment: async () => {
-          throw new Error('Usa el checkout directo para pagar.')
-        },
-      }
-    }
-    return null
-  }, [
-    walletSession.connection,
-    activeWalletAddress,
-    chain?.name,
-    disconnectWagmi,
-    walletSession.disconnect,
-  ])
-
-  const effectiveWalletSession = useMemo(() => ({
-    ...walletSession,
-    connection: unifiedConnection,
-  }), [walletSession, unifiedConnection])
+  const effectiveWalletSession = walletSession
 
   const demo = useDemoSession()
   const persistence = useDemoFirestorePersistence()
@@ -282,12 +248,12 @@ function AppContent() {
   // SCRUM-375: Enforce per-account Web3 wallet ownership across logout, switch, and cross-account reload
   useEffect(() => {
     if (loading) return
-    if (!isWalletConnected && isWalletReconnecting) return
+    if (!hasAnyWeb3ProviderConnected && isWalletReconnecting) return
     const prevUid = prevWalletGuardUidRef.current
     const wasWalletConnected = prevWalletConnectedOnGuardRef.current
     prevWalletGuardUidRef.current = activeUid
-    prevWalletConnectedOnGuardRef.current = isWalletConnected
-    if (!isWalletConnected) {
+    prevWalletConnectedOnGuardRef.current = hasAnyWeb3ProviderConnected
+    if (!hasAnyWeb3ProviderConnected) {
       pendingResidualWalletRef.current = false
     }
     const storedOwnerUid = readStoredWalletOwnerUid()
@@ -306,7 +272,7 @@ function AppContent() {
       prevUid,
       nextUid: activeUid,
       storedOwnerUid,
-      isWalletConnected,
+      isWalletConnected: hasAnyWeb3ProviderConnected,
       hadUnownedConnectedWallet,
     })
     if (action === 'disconnect') {
@@ -321,7 +287,7 @@ function AppContent() {
     } else if (action === 'clear_owner' && !isPreservingRemoteOwner) {
       clearStoredWalletOwnerUid()
     }
-  }, [loading, activeUid, isWalletConnected, isWalletReconnecting, disconnectAllWagmiConnectors])
+  }, [loading, activeUid, hasAnyWeb3ProviderConnected, isWalletReconnecting, disconnectAllWagmiConnectors])
 
   // SCRUM-378: Immediate cross-tab session & Web3 isolation via storage events (zero ping-pong)
   useEffect(() => {
@@ -335,7 +301,7 @@ function AppContent() {
         }
         if (event.storageArea !== localStore) return
       }
-      const currentlyConnected = isWalletConnectedRef.current
+      const currentlyConnected = hasAnyWeb3ProviderConnectedRef.current
       const decision = evaluateCrossTabStorageEvent({
         key: event.key,
         newValue: event.newValue,

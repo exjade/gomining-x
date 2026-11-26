@@ -4,6 +4,7 @@ import { useAccount, useBalance } from 'wagmi'
 import { useAuth } from './AuthContext'
 import { ClientPaymentHistory } from './components/payments/ClientPaymentHistory'
 import { resolveActiveMultichainWallet } from './services/payments/checkoutIntentCoordinator'
+import { disconnectWeb3SessionBestEffort } from './services/session/accountSessionIsolation'
 import type { WalletSession } from './walletSession'
 
 export function WalletPanel({ session }: { session?: WalletSession }) {
@@ -26,10 +27,12 @@ export function WalletPanel({ session }: { session?: WalletSession }) {
     isWagmiConnected,
     fallbackAddress: session?.connection?.address,
   })
-  const activeAddress = session?.connection?.address || resolvedWallet.activeAddress
-  const isConnected = Boolean(activeAddress && (Boolean(session?.connection) || resolvedWallet.isWalletConnected))
-  const isEvmActive = activeAddress.startsWith('0x')
-  const currentNetwork = session?.connection?.network ?? (isEvmActive ? (chain?.name ?? 'EVM') : 'Solana')
+  const activeAddress = resolvedWallet.activeAddress
+  const isConnected = resolvedWallet.isWalletConnected
+  const isEvmActive = resolvedWallet.isEvmWallet
+  const currentNetwork = isEvmActive
+    ? (chain?.name ?? caipNetwork?.name ?? session?.connection?.network ?? 'EVM')
+    : (caipNetwork?.name ?? session?.connection?.network ?? 'Solana')
 
   const { data: balanceData } = useBalance({
     address: isEvmActive ? (activeAddress as `0x${string}`) : undefined,
@@ -47,14 +50,14 @@ export function WalletPanel({ session }: { session?: WalletSession }) {
   }
 
   const handleDisconnect = async () => {
-    try {
-      await disconnectAppKit()
-    } catch {
-      // Ignore already-disconnected provider error
-    }
     if (session?.disconnect) {
-      await session.disconnect().catch(() => undefined)
+      await session.disconnect()
+      return
     }
+    await disconnectWeb3SessionBestEffort({
+      disconnectAppKit: () => disconnectAppKit(),
+      clearOwnerStorage: true,
+    })
   }
 
   return (

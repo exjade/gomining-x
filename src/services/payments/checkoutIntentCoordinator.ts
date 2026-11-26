@@ -1,5 +1,10 @@
-import type { BackendPaymentNetworkId } from '../../paymentDestinations'
-import type { PaymentAssetSymbol, PaymentIntentRecord, PaymentProductType } from './paymentGatewayClient'
+import {
+  isValidEvmAddress,
+  isValidSolanaAddress,
+  type BackendPaymentNetworkId,
+  type PaymentNetworkMode,
+} from '../../paymentDestinations.ts'
+import type { PaymentAssetSymbol, PaymentIntentRecord, PaymentIntentStatus, PaymentProductType } from './paymentGatewayClient'
 
 export interface CheckoutProductSignatureInput {
   uid?: string | null
@@ -145,29 +150,77 @@ export interface ResolvedMultichainWallet {
   isSolanaWallet: boolean
 }
 
+const DISCONNECTED_WALLET: ResolvedMultichainWallet = {
+  activeAddress: '',
+  isWalletConnected: false,
+  isEvmWallet: false,
+  isSolanaWallet: false,
+}
+
+const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+
+/** Validates a Solana Ed25519 address via isValidSolanaAddress and exact 32-byte Base58 length (rejects 25-byte TRON/BTC addresses). */
+function isStrictSolanaAddress(address: string): boolean {
+  if (!isValidSolanaAddress(address)) return false
+  const trimmed = address.trim()
+  let leadingZeros = 0
+  while (leadingZeros < trimmed.length && trimmed[leadingZeros] === '1') {
+    leadingZeros += 1
+  }
+  let value = 0n
+  for (let i = leadingZeros; i < trimmed.length; i += 1) {
+    const digit = BASE58_ALPHABET.indexOf(trimmed[i])
+    if (digit < 0) return false
+    value = value * 58n + BigInt(digit)
+  }
+  let valueBytes = 0
+  while (value > 0n) {
+    value >>= 8n
+    valueBytes += 1
+  }
+  return leadingZeros + valueBytes === 32
+}
+
 /**
- * Resolves the active multichain wallet (Wagmi EVM vs Reown AppKit Solana) without letting a dormant
- * Wagmi connection hijack an active Solana session in AppKit.
+ * Resolves the active multichain wallet (Wagmi EVM vs Reown AppKit Solana) with strict namespace
+ * isolation and address validation, preventing dormant Wagmi hijack and snapshot-tear mislabeling.
  */
 export function resolveActiveMultichainWallet(input: MultichainWalletInput): ResolvedMultichainWallet {
   const appKitAddr = input.appKitAddress?.trim() || ''
   const wagmiAddr = input.wagmiAddress?.trim() || ''
   const fallbackAddr = input.fallbackAddress?.trim() || ''
+  const caipAddress = input.appKitCaipAddress?.trim() || ''
+  const isSolanaNamespace = input.caipNamespace === 'solana' || caipAddress.startsWith('solana:')
+  const isEvmNamespace = input.caipNamespace === 'eip155' || caipAddress.startsWith('eip155:')
 
-  if (input.isAppKitConnected && appKitAddr) {
-    const isSolanaActive =
-      input.caipNamespace === 'solana' ||
-      Boolean(input.appKitCaipAddress?.startsWith('solana:')) ||
-      !appKitAddr.startsWith('0x')
-    return {
-      activeAddress: appKitAddr,
-      isWalletConnected: true,
-      isEvmWallet: !isSolanaActive,
-      isSolanaWallet: isSolanaActive,
-    }
+  if (input.caipNamespace === 'solana' && !input.isAppKitConnected) {
+    return DISCONNECTED_WALLET
   }
 
-  if (input.isWagmiConnected && wagmiAddr) {
+  if (input.isAppKitConnected && appKitAddr) {
+    if (isSolanaNamespace && isEvmNamespace) {
+      return DISCONNECTED_WALLET
+    }
+    if (isSolanaNamespace) {
+      return isStrictSolanaAddress(appKitAddr)
+        ? { activeAddress: appKitAddr, isWalletConnected: true, isEvmWallet: false, isSolanaWallet: true }
+        : DISCONNECTED_WALLET
+    }
+    if (isEvmNamespace) {
+      return isValidEvmAddress(appKitAddr)
+        ? { activeAddress: appKitAddr, isWalletConnected: true, isEvmWallet: true, isSolanaWallet: false }
+        : DISCONNECTED_WALLET
+    }
+    if (isValidEvmAddress(appKitAddr)) {
+      return { activeAddress: appKitAddr, isWalletConnected: true, isEvmWallet: true, isSolanaWallet: false }
+    }
+    if (isStrictSolanaAddress(appKitAddr)) {
+      return { activeAddress: appKitAddr, isWalletConnected: true, isEvmWallet: false, isSolanaWallet: true }
+    }
+    return DISCONNECTED_WALLET
+  }
+
+  if (input.isWagmiConnected && wagmiAddr && input.caipNamespace !== 'solana' && isValidEvmAddress(wagmiAddr)) {
     return {
       activeAddress: wagmiAddr,
       isWalletConnected: true,
@@ -177,20 +230,262 @@ export function resolveActiveMultichainWallet(input: MultichainWalletInput): Res
   }
 
   if (fallbackAddr) {
-    const isSolanaFallback = !fallbackAddr.startsWith('0x')
-    return {
-      activeAddress: fallbackAddr,
-      isWalletConnected: true,
-      isEvmWallet: !isSolanaFallback,
-      isSolanaWallet: isSolanaFallback,
+    if (isValidEvmAddress(fallbackAddr) && input.caipNamespace !== 'solana') {
+      return { activeAddress: fallbackAddr, isWalletConnected: true, isEvmWallet: true, isSolanaWallet: false }
+    }
+    if (isStrictSolanaAddress(fallbackAddr) && input.caipNamespace !== 'eip155') {
+      return { activeAddress: fallbackAddr, isWalletConnected: true, isEvmWallet: false, isSolanaWallet: true }
     }
   }
 
+  return DISCONNECTED_WALLET
+}
+
+export const BROADCAST_TX_LOCK_PREFIX = 'pouw_checkout_broadcast_tx'
+
+export interface BroadcastTxLock {
+  uid: string
+  intentId: string
+  txHash: string
+  networkId: BackendPaymentNetworkId
+  networkMode: PaymentNetworkMode
+  broadcastAt: number
+}
+
+export type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
+
+const VALID_BACKEND_NETWORK_IDS = new Set<BackendPaymentNetworkId>(['bsc', 'ethereum', 'polygon', 'solana'])
+const TERMINAL_LOCK_CLEAR_STATUSES = new Set<PaymentIntentStatus>([
+  'SETTLED',
+  'FAILED',
+  'UNDERPAID',
+  'EXPIRED',
+  'CANCELLED',
+])
+
+function resolveSessionStorage(storage?: StorageLike | null): StorageLike | null {
+  if (storage !== undefined) return storage
+  if (typeof window === 'undefined') return null
+  try {
+    return window.sessionStorage ?? null
+  } catch {
+    return null
+  }
+}
+
+function buildBroadcastTxLockKey(uid: string, intentId: string): string | null {
+  const cleanUid = uid.trim()
+  const cleanIntentId = intentId.trim()
+  if (!cleanUid || !cleanIntentId) return null
+  return `${BROADCAST_TX_LOCK_PREFIX}:${cleanUid}:${cleanIntentId}`
+}
+
+export function readBroadcastTxLock(
+  uid: string,
+  intentId: string,
+  storage?: StorageLike | null,
+): BroadcastTxLock | null {
+  const cleanUid = uid.trim()
+  const cleanIntentId = intentId.trim()
+  const key = buildBroadcastTxLockKey(cleanUid, cleanIntentId)
+  const target = resolveSessionStorage(storage)
+  if (!key || !target) return null
+  try {
+    const raw = target.getItem(key)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<BroadcastTxLock> | null
+    if (!parsed || typeof parsed !== 'object') return null
+    const txHash = typeof parsed.txHash === 'string' ? parsed.txHash.trim() : ''
+    if (
+      parsed.uid !== cleanUid ||
+      parsed.intentId !== cleanIntentId ||
+      !txHash ||
+      !parsed.networkId ||
+      !VALID_BACKEND_NETWORK_IDS.has(parsed.networkId) ||
+      (parsed.networkMode !== 'mainnet' && parsed.networkMode !== 'testnet') ||
+      typeof parsed.broadcastAt !== 'number' ||
+      !Number.isFinite(parsed.broadcastAt)
+    ) {
+      return null
+    }
+    return {
+      uid: cleanUid,
+      intentId: cleanIntentId,
+      txHash,
+      networkId: parsed.networkId,
+      networkMode: parsed.networkMode,
+      broadcastAt: parsed.broadcastAt,
+    }
+  } catch {
+    return null
+  }
+}
+
+export function writeBroadcastTxLock(
+  lock: BroadcastTxLock,
+  storage?: StorageLike | null,
+): boolean {
+  const cleanUid = lock.uid.trim()
+  const cleanIntentId = lock.intentId.trim()
+  const cleanTxHash = lock.txHash.trim()
+  const key = buildBroadcastTxLockKey(cleanUid, cleanIntentId)
+  const target = resolveSessionStorage(storage)
+  if (!key || !target || !cleanTxHash || !VALID_BACKEND_NETWORK_IDS.has(lock.networkId)) {
+    return false
+  }
+  try {
+    target.setItem(
+      key,
+      JSON.stringify({
+        uid: cleanUid,
+        intentId: cleanIntentId,
+        txHash: cleanTxHash,
+        networkId: lock.networkId,
+        networkMode: lock.networkMode,
+        broadcastAt: lock.broadcastAt,
+      }),
+    )
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function clearBroadcastTxLock(
+  uid: string,
+  intentId: string,
+  storage?: StorageLike | null,
+): void {
+  const key = buildBroadcastTxLockKey(uid, intentId)
+  const target = resolveSessionStorage(storage)
+  if (!key || !target) return
+  try {
+    target.removeItem(key)
+  } catch {
+    // Storage cleanup errors must never break checkout flow.
+  }
+}
+
+export function shouldClearBroadcastTxLock(status: PaymentIntentStatus | null | undefined): boolean {
+  return Boolean(status && TERMINAL_LOCK_CLEAR_STATUSES.has(status))
+}
+
+export interface EvmSigningParityInput {
+  activeAddress?: string | null
+  wagmiAddress?: string | null
+  intentSenderWallet?: string | null
+}
+
+export interface EvmSigningParityResult {
+  ok: boolean
+  error?: string
+}
+
+export function validateEvmSigningParity(input: EvmSigningParityInput): EvmSigningParityResult {
+  const active = input.activeAddress?.trim() || ''
+  const wagmi = input.wagmiAddress?.trim() || ''
+  const sender = input.intentSenderWallet?.trim() || ''
+  if (!isValidEvmAddress(active) || !isValidEvmAddress(wagmi)) {
+    return {
+      ok: false,
+      error: 'La billetera EVM conectada no tiene una dirección válida. Reconecta tu billetera antes de firmar.',
+    }
+  }
+  if (active.toLowerCase() !== wagmi.toLowerCase()) {
+    return {
+      ok: false,
+      error: 'La cuenta activa en Reown AppKit no coincide con el firmante EVM de tu billetera. Reconecta o sincroniza tu cuenta antes de pagar.',
+    }
+  }
+  if (sender && (!isValidEvmAddress(sender) || sender.toLowerCase() !== active.toLowerCase())) {
+    return {
+      ok: false,
+      error: 'La cuenta EVM conectada no coincide con la dirección registrada en la cotización. Actualiza la cotización o cambia a la cuenta autorizada.',
+    }
+  }
+  return { ok: true }
+}
+
+export interface SolanaClusterParityInput {
+  caipNetworkId?: string | null
+  caipChainId?: string | number | null
+  expectedNetworkMode: PaymentNetworkMode
+}
+
+export interface SolanaClusterParityResult {
+  ok: boolean
+  expectedLabel: string
+  actualLabel: string
+  error?: string
+}
+
+const SOLANA_MAINNET_IDS = new Set([
+  '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp',
+  'solana-mainnet',
+  'mainnet-beta',
+])
+const SOLANA_DEVNET_IDS = new Set([
+  'EtWTRABZaYq6iMfeYKouRu166VU2xqa1',
+  'solana-devnet',
+  'devnet',
+])
+const SOLANA_TESTNET_IDS = new Set([
+  '4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z',
+  'solana-testnet',
+  'testnet',
+])
+
+function classifySolanaClusterToken(raw: string): { mode: PaymentNetworkMode | null; label: string } {
+  const trimmed = raw.trim()
+  if (!trimmed) return { mode: null, label: 'red Solana no detectada' }
+  if (trimmed.includes(':') && !trimmed.startsWith('solana:')) {
+    return { mode: null, label: trimmed }
+  }
+  const token = trimmed.startsWith('solana:') ? trimmed.slice('solana:'.length).trim() : trimmed
+  if (SOLANA_MAINNET_IDS.has(token)) return { mode: 'mainnet', label: 'Solana Mainnet' }
+  if (SOLANA_DEVNET_IDS.has(token)) return { mode: 'testnet', label: 'Solana Devnet' }
+  if (SOLANA_TESTNET_IDS.has(token)) return { mode: null, label: 'Solana Testnet' }
+  return { mode: null, label: trimmed }
+}
+
+export function validateSolanaClusterParity(input: SolanaClusterParityInput): SolanaClusterParityResult {
+  const expectedLabel = input.expectedNetworkMode === 'mainnet' ? 'Solana Mainnet' : 'Solana Devnet'
+  const caipNetRaw = typeof input.caipNetworkId === 'string' ? input.caipNetworkId.trim() : ''
+  const chainIdRaw = input.caipChainId !== undefined && input.caipChainId !== null ? String(input.caipChainId).trim() : ''
+
+  if (!caipNetRaw && !chainIdRaw) {
+    const actualLabel = 'red Solana no detectada'
+    return {
+      ok: false,
+      expectedLabel,
+      actualLabel,
+      error: `No se pudo confirmar la red activa de tu billetera Solana. Asegúrate de seleccionar ${expectedLabel} en Reown AppKit antes de firmar.`,
+    }
+  }
+
+  const netRes = caipNetRaw ? classifySolanaClusterToken(caipNetRaw) : null
+  const chainRes = chainIdRaw ? classifySolanaClusterToken(chainIdRaw) : null
+
+  if (netRes && chainRes && netRes.label !== chainRes.label) {
+    const actualLabel = `${netRes.label} / ${chainRes.label}`
+    return {
+      ok: false,
+      expectedLabel,
+      actualLabel,
+      error: `Red Solana inconsistente (${actualLabel}). Selecciona ${expectedLabel} en tu billetera antes de firmar.`,
+    }
+  }
+
+  const resolved = netRes ?? chainRes!
+  if (resolved.mode === input.expectedNetworkMode) {
+    return { ok: true, expectedLabel, actualLabel: resolved.label }
+  }
+
   return {
-    activeAddress: '',
-    isWalletConnected: false,
-    isEvmWallet: false,
-    isSolanaWallet: false,
+    ok: false,
+    expectedLabel,
+    actualLabel: resolved.label,
+    error: `Tu billetera Solana está conectada a ${resolved.label}, pero esta orden requiere ${expectedLabel}. Cambia de red en tu billetera antes de firmar.`,
   }
 }
 

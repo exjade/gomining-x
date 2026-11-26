@@ -33,15 +33,22 @@ export const queryClient = new QueryClient({
 })
 
 // Reown AppKit Project ID from environment variable with fallback
-export const projectId =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_REOWN_PROJECT_ID) ||
-  '0343399f08f86b28ceaf084ae4e45a01'
+const envProjectId = typeof import.meta !== 'undefined' ? import.meta.env?.VITE_REOWN_PROJECT_ID : undefined
+if (typeof import.meta !== 'undefined' && import.meta.env?.PROD && !envProjectId) {
+  console.warn('[AppKit] VITE_REOWN_PROJECT_ID is not set in production; using fallback projectId.')
+}
+export const projectId = envProjectId || '0343399f08f86b28ceaf084ae4e45a01'
+
+const canonicalOrigin =
+  typeof window !== 'undefined' && window.location?.origin
+    ? window.location.origin
+    : 'https://pouwminer.com'
 
 export const metadata = {
   name: 'PouwMiner.com',
   description: 'PouwMiner.com wallet connection',
-  url: typeof window !== 'undefined' ? window.location.origin : 'https://app.gomining.com',
-  icons: ['https://app.gomining.com/favicon.ico'],
+  url: canonicalOrigin,
+  icons: [`${canonicalOrigin}/favicon.ico`],
 }
 
 export function getAppKitEvmNetworksForMode(
