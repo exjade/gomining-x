@@ -1,6 +1,6 @@
 import { PAYMENT_DESTINATIONS, USDT_CONTRACTS, type PaymentNetworkId } from './paymentDestinations'
 
-export type PaymentAsset = 'BNB' | 'ETH' | 'POL' | 'SOL' | 'USDT' | 'BTC' | 'TRX'
+export type PaymentAsset = 'BNB' | 'ETH' | 'POL' | 'SOL' | 'USDT' | 'BTC' | 'TRX' | 'AVAX'
 export type PaymentCurrency = 'USD'
 
 export type PaymentQuote = {
@@ -30,20 +30,29 @@ const SPOT_SYMBOLS: Partial<Record<PaymentAsset, string>> = {
   SOL: 'SOLUSDT',
   BTC: 'BTCUSDT',
   TRX: 'TRXUSDT',
+  AVAX: 'AVAXUSDT',
 }
 
 export const DEFAULT_ASSET_BY_NETWORK: Record<PaymentNetworkId, PaymentAsset> = {
   bnb: 'BNB',
-  ethereum: 'ETH',
+  tron: 'TRX',
   polygon: 'POL',
   solana: 'SOL',
+  arbitrum: 'ETH',
+  optimism: 'ETH',
+  avalanche: 'AVAX',
+  ethereum: 'ETH',
 }
 
 export const ASSET_DECIMALS: Record<PaymentNetworkId, Record<string, number>> = {
   bnb: { BNB: 18, USDT: 18 },
-  ethereum: { ETH: 18, USDT: 6 },
+  tron: { TRX: 6, USDT: 6 },
   polygon: { POL: 18, USDT: 6 },
   solana: { SOL: 9, USDT: 6 },
+  arbitrum: { ETH: 18, USDT: 6 },
+  optimism: { ETH: 18, USDT: 6 },
+  avalanche: { AVAX: 18, USDT: 6 },
+  ethereum: { ETH: 18, USDT: 6 },
 }
 
 // 1.5% trasladado al usuario para cubrir comisiones de gas y slippage del swap posterior a USDT en BSC

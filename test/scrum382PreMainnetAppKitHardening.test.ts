@@ -178,6 +178,7 @@ describe('SCRUM-382: Pre-Mainnet Reown AppKit Multichain Hardening (F-01..F-07)'
       assert.equal(retryBlock.includes('writeContractAsync'), false, 'handleRetryVerification must NEVER call writeContractAsync')
       assert.equal(retryBlock.includes('sendTransactionAsync'), false, 'handleRetryVerification must NEVER call sendTransactionAsync')
       assert.equal(retryBlock.includes('submitSolanaTransactionViaProvider'), false, 'handleRetryVerification must NEVER re-sign Solana tx')
+      assert.equal(retryBlock.includes('submitTronTransactionViaProvider'), false, 'handleRetryVerification must NEVER re-sign TRON tx')
 
       // UI exposes retry verification CTA and blocks expired view from pushing user to pay twice while lock active
       assert.ok(checkoutSrc.includes('Reintentar verificación on-chain'), 'Checkout must render retry verification CTA')
@@ -239,6 +240,7 @@ describe('SCRUM-382: Pre-Mainnet Reown AppKit Multichain Hardening (F-01..F-07)'
           isWalletConnected: false,
           isEvmWallet: false,
           isSolanaWallet: false,
+          isTronWallet: false,
         },
       )
     })
@@ -258,6 +260,7 @@ describe('SCRUM-382: Pre-Mainnet Reown AppKit Multichain Hardening (F-01..F-07)'
           isWalletConnected: false,
           isEvmWallet: false,
           isSolanaWallet: false,
+          isTronWallet: false,
         },
       )
 
@@ -274,6 +277,7 @@ describe('SCRUM-382: Pre-Mainnet Reown AppKit Multichain Hardening (F-01..F-07)'
           isWalletConnected: false,
           isEvmWallet: false,
           isSolanaWallet: false,
+          isTronWallet: false,
         },
       )
 
@@ -290,6 +294,7 @@ describe('SCRUM-382: Pre-Mainnet Reown AppKit Multichain Hardening (F-01..F-07)'
           isWalletConnected: false,
           isEvmWallet: false,
           isSolanaWallet: false,
+          isTronWallet: false,
         },
       )
 
@@ -307,6 +312,7 @@ describe('SCRUM-382: Pre-Mainnet Reown AppKit Multichain Hardening (F-01..F-07)'
           isWalletConnected: false,
           isEvmWallet: false,
           isSolanaWallet: false,
+          isTronWallet: false,
         },
       )
     })
@@ -324,6 +330,7 @@ describe('SCRUM-382: Pre-Mainnet Reown AppKit Multichain Hardening (F-01..F-07)'
             isWalletConnected: false,
             isEvmWallet: false,
             isSolanaWallet: false,
+            isTronWallet: false,
           },
           `AppKit address "${badAddr}" must be rejected`,
         )
@@ -339,6 +346,7 @@ describe('SCRUM-382: Pre-Mainnet Reown AppKit Multichain Hardening (F-01..F-07)'
             isWalletConnected: false,
             isEvmWallet: false,
             isSolanaWallet: false,
+            isTronWallet: false,
           },
           `Fallback address "${badAddr}" must be rejected`,
         )
@@ -356,6 +364,7 @@ describe('SCRUM-382: Pre-Mainnet Reown AppKit Multichain Hardening (F-01..F-07)'
           isWalletConnected: false,
           isEvmWallet: false,
           isSolanaWallet: false,
+          isTronWallet: false,
         },
       )
     })
@@ -375,6 +384,7 @@ describe('SCRUM-382: Pre-Mainnet Reown AppKit Multichain Hardening (F-01..F-07)'
           isWalletConnected: true,
           isEvmWallet: false,
           isSolanaWallet: true,
+          isTronWallet: false,
         },
       )
 
@@ -390,6 +400,7 @@ describe('SCRUM-382: Pre-Mainnet Reown AppKit Multichain Hardening (F-01..F-07)'
           isWalletConnected: true,
           isEvmWallet: false,
           isSolanaWallet: true,
+          isTronWallet: false,
         },
       )
 
@@ -408,6 +419,7 @@ describe('SCRUM-382: Pre-Mainnet Reown AppKit Multichain Hardening (F-01..F-07)'
           isWalletConnected: true,
           isEvmWallet: true,
           isSolanaWallet: false,
+          isTronWallet: false,
         },
       )
 
@@ -424,6 +436,7 @@ describe('SCRUM-382: Pre-Mainnet Reown AppKit Multichain Hardening (F-01..F-07)'
           isWalletConnected: true,
           isEvmWallet: true,
           isSolanaWallet: false,
+          isTronWallet: false,
         },
       )
 

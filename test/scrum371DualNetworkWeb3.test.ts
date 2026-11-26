@@ -4,7 +4,24 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
-import { bsc, bscTestnet, mainnet, polygon, polygonAmoy, sepolia, solana, solanaDevnet } from '@reown/appkit/networks'
+import {
+  arbitrum,
+  arbitrumSepolia,
+  avalanche,
+  avalancheFuji,
+  bsc,
+  bscTestnet,
+  mainnet,
+  optimism,
+  optimismSepolia,
+  polygon,
+  polygonAmoy,
+  sepolia,
+  solana,
+  solanaDevnet,
+  tronMainnet,
+  tronNileTestnet,
+} from '@reown/appkit/networks'
 import * as paymentDestinations from '../src/paymentDestinations.ts'
 import * as solanaPayment from '../src/solanaPayment.ts'
 import { SystemProgram } from '@solana/web3.js'
@@ -284,7 +301,7 @@ describe('SCRUM-371 (PG-04B): Dual Network Web3 Client Layer (Reown AppKit Only)
       assert.match(appKitSource, /solanaDevnet/)
       assert.match(appKitSource, /resolvePaymentNetworkMode/)
       assert.match(appKitSource, /isEthereumPaymentEnabled/)
-      assert.match(appKitSource, /adapters:\s*\[wagmiAdapter,\s*solanaAdapter\]/)
+      assert.match(appKitSource, /adapters:\s*\[wagmiAdapter,\s*solanaAdapter,\s*tronAdapter\]/)
       assert.doesNotMatch(appKitSource, /mainnet-beta/)
       assert.doesNotMatch(appKitSource, /solflareMobile|phantomMobile|metamaskConnect|coinbaseWallet|walletSession/)
 
@@ -292,7 +309,12 @@ describe('SCRUM-371 (PG-04B): Dual Network Web3 Client Layer (Reown AppKit Only)
       assert.ok(fnBlockMatch, 'src/appkitConfig.ts must export pure network mode resolver functions')
 
       const wrappedSource = `
-        export function createResolvers({ bsc, bscTestnet, mainnet, polygon, polygonAmoy, sepolia, solana, solanaDevnet, resolvePaymentNetworkMode, isEthereumPaymentEnabled }) {
+        export function createResolvers({
+          bsc, bscTestnet, mainnet, polygon, polygonAmoy, sepolia,
+          arbitrum, arbitrumSepolia, optimism, optimismSepolia, avalanche, avalancheFuji,
+          solana, solanaDevnet, tronMainnet, tronNileTestnet,
+          resolvePaymentNetworkMode, isEthereumPaymentEnabled
+        }) {
           ${fnBlockMatch[0].replaceAll('export function ', 'function ')}
           return { getAppKitEvmNetworksForMode, getAppKitNetworksForMode, getDefaultAppKitNetworkForMode }
         }
@@ -308,33 +330,41 @@ describe('SCRUM-371 (PG-04B): Dual Network Web3 Client Layer (Reown AppKit Only)
         polygon,
         polygonAmoy,
         sepolia,
+        arbitrum,
+        arbitrumSepolia,
+        optimism,
+        optimismSepolia,
+        avalanche,
+        avalancheFuji,
         solana,
         solanaDevnet,
+        tronMainnet,
+        tronNileTestnet,
         resolvePaymentNetworkMode: paymentDestinations.resolvePaymentNetworkMode,
         isEthereumPaymentEnabled: paymentDestinations.isEthereumPaymentEnabled,
       })
 
       assert.deepEqual(
         resolvers.getAppKitNetworksForMode('testnet', {}).map((n: { id: unknown }) => n.id),
-        [bscTestnet.id, polygonAmoy.id, solanaDevnet.id],
+        [bscTestnet.id, polygonAmoy.id, arbitrumSepolia.id, optimismSepolia.id, avalancheFuji.id, solanaDevnet.id, tronNileTestnet.id],
       )
       assert.deepEqual(
         resolvers.getAppKitNetworksForMode('testnet', { VITE_PAYMENT_ENABLE_ETHEREUM: 'true' }).map((n: { id: unknown }) => n.id),
-        [bscTestnet.id, polygonAmoy.id, sepolia.id, solanaDevnet.id],
+        [bscTestnet.id, polygonAmoy.id, arbitrumSepolia.id, optimismSepolia.id, avalancheFuji.id, sepolia.id, solanaDevnet.id, tronNileTestnet.id],
       )
       assert.deepEqual(
         resolvers.getAppKitEvmNetworksForMode('testnet', {}).map((n: { id: unknown }) => n.id),
-        [bscTestnet.id, polygonAmoy.id],
+        [bscTestnet.id, polygonAmoy.id, arbitrumSepolia.id, optimismSepolia.id, avalancheFuji.id],
       )
       assert.equal(resolvers.getDefaultAppKitNetworkForMode('testnet').id, bscTestnet.id)
 
       assert.deepEqual(
         resolvers.getAppKitNetworksForMode('mainnet', {}).map((n: { id: unknown }) => n.id),
-        [bsc.id, polygon.id, solana.id],
+        [bsc.id, polygon.id, arbitrum.id, optimism.id, avalanche.id, solana.id, tronMainnet.id],
       )
       assert.deepEqual(
         resolvers.getAppKitNetworksForMode('mainnet', { VITE_PAYMENT_ENABLE_ETHEREUM: 'true' }).map((n: { id: unknown }) => n.id),
-        [bsc.id, polygon.id, mainnet.id, solana.id],
+        [bsc.id, polygon.id, arbitrum.id, optimism.id, avalanche.id, mainnet.id, solana.id, tronMainnet.id],
       )
       assert.equal(resolvers.getDefaultAppKitNetworkForMode('mainnet').id, bsc.id)
     })

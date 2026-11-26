@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export type CryptoSymbol = 'BTC' | 'BNB' | 'ETH' | 'TRX' | 'USDT' | 'SOL' | 'POL' | 'GOMINING'
+export type CryptoSymbol = 'BTC' | 'BNB' | 'ETH' | 'TRX' | 'USDT' | 'SOL' | 'POL' | 'ARB' | 'OP' | 'AVAX' | 'GOMINING'
 
 const assets: Partial<Record<CryptoSymbol, string>> = {
   BTC: '/crypto/bitcoin.svg',
@@ -14,7 +14,8 @@ const assets: Partial<Record<CryptoSymbol, string>> = {
 
 const names: Record<CryptoSymbol, string> = {
   BTC: 'Bitcoin', BNB: 'BNB Chain', ETH: 'Ethereum', TRX: 'TRON',
-  USDT: 'Tether USD', SOL: 'Solana', POL: 'Polygon', GOMINING: 'GoMining',
+  USDT: 'Tether USD', SOL: 'Solana', POL: 'Polygon', ARB: 'Arbitrum',
+  OP: 'Optimism', AVAX: 'Avalanche', GOMINING: 'GoMining',
 }
 
 export function CryptoIcon({ symbol, size = 'md' }: { symbol: CryptoSymbol; size?: 'sm' | 'md' | 'lg' }) {

@@ -11,6 +11,7 @@ export function WalletPanel({ session }: { session?: WalletSession }) {
   const { user } = useAuth()
   const { open } = useAppKit()
   const { address: appKitAddress, caipAddress: appKitCaipAddress, isConnected: isAppKitConnected } = useAppKitAccount()
+  const tronAppKitAccount = useAppKitAccount({ namespace: 'tron' })
   const { caipNetwork } = useAppKitNetwork()
   const { address: wagmiAddress, isConnected: isWagmiConnected, chain } = useAccount()
   const { disconnect: disconnectAppKit } = useDisconnect()
@@ -26,13 +27,19 @@ export function WalletPanel({ session }: { session?: WalletSession }) {
     wagmiAddress,
     isWagmiConnected,
     fallbackAddress: session?.connection?.address,
+    tronAppKitAddress: tronAppKitAccount.address,
+    isTronAppKitConnected: tronAppKitAccount.isConnected,
+    tronAppKitCaipAddress: tronAppKitAccount.caipAddress,
   })
   const activeAddress = resolvedWallet.activeAddress
   const isConnected = resolvedWallet.isWalletConnected
   const isEvmActive = resolvedWallet.isEvmWallet
+  const isTronActive = resolvedWallet.isTronWallet
   const currentNetwork = isEvmActive
     ? (chain?.name ?? caipNetwork?.name ?? session?.connection?.network ?? 'EVM')
-    : (caipNetwork?.name ?? session?.connection?.network ?? 'Solana')
+    : isTronActive
+      ? (caipNetwork?.name ?? session?.connection?.network ?? 'TRON')
+      : (caipNetwork?.name ?? session?.connection?.network ?? 'Solana')
 
   const { data: balanceData } = useBalance({
     address: isEvmActive ? (activeAddress as `0x${string}`) : undefined,
@@ -66,7 +73,7 @@ export function WalletPanel({ session }: { session?: WalletSession }) {
         <div>
           <h2>Cartera Web3 (Reown AppKit)</h2>
           <p className="wallet-panel-desc">
-            Conecta o gestiona tu billetera EVM o Solana de forma segura mediante el selector unificado Reown AppKit (MetaMask, Phantom, Solflare, Trust Wallet, Coinbase y +300 wallets).
+            Conecta o gestiona tu billetera EVM, Solana o TRON de forma segura mediante el selector unificado Reown AppKit (MetaMask, Phantom, Solflare, Trust Wallet, OKX, TronLink vía WalletConnect y +300 wallets).
           </p>
         </div>
         <div className="wallet-header-actions">
@@ -160,7 +167,7 @@ export function WalletPanel({ session }: { session?: WalletSession }) {
       >
         <div>
           <span style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', letterSpacing: '0.06em' }}>
-            REOWN APPKIT · EVM &amp; SOLANA
+            REOWN APPKIT · EVM, SOLANA &amp; TRON
           </span>
           <h3 style={{ margin: '4px 0 2px', fontSize: 16, color: '#f8fafc' }}>
             Conexión Unificada (+300 Wallets y QR Móvil)

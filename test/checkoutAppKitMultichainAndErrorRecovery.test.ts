@@ -118,6 +118,7 @@ describe('Checkout Error Classification, Deadlock Recovery & AppKit Multichain C
           isWalletConnected: true,
           isEvmWallet: false,
           isSolanaWallet: true,
+          isTronWallet: false,
         },
       )
 
@@ -136,6 +137,7 @@ describe('Checkout Error Classification, Deadlock Recovery & AppKit Multichain C
           isWalletConnected: true,
           isEvmWallet: true,
           isSolanaWallet: false,
+          isTronWallet: false,
         },
       )
 
@@ -152,6 +154,7 @@ describe('Checkout Error Classification, Deadlock Recovery & AppKit Multichain C
           isWalletConnected: true,
           isEvmWallet: true,
           isSolanaWallet: false,
+          isTronWallet: false,
         },
       )
 
@@ -168,6 +171,7 @@ describe('Checkout Error Classification, Deadlock Recovery & AppKit Multichain C
           isWalletConnected: false,
           isEvmWallet: false,
           isSolanaWallet: false,
+          isTronWallet: false,
         },
       )
     })

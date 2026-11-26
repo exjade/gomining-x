@@ -49,17 +49,21 @@ function formatShortAddress(address: string): string {
 export function useWalletSession(): WalletSession {
   const { open } = useAppKit()
   const { address: appKitAddress, caipAddress: appKitCaipAddress, isConnected: isAppKitConnected, status: appKitStatus } = useAppKitAccount()
+  const tronAccount = useAppKitAccount({ namespace: 'tron' })
   const { caipNetwork } = useAppKitNetwork()
   const { address: wagmiAddress, isConnected: isWagmiConnected, chain } = useAccount()
   const { disconnect: appKitDisconnect } = useDisconnect()
 
-  const { activeAddress, isWalletConnected: isConnected, isEvmWallet: isEvm } = resolveActiveMultichainWallet({
+  const { activeAddress, isWalletConnected: isConnected, isEvmWallet: isEvm, isTronWallet: isTron } = resolveActiveMultichainWallet({
     appKitAddress,
     isAppKitConnected,
     appKitCaipAddress,
     caipNamespace: caipNetwork?.chainNamespace,
     wagmiAddress,
     isWagmiConnected,
+    tronAppKitAddress: tronAccount.address,
+    isTronAppKitConnected: tronAccount.isConnected,
+    tronAppKitCaipAddress: tronAccount.caipAddress,
   })
 
   const disconnect = useCallback(async () => {
@@ -84,11 +88,17 @@ export function useWalletSession(): WalletSession {
     if (!isConnected || !activeAddress) return null
     const networkLabel = isEvm
       ? (chain?.name ?? caipNetwork?.name ?? 'EVM')
-      : (caipNetwork?.name ?? 'Solana')
+      : isTron
+        ? (caipNetwork?.name ?? 'TRON')
+        : (caipNetwork?.name ?? 'Solana')
     return {
       id: 'reown',
-      name: isEvm ? (chain?.name ?? caipNetwork?.name ?? 'Reown AppKit (EVM)') : 'Reown AppKit (Solana)',
-      protocol: isEvm ? 'EIP-1193' : 'Solana',
+      name: isEvm
+        ? (chain?.name ?? caipNetwork?.name ?? 'Reown AppKit (EVM)')
+        : isTron
+          ? 'Reown AppKit (TRON)'
+          : 'Reown AppKit (Solana)',
+      protocol: isEvm ? 'EIP-1193' : isTron ? 'TRON' : 'Solana',
       network: networkLabel,
       address: activeAddress,
       shortAddress: formatShortAddress(activeAddress),
@@ -97,7 +107,7 @@ export function useWalletSession(): WalletSession {
         throw new Error('Los pagos Web3 deben ejecutarse desde el checkout oficial con Reown AppKit.')
       },
     }
-  }, [isConnected, activeAddress, isEvm, chain?.name, caipNetwork?.name, disconnect])
+  }, [isConnected, activeAddress, isEvm, isTron, chain?.name, caipNetwork?.name, disconnect])
 
   return useMemo<WalletSession>(() => ({
     connection,

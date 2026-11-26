@@ -13,7 +13,7 @@ export type PaymentIntentStatus =
   | 'CANCELLED'
 
 export type PaymentProductType = 'miner' | 'subscription'
-export type PaymentAssetSymbol = 'USDT' | 'BNB' | 'POL' | 'ETH' | 'SOL'
+export type PaymentAssetSymbol = 'USDT' | 'BNB' | 'POL' | 'ETH' | 'SOL' | 'TRX' | 'AVAX'
 
 export interface PaymentIntentRecord {
   intentId: string

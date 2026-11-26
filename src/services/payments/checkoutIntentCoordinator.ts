@@ -1,6 +1,7 @@
 import {
   isValidEvmAddress,
   isValidSolanaAddress,
+  isValidTronAddress,
   type BackendPaymentNetworkId,
   type PaymentNetworkMode,
 } from '../../paymentDestinations.ts'
@@ -141,6 +142,9 @@ export interface MultichainWalletInput {
   wagmiAddress?: string | null
   isWagmiConnected: boolean
   fallbackAddress?: string | null
+  tronAppKitAddress?: string | null
+  isTronAppKitConnected?: boolean
+  tronAppKitCaipAddress?: string | null
 }
 
 export interface ResolvedMultichainWallet {
@@ -148,6 +152,7 @@ export interface ResolvedMultichainWallet {
   isWalletConnected: boolean
   isEvmWallet: boolean
   isSolanaWallet: boolean
+  isTronWallet: boolean
 }
 
 const DISCONNECTED_WALLET: ResolvedMultichainWallet = {
@@ -155,6 +160,7 @@ const DISCONNECTED_WALLET: ResolvedMultichainWallet = {
   isWalletConnected: false,
   isEvmWallet: false,
   isSolanaWallet: false,
+  isTronWallet: false,
 }
 
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
@@ -182,7 +188,7 @@ function isStrictSolanaAddress(address: string): boolean {
 }
 
 /**
- * Resolves the active multichain wallet (Wagmi EVM vs Reown AppKit Solana) with strict namespace
+ * Resolves the active multichain wallet (EVM vs Solana vs TRON) with strict namespace
  * isolation and address validation, preventing dormant Wagmi hijack and snapshot-tear mislabeling.
  */
 export function resolveActiveMultichainWallet(input: MultichainWalletInput): ResolvedMultichainWallet {
@@ -190,51 +196,93 @@ export function resolveActiveMultichainWallet(input: MultichainWalletInput): Res
   const wagmiAddr = input.wagmiAddress?.trim() || ''
   const fallbackAddr = input.fallbackAddress?.trim() || ''
   const caipAddress = input.appKitCaipAddress?.trim() || ''
+  const tronAddr = input.tronAppKitAddress?.trim() || ''
+  const tronCaipAddr = input.tronAppKitCaipAddress?.trim() || ''
+  const hasValidTronNamespaceAccount = Boolean(
+    input.isTronAppKitConnected &&
+    tronAddr &&
+    isValidTronAddress(tronAddr) &&
+    (!tronCaipAddr || tronCaipAddr.startsWith('tron:')),
+  )
   const isSolanaNamespace = input.caipNamespace === 'solana' || caipAddress.startsWith('solana:')
+  const isTronNamespace = input.caipNamespace === 'tron' || caipAddress.startsWith('tron:')
   const isEvmNamespace = input.caipNamespace === 'eip155' || caipAddress.startsWith('eip155:')
 
   if (input.caipNamespace === 'solana' && !input.isAppKitConnected) {
     return DISCONNECTED_WALLET
   }
 
+  if (input.caipNamespace === 'tron' && !input.isAppKitConnected) {
+    return hasValidTronNamespaceAccount
+      ? { activeAddress: tronAddr, isWalletConnected: true, isEvmWallet: false, isSolanaWallet: false, isTronWallet: true }
+      : DISCONNECTED_WALLET
+  }
+
   if (input.isAppKitConnected && appKitAddr) {
-    if (isSolanaNamespace && isEvmNamespace) {
+    const activeNamespaceCount = Number(isSolanaNamespace) + Number(isTronNamespace) + Number(isEvmNamespace)
+    if (activeNamespaceCount > 1) {
       return DISCONNECTED_WALLET
+    }
+    if (isTronNamespace) {
+      return isValidTronAddress(appKitAddr)
+        ? { activeAddress: appKitAddr, isWalletConnected: true, isEvmWallet: false, isSolanaWallet: false, isTronWallet: true }
+        : DISCONNECTED_WALLET
     }
     if (isSolanaNamespace) {
       return isStrictSolanaAddress(appKitAddr)
-        ? { activeAddress: appKitAddr, isWalletConnected: true, isEvmWallet: false, isSolanaWallet: true }
+        ? { activeAddress: appKitAddr, isWalletConnected: true, isEvmWallet: false, isSolanaWallet: true, isTronWallet: false }
         : DISCONNECTED_WALLET
     }
     if (isEvmNamespace) {
       return isValidEvmAddress(appKitAddr)
-        ? { activeAddress: appKitAddr, isWalletConnected: true, isEvmWallet: true, isSolanaWallet: false }
+        ? { activeAddress: appKitAddr, isWalletConnected: true, isEvmWallet: true, isSolanaWallet: false, isTronWallet: false }
         : DISCONNECTED_WALLET
     }
     if (isValidEvmAddress(appKitAddr)) {
-      return { activeAddress: appKitAddr, isWalletConnected: true, isEvmWallet: true, isSolanaWallet: false }
+      return { activeAddress: appKitAddr, isWalletConnected: true, isEvmWallet: true, isSolanaWallet: false, isTronWallet: false }
     }
     if (isStrictSolanaAddress(appKitAddr)) {
-      return { activeAddress: appKitAddr, isWalletConnected: true, isEvmWallet: false, isSolanaWallet: true }
+      return { activeAddress: appKitAddr, isWalletConnected: true, isEvmWallet: false, isSolanaWallet: true, isTronWallet: false }
     }
     return DISCONNECTED_WALLET
   }
 
-  if (input.isWagmiConnected && wagmiAddr && input.caipNamespace !== 'solana' && isValidEvmAddress(wagmiAddr)) {
+  if (
+    input.isWagmiConnected &&
+    wagmiAddr &&
+    input.caipNamespace !== 'solana' &&
+    input.caipNamespace !== 'tron' &&
+    isValidEvmAddress(wagmiAddr)
+  ) {
     return {
       activeAddress: wagmiAddr,
       isWalletConnected: true,
       isEvmWallet: true,
       isSolanaWallet: false,
+      isTronWallet: false,
+    }
+  }
+
+  // Fallback for TRON-only WalletConnect sessions when AppKit default activeChain is still eip155.
+  if (hasValidTronNamespaceAccount && input.caipNamespace !== 'solana') {
+    return {
+      activeAddress: tronAddr,
+      isWalletConnected: true,
+      isEvmWallet: false,
+      isSolanaWallet: false,
+      isTronWallet: true,
     }
   }
 
   if (fallbackAddr) {
-    if (isValidEvmAddress(fallbackAddr) && input.caipNamespace !== 'solana') {
-      return { activeAddress: fallbackAddr, isWalletConnected: true, isEvmWallet: true, isSolanaWallet: false }
+    if (isValidEvmAddress(fallbackAddr) && input.caipNamespace !== 'solana' && input.caipNamespace !== 'tron') {
+      return { activeAddress: fallbackAddr, isWalletConnected: true, isEvmWallet: true, isSolanaWallet: false, isTronWallet: false }
     }
-    if (isStrictSolanaAddress(fallbackAddr) && input.caipNamespace !== 'eip155') {
-      return { activeAddress: fallbackAddr, isWalletConnected: true, isEvmWallet: false, isSolanaWallet: true }
+    if (isStrictSolanaAddress(fallbackAddr) && input.caipNamespace !== 'eip155' && input.caipNamespace !== 'tron') {
+      return { activeAddress: fallbackAddr, isWalletConnected: true, isEvmWallet: false, isSolanaWallet: true, isTronWallet: false }
+    }
+    if (isValidTronAddress(fallbackAddr) && isTronNamespace) {
+      return { activeAddress: fallbackAddr, isWalletConnected: true, isEvmWallet: false, isSolanaWallet: false, isTronWallet: true }
     }
   }
 
@@ -254,7 +302,16 @@ export interface BroadcastTxLock {
 
 export type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 
-const VALID_BACKEND_NETWORK_IDS = new Set<BackendPaymentNetworkId>(['bsc', 'ethereum', 'polygon', 'solana'])
+const VALID_BACKEND_NETWORK_IDS = new Set<BackendPaymentNetworkId>([
+  'bsc',
+  'tron',
+  'polygon',
+  'solana',
+  'arbitrum',
+  'optimism',
+  'avalanche',
+  'ethereum',
+])
 const TERMINAL_LOCK_CLEAR_STATUSES = new Set<PaymentIntentStatus>([
   'SETTLED',
   'FAILED',
@@ -486,6 +543,139 @@ export function validateSolanaClusterParity(input: SolanaClusterParityInput): So
     expectedLabel,
     actualLabel: resolved.label,
     error: `Tu billetera Solana está conectada a ${resolved.label}, pero esta orden requiere ${expectedLabel}. Cambia de red en tu billetera antes de firmar.`,
+  }
+}
+
+export interface TronSigningParityInput {
+  activeAddress?: string | null
+  intentSenderWallet?: string | null
+}
+
+export interface TronSigningParityResult {
+  ok: boolean
+  error?: string
+}
+
+export function validateTronSigningParity(input: TronSigningParityInput): TronSigningParityResult {
+  const active = input.activeAddress?.trim() || ''
+  const sender = input.intentSenderWallet?.trim() || ''
+  if (!isValidTronAddress(active)) {
+    return {
+      ok: false,
+      error: 'La billetera TRON conectada no tiene una dirección Base58Check válida. Reconecta tu billetera antes de firmar.',
+    }
+  }
+  if (sender && (!isValidTronAddress(sender) || sender !== active)) {
+    return {
+      ok: false,
+      error: 'La cuenta TRON conectada no coincide con la dirección registrada en la cotización. Actualiza la cotización o cambia a la cuenta autorizada.',
+    }
+  }
+  return { ok: true }
+}
+
+export interface TronClusterParityInput {
+  caipNetworkId?: string | null
+  caipChainId?: string | number | null
+  expectedNetworkMode: PaymentNetworkMode
+  sessionChains?: readonly string[] | null
+  sessionAccounts?: readonly string[] | null
+}
+
+export interface TronClusterParityResult {
+  ok: boolean
+  expectedLabel: string
+  actualLabel: string
+  error?: string
+}
+
+const TRON_MAINNET_IDS = new Set(['0x2b6653dc', 'tron-mainnet', 'mainnet'])
+const TRON_NILE_IDS = new Set(['0xcd8690dc', 'tron-nile', 'nile'])
+const TRON_SHASTA_IDS = new Set(['0x94a9059e', 'tron-shasta', 'shasta'])
+
+function classifyTronClusterToken(raw: string): { mode: PaymentNetworkMode | null; label: string } {
+  const trimmed = raw.trim()
+  if (!trimmed) return { mode: null, label: 'red TRON no detectada' }
+  if (trimmed.includes(':') && !trimmed.toLowerCase().startsWith('tron:')) {
+    return { mode: null, label: trimmed }
+  }
+  const token = trimmed.toLowerCase().startsWith('tron:')
+    ? trimmed.slice('tron:'.length).trim().toLowerCase()
+    : trimmed.toLowerCase()
+  if (TRON_MAINNET_IDS.has(token)) return { mode: 'mainnet', label: 'TRON Mainnet' }
+  if (TRON_NILE_IDS.has(token)) return { mode: 'testnet', label: 'TRON Nile' }
+  if (TRON_SHASTA_IDS.has(token)) return { mode: null, label: 'TRON Shasta' }
+  return { mode: null, label: trimmed }
+}
+
+export function validateTronClusterParity(input: TronClusterParityInput): TronClusterParityResult {
+  const expectedLabel = input.expectedNetworkMode === 'mainnet' ? 'TRON Mainnet' : 'TRON Nile'
+
+  // Inspect actual WalletConnect session chains/accounts first so AppKit's fallbackCaipNetwork cannot mask a cluster mismatch.
+  const sessionTokens: string[] = []
+  if (Array.isArray(input.sessionChains)) {
+    for (const chain of input.sessionChains) {
+      if (typeof chain === 'string' && chain.trim()) sessionTokens.push(chain.trim())
+    }
+  }
+  if (Array.isArray(input.sessionAccounts)) {
+    for (const acc of input.sessionAccounts) {
+      if (typeof acc === 'string' && acc.trim()) {
+        const parts = acc.trim().split(':')
+        if (parts.length >= 2) sessionTokens.push(`${parts[0]}:${parts[1]}`)
+      }
+    }
+  }
+  if (sessionTokens.length > 0) {
+    const classified = sessionTokens.map(classifyTronClusterToken)
+    const hasExpectedSession = classified.some((item) => item.mode === input.expectedNetworkMode)
+    if (!hasExpectedSession) {
+      const actualLabel = classified[0]?.label || 'red TRON no autorizada'
+      return {
+        ok: false,
+        expectedLabel,
+        actualLabel,
+        error: `La sesión WalletConnect TRON autorizó ${actualLabel}, pero esta orden requiere ${expectedLabel}. Reconecta tu billetera en ${expectedLabel} antes de firmar.`,
+      }
+    }
+    return { ok: true, expectedLabel, actualLabel: expectedLabel }
+  }
+
+  const caipNetRaw = typeof input.caipNetworkId === 'string' ? input.caipNetworkId.trim() : ''
+  const chainIdRaw = input.caipChainId !== undefined && input.caipChainId !== null ? String(input.caipChainId).trim() : ''
+
+  if (!caipNetRaw && !chainIdRaw) {
+    return {
+      ok: false,
+      expectedLabel,
+      actualLabel: 'red TRON no detectada',
+      error: `No se pudo confirmar la red activa de tu billetera TRON. Asegúrate de seleccionar ${expectedLabel} en Reown AppKit antes de firmar.`,
+    }
+  }
+
+  const netRes = caipNetRaw ? classifyTronClusterToken(caipNetRaw) : null
+  const chainRes = chainIdRaw ? classifyTronClusterToken(chainIdRaw) : null
+
+  if (netRes && chainRes && netRes.label !== chainRes.label) {
+    const actualLabel = `${netRes.label} / ${chainRes.label}`
+    return {
+      ok: false,
+      expectedLabel,
+      actualLabel,
+      error: `Red TRON inconsistente (${actualLabel}). Selecciona ${expectedLabel} en tu billetera antes de firmar.`,
+    }
+  }
+
+  const resolved = netRes ?? chainRes!
+  if (resolved.mode === input.expectedNetworkMode) {
+    return { ok: true, expectedLabel, actualLabel: resolved.label }
+  }
+
+  return {
+    ok: false,
+    expectedLabel,
+    actualLabel: resolved.label,
+    error: `Tu billetera TRON está conectada a ${resolved.label}, pero esta orden requiere ${expectedLabel}. Cambia de red en tu billetera antes de firmar.`,
   }
 }
 

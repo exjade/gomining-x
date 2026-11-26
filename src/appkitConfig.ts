@@ -1,15 +1,24 @@
 import { createAppKit } from '@reown/appkit/react'
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
 import { SolanaAdapter } from '@reown/appkit-adapter-solana'
+import { AdapterBlueprint, CoreHelperUtil, WalletConnectConnector } from '@reown/appkit-controllers'
 import {
+  arbitrum,
+  arbitrumSepolia,
+  avalanche,
+  avalancheFuji,
   bsc,
   bscTestnet,
   mainnet,
+  optimism,
+  optimismSepolia,
   polygon,
   polygonAmoy,
   sepolia,
   solana,
   solanaDevnet,
+  tronMainnet,
+  tronNileTestnet,
   type AppKitNetwork,
 } from '@reown/appkit/networks'
 import { QueryClient } from '@tanstack/react-query'
@@ -51,6 +60,139 @@ export const metadata = {
   icons: [`${canonicalOrigin}/favicon.ico`],
 }
 
+type UniversalProviderLike = Parameters<NonNullable<AdapterBlueprint['setUniversalProvider']>>[0]
+
+/**
+ * Minimal WalletConnect v2 UniversalAdapter blueprint for the TRON namespace on @reown/appkit@1.8.24.
+ * Required because AppKitBaseClient.getChainNamespacesSet() derives namespaces exclusively from
+ * registered adapters when EVM/Solana adapters are present. Uses zero external npm dependencies.
+ */
+class TronUniversalAdapter extends AdapterBlueprint {
+  constructor() {
+    super({ namespace: 'tron', adapterType: 'tron' })
+  }
+
+  override construct(params: AdapterBlueprint.Params): void {
+    super.construct({ ...params, adapterType: params.adapterType ?? 'tron' })
+  }
+
+  override async setUniversalProvider(universalProvider: UniversalProviderLike): Promise<void> {
+    this.provider = universalProvider
+    this.addConnector(
+      new WalletConnectConnector({
+        provider: universalProvider,
+        caipNetworks: this.getCaipNetworks(),
+        namespace: 'tron',
+      }),
+    )
+  }
+
+  override async connect(params: AdapterBlueprint.ConnectParams): Promise<AdapterBlueprint.ConnectResult> {
+    return {
+      id: 'WALLET_CONNECT',
+      type: 'WALLET_CONNECT',
+      chainId: params.chainId ?? '0x2b6653dc',
+      provider: this.provider,
+      address: '',
+    }
+  }
+
+  override async disconnect(): Promise<AdapterBlueprint.DisconnectResult> {
+    try {
+      const connector = this.getWalletConnectConnector()
+      await connector.disconnect()
+    } catch {
+      // Ignore disconnect errors when another adapter already closed the shared WalletConnect session
+    } finally {
+      this.emit('disconnect')
+    }
+    return { connections: [] }
+  }
+
+  override async syncConnections(): Promise<void> {}
+  override async syncConnectors(): Promise<void> {}
+
+  override async syncConnection(params?: AdapterBlueprint.SyncConnectionParams): Promise<AdapterBlueprint.ConnectResult> {
+    const provider = this.provider as UniversalProviderLike | undefined
+    const accounts = provider?.session?.namespaces?.tron?.accounts ?? []
+    const firstAccount = accounts[0]
+    if (!firstAccount) {
+      return undefined as unknown as AdapterBlueprint.ConnectResult
+    }
+    const [, parsedChainId, parsedAddress] = firstAccount.split(':')
+    return {
+      id: 'walletConnect',
+      type: 'WALLET_CONNECT',
+      chainId: parsedChainId || params?.chainId || '0x2b6653dc',
+      provider,
+      address: parsedAddress || '',
+    }
+  }
+
+  override async getAccounts(): Promise<AdapterBlueprint.GetAccountsResult> {
+    const provider = this.provider as UniversalProviderLike | undefined
+    const caipAccounts = (provider?.session?.namespaces?.tron?.accounts ?? []).filter(
+      (account, index, self) => self.indexOf(account) === index,
+    )
+    return {
+      accounts: caipAccounts.map((caipAddress) =>
+        CoreHelperUtil.createAccount({
+          caipAddress: caipAddress as `tron:${string}:${string}`,
+          type: 'eoa',
+        }),
+      ),
+    }
+  }
+
+  override async getBalance(params: AdapterBlueprint.GetBalanceParams): Promise<AdapterBlueprint.GetBalanceResult> {
+    return {
+      balance: '0.00',
+      symbol: params.caipNetwork?.nativeCurrency?.symbol || 'TRX',
+    }
+  }
+
+  override async signMessage(params: AdapterBlueprint.SignMessageParams): Promise<AdapterBlueprint.SignMessageResult> {
+    const provider = params.provider as UniversalProviderLike | undefined
+    if (!provider) {
+      throw new Error('TronUniversalAdapter:signMessage - provider is undefined')
+    }
+    const res = (await provider.request({
+      method: 'tron_signMessage',
+      params: { address: params.address, message: params.message },
+    })) as string | { signature?: string }
+    return { signature: typeof res === 'string' ? res : (res?.signature ?? '') }
+  }
+
+  override async switchNetwork(params: AdapterBlueprint.SwitchNetworkParams): Promise<void> {
+    try {
+      const connector = this.getWalletConnectConnector()
+      const wcProvider = connector.provider as (UniversalProviderLike & { rpcProviders?: Record<string, unknown> }) | undefined
+      if (wcProvider?.rpcProviders?.tron) {
+        wcProvider.setDefaultChain(params.caipNetwork.caipNetworkId)
+      }
+    } catch {
+      // Ignore setDefaultChain errors when TRON RPC provider map is not yet initialized
+    }
+  }
+
+  override getWalletConnectProvider(params?: AdapterBlueprint.GetWalletConnectProviderParams): UniversalProviderLike {
+    const connector = this.connectors.find((c) => c.type === 'WALLET_CONNECT')
+    return (connector?.provider ?? params?.provider ?? this.provider) as UniversalProviderLike
+  }
+
+  override async estimateGas(): Promise<AdapterBlueprint.EstimateGasTransactionResult> { return { gas: 0n } }
+  override async sendTransaction(): Promise<AdapterBlueprint.SendTransactionResult> { return { hash: '' } }
+  override async writeContract(): Promise<AdapterBlueprint.WriteContractResult> { return { hash: '' } }
+  override async writeSolanaTransaction(): Promise<AdapterBlueprint.WriteSolanaTransactionResult> { return { hash: '' } }
+  override emitFirstAvailableConnection(): void {}
+  override parseUnits(): AdapterBlueprint.ParseUnitsResult { return 0n }
+  override formatUnits(): AdapterBlueprint.FormatUnitsResult { return '0' }
+  override async getCapabilities(): Promise<unknown> { return {} }
+  override async grantPermissions(): Promise<unknown> { return {} }
+  override async revokePermissions(): Promise<`0x${string}`> { return '0x' }
+  override async walletGetAssets(): Promise<AdapterBlueprint.WalletGetAssetsResponse> { return {} }
+}
+
 export function getAppKitEvmNetworksForMode(
   mode?: PaymentNetworkMode,
   env?: PaymentEnv,
@@ -58,9 +200,13 @@ export function getAppKitEvmNetworksForMode(
   const activeMode = mode ?? resolvePaymentNetworkMode(env)
   const ethereumEnabled = isEthereumPaymentEnabled(env)
   if (activeMode === 'mainnet') {
-    return ethereumEnabled ? [bsc, polygon, mainnet] : [bsc, polygon]
+    return ethereumEnabled
+      ? [bsc, polygon, arbitrum, optimism, avalanche, mainnet]
+      : [bsc, polygon, arbitrum, optimism, avalanche]
   }
-  return ethereumEnabled ? [bscTestnet, polygonAmoy, sepolia] : [bscTestnet, polygonAmoy]
+  return ethereumEnabled
+    ? [bscTestnet, polygonAmoy, arbitrumSepolia, optimismSepolia, avalancheFuji, sepolia]
+    : [bscTestnet, polygonAmoy, arbitrumSepolia, optimismSepolia, avalancheFuji]
 }
 
 export function getAppKitNetworksForMode(
@@ -70,8 +216,8 @@ export function getAppKitNetworksForMode(
   const activeMode = mode ?? resolvePaymentNetworkMode(env)
   const evmNetworks = getAppKitEvmNetworksForMode(activeMode, env)
   return activeMode === 'mainnet'
-    ? [...evmNetworks, solana]
-    : [...evmNetworks, solanaDevnet]
+    ? [...evmNetworks, solana, tronMainnet]
+    : [...evmNetworks, solanaDevnet, tronNileTestnet]
 }
 
 export function getDefaultAppKitNetworkForMode(
@@ -95,8 +241,10 @@ export const solanaAdapter = new SolanaAdapter({
   wallets: [],
 })
 
+export const tronAdapter = new TronUniversalAdapter()
+
 export const appKitModal = createAppKit({
-  adapters: [wagmiAdapter, solanaAdapter],
+  adapters: [wagmiAdapter, solanaAdapter, tronAdapter],
   networks: appKitNetworks,
   defaultNetwork: getDefaultAppKitNetworkForMode(paymentNetworkMode),
   projectId,

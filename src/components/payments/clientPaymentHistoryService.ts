@@ -34,9 +34,13 @@ const CANONICAL_STATUSES = new Set<ClientOrderStatus>([
 const SUPPORTED_EXPLORER_NETWORKS = new Set<AnyPaymentNetworkId>([
   'bsc',
   'bnb',
-  'ethereum',
+  'tron',
   'polygon',
   'solana',
+  'arbitrum',
+  'optimism',
+  'avalanche',
+  'ethereum',
 ])
 
 export interface ClientPaymentOrder {

@@ -17,6 +17,11 @@ import { formatCatalogPrice, type PaymentAsset, type PaymentCurrency, type Payme
 import { CryptoIcon, type CryptoSymbol } from './CryptoIcon'
 import { QuoteDetailsSkeleton } from './Skeletons'
 import { buildSolanaPaymentTransaction, getSolanaConnection } from './solanaPayment'
+import {
+  buildTronPaymentTransaction,
+  submitTronTransactionViaProvider,
+  type TronAppKitProvider,
+} from './tronPayment'
 import { useAuth } from './AuthContext'
 import { isMinerProduct, parseMinerPowerTh, type PackageSnapshot, type PostTxPendingState } from './minerPurchaseFlow'
 import type { WalletSession } from './walletSession'
@@ -43,6 +48,8 @@ import {
   submitSolanaTransactionViaProvider,
   validateEvmSigningParity,
   validateSolanaClusterParity,
+  validateTronClusterParity,
+  validateTronSigningParity,
   writeBroadcastTxLock,
   type BroadcastTxLock,
 } from './services/payments/checkoutIntentCoordinator'
@@ -65,24 +72,38 @@ export type PaymentReceipt = {
 
 export const networks: Array<{ id: PaymentNetworkId; label: string; chainId: number; icon: CryptoSymbol }> = [
   { id: 'bnb', label: 'BNB Chain · BSC', chainId: 56, icon: 'BNB' },
-  { id: 'ethereum', label: 'Ethereum · ETH', chainId: 1, icon: 'ETH' },
+  { id: 'tron', label: 'Tron · TRC-20', chainId: 0, icon: 'TRX' },
   { id: 'polygon', label: 'Polygon · POL', chainId: 137, icon: 'POL' },
   { id: 'solana', label: 'Solana · SOL/USDT', chainId: 0, icon: 'SOL' },
+  { id: 'arbitrum', label: 'Arbitrum · ARB', chainId: 42161, icon: 'ARB' },
+  { id: 'optimism', label: 'Optimism · OP', chainId: 10, icon: 'OP' },
+  { id: 'avalanche', label: 'Avalanche · AVAX', chainId: 43114, icon: 'AVAX' },
+  { id: 'ethereum', label: 'Ethereum · ETH', chainId: 1, icon: 'ETH' },
 ]
 
 export function networkForConnection(connection: { id?: string; protocol?: string; network?: string } | null): PaymentNetworkId {
   if (!connection) return 'bnb'
+  if (connection.protocol === 'TRON') return 'tron'
   if (connection.protocol === 'Solana') return 'solana'
-  if (connection.network?.toLowerCase().includes('poly')) return 'polygon'
-  if (connection.network?.toLowerCase().includes('eth') && isEthereumPaymentEnabled()) return 'ethereum'
+  const lowerNet = connection.network?.toLowerCase() ?? ''
+  if (lowerNet.includes('tron')) return 'tron'
+  if (lowerNet.includes('poly')) return 'polygon'
+  if (lowerNet.includes('arb')) return 'arbitrum'
+  if (lowerNet.includes('opt')) return 'optimism'
+  if (lowerNet.includes('avax') || lowerNet.includes('avalanche')) return 'avalanche'
+  if (lowerNet.includes('eth') && isEthereumPaymentEnabled()) return 'ethereum'
   return 'bnb'
 }
 
 const NATIVE_SYMBOL_BY_NETWORK: Record<PaymentNetworkId, PaymentAssetSymbol> = {
   bnb: 'BNB',
-  ethereum: 'ETH',
+  tron: 'TRX',
   polygon: 'POL',
   solana: 'SOL',
+  arbitrum: 'ETH',
+  optimism: 'ETH',
+  avalanche: 'AVAX',
+  ethereum: 'ETH',
 }
 
 const ERC20_ABI = [
@@ -234,6 +255,7 @@ export function classifyPaymentError(
   if (
     reasonCode === 'TOKEN_CONTRACT_NOT_CONFIGURED' ||
     reasonCode === 'SOLANA_USDT_MINT_NOT_CONFIGURED' ||
+    reasonCode === 'TRON_USDT_CONTRACT_NOT_CONFIGURED' ||
     reasonCode === 'INVALID_TOKEN_CONTRACT'
   ) {
     return {
@@ -249,6 +271,8 @@ export function classifyPaymentError(
   const isExplicitUserRejection =
     code === 4001 ||
     codeStr === '4001' ||
+    code === 5000 ||
+    codeStr === '5000' ||
     rootName === 'UserRejectedRequestError' ||
     rootName === 'TransactionRejectedRpcError' ||
     /(?:user|wallet|signer)\s+(?:has\s+)?(?:rejected|denied|declined|cancelled|canceled)|(?:rejected|denied|declined|cancelled|canceled)\s+by\s+(?:the\s+)?(?:user|wallet|signer)|user\s+(?:rejected|denied|declined|cancelled|canceled)/i.test(checkText)
@@ -395,8 +419,10 @@ export function WalletPaymentCheckout({
   const navigate = useNavigate()
   const { open: openAppKit } = useAppKit()
   const appKitAccount = useAppKitAccount()
+  const tronAppKitAccount = useAppKitAccount({ namespace: 'tron' })
   const { chainId: appKitChainId, caipNetwork } = useAppKitNetwork()
   const { walletProvider: solanaProvider } = useAppKitProvider<SolanaAppKitProvider>('solana')
+  const { walletProvider: tronProvider } = useAppKitProvider<TronAppKitProvider>('tron')
   const { address: evmAddress, isConnected: isEvmConnected, chainId: wagmiChainId } = useAccount()
   const { switchChainAsync } = useSwitchChain()
   const { sendTransactionAsync } = useSendTransaction()
@@ -406,13 +432,16 @@ export function WalletPaymentCheckout({
   const isAuthenticated = Boolean(user && !user.isAnonymous)
   const ethereumEnabled = isEthereumPaymentEnabled()
 
-  const { activeAddress, isWalletConnected, isEvmWallet, isSolanaWallet } = resolveActiveMultichainWallet({
+  const { activeAddress, isWalletConnected, isEvmWallet, isSolanaWallet, isTronWallet } = resolveActiveMultichainWallet({
     appKitAddress: appKitAccount.address,
     isAppKitConnected: appKitAccount.isConnected,
     appKitCaipAddress: appKitAccount.caipAddress,
     caipNamespace: caipNetwork?.chainNamespace,
     wagmiAddress: evmAddress,
     isWagmiConnected: isEvmConnected,
+    tronAppKitAddress: tronAppKitAccount.address,
+    isTronAppKitConnected: tronAppKitAccount.isConnected,
+    tronAppKitCaipAddress: tronAppKitAccount.caipAddress,
   })
 
   const [networkId, setNetworkId] = useState<PaymentNetworkId>(() =>
@@ -421,7 +450,9 @@ export function WalletPaymentCheckout({
   const [useUsdt, setUseUsdt] = useState<boolean>(() => {
     const initialNet: PaymentNetworkId = isSolanaWallet
       ? 'solana'
-      : (initialNetworkId === 'ethereum' && !ethereumEnabled ? 'bnb' : initialNetworkId)
+      : isTronWallet
+        ? 'tron'
+        : (initialNetworkId === 'ethereum' && !ethereumEnabled ? 'bnb' : initialNetworkId)
     return Boolean(getPaymentNetworkConfig(initialNet).usdtContractAddress)
   })
   const [intent, setIntent] = useState<PaymentIntentRecord | null>(null)
@@ -468,10 +499,11 @@ export function WalletPaymentCheckout({
     [ethereumEnabled],
   )
   const availableNetworks = useMemo(() => {
-    if (isEvmWallet) return enabledNetworks.filter((n) => n.id !== 'solana')
+    if (isEvmWallet) return enabledNetworks.filter((n) => n.id !== 'solana' && n.id !== 'tron')
     if (isSolanaWallet) return enabledNetworks.filter((n) => n.id === 'solana')
+    if (isTronWallet) return enabledNetworks.filter((n) => n.id === 'tron')
     return enabledNetworks
-  }, [enabledNetworks, isEvmWallet, isSolanaWallet])
+  }, [enabledNetworks, isEvmWallet, isSolanaWallet, isTronWallet])
 
   const effectiveNetworkId: PaymentNetworkId = availableNetworks.some((n) => n.id === networkId)
     ? networkId
@@ -481,6 +513,7 @@ export function WalletPaymentCheckout({
     ? toClientPaymentNetworkId(intent.paymentNetwork)
     : effectiveNetworkId
   const isSolana = authoritativeNetworkId === 'solana'
+  const isTron = authoritativeNetworkId === 'tron'
   const activeDestination = destinations.find((d) => d.id === authoritativeNetworkId) ?? destinations[0]
   const activeNetworkConfig = getPaymentNetworkConfig(authoritativeNetworkId, intent?.networkMode)
   const selectedAsset: PaymentAssetSymbol = useUsdt ? 'USDT' : NATIVE_SYMBOL_BY_NETWORK[effectiveNetworkId]
@@ -496,7 +529,8 @@ export function WalletPaymentCheckout({
     isEvmWallet &&
     !hasNetworkSelectionMismatch &&
     numericChainId > 0 &&
-    numericChainId !== expectedEvmChainId
+    numericChainId !== expectedEvmChainId &&
+    !isTron
 
   const latestSelectionRef = useRef({
     isWalletConnected,
@@ -1056,6 +1090,48 @@ export function WalletPaymentCheckout({
           tx,
           () => getSolanaConnection(intent.networkMode),
         )
+      } else if (isTron) {
+        const treasury = requireTreasuryAddress(intent.treasuryAddress, 'tron')
+        if (!activeAddress || !tronProvider) {
+          throw new Error('No hay una wallet TRON conectada vía Reown AppKit para autorizar el pago.')
+        }
+        const tronSessionNs = tronProvider.session?.namespaces?.tron
+        const tronClusterParity = validateTronClusterParity({
+          caipNetworkId: caipNetwork?.caipNetworkId,
+          caipChainId: caipNetwork?.id,
+          expectedNetworkMode: intent.networkMode,
+          sessionChains: tronSessionNs?.chains,
+          sessionAccounts: tronSessionNs?.accounts,
+        })
+        if (!tronClusterParity.ok) {
+          setError(
+            tronClusterParity.error ??
+              `Tu billetera TRON está en ${tronClusterParity.actualLabel}, pero esta orden requiere ${tronClusterParity.expectedLabel}. Cambia de red en tu billetera antes de firmar.`,
+          )
+          return
+        }
+        const tronSignerParity = validateTronSigningParity({
+          activeAddress,
+          intentSenderWallet: intent.senderWallet,
+        })
+        if (!tronSignerParity.ok) {
+          setError(tronSignerParity.error ?? 'La cuenta TRON conectada no coincide con la cotización activa.')
+          return
+        }
+        const tronTx = await buildTronPaymentTransaction({
+          senderAddress: activeAddress,
+          recipientAddress: treasury,
+          asset: (intent.paymentAsset === 'TRX' ? 'TRX' : 'USDT'),
+          expectedAmountAtomic: intent.expectedAmountAtomic,
+          tokenContractAddress: intent.tokenContractAddress ?? undefined,
+          networkMode: intent.networkMode,
+        })
+        txHash = await submitTronTransactionViaProvider({
+          provider: tronProvider,
+          transaction: tronTx,
+          senderAddress: activeAddress,
+          networkMode: intent.networkMode,
+        })
       } else {
         const evmParity = validateEvmSigningParity({
           activeAddress,
@@ -1327,7 +1403,13 @@ export function WalletPaymentCheckout({
                 type="button"
                 className="button button-primary"
                 disabled={loadingIntent || methodUpdating}
-                onClick={() => void createFreshIntent(effectiveNetworkId, selectedAsset, activeAddress)}
+                onClick={() => {
+                  const freshAsset: PaymentAssetSymbol =
+                    useUsdt && Boolean(getPaymentNetworkConfig(effectiveNetworkId, intent?.networkMode).usdtContractAddress)
+                      ? 'USDT'
+                      : NATIVE_SYMBOL_BY_NETWORK[effectiveNetworkId]
+                  void createFreshIntent(effectiveNetworkId, freshAsset, activeAddress)
+                }}
               >
                 Generar nueva cotización
               </button>
@@ -1374,7 +1456,11 @@ export function WalletPaymentCheckout({
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: 10, marginBottom: 12 }}>
                       <div>
                         <strong style={{ fontSize: 12, color: '#22c55e', display: 'block' }}>
-                          {isEvmWallet ? 'Billetera EVM (Reown AppKit)' : 'Billetera Solana (Reown AppKit)'}
+                          {isEvmWallet
+                            ? 'Billetera EVM (Reown AppKit)'
+                            : isTronWallet
+                              ? 'Billetera TRON (Reown AppKit)'
+                              : 'Billetera Solana (Reown AppKit)'}
                         </strong>
                         <code style={{ fontSize: 11, color: '#e2e8f0' }}>
                           {activeAddress.slice(0, 8)}...{activeAddress.slice(-6)}
@@ -1394,7 +1480,11 @@ export function WalletPaymentCheckout({
                             type="button"
                             className={`network-chip-btn ${effectiveNetworkId === net.id ? 'network-chip-active' : ''}`}
                             disabled={loadingIntent || methodUpdating || paying || cancelling || retryingVerification || hasBroadcastTxLock}
-                            onClick={() => void handleSelectNetworkOrAsset(net.id, useUsdt)}
+                            onClick={() => {
+                              const nextUseUsdt =
+                                useUsdt && Boolean(getPaymentNetworkConfig(net.id, intent?.networkMode).usdtContractAddress)
+                              void handleSelectNetworkOrAsset(net.id, nextUseUsdt)
+                            }}
                           >
                             <CryptoIcon symbol={net.icon} size="sm" />
                             <span>{net.label}</span>
@@ -1413,7 +1503,17 @@ export function WalletPaymentCheckout({
                           onClick={() => void handleSelectNetworkOrAsset(effectiveNetworkId, true)}
                         >
                           <CryptoIcon symbol="USDT" size="sm" />
-                          <span>Tether USD (USDT {isSolana ? 'SPL' : 'ERC-20/BEP-20'})</span>
+                          <span>
+                            Tether USD (USDT{' '}
+                            {effectiveNetworkId === 'tron'
+                              ? 'TRC-20'
+                              : effectiveNetworkId === 'solana'
+                                ? 'SPL'
+                                : effectiveNetworkId === 'bnb'
+                                  ? 'BEP-20'
+                                  : 'ERC-20'}
+                            )
+                          </span>
                         </button>
                         <button
                           type="button"
