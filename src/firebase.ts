@@ -459,16 +459,17 @@ export async function registerWithEmail(email: string, password: string, referra
     },
     country: geo.country,
     twoFactorEnabled: false,
-    sponsorId: referrerUid || undefined,
+    ...(referrerUid ? { sponsorId: referrerUid } : {}),
   }
+  const cleanUserDoc = stripUndefinedUserFields(userDoc)
 
   // Save profile to Firestore
   try {
-    await setDoc(doc(db, 'users', user.uid), userDoc)
+    await setDoc(doc(db, 'users', user.uid), cleanUserDoc)
   } catch (err) {
     console.warn('Initial setDoc on /users failed, attempting merge setDoc:', err)
     try {
-      await setDoc(doc(db, 'users', user.uid), userDoc, { merge: true })
+      await setDoc(doc(db, 'users', user.uid), cleanUserDoc, { merge: true })
     } catch (err2) {
       console.error('Critical warning: Firestore setDoc failed during registration:', err2)
     }
@@ -510,7 +511,29 @@ export async function registerWithEmail(email: string, password: string, referra
     }
   }
 
-  return { user, profile: userDoc }
+  return { user, profile: cleanUserDoc }
+}
+
+/** Recursively strips `undefined` fields from plain objects while preserving Firestore FieldValues & arrays */
+export function stripUndefinedUserFields<T>(input: T): T {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return input
+  }
+  if (Object.getPrototypeOf(input) !== Object.prototype) {
+    return input
+  }
+  const cleaned: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (value === undefined) continue
+    cleaned[key] =
+      value !== null &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      Object.getPrototypeOf(value) === Object.prototype
+        ? stripUndefinedUserFields(value)
+        : value
+  }
+  return cleaned as T
 }
 
 /** Ensures a Firestore profile exists for an authenticated user, creating one if missing */
@@ -563,9 +586,10 @@ export async function ensureUserProfile(user: User): Promise<UserProfile | null>
     country: geo.country,
     twoFactorEnabled: false,
   }
+  const cleanUserDoc = stripUndefinedUserFields(userDoc)
 
   try {
-    await setDoc(doc(db, 'users', user.uid), userDoc, { merge: true })
+    await setDoc(doc(db, 'users', user.uid), cleanUserDoc, { merge: true })
     await saveDetectedCountry(user.uid, geo.country, geo.ip).catch(() => {})
     await publishPublicReferralCode(user.uid, myReferralCode)
     await ensureReferralAccount(user.uid, myReferralCode, '')
@@ -574,7 +598,7 @@ export async function ensureUserProfile(user: User): Promise<UserProfile | null>
     console.error('Error creating profile in ensureUserProfile:', err)
   }
 
-  return userDoc
+  return cleanUserDoc
 }
 
 /** Dedicated country detection document operations in /countries/{uid} */
@@ -653,7 +677,10 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
 
 /** Update user profile in Firestore and sync with Firebase Auth */
 export async function updateUserProfile(uid: string, updates: Partial<UserProfile>) {
-  await setDoc(doc(db, 'users', uid), updates as any, { merge: true })
+  const sanitizedUpdates = stripUndefinedUserFields(updates as Record<string, unknown>)
+  if (Object.keys(sanitizedUpdates).length > 0) {
+    await setDoc(doc(db, 'users', uid), sanitizedUpdates as any, { merge: true })
+  }
 
   // Synchronize displayName and photoURL with Firebase Auth if this is current user
   if (auth.currentUser && auth.currentUser.uid === uid) {
