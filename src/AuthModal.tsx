@@ -35,10 +35,13 @@ import {
   EmbudoFunnelProgress,
   advanceEmbudoF1Stage,
   clearEmbudoF1State,
+  emitLeadCapturedEvent,
   readEmbudoF1State,
   readEmbudoPresaleSelection,
+  readLeadCommunicationConsent,
   resolvePostRegisterTransition,
   saveEmbudoPresaleSelection,
+  saveLeadCommunicationConsent,
   startEmbudoF1Registration,
   type EmbudoPresaleSelection,
 } from './components/embudo-f1'
@@ -83,6 +86,9 @@ export function AuthModal() {
   const [resendCooldown, setResendCooldown] = useState(0)
   const [emulatorOobInput, setEmulatorOobInput] = useState('')
   const [embudoF1Active, setEmbudoF1Active] = useState(false)
+  const [allowsCommunication, setAllowsCommunication] = useState<boolean>(() =>
+    readLeadCommunicationConsent(),
+  )
   const [preloadedConfig, setPreloadedConfig] = useState<EmbudoPresaleSelection>(() =>
     readEmbudoPresaleSelection(),
   )
@@ -199,6 +205,16 @@ export function AuthModal() {
       setError(validationError)
       return
     }
+    // Regla B (SCRUM-336): emitir user/lead-captured solo si dejó email válido y permite comunicación
+    emitLeadCapturedEvent({
+      email,
+      status: 'registering',
+      allowsCommunication,
+      source: 'register-welcome',
+      powerTh: preloadedConfig.powerTh,
+      priceUsd: preloadedConfig.priceUsd,
+      designSlug: preloadedConfig.designSlug,
+    })
     setStep(2)
   }
 
@@ -227,6 +243,15 @@ export function AuthModal() {
         isAuthenticated: true,
       })
       await register(email, password, referralCode)
+      emitLeadCapturedEvent({
+        email,
+        status: postRegister.deferEmailVerification ? 'configuring' : 'registering',
+        allowsCommunication,
+        source: 'register-welcome',
+        powerTh: preloadedConfig.powerTh,
+        priceUsd: preloadedConfig.priceUsd,
+        designSlug: preloadedConfig.designSlug,
+      })
       if (postRegister.deferEmailVerification) {
         advanceEmbudoF1Stage('configuring')
         closeAuthModal()
@@ -731,6 +756,24 @@ export function AuthModal() {
                         />
                       </div>
                     </div>
+
+                    <label className="flex items-start gap-2 text-[11px] text-white/60 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={allowsCommunication}
+                        onChange={(e) => {
+                          setAllowsCommunication(e.target.checked)
+                          saveLeadCommunicationConsent(e.target.checked)
+                        }}
+                        data-testid="register-lead-comms-optin"
+                        className="mt-0.5 rounded border-white/25 bg-white/5 accent-emerald-500"
+                      />
+                      <span>
+                        {language === 'en'
+                          ? 'Allow welcome email, miner setup reminders, and purchase access updates.'
+                          : 'Permito recibir correo de bienvenida, seguimiento de mi miner y mi recibo/acceso.'}
+                      </span>
+                    </label>
 
                     <button
                       type="submit"

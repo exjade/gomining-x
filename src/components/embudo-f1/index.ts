@@ -36,3 +36,22 @@ export {
   type StorageLike,
 } from './funnelState'
 export { EmbudoFunnelProgress, EmbudoPresaleSkinNotice } from './EmbudoFunnelProgress'
+export {
+  LEAD_CAPTURED_EVENT_NAME,
+  LEAD_COMMS_STORAGE_KEY,
+  LEAD_LAST_CAPTURED_STORAGE_KEY,
+  buildLeadCapturedEvent,
+  deriveLeadName,
+  emitLeadCapturedEvent,
+  isValidLeadEmail,
+  normalizeLeadEmail,
+  readLeadCommunicationConsent,
+  resolveLeadCaptureApiUrl,
+  saveLeadCommunicationConsent,
+  shouldCaptureLead,
+  type EmitLeadOptions,
+  type LeadCaptureInput,
+  type LeadCaptureSource,
+  type LeadCapturedEventPayload,
+  type LeadFunnelStatus,
+} from './leadCapture'

@@ -48,6 +48,7 @@ import {
   EmbudoPresaleSkinNotice,
   advanceEmbudoF1Stage,
   dismissPendingEmbudoPurchase,
+  emitLeadCapturedEvent,
   hasCompletedPurchaseOrFunnelReceipt,
   hasEmbudoF1QueryFlag,
   hasPendingEmbudoPurchase,
@@ -55,10 +56,12 @@ import {
   readBuilderSelectedDesign,
   readEmbudoF1State,
   readEmbudoPresaleSelection,
+  readLeadCommunicationConsent,
   resumeEmbudoF1Modal,
   returnEmbudoF1ToRegister,
   saveBuilderSelectedDesign,
   saveEmbudoPresaleSelection,
+  saveLeadCommunicationConsent,
   shouldLockHomeForEmailVerification,
   startEmbudoF1Registration,
 } from './components/embudo-f1'
@@ -2234,7 +2237,16 @@ function MinerBuilderDialog({
   const [accepted, setAccepted] = useState(false)
   const [receipt, setReceipt] = useState<DemoReceipt | null>(null)
   const [feedback, setFeedback] = useState('')
+  const { user: builderAuthUser } = useAuth()
+  const [checkoutLeadEmail, setCheckoutLeadEmail] = useState<string>(() => builderAuthUser?.email || '')
+  const [allowsCommunication, setAllowsCommunication] = useState<boolean>(() => readLeadCommunicationConsent())
   const [plansByTab, setPlansByTab] = useState<Partial<Record<MinerCategoryTab, MinerPlan[]>>>({})
+
+  useEffect(() => {
+    if (builderAuthUser?.email && !checkoutLeadEmail) {
+      setCheckoutLeadEmail(builderAuthUser.email)
+    }
+  }, [builderAuthUser?.email, checkoutLeadEmail])
 
   useEffect(() => {
     let active = true
@@ -2396,6 +2408,18 @@ function MinerBuilderDialog({
       setReceipt(result.receipt)
       setStage('receipt')
       dismissPendingEmbudoPurchase()
+      // Regla B (SCRUM-336): emitir user/lead-captured en purchased para cancelar correo de recuperación
+      emitLeadCapturedEvent({
+        email: checkoutLeadEmail || builderAuthUser?.email || '',
+        name: builderAuthUser?.displayName || undefined,
+        status: 'purchased',
+        allowsCommunication,
+        source: 'purchase-receipt',
+        powerTh,
+        priceUsd: total,
+        designSlug: selectedDesign.slug,
+        uid: builderAuthUser?.uid || undefined,
+      })
     } catch (cause) {
       setFeedback(sanitizeFirestoreErrorMessage(cause instanceof Error ? cause.message : null, isAuth ? 'No se pudo procesar la compra.' : 'No se pudo procesar la acción.'))
     }
@@ -2487,6 +2511,33 @@ function MinerBuilderDialog({
                 <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
                 <span>Revisaré la red, importe en USD y el destino en mi wallet antes de aprobar.</span>
               </label>
+              <div className="checkout-lead-capture-box" data-testid="checkout-lead-capture-box" style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px 12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.03)' }}>
+                <label htmlFor="checkout-receipt-email" style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.78)', fontWeight: 600 }}>
+                  Correo para recibo y acceso de tu compra
+                </label>
+                <input
+                  id="checkout-receipt-email"
+                  type="email"
+                  value={checkoutLeadEmail}
+                  onChange={(event) => setCheckoutLeadEmail(event.target.value)}
+                  placeholder="tu@correo.com"
+                  data-testid="checkout-receipt-email-input"
+                  style={{ height: '34px', padding: '0 10px', borderRadius: '9px', border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.04)', color: '#ffffff', fontSize: '12.5px' }}
+                />
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'rgba(255,255,255,0.62)', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={allowsCommunication}
+                    onChange={(event) => {
+                      setAllowsCommunication(event.target.checked)
+                      saveLeadCommunicationConsent(event.target.checked)
+                    }}
+                    data-testid="checkout-lead-comms-optin"
+                    style={{ accentColor: '#10b981' }}
+                  />
+                  <span>Permito recibir mi recibo, acceso y seguimiento de mi miner por correo.</span>
+                </label>
+              </div>
               {feedback && <small className="inline-feedback" role="status">{feedback}</small>}
               {isAuth ? (
                 <div className="miner-platform-balance-section" style={{ marginTop: '8px' }}>
@@ -2512,6 +2563,18 @@ function MinerBuilderDialog({
                 className="button button-primary"
                 disabled={!accepted}
                 onClick={() => {
+                  // Regla B (SCRUM-336): capturar lead pre-pago si dejó email válido y permite comunicación
+                  emitLeadCapturedEvent({
+                    email: checkoutLeadEmail || builderAuthUser?.email || '',
+                    name: builderAuthUser?.displayName || undefined,
+                    status: 'paying',
+                    allowsCommunication,
+                    source: 'checkout-prepay',
+                    powerTh,
+                    priceUsd: total,
+                    designSlug: selectedDesign.slug,
+                    uid: builderAuthUser?.uid || undefined,
+                  })
                   onPayWithWallet(productName, total, 'USD', packageId, purchaseMode)
                 }}
               >
@@ -2650,6 +2713,17 @@ function MinerBuilderDialog({
                       if (isEmbudoF1) {
                         advanceEmbudoF1Stage('paying', undefined, { selectedDesignSlug: selectedDesign.slug })
                       }
+                      emitLeadCapturedEvent({
+                        email: checkoutLeadEmail || builderAuthUser?.email || '',
+                        name: builderAuthUser?.displayName || undefined,
+                        status: 'configuring',
+                        allowsCommunication,
+                        source: 'builder-configure',
+                        powerTh,
+                        priceUsd: total,
+                        designSlug: selectedDesign.slug,
+                        uid: builderAuthUser?.uid || undefined,
+                      })
                       setAccepted(false)
                       setStage('review')
                     }}
