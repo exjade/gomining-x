@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useId, type ReactElement, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import {
   WITHDRAWAL_ASSET,
   formatMicrosAsUsdt,
@@ -84,7 +85,7 @@ export function WithdrawalDetailsModal({
     withdrawal.conversionFeeMicros;
   const networkConfig = networksCatalog?.find((n) => n.id === withdrawal.networkId) ?? null;
 
-  return (
+  const modalContent = (
     <div
       className="wth-modal-backdrop"
       role="presentation"
@@ -103,7 +104,7 @@ export function WithdrawalDetailsModal({
         <header className="wth-modal-header">
           <div className="wth-modal-heading">
             <div className="wth-modal-kicker-row">
-              <span className="wth-mini-tag wth-tabular-mono">{WITHDRAWAL_ASSET}</span>
+              <span className="wth-mini-tag wth-mini-tag--emerald wth-tabular-mono">{WITHDRAWAL_ASSET}</span>
               <WithdrawalStatusBadge status={withdrawal.status} showCode={safeMode === 'admin'} />
             </div>
             <h3 id={titleId} className="wth-modal-title wth-tabular-mono">
@@ -321,4 +322,9 @@ export function WithdrawalDetailsModal({
       </section>
     </div>
   );
+
+  if (typeof document !== 'undefined' && document.body) {
+    return createPortal(modalContent, document.body);
+  }
+  return modalContent;
 }

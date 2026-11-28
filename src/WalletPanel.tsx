@@ -68,9 +68,10 @@ export function WalletPanel({ session }: { session?: WalletSession }) {
   }
 
   return (
-    <div className="wallet-panel-container">
-      <div className="wallet-card-header">
+    <div className="wallet-panel-container f5-wallet-panel" data-testid="f5-wallet-panel">
+      <div className="wallet-card-header f5-glass-card">
         <div>
+          <p className="eyebrow">MULTICHAIN · REOWN APPKIT</p>
           <h2>Cartera Web3 (Reown AppKit)</h2>
           <p className="wallet-panel-desc">
             Conecta o gestiona tu billetera EVM, Solana o TRON de forma segura mediante el selector unificado Reown AppKit (MetaMask, Phantom, Solflare, Trust Wallet, OKX, TronLink vía WalletConnect y +300 wallets).
@@ -98,7 +99,7 @@ export function WalletPanel({ session }: { session?: WalletSession }) {
       </div>
 
       {isConnected && (
-        <div className="connected-wallet-card" style={{ marginBottom: 24 }}>
+        <div className="connected-wallet-card f5-glass-card">
           <div className="wallet-status-badge">
             <span className="status-indicator-green" /> Conectada vía Reown AppKit
           </div>
@@ -152,34 +153,21 @@ export function WalletPanel({ session }: { session?: WalletSession }) {
         </div>
       )}
 
-      <div
-        style={{
-          background: 'linear-gradient(135deg, rgba(124,58,237,0.12), rgba(15,23,42,0.4))',
-          border: '1px solid rgba(124,58,237,0.3)',
-          borderRadius: 14,
-          padding: '16px 20px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 12,
-        }}
-      >
-        <div>
-          <span style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', letterSpacing: '0.06em' }}>
+      <div className="wallet-universal-banner f5-glass-card">
+        <div className="wallet-universal-copy">
+          <span className="wallet-universal-kicker">
             REOWN APPKIT · EVM, SOLANA &amp; TRON
           </span>
-          <h3 style={{ margin: '4px 0 2px', fontSize: 16, color: '#f8fafc' }}>
+          <h3>
             Conexión Unificada (+300 Wallets y QR Móvil)
           </h3>
-          <p style={{ margin: 0, fontSize: 13, color: '#94a3b8' }}>
+          <p>
             Compatible con MetaMask, Phantom, Solflare, Trust Wallet, Coinbase Wallet y WalletConnect v2.
           </p>
         </div>
         <button
           type="button"
-          className="button button-primary"
-          style={{ whiteSpace: 'nowrap' }}
+          className="button button-primary wallet-universal-cta"
           onClick={() => open()}
         >
           {isConnected ? 'Gestionar en Reown AppKit' : 'Conectar con Reown AppKit'}

@@ -9,26 +9,39 @@ export function useLenisScroll() {
   const lenisRef = useRef<InstanceType<typeof Lenis> | null>(null)
 
   useEffect(() => {
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      (window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+        window.matchMedia('(pointer: coarse)').matches)
+    ) {
+      return
+    }
+
     const lenis = new Lenis({
-      duration: 1.2,
-      easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      lerp: 0.14,
       orientation: 'vertical',
       gestureOrientation: 'vertical',
       smoothWheel: true,
-      wheelMultiplier: 1,
-      touchMultiplier: 2,
+      syncTouch: false,
+      wheelMultiplier: 1.05,
+      touchMultiplier: 1.5,
     })
 
     lenisRef.current = lenis
 
-    // Sync Lenis with GSAP ScrollTrigger
-    const handleScroll = ScrollTrigger.update
+    // Only invoke GSAP ScrollTrigger.update if triggers are actually registered
+    const handleScroll = () => {
+      if (ScrollTrigger.getAll().length > 0) {
+        ScrollTrigger.update()
+      }
+    }
     const handleTick = (time: number) => {
       lenis.raf(time * 1000)
     }
     lenis.on('scroll', handleScroll)
     gsap.ticker.add(handleTick)
-    gsap.ticker.lagSmoothing(0)
+    gsap.ticker.lagSmoothing(500, 33)
 
     return () => {
       lenis.off('scroll', handleScroll)

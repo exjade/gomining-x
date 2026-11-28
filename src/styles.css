@@ -7223,9 +7223,1821 @@ body:has(.miner-builder-modal) { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .miner-builder-modal *,
   .miner-builder-modal *::before,
-  .miner-builder-modal *::after {
+  .miner-builder-modal *::after,
+  .pending-miner-banner,
+  .pending-miner-banner * {
     scroll-behavior: auto !important;
     transition-duration: .01ms !important;
     animation-duration: .01ms !important;
+  }
+}
+
+/* Pending Miner Resume Banner (/home above .account-hero) */
+.pending-miner-banner,
+section.pending-miner-banner {
+  position: relative;
+  top: auto;
+  z-index: 5;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: 100%;
+  margin: 0 0 16px;
+  padding: 16px 20px;
+  border-radius: 18px;
+  background: #0b0c10;
+  background-color: #0b0c10;
+  background-image: none;
+  border: 1px solid #10b981;
+  box-shadow:
+    inset 3px 0 0 #10b981,
+    0 14px 34px rgba(0, 0, 0, 0.38);
+  color: #f8fafc;
+}
+
+.pending-miner-banner-left,
+section.pending-miner-banner .pending-miner-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pending-miner-banner-thumb,
+section.pending-miner-banner .pending-miner-banner-thumb {
+  display: block;
+  width: 72px;
+  height: 72px;
+  min-width: 72px;
+  min-height: 72px;
+  flex: 0 0 72px;
+  padding: 6px;
+  border-radius: 14px;
+  object-fit: contain;
+  background: radial-gradient(circle at 50% 42%, rgba(16, 185, 129, 0.18), rgba(255, 255, 255, 0.02) 72%);
+  border: 1px solid rgba(16, 185, 129, 0.34);
+}
+
+.pending-miner-banner-copy,
+section.pending-miner-banner .pending-miner-banner-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pending-miner-banner-kicker,
+section.pending-miner-banner .pending-miner-banner-kicker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 1px;
+  color: #10b981;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.2;
+}
+
+.pending-miner-banner-kicker > span:first-child,
+section.pending-miner-banner .pending-miner-banner-kicker > span:first-child {
+  color: #10b981;
+  text-transform: uppercase;
+}
+
+.pending-miner-banner-stage,
+section.pending-miner-banner .pending-miner-banner-stage {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.14);
+  border: 1px solid rgba(16, 185, 129, 0.36);
+  color: #6ee7b7;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.pending-miner-banner-copy h2,
+section.pending-miner-banner .pending-miner-banner-copy h2 {
+  margin: 0;
+  color: #f8fafc;
+  font-family: Manrope, 'DM Sans', sans-serif;
+  font-size: clamp(16px, 1.5vw, 19px);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.pending-miner-banner-copy p,
+section.pending-miner-banner .pending-miner-banner-copy p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 12.5px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+.pending-miner-banner-copy p strong,
+section.pending-miner-banner .pending-miner-banner-copy p strong {
+  color: #10b981;
+  font-weight: 700;
+}
+
+.pending-miner-banner-actions,
+section.pending-miner-banner .pending-miner-banner-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.pending-miner-resume-btn,
+section.pending-miner-banner .button.pending-miner-resume-btn {
+  min-height: 40px !important;
+  padding: 0 16px !important;
+  gap: 8px;
+  border-radius: 11px !important;
+  border: 1px solid #10b981 !important;
+  background: #10b981 !important;
+  color: #04130d !important;
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.22);
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+.pending-miner-resume-btn span,
+section.pending-miner-banner .button.pending-miner-resume-btn span {
+  display: inline-block;
+  font-size: 14px;
+  line-height: 1;
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.pending-miner-resume-btn:hover,
+section.pending-miner-banner .button.pending-miner-resume-btn:hover {
+  background: #34d399 !important;
+  border-color: #34d399 !important;
+  box-shadow: 0 10px 24px rgba(16, 185, 129, 0.3);
+  filter: none;
+  transform: translateY(-1px);
+}
+
+.pending-miner-resume-btn:hover span,
+section.pending-miner-banner .button.pending-miner-resume-btn:hover span {
+  transform: translateX(2px);
+}
+
+.pending-miner-resume-btn:active,
+section.pending-miner-banner .button.pending-miner-resume-btn:active {
+  transform: scale(0.97) !important;
+}
+
+.pending-miner-verify-btn,
+section.pending-miner-banner .button.pending-miner-verify-btn {
+  min-height: 40px !important;
+  padding: 0 14px !important;
+  border-radius: 11px !important;
+  border: 1px solid rgba(16, 185, 129, 0.38) !important;
+  background: rgba(16, 185, 129, 0.1) !important;
+  color: #a7f3d0 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  white-space: nowrap;
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+.pending-miner-verify-btn:hover,
+section.pending-miner-banner .button.pending-miner-verify-btn:hover {
+  background: rgba(16, 185, 129, 0.18) !important;
+  border-color: #10b981 !important;
+  color: #ecfdf5 !important;
+  filter: none;
+  transform: translateY(-1px);
+}
+
+.pending-miner-verify-btn:active,
+section.pending-miner-banner .button.pending-miner-verify-btn:active {
+  transform: scale(0.97) !important;
+}
+
+.pending-miner-dismiss-btn,
+section.pending-miner-banner .pending-miner-dismiss-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: #94a3b8;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.pending-miner-dismiss-btn:hover,
+section.pending-miner-banner .pending-miner-dismiss-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #f8fafc;
+}
+
+.pending-miner-dismiss-btn:active,
+section.pending-miner-banner .pending-miner-dismiss-btn:active {
+  transform: scale(0.97);
+}
+
+section.pending-miner-banner .button:focus-visible,
+section.pending-miner-banner .pending-miner-dismiss-btn:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: 2px;
+}
+
+@media (max-width: 860px) {
+  .pending-miner-banner,
+  section.pending-miner-banner {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 14px;
+    padding: 16px;
+  }
+
+  .pending-miner-banner-left,
+  section.pending-miner-banner .pending-miner-banner-left {
+    flex: 0 0 auto;
+    align-items: flex-start;
+    padding-right: 46px;
+  }
+
+  .pending-miner-banner-actions,
+  section.pending-miner-banner .pending-miner-banner-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: stretch;
+    gap: 8px;
+  }
+
+  .pending-miner-resume-btn,
+  .pending-miner-verify-btn,
+  section.pending-miner-banner .button.pending-miner-resume-btn,
+  section.pending-miner-banner .button.pending-miner-verify-btn {
+    flex: 1 1 180px;
+    width: 100%;
+  }
+
+  .pending-miner-dismiss-btn,
+  section.pending-miner-banner .pending-miner-dismiss-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .pending-miner-banner,
+  section.pending-miner-banner {
+    padding: 14px;
+    border-radius: 16px;
+  }
+
+  .pending-miner-banner-left,
+  section.pending-miner-banner .pending-miner-banner-left {
+    gap: 12px;
+    padding-right: 46px;
+  }
+
+  .pending-miner-banner-copy h2,
+  section.pending-miner-banner .pending-miner-banner-copy h2 {
+    font-size: 15.5px;
+  }
+
+  .pending-miner-banner-copy p,
+  section.pending-miner-banner .pending-miner-banner-copy p {
+    font-size: 12px;
+  }
+
+  .pending-miner-resume-btn,
+  .pending-miner-verify-btn,
+  section.pending-miner-banner .button.pending-miner-resume-btn,
+  section.pending-miner-banner .button.pending-miner-verify-btn {
+    flex: 1 1 100%;
+  }
+}
+
+/* Post-Payment /home Email Verification Gate & Null-Profile Guard (EMBUDO-AUTH-GATE-VERIFICACION) */
+section.home-verify-email-gate,
+section.profile-missing-error-card {
+  max-width: 680px;
+  margin: 32px auto;
+  padding: 24px 28px;
+  border-radius: 18px;
+  background-color: #0b0c10;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 20px 48px -20px rgba(0, 0, 0, 0.78);
+  color: #f8fafc;
+}
+
+section.profile-missing-error-card {
+  border-color: rgba(248, 113, 113, 0.38);
+}
+
+section.home-verify-email-gate h1,
+section.profile-missing-error-card h1 {
+  margin: 6px 0 8px;
+  font-size: 22px;
+  line-height: 1.25;
+  color: #ffffff;
+}
+
+section.home-verify-email-gate p,
+section.profile-missing-error-card p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: rgba(226, 232, 240, 0.76);
+}
+
+.profile-missing-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.profile-missing-error-actions .button {
+  transition:
+    transform 150ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 150ms ease,
+    border-color 150ms ease;
+}
+
+.profile-missing-error-actions .button:active {
+  transform: scale(0.97);
+}
+
+/* ==========================================================================
+   EMBUDO-F5 (SCRUM-337): UNIFIED LANDING DESIGN FOR 5 REAL CLIENT SCREENS
+   Scope: .app-shell:not(.app-shell-source-landing) — Landing (/) untouched.
+   Palette: #050505 obsidian · #0a0b0e glass · #10b981 / #34d399 emerald
+   ========================================================================== */
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) {
+  --bg: #050505;
+  --sidebar: #08090c;
+  --panel: #0a0b0e;
+  --panel-raised: #0e1015;
+  --border: rgba(255, 255, 255, 0.09);
+  --muted: rgba(255, 255, 255, 0.58);
+  --text: #ffffff;
+  --purple: #10b981;
+  --purple-2: #34d399;
+  --green: #10b981;
+  background-color: #050505;
+  color: #ffffff;
+  font-family: 'Inter', 'DM Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .workspace {
+  background:
+    radial-gradient(ellipse 70% 36% at 50% -8%, rgba(16, 185, 129, 0.07), transparent 65%),
+    #050505;
+}
+
+/* Unified Topbar & Shell Chrome */
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .topbar {
+  background: rgba(6, 7, 10, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .brand-mark,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .avatar,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .header-balance > span {
+  background: #10b981;
+  color: #04130d;
+  border-color: rgba(52, 211, 153, 0.45);
+  box-shadow: 0 0 18px rgba(16, 185, 129, 0.24);
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .header-balance,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .header-icon-link,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .wallet-topbar-button,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .cart-button,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .icon-button,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .lang-toggle-btn,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .theme-toggle-btn {
+  background: #0d0f14 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #f8fafc !important;
+  box-shadow: none !important;
+  font-variant-numeric: tabular-nums;
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 180ms ease;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .wallet-topbar-button > span,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .wallet-topbar-button > svg {
+  color: #34d399 !important;
+  stroke: #34d399 !important;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .header-auth-btn {
+  background: #10b981;
+  color: #04130d;
+  font-weight: 700;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .primary-nav-link-active {
+  color: #ffffff;
+  border-bottom-color: #10b981;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .nav-dropdown {
+  background: #0a0b0e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .nav-dropdown-link > span {
+  color: #34d399;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .nav-dropdown-link:hover,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .nav-dropdown-link-active {
+  background: rgba(16, 185, 129, 0.14);
+  color: #ffffff;
+}
+
+/* Shared Kickers, Headings, Badges & Route Tabs */
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .replica-note {
+  background: rgba(16, 185, 129, 0.06);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  color: rgba(255, 255, 255, 0.72);
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .note-icon {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.45);
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .page-icon {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.26);
+  color: #34d399;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .eyebrow,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .card-kicker {
+  color: #34d399;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px !important;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .evidence-chip {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 12px !important;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .evidence-chip > span {
+  color: #10b981;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .data-source-note {
+  background: #0a0b0e;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .source-lock {
+  color: #34d399;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .route-tabs {
+  background: #0a0b0e;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  padding: 4px;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .route-tab {
+  color: rgba(255, 255, 255, 0.6);
+  border-radius: 9px;
+  font-weight: 600;
+  transition:
+    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms ease;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .route-tab-active {
+  background: rgba(16, 185, 129, 0.16);
+  color: #6ee7b7;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .proposal-badge {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #6ee7b7;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px !important;
+  padding: 5px 10px;
+  border-radius: 999px;
+}
+
+/* Unified Buttons & Tactile Feedback (Emil Kowalski Craft) */
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .button,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .pwm-button {
+  border-radius: 12px;
+  font-weight: 700;
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .button:active:not(:disabled),
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .pwm-button:active:not(:disabled),
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .quick-action:active:not(:disabled),
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .subscription-cycle-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .button-primary,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .pwm-button.pwm-button-primary {
+  background: #10b981;
+  color: #04130d;
+  border: 1px solid rgba(52, 211, 153, 0.5);
+  box-shadow: 0 10px 26px -10px rgba(16, 185, 129, 0.45);
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .button-secondary,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .button-outline,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .button-outline-sm {
+  background: rgba(255, 255, 255, 0.04);
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: none;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .button-quiet {
+  background: rgba(255, 255, 255, 0.025);
+  color: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .button-primary:hover:not(:disabled),
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .pwm-button.pwm-button-primary:hover:not(:disabled) {
+    background: #34d399;
+    filter: none;
+    transform: translateY(-1px);
+  }
+
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .button-secondary:hover:not(:disabled),
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .button-outline:hover:not(:disabled),
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .button-outline-sm:hover:not(:disabled) {
+    background: rgba(16, 185, 129, 0.1);
+    border-color: rgba(16, 185, 129, 0.36);
+    color: #ffffff;
+    filter: none;
+    transform: translateY(-1px);
+  }
+}
+
+/* Shared Floating / Glass Surface & Skeleton System */
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .f5-glass-card,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .content-panel {
+  background: rgba(10, 11, 14, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 20px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 18px 42px -24px rgba(0, 0, 0, 0.85);
+}
+
+.f5-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  padding: 6px 0;
+}
+
+.f5-skeleton-card {
+  min-height: 180px;
+  padding: 20px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(110deg, #0d0f14 25%, #141821 45%, #0d0f14 65%);
+  background-size: 220% 100%;
+  animation: f5-shimmer 1.6s ease-in-out infinite;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.f5-skeleton-line {
+  display: block;
+  width: 52%;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.22);
+}
+
+@keyframes f5-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ==========================================================================
+   SCREEN 1: HomeDashboard (.f5-home-dashboard) — Zero 3D Sim, Real Cards
+   ========================================================================== */
+.f5-home-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+}
+
+body:not(.light-theme) .f5-home-dashboard .account-hero {
+  margin: 0;
+  padding: 26px 28px;
+  border-radius: 22px;
+  background:
+    radial-gradient(ellipse 60% 80% at 88% 0%, rgba(16, 185, 129, 0.14), transparent 58%),
+    #0a0b0e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.f5-home-dashboard .account-hero-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+body:not(.light-theme) .f5-home-dashboard .account-hero-heading h1 {
+  margin: 4px 0 0;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: clamp(32px, 4vw, 46px) !important;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+  color: #ffffff;
+}
+
+.f5-hero-meta {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+body:not(.light-theme) .f5-home-dashboard .account-data-state {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #6ee7b7;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px !important;
+  padding: 6px 11px;
+}
+
+body:not(.light-theme) .f5-home-dashboard .account-data-state i {
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.65);
+}
+
+.f5-hero-stat-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px !important;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.f5-home-dashboard .quick-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 22px 0 0;
+}
+
+body:not(.light-theme) .f5-home-dashboard .quick-action {
+  min-height: 52px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: #101319;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: #f8fafc;
+  justify-content: flex-start;
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+body:not(.light-theme) .f5-home-dashboard .quick-action:first-child {
+  background: #10b981;
+  border-color: rgba(52, 211, 153, 0.55);
+  color: #04130d;
+}
+
+body:not(.light-theme) .f5-home-dashboard .quick-action:first-child strong,
+body:not(.light-theme) .f5-home-dashboard .quick-action:first-child > span {
+  color: #04130d !important;
+}
+
+body:not(.light-theme) .f5-home-dashboard .quick-action:not(:first-child) > span {
+  color: #34d399 !important;
+}
+
+body:not(.light-theme) .f5-home-dashboard .market-strip {
+  margin: 0;
+  padding: 12px 18px;
+  background: #0a0b0e;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 16px;
+}
+
+body:not(.light-theme) .f5-home-dashboard .market-item:nth-of-type(3) > span {
+  background: rgba(16, 185, 129, 0.14);
+  color: #34d399;
+}
+
+body:not(.light-theme) .f5-home-dashboard .market-status span {
+  background: #10b981;
+}
+
+body:not(.light-theme) .f5-home-dashboard .quest-board {
+  margin: 0;
+  padding: 22px 24px;
+  background: #0a0b0e;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 20px;
+}
+
+.f5-home-dashboard .quest-board-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.f5-home-dashboard .quest-progress-count {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 20px !important;
+  font-weight: 800;
+  color: #34d399;
+  font-variant-numeric: tabular-nums;
+}
+
+.f5-home-dashboard .quest-progress-track {
+  height: 6px;
+  margin: 14px 0 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+
+.f5-home-dashboard .quest-progress-track > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #10b981;
+  transition: width 240ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.f5-home-dashboard .quest-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+body:not(.light-theme) .f5-home-dashboard .quest-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #0e1015;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.f5-home-dashboard .quest-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  color: #34d399;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px !important;
+  font-weight: 700;
+}
+
+.f5-home-dashboard .quest-copy {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.f5-home-dashboard .quest-copy small {
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.f5-home-dashboard .quest-arrow {
+  color: #34d399;
+}
+
+body:not(.light-theme) .f5-home-dashboard .dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+body:not(.light-theme) .f5-home-dashboard .dashboard-card {
+  min-height: 148px;
+  padding: 20px;
+  border-radius: 18px;
+  background: #0a0b0e;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
+body:not(.light-theme) .f5-home-dashboard .card-icon,
+body:not(.light-theme) .f5-home-dashboard .card-icon.purple,
+body:not(.light-theme) .f5-home-dashboard .card-icon.platinum {
+  background: rgba(16, 185, 129, 0.11);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: #34d399;
+}
+
+body:not(.light-theme) .f5-home-dashboard .card-link {
+  color: #34d399;
+}
+
+.f5-home-dashboard .explore-section {
+  margin: 4px 0 0;
+  padding: 0;
+}
+
+.f5-home-dashboard .explore-grid,
+.f5-home-dashboard .platform-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+body:not(.light-theme) .f5-home-dashboard .explore-card {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: #0a0b0e;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
+body:not(.light-theme) .f5-home-dashboard .explore-icon {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.24);
+  color: #34d399;
+}
+
+body:not(.light-theme) .f5-home-dashboard .explore-badge {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.26);
+  color: #6ee7b7;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px !important;
+}
+
+.f5-home-dashboard .mining-source-panel {
+  margin: 0;
+}
+
+.f5-home-dashboard .mining-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 4px 20px 16px;
+}
+
+body:not(.light-theme) .f5-home-dashboard .mining-metric {
+  background: #0e1015;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+
+body:not(.light-theme) .f5-home-dashboard .mining-metric > strong {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 18px !important;
+  color: #34d399;
+  font-variant-numeric: tabular-nums;
+}
+
+body:not(.light-theme) .f5-home-dashboard .mining-source-note {
+  background: rgba(16, 185, 129, 0.05);
+  border: 1px solid rgba(16, 185, 129, 0.18);
+  color: rgba(255, 255, 255, 0.68);
+}
+
+/* ==========================================================================
+   SCREEN 2: MinerFarm ([data-authenticated-miner-farm="true"].f5-miner-farm)
+   Strictly 2D MinerAppearancePreview — Zero 3D Sim
+   ========================================================================== */
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm {
+  display: grid;
+  gap: 16px;
+  background: transparent;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-mining-farm,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-farm-banner,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-farm-miners {
+  background: #0a0b0e !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  border-radius: 20px !important;
+  padding: 22px 24px !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-farm-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 22px !important;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-farm-banner-mark {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border-radius: 10px;
+  background: #10b981 !important;
+  color: #04130d !important;
+  font-weight: 800;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-farm-metrics {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+  margin-top: 16px;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-farm-header-actions .pwm-button {
+  background: #101319 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.76) !important;
+  box-shadow: none !important;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-farm-metric > button,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-farm-tools > button {
+  background: #10141b !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #e2e8f0 !important;
+  box-shadow: none !important;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-farm-metric > button:not(:disabled) {
+  border-color: rgba(16, 185, 129, 0.34) !important;
+  color: #34d399 !important;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-farm-metric {
+  background: #0e1015 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 15px !important;
+  padding: 14px 16px !important;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-farm-metric-icon {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border: 1px solid rgba(16, 185, 129, 0.26) !important;
+  color: #34d399 !important;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-farm-metric strong {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 20px !important;
+  font-variant-numeric: tabular-nums;
+  color: #ffffff;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-miner-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 16px !important;
+  margin-top: 16px;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-miner-tile {
+  width: 100% !important;
+  max-width: 100% !important;
+  background: #0e1015 !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  border-radius: 18px !important;
+  padding: 14px !important;
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 180ms ease;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-farm-empty {
+  min-height: 220px;
+  padding: 32px 20px;
+  border-radius: 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  background: #0d0f14;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-farm-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  color: #34d399;
+  font-size: 22px !important;
+}
+
+/* ==========================================================================
+   SCREEN 3: WalletPanel (.f5-wallet-panel)
+   ========================================================================== */
+.wallet-panel-container.f5-wallet-panel {
+  max-width: 1140px;
+  margin: 0 auto;
+  width: 100%;
+  display: grid;
+  gap: 18px;
+}
+
+.f5-wallet-panel .wallet-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 24px 26px;
+}
+
+.f5-wallet-panel .wallet-card-header h2 {
+  margin: 4px 0 6px;
+  color: #ffffff;
+}
+
+.f5-wallet-panel .wallet-panel-desc {
+  margin: 0;
+  max-width: 680px;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.f5-wallet-panel .connected-wallet-card {
+  padding: 22px 24px;
+  border-color: rgba(16, 185, 129, 0.32);
+  display: grid;
+  gap: 16px;
+}
+
+.f5-wallet-panel .wallet-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.32);
+  color: #6ee7b7;
+  font-weight: 700;
+}
+
+.f5-wallet-panel .status-indicator-green {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.65);
+}
+
+.f5-wallet-panel .wallet-info-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.f5-wallet-panel .wallet-info-item {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #0e1015;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  gap: 6px;
+}
+
+.f5-wallet-panel .wallet-address-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.f5-wallet-panel .wallet-address-row code {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  color: #34d399;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.f5-wallet-panel .wallet-management-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.f5-wallet-panel .wallet-universal-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 26px;
+  background:
+    linear-gradient(120deg, rgba(16, 185, 129, 0.1), rgba(10, 11, 14, 0.96) 56%),
+    #0a0b0e;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+}
+
+.f5-wallet-panel .wallet-universal-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.f5-wallet-panel .wallet-universal-kicker {
+  color: #34d399;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px !important;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.f5-wallet-panel .wallet-universal-copy h3 {
+  margin: 0;
+  color: #ffffff;
+}
+
+.f5-wallet-panel .wallet-universal-copy p {
+  margin: 2px 0 0;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.f5-wallet-panel .wallet-universal-cta {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.f5-wallet-panel .wallet-direct-section {
+  display: grid;
+  gap: 14px;
+}
+
+.f5-wallet-panel .wallet-direct-heading {
+  margin: 0;
+  color: #ffffff;
+}
+
+.f5-wallet-panel .wallet-options-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  padding: 0;
+}
+
+body:not(.light-theme) .f5-wallet-panel .wallet-option {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  padding: 20px;
+  border-radius: 18px;
+  background: #0a0b0e;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 180ms ease;
+}
+
+body:not(.light-theme) .f5-wallet-panel .wallet-option-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(16, 185, 129, 0.11);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  color: #34d399;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 13px !important;
+  font-weight: 800;
+}
+
+body:not(.light-theme) .f5-wallet-panel .wallet-option-heading > span {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.26);
+  color: #6ee7b7;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 10px !important;
+}
+
+.f5-wallet-panel .wallet-option-copy {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+}
+
+.f5-wallet-panel .wallet-option > .button {
+  margin-top: auto;
+  width: 100%;
+}
+
+/* ==========================================================================
+   SCREEN 4: ReferralPage (.referral-page-container) — Pure CSS Restyle
+   src/ReferralPage.tsx stays 100% frozen vs HEAD 76c59c2
+   ========================================================================== */
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .referral-page-container {
+  max-width: 1140px !important;
+  padding: 6px 0 24px !important;
+  width: 100%;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .referral-proposal-hero {
+  background:
+    radial-gradient(ellipse 55% 80% at 8% 0%, rgba(16, 185, 129, 0.12), transparent 58%),
+    #0a0b0e !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  border-radius: 20px !important;
+  padding: 22px 24px !important;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .referral-commission-icon {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  color: #34d399 !important;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .referral-page-container > div[style*="grid"] {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 14px !important;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .referral-page-container > div[style*="grid"] > div {
+  background: #0a0b0e !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  border-radius: 18px !important;
+  padding: 20px 22px !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .referral-page-container > div[style*="grid"] strong {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 26px !important;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .referral-page-container > div[style*="grid"] > div:nth-child(2) strong {
+  color: #34d399 !important;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .referral-page-container .content-panel div[style*="grid"] {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .referral-page-container .content-panel div[style*="grid"] > div {
+  background: #0e1015 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 14px !important;
+  padding: 14px 16px !important;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .referral-page-container .content-panel div[style*="grid"] > div:nth-child(2) {
+  background: rgba(16, 185, 129, 0.07) !important;
+  border-color: rgba(16, 185, 129, 0.24) !important;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .referral-page-container .content-panel div[style*="grid"] > div:nth-child(2) span,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .referral-page-container .content-panel div[style*="grid"] > div:nth-child(2) strong {
+  color: #6ee7b7 !important;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .referral-page-container .content-panel div[style*="grid"] strong {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 20px !important;
+  font-variant-numeric: tabular-nums;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .profile-referral-tools {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .profile-ref-block,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .profile-sponsor-box {
+  background: #0e1015;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .profile-ref-copy-box code,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .profile-sponsor-info strong,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .profile-sponsor-feedback {
+  color: #34d399 !important;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+}
+
+/* ==========================================================================
+   SCREEN 5: SubscriptionsPage (.f5-subscriptions-page) + 22 Power Tiers
+   ========================================================================== */
+.subscription-container.f5-subscriptions-page {
+  max-width: 1140px;
+  margin: 0 auto;
+  width: 100%;
+  display: grid;
+  gap: 22px;
+}
+
+body:not(.light-theme) .f5-subscriptions-page .subscription-platinum-card {
+  background:
+    radial-gradient(ellipse 60% 45% at 50% -10%, rgba(16, 185, 129, 0.12), transparent 62%),
+    #0a0b0e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 22px;
+  padding: clamp(24px, 3vw, 36px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 20px 52px -26px rgba(0, 0, 0, 0.85);
+}
+
+body:not(.light-theme) .f5-subscriptions-page .subscription-star-wrapper {
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.28), transparent 70%);
+}
+
+body:not(.light-theme) .f5-subscriptions-page .subscription-star-glow {
+  color: #34d399;
+  text-shadow: 0 0 18px rgba(16, 185, 129, 0.55);
+  font-size: 32px !important;
+}
+
+body:not(.light-theme) .f5-subscriptions-page .subscription-plastic-card-teaser {
+  background: #0e1015;
+  border: 1px solid rgba(16, 185, 129, 0.24);
+  border-radius: 16px;
+}
+
+body:not(.light-theme) .f5-subscriptions-page .subscription-card-chip {
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.1);
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+}
+
+body:not(.light-theme) .f5-subscriptions-page .subscription-soon-badge {
+  background: rgba(16, 185, 129, 0.14);
+  color: #6ee7b7;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px !important;
+}
+
+.f5-subscriptions-page .subscription-perks-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 18px;
+}
+
+body:not(.light-theme) .f5-subscriptions-page .subscription-perk-icon {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.26);
+  color: #34d399;
+}
+
+body:not(.light-theme) .f5-subscriptions-page .subscription-perk-text small {
+  color: #34d399;
+}
+
+.f5-subscriptions-page .subscription-cycle-selector {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+body:not(.light-theme) .f5-subscriptions-page .subscription-cycle-btn {
+  background: #0e1015;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 16px;
+  padding: 18px 14px;
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+body:not(.light-theme) .f5-subscriptions-page .subscription-cycle-btn.active {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: #10b981;
+  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.45);
+}
+
+body:not(.light-theme) .f5-subscriptions-page .subscription-cycle-badge {
+  background: #10b981;
+  color: #04130d;
+  font-size: 11px !important;
+  box-shadow: none;
+}
+
+body:not(.light-theme) .f5-subscriptions-page .subscription-cycle-price {
+  color: #ffffff;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 20px !important;
+  font-variant-numeric: tabular-nums;
+}
+
+body:not(.light-theme) .f5-subscriptions-page .subscription-cycle-btn.active .subscription-cycle-price {
+  color: #34d399;
+}
+
+body:not(.light-theme) .f5-subscriptions-page .subscription-pricing-summary strong {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 22px !important;
+  color: #34d399;
+  font-variant-numeric: tabular-nums;
+}
+
+.f5-subscriptions-page .subscription-payment-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.subscription-tiers-panel {
+  padding: clamp(22px, 3vw, 32px);
+  display: grid;
+  gap: 20px;
+}
+
+.subscription-tiers-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.subscription-tiers-head h2 {
+  margin: 4px 0 6px;
+  color: #ffffff;
+}
+
+.subscription-tiers-sub {
+  margin: 0;
+  max-width: 640px;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.subscription-tiers-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.subscription-tier-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.82);
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px !important;
+  font-weight: 700;
+}
+
+.subscription-tier-pill-emerald {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.34);
+  color: #6ee7b7;
+}
+
+.subscription-tiers-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.subscription-tier-card {
+  padding: 15px 16px;
+  border-radius: 15px;
+  background: #0e1015;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .subscription-tier-card:hover {
+    border-color: rgba(16, 185, 129, 0.36);
+    background: #11151d;
+  }
+}
+
+.subscription-tier-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.subscription-tier-th {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 16px !important;
+  font-weight: 800;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+
+.subscription-tier-th small,
+.subscription-tier-price small {
+  color: rgba(255, 255, 255, 0.54);
+  font-size: 11px !important;
+  font-weight: 600;
+}
+
+.subscription-tier-skin-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  color: #6ee7b7;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px !important;
+  font-weight: 700;
+}
+
+.subscription-tier-price {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 18px !important;
+  font-weight: 800;
+  color: #34d399;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   RESPONSIVE BREAKPOINTS: 2-3 Cols Desktop → 2 Cols Tablet → 1 Col Mobile
+   ========================================================================== */
+@media (max-width: 980px) {
+  .f5-home-dashboard .quick-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body:not(.light-theme) .f5-home-dashboard .dashboard-grid,
+  .f5-wallet-panel .wallet-options-grid,
+  .subscription-tiers-grid,
+  .f5-skeleton-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-farm-metrics,
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-miner-grid,
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .referral-page-container .content-panel div[style*="grid"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .f5-wallet-panel .wallet-info-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .f5-home-dashboard .quick-actions,
+  .f5-home-dashboard .quest-cards,
+  body:not(.light-theme) .f5-home-dashboard .dashboard-grid,
+  .f5-home-dashboard .explore-grid,
+  .f5-home-dashboard .platform-feature-grid,
+  .f5-home-dashboard .mining-metrics-grid,
+  .f5-wallet-panel .wallet-options-grid,
+  .f5-subscriptions-page .subscription-perks-list,
+  .f5-subscriptions-page .subscription-cycle-selector,
+  .f5-subscriptions-page .subscription-payment-buttons,
+  .subscription-tiers-grid,
+  .f5-skeleton-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-farm-metrics,
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-miner-grid,
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .referral-page-container > div[style*="grid"],
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .referral-page-container .content-panel div[style*="grid"],
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .profile-referral-tools {
+    grid-template-columns: 1fr !important;
+  }
+
+  body:not(.light-theme) .f5-home-dashboard .account-hero,
+  .f5-wallet-panel .wallet-card-header,
+  .f5-wallet-panel .wallet-universal-banner,
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-mining-farm,
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) [data-authenticated-miner-farm="true"].f5-miner-farm .pwm-farm-miners,
+  body:not(.light-theme) .f5-subscriptions-page .subscription-platinum-card,
+  .subscription-tiers-panel {
+    padding: 18px 16px !important;
+  }
+
+  .f5-wallet-panel .wallet-universal-banner,
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .referral-proposal-hero,
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .profile-ref-copy-box,
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .profile-sponsor-input-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .f5-wallet-panel .wallet-universal-cta,
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .profile-ref-copy-box .button,
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .profile-sponsor-input-group .button {
+    width: 100%;
+  }
+
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .profile-ref-copy-box code,
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .profile-ref-link-text {
+    width: 100%;
+  }
+
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .profile-referral-table-row {
+    flex-wrap: wrap;
+  }
+}
+
+
+/* ==========================================================================
+   EMBUDO-REDISENO-TODO-PREVENTA: Mi Miner HUB & Preventa Stage 1 Surfaces
+   Obsidian (#050505 / #0a0b0e) + Emerald (#10b981 / #34d399), zero purple
+   ========================================================================== */
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .pwm-detail-flow {
+  color: #ffffff;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .pwm-brand-label {
+  color: #34d399;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .pwm-detail-layout {
+  align-items: start;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .pwm-detail-art-panel,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .pwm-detail-content-card,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .pwm-miner-stats > div,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .profile-hero-card,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .profile-section-card {
+  background: #0a0b0e;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .profile-avatar-circle {
+  background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.26);
+  color: #04130d;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .profile-miner-tx,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .profile-menu-icon {
+  color: #34d399;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .profile-miner-preview {
+  border: 1px solid rgba(52, 211, 153, 0.26);
+  color: #6ee7b7;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .pwm-detail-tab-active {
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(52, 211, 153, 0.42);
+  color: #6ee7b7;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .pwm-detail-properties dd,
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .pwm-detail-trait-list strong {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .dashboard-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 640px) {
+  body:not(.light-theme) .app-shell:not(.app-shell-source-landing) .dashboard-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell:not(.app-shell-source-landing),
+  .app-shell:not(.app-shell-source-landing) .workspace,
+  .app-shell:not(.app-shell-source-landing) .page-wrap,
+  .f5-wallet-panel {
+    max-width: 100vw;
+    overflow-x: clip;
   }
 }

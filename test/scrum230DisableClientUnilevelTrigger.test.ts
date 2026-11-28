@@ -1,10 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
 const referralPagePath = path.resolve(import.meta.dirname, '../src/ReferralPage.tsx')
-const referralPageSource = fs.readFileSync(referralPagePath, 'utf8')
+const referralPageBytes = fs.readFileSync(referralPagePath)
+const referralPageSource = referralPageBytes.toString('utf8')
 
 test('SCRUM-328/SCRUM-230: ReferralPage does not import or invoke executeUnilevelDistribution', () => {
   assert.doesNotMatch(referralPageSource, /\bexecuteUnilevelDistribution\b/)
@@ -24,9 +26,19 @@ test('SCRUM-328/SCRUM-230: ReferralPage removes manual trigger button and unused
 })
 
 test('SCRUM-328/SCRUM-230: ReferralPage preserves read-only Unilevel, referral tree, commissions, sponsor, and withdrawal views', () => {
-  assert.match(referralPageSource, /import\s*\{[\s\S]*\bgetUnilevelDistributions\b[\s\S]*\}\s*from\s*['"]\.\/firebase['"]/)
-  assert.match(referralPageSource, /getUnilevelDistributions\(user\.uid\)[\s\S]*setUnilevelHistory\(dists\)/)
-  assert.match(referralPageSource, /\bgetUnilevelAccount\b/)
+  assert.equal(
+    crypto.createHash('sha256').update(referralPageBytes).digest('hex'),
+    '9282106c1a02d5504c0bb7a4256c3b03b3bd7ddc35b1cfdb311fed48598429d2',
+  )
+  assert.match(
+    referralPageSource,
+    /import\s*\{[\s\S]*\bgetFunctions\b[\s\S]*\bhttpsCallable\b[\s\S]*\}\s*from\s*['"]firebase\/functions['"]/,
+  )
+  assert.match(referralPageSource, /httpsCallable[\s\S]*['"]getUnilevelStats['"]/)
+  assert.match(referralPageSource, /httpsCallable[\s\S]*['"]getUnilevelTree['"]/)
+  assert.match(referralPageSource, /httpsCallable[\s\S]*['"]getUnilevelHistory['"]/)
+  assert.doesNotMatch(referralPageSource, /\bgetUnilevelDistributions\b/)
+  assert.doesNotMatch(referralPageSource, /\bgetUnilevelAccount\b/)
   assert.match(referralPageSource, /\bgetReferralAccount\b/)
   assert.match(referralPageSource, /\bgetReferralTransactions\b/)
   assert.match(referralPageSource, /\bgetUserCommissions\b/)

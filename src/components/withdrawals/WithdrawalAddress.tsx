@@ -121,14 +121,14 @@ export function WithdrawalAddress({
 
   return (
     <span
-      className={`wth-chip-inline${className ? ` ${className}` : ''}`}
+      className={`wth-chip-inline wth-chip-inline--address${className ? ` ${className}` : ''}`}
       data-testid="withdrawal-address-chip"
     >
       {showTypeTag && addressType && (
         <span className="wth-mini-tag wth-tabular-mono">{addressType}</span>
       )}
       <code
-        className="wth-mono-value wth-tabular-mono"
+        className="wth-mono-value wth-mono-capsule wth-tabular-mono"
         title={cleanAddress}
         data-testid="withdrawal-address-value"
       >

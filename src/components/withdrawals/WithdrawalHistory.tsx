@@ -132,7 +132,7 @@ export function WithdrawalTable({
             const w = row.withdrawal;
             const netCfg = networksCatalog?.find((n) => n.id === w.networkId) ?? null;
             return (
-              <tr key={row.id} data-testid={`withdrawal-table-row-${row.id}`}>
+              <tr key={row.id} className="wth-table-row" data-testid={`withdrawal-table-row-${row.id}`}>
                 <td>
                   <div className="wth-cell-stack">
                     <span className="wth-tabular-mono wth-cell-primary">
@@ -155,7 +155,7 @@ export function WithdrawalTable({
 
                 <td>
                   <div className="wth-cell-stack">
-                    <span className="wth-cell-primary">{w.network}</span>
+                    <span className="wth-network-tag wth-tabular-mono">{w.network}</span>
                     <span className="wth-tabular-mono wth-cell-secondary">
                       {row.confirmationsLabel} conf.
                     </span>
@@ -206,7 +206,10 @@ export function WithdrawalTable({
                         onClick={() => onSelectWithdrawal(w)}
                         data-testid={`withdrawal-detail-btn-${row.id}`}
                       >
-                        Detalle
+                        <span>Detalle</span>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                          <path d="m9 18 6-6-6-6" />
+                        </svg>
                       </button>
                     )}
                     {renderActions?.(w)}

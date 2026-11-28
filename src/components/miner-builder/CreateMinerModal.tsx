@@ -1,12 +1,15 @@
 import type { ReactNode } from 'react'
+import './builderLandingTheme.css'
 
 type ModalVariant = 'catalog' | 'custom' | 'workflow'
 
-export function CreateMinerModal({ children, onClose, variant }: {
+export function CreateMinerModal({ children, onClose, variant, showBrandTopbar = true }: {
   children: ReactNode
   onClose: () => void
   variant: ModalVariant
+  showBrandTopbar?: boolean
 }) {
+  const useStructuredTopbar = showBrandTopbar && (variant === 'custom' || variant === 'workflow')
   return (
     <div
       className="modal-backdrop purchase-backdrop miner-builder-backdrop"
@@ -19,7 +22,25 @@ export function CreateMinerModal({ children, onClose, variant }: {
         aria-modal="true"
         aria-labelledby="miner-builder-title"
       >
-        <button type="button" className="modal-close" aria-label="Cerrar configurador" onClick={onClose}>×</button>
+        {useStructuredTopbar ? (
+          <div className="builder-modal-topbar">
+            <div className="builder-modal-topbar-left">
+              <span className="builder-modal-brand">
+                PouwMiner <span className="builder-modal-brand-tag">Builder</span>
+              </span>
+            </div>
+            <button
+              type="button"
+              className="builder-modal-close-inline"
+              aria-label="Cerrar configurador"
+              onClick={onClose}
+            >
+              ×
+            </button>
+          </div>
+        ) : (
+          <button type="button" className="modal-close" aria-label="Cerrar configurador" onClick={onClose}>×</button>
+        )}
         {children}
       </section>
     </div>

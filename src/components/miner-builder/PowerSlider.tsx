@@ -1,5 +1,3 @@
-import { useEffect, useRef, useState } from 'react'
-
 type MinerTier = { powerTh: number; priceUsd: number }
 
 export function PowerSlider({ value, tiers, valueLabel, onChange }: {
@@ -8,75 +6,52 @@ export function PowerSlider({ value, tiers, valueLabel, onChange }: {
   valueLabel: string
   onChange: (index: number) => void
 }) {
-  const buttons = useRef<Array<HTMLButtonElement | null>>([])
-  const scrollViewport = useRef<HTMLDivElement | null>(null)
-  const [canScrollLeft, setCanScrollLeft] = useState(false)
-  const [canScrollRight, setCanScrollRight] = useState(tiers.length > 1)
-
-  const updateScrollState = () => {
-    const viewport = scrollViewport.current
-    if (!viewport) return
-    setCanScrollLeft(viewport.scrollLeft > 1)
-    setCanScrollRight(viewport.scrollLeft + viewport.clientWidth < viewport.scrollWidth - 1)
-  }
-
-  const moveTo = (index: number) => {
-    const nextIndex = Math.max(0, Math.min(tiers.length - 1, index))
-    onChange(nextIndex)
-    buttons.current[nextIndex]?.focus()
-    buttons.current[nextIndex]?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-  }
-
-  const scrollCarousel = (direction: -1 | 1) => {
-    const viewport = scrollViewport.current
-    if (!viewport) return
-    viewport.scrollBy({ left: direction * viewport.clientWidth * 0.7, behavior: 'smooth' })
-  }
-
-  useEffect(() => {
-    updateScrollState()
-  }, [tiers.length])
-
-  const pricePerTh = tiers[value].priceUsd / tiers[value].powerTh
+  const safeIndex = Math.max(0, Math.min(tiers.length - 1, value))
+  const currentTier = tiers[safeIndex]
+  const pricePerTh = currentTier.priceUsd / currentTier.powerTh
   const pricePerThLabel = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(pricePerTh)
+  const totalPriceLabel = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(currentTier.priceUsd)
+  const fillPct = tiers.length > 1 ? (safeIndex / (tiers.length - 1)) * 100 : 0
 
   return (
-    <div className="miner-power-control">
-      <div className="miner-power-label">
-        <span>Nivel y Potencia <span className="miner-info-icon" aria-hidden="true">i</span></span>
-        <strong>{valueLabel}</strong>
-      </div>
-      <div className="miner-power-carousel">
-        <button type="button" className="miner-power-arrow" aria-label="Nivel anterior" disabled={!canScrollLeft} onClick={() => scrollCarousel(-1)}>‹</button>
-        <div ref={scrollViewport} className="miner-power-scroll" role="group" aria-label="Niveles de potencia" onScroll={updateScrollState}>
-          {tiers.map((tier, index) => (
-            <button
-              key={tier.powerTh + '-' + index}
-              ref={(element) => { buttons.current[index] = element }}
-              type="button"
-              className={value === index ? 'miner-power-chip miner-power-chip-active' : 'miner-power-chip'}
-              aria-pressed={value === index}
-              tabIndex={value === index ? 0 : -1}
-              onClick={() => {
-                onChange(index)
-                buttons.current[index]?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'ArrowRight') { event.preventDefault(); moveTo(index + 1) }
-                if (event.key === 'ArrowLeft') { event.preventDefault(); moveTo(index - 1) }
-                if (event.key === 'Home') { event.preventDefault(); moveTo(0) }
-                if (event.key === 'End') { event.preventDefault(); moveTo(tiers.length - 1) }
-              }}
-            >
-              <span className="miner-power-chip-main"><span className="miner-power-mark" aria-hidden="true">⚡</span>{tier.powerTh.toLocaleString('es-MX')} TH</span>
-            </button>
-          ))}
+    <div className="miner-power-control" data-testid="builder-power-slider">
+      <div className="miner-power-range-control">
+        <div className="miner-power-range-head">
+          <label className="miner-power-range-label" htmlFor="custom-power-range">
+            Desliza para elegir tu potencia
+          </label>
+          <span className="miner-power-range-tier">{valueLabel}</span>
         </div>
-        <button type="button" className="miner-power-arrow" aria-label="Nivel siguiente" disabled={!canScrollRight} onClick={() => scrollCarousel(1)}>›</button>
+        <input
+          id="custom-power-range"
+          className="miner-power-range"
+          type="range"
+          min={0}
+          max={Math.max(0, tiers.length - 1)}
+          step={1}
+          value={safeIndex}
+          style={{ ['--slider-fill' as string]: `${fillPct}%` }}
+          aria-label="Potencia del minero en TH/s"
+          aria-valuetext={`${currentTier.powerTh.toLocaleString('es-MX')} TH/s · ${totalPriceLabel} USD`}
+          onChange={(event) => onChange(Number(event.target.value))}
+        />
+        <div className="miner-power-scale" aria-hidden="true">
+          <span>1 TH</span>
+          <span>32 TH</span>
+          <span>512 TH</span>
+          <span>5,000 TH</span>
+        </div>
       </div>
-      <div className="miner-power-price">
-        <span>Precio por TH</span>
-        <strong>{pricePerThLabel} / TH</strong>
+
+      <div className="miner-power-price-grid">
+        <div className="miner-power-price-cell">
+          <span>Precio por TH</span>
+          <strong>{pricePerThLabel} / TH</strong>
+        </div>
+        <div className="miner-power-price-cell miner-power-price-total">
+          <span>Precio total</span>
+          <strong>{totalPriceLabel} USD</strong>
+        </div>
       </div>
     </div>
   )

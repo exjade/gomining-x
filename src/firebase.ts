@@ -1,16 +1,19 @@
 import { initializeApp, getApps, getApp } from 'firebase/app'
 import {
   getAuth,
+  connectAuthEmulator,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
   sendEmailVerification,
   sendPasswordResetEmail,
+  applyActionCode,
   updateProfile as updateAuthProfile,
   type User,
 } from 'firebase/auth'
 import {
   getFirestore,
+  connectFirestoreEmulator,
   doc,
   getDoc,
   setDoc,
@@ -26,9 +29,11 @@ import {
   type Timestamp,
   type FieldValue,
 } from 'firebase/firestore'
+import { getFunctions, connectFunctionsEmulator } from 'firebase/functions'
 import type { MinerAppearance } from './nft-miners/appearance'
 
 import { detectUserGeo } from './geoIp.ts'
+import { extractVerificationOobCode } from './authModalValidation.ts'
 
 export type FirestoreTimestamp = Timestamp | FieldValue | string | null
 
@@ -61,6 +66,42 @@ if (isNode && firebaseConfig.projectId === 'salad-miners') {
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const db = getFirestore(app)
+export const functions = getFunctions(app)
+
+const isLoopbackBrowserHost =
+  typeof window !== 'undefined' &&
+  (window.location.hostname === '127.0.0.1' ||
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '100.89.0.52')
+
+export const useFirebaseEmulators =
+  !isNode &&
+  Boolean(env.DEV || isLoopbackBrowserHost) &&
+  String(env.VITE_USE_FIREBASE_EMULATORS ?? '').toLowerCase() === 'true'
+
+if (useFirebaseEmulators) {
+  const emulatorGuard = globalThis as typeof globalThis & { __firebaseEmulatorsConnected?: boolean }
+  if (!emulatorGuard.__firebaseEmulatorsConnected) {
+    const isTailscaleOrigin = typeof window !== 'undefined' && window.location.hostname === '100.89.0.52'
+    const authEmulatorUrl = isTailscaleOrigin
+      ? 'http://100.89.0.52:9099'
+      : (env.VITE_FIREBASE_AUTH_EMULATOR_URL || 'http://127.0.0.1:9099')
+    const firestoreEmulatorHost = isTailscaleOrigin
+      ? '100.89.0.52'
+      : (env.VITE_FIREBASE_FIRESTORE_EMULATOR_HOST || '127.0.0.1')
+    const firestoreEmulatorPort = Number(env.VITE_FIREBASE_FIRESTORE_EMULATOR_PORT || 8080)
+    const functionsEmulatorHost = isTailscaleOrigin
+      ? '100.89.0.52'
+      : (env.VITE_FIREBASE_FUNCTIONS_EMULATOR_HOST || '127.0.0.1')
+    const functionsEmulatorPort = Number(env.VITE_FIREBASE_FUNCTIONS_EMULATOR_PORT || 5001)
+    connectAuthEmulator(auth, authEmulatorUrl, { disableWarnings: true })
+    if (String(env.VITE_USE_FIRESTORE_EMULATOR ?? 'true').toLowerCase() !== 'false') {
+      connectFirestoreEmulator(db, firestoreEmulatorHost, firestoreEmulatorPort)
+    }
+    connectFunctionsEmulator(functions, functionsEmulatorHost, functionsEmulatorPort)
+    emulatorGuard.__firebaseEmulatorsConnected = true
+  }
+}
 
 export interface FirestoreWriterHooks {
   setDoc: (docRef: any, data: any, options?: any) => Promise<any>
@@ -68,6 +109,7 @@ export interface FirestoreWriterHooks {
 }
 
 export function assertNotProductionFirestore(docRef?: any): void {
+  if (useFirebaseEmulators) return
   const targetProjectId = docRef?.firestore?.app?.options?.projectId
     || (typeof db !== 'undefined' && (db as any)?.app?.options?.projectId)
     || (typeof process !== 'undefined' && process.env?.VITE_FIREBASE_PROJECT_ID)
@@ -77,6 +119,7 @@ export function assertNotProductionFirestore(docRef?: any): void {
 }
 
 export function isProductionFirestoreTarget(docRef?: any): boolean {
+  if (useFirebaseEmulators) return false
   const targetProjectId = docRef?.firestore?.app?.options?.projectId
     || (typeof db !== 'undefined' && (db as any)?.app?.options?.projectId)
     || (typeof process !== 'undefined' && process.env?.VITE_FIREBASE_PROJECT_ID)
@@ -408,131 +451,261 @@ export async function findUserByReferralCode(code: string): Promise<{ uid: strin
 }
 
 /** Registers a new user with email and password, creates profile with referral code */
-export async function registerWithEmail(email: string, password: string, referralCodeProvided?: string) {
+export interface RegisterWithEmailDeps {
+  createUser?: (email: string, password: string) => Promise<{ user: User }>
+  sendVerification?: (user: User) => Promise<void>
+  findSponsor?: typeof findUserByReferralCode
+  detectGeo?: () => Promise<{ country: string; ip: string }>
+  setUserDoc?: (uid: string, data: UserProfile, options?: { merge?: boolean }) => Promise<void>
+  signOutUser?: () => Promise<void>
+  saveCountry?: (uid: string, country: string, ip: string) => Promise<void>
+  publishCode?: (uid: string, code: string) => Promise<void>
+  ensureReferral?: (uid: string, code: string, referrerBy: string) => Promise<void>
+  ensureUnilevel?: (uid: string, email: string, code: string, referrerBy: string, referrerUid: string) => Promise<void>
+  logger?: Pick<Console, 'error' | 'warn'>
+}
+
+export async function registerWithEmail(
+  email: string,
+  password: string,
+  referralCodeProvided?: string,
+  deps?: RegisterWithEmailDeps,
+) {
   const cleanEmail = email.toLowerCase().trim()
-  const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password)
+  const log = deps?.logger ?? console
+  const createUserFn = deps?.createUser ?? ((e: string, p: string) => createUserWithEmailAndPassword(auth, e, p))
+  const sendVerificationFn = deps?.sendVerification ?? ((u: User) => sendEmailVerification(u))
+  const findSponsorFn = deps?.findSponsor ?? findUserByReferralCode
+  const detectGeoFn = deps?.detectGeo ?? detectUserGeo
+  const setUserDocFn =
+    deps?.setUserDoc ??
+    ((uid: string, data: UserProfile, options?: { merge?: boolean }) =>
+      options ? setDoc(doc(db, 'users', uid), data, options) : setDoc(doc(db, 'users', uid), data))
+  const signOutFn = deps?.signOutUser ?? (() => signOut(auth))
+  const saveCountryFn = deps?.saveCountry ?? saveDetectedCountry
+  const publishCodeFn = deps?.publishCode ?? publishPublicReferralCode
+  const ensureReferralFn = deps?.ensureReferral ?? ensureReferralAccount
+  const ensureUnilevelFn = deps?.ensureUnilevel ?? ensureUnilevelAccount
+
+  const cred = await createUserFn(cleanEmail, password)
   const user = cred.user
+  const finishInFlight = beginUserRegistrationInFlight(user.uid)
 
-  // Send verification email
   try {
-    await sendEmailVerification(user)
-  } catch (err) {
-    console.warn('Could not send verification email automatically:', err)
-  }
-
-  // Handle sponsor referral validation
-  let validReferrerCode = ''
-  let referrerUid = ''
-  if (referralCodeProvided && referralCodeProvided.trim()) {
+    // Send verification email
     try {
-      const sponsor = await findUserByReferralCode(referralCodeProvided)
-      if (sponsor && sponsor.uid !== user.uid) {
-        validReferrerCode = sponsor.referralCode
-        referrerUid = sponsor.uid
+      await sendVerificationFn(user)
+    } catch (err) {
+      log.warn('Could not send verification email automatically:', err)
+    }
+
+    // Handle sponsor referral validation
+    let validReferrerCode = ''
+    let referrerUid = ''
+    if (referralCodeProvided && referralCodeProvided.trim()) {
+      try {
+        const sponsor = await findSponsorFn(referralCodeProvided)
+        if (sponsor && sponsor.uid !== user.uid) {
+          validReferrerCode = sponsor.referralCode
+          referrerUid = sponsor.uid
+        }
+      } catch (err) {
+        log.warn('Could not validate sponsor referral code:', err)
       }
-    } catch (err) {
-      console.warn('Could not validate sponsor referral code:', err)
     }
-  }
 
-  const myReferralCode = generateReferralCode(cleanEmail)
-  const username = cleanEmail.split('@')[0]
-  const geo = await detectUserGeo().catch(() => ({ country: 'United States', ip: '127.0.0.1' }))
+    const myReferralCode = generateReferralCode(cleanEmail)
+    const username = cleanEmail.split('@')[0] || 'User'
+    const geo = await detectGeoFn().catch(() => ({ country: 'United States', ip: '127.0.0.1' }))
+    const safeCountry = geo?.country || 'United States'
+    const safeIp = geo?.ip || '127.0.0.1'
 
-  const userDoc: UserProfile = {
-    uid: user.uid,
-    email: cleanEmail,
-    username,
-    status: 'active',
-    createdAt: serverTimestamp(),
-    emailVerified: false,
-    walletAddress: '',
-    balance: 0,
-    commissionBalance: 0,
-    totalCommissionsEarned: 0,
-    purchasesCount: 0,
-    referral: {
-      referrerBy: validReferrerCode,
-      referralCode: myReferralCode,
-      userReferrals: [],
-      joinDate: serverTimestamp(),
-    },
-    country: geo.country,
-    twoFactorEnabled: false,
-    sponsorId: referrerUid || undefined,
-  }
+    const userDoc: UserProfile = {
+      uid: user.uid,
+      email: cleanEmail,
+      username,
+      status: 'active',
+      createdAt: serverTimestamp(),
+      emailVerified: false,
+      walletAddress: '',
+      balance: 0,
+      commissionBalance: 0,
+      totalCommissionsEarned: 0,
+      purchasesCount: 0,
+      referral: {
+        referrerBy: validReferrerCode,
+        referralCode: myReferralCode,
+        userReferrals: [],
+        joinDate: serverTimestamp(),
+      },
+      country: safeCountry,
+      twoFactorEnabled: false,
+      ...(referrerUid ? { sponsorId: referrerUid } : {}),
+    }
+    const cleanUserDoc = stripUndefinedUserFields(userDoc)
 
-  // Save profile to Firestore
-  try {
-    await setDoc(doc(db, 'users', user.uid), userDoc)
-  } catch (err) {
-    console.warn('Initial setDoc on /users failed, attempting merge setDoc:', err)
+    // Save profile to Firestore — MUST propagate error if /users setDoc fails (never return in-memory profile)
     try {
-      await setDoc(doc(db, 'users', user.uid), userDoc, { merge: true })
-    } catch (err2) {
-      console.error('Critical warning: Firestore setDoc failed during registration:', err2)
-    }
-  }
-
-  // Save detected country to dedicated /countries/{uid} collection
-  await saveDetectedCountry(user.uid, geo.country, geo.ip).catch(() => {})
-
-  // Publish minimal public referral code index (/publicReferralCodes/{CODE})
-  await publishPublicReferralCode(user.uid, myReferralCode)
-
-  // Ensure dedicated referral document in /referrals/{uid}
-  try {
-    await ensureReferralAccount(user.uid, myReferralCode, validReferrerCode)
-  } catch (refErr) {
-    console.warn('Could not initialize /referrals document:', refErr)
-  }
-
-  // Ensure dedicated unilevel tree document in /unilevel/{uid}
-  try {
-    await ensureUnilevelAccount(user.uid, cleanEmail, myReferralCode, validReferrerCode, referrerUid)
-  } catch (uniErr) {
-    console.warn('Could not initialize /unilevel document:', uniErr)
-  }
-
-  // Link to sponsor userReferrals and update sponsor /referrals/{referrerUid} if valid
-  if (referrerUid) {
-    try {
-      await updateDoc(doc(db, 'users', referrerUid), {
-        'referral.userReferrals': arrayUnion(cleanEmail),
-      })
-      await updateDoc(doc(db, 'referrals', referrerUid), {
-        directReferralsCount: increment(1),
-        directReferrals: arrayUnion(cleanEmail),
-        updatedAt: serverTimestamp(),
-      }).catch(() => {})
+      await setUserDocFn(user.uid, cleanUserDoc)
     } catch (err) {
-      console.warn('Failed to link referral into sponsor document:', err)
+      log.warn('Initial setDoc on /users failed, attempting merge setDoc:', err)
+      try {
+        await setUserDocFn(user.uid, cleanUserDoc, { merge: true })
+      } catch (err2) {
+        const failureCode =
+          (err2 as { code?: string })?.code ||
+          (err as { code?: string })?.code ||
+          'firestore/setdoc-failed'
+        log.error(
+          `[Firebase][registerWithEmail] Firestore setDoc(/users/${user.uid}) failed [${failureCode}]:`,
+          err2,
+        )
+        finishInFlight(null)
+        await signOutFn().catch(() => {})
+        if (err2 && typeof err2 === 'object' && !('code' in err2)) {
+          Object.assign(err2 as Record<string, unknown>, { code: failureCode })
+        }
+        throw err2
+      }
     }
-  }
 
-  return { user, profile: userDoc }
+    finishInFlight(cleanUserDoc)
+
+    // Save detected country to dedicated /countries/{uid} collection
+    await saveCountryFn(user.uid, safeCountry, safeIp).catch(() => {})
+
+    // Publish minimal public referral code index (/publicReferralCodes/{CODE})
+    await publishCodeFn(user.uid, myReferralCode).catch(() => {})
+
+    // Ensure dedicated referral document in /referrals/{uid}
+    try {
+      await ensureReferralFn(user.uid, myReferralCode, validReferrerCode)
+    } catch (refErr) {
+      log.warn('Could not initialize /referrals document:', refErr)
+    }
+
+    // Ensure dedicated unilevel tree document in /unilevel/{uid}
+    try {
+      await ensureUnilevelFn(user.uid, cleanEmail, myReferralCode, validReferrerCode, referrerUid)
+    } catch (uniErr) {
+      log.warn('Could not initialize /unilevel document:', uniErr)
+    }
+
+    // Link to sponsor userReferrals and update sponsor /referrals/{referrerUid} if valid
+    if (referrerUid && !deps?.setUserDoc) {
+      try {
+        await updateDoc(doc(db, 'users', referrerUid), {
+          'referral.userReferrals': arrayUnion(cleanEmail),
+        })
+        await updateDoc(doc(db, 'referrals', referrerUid), {
+          directReferralsCount: increment(1),
+          directReferrals: arrayUnion(cleanEmail),
+          updatedAt: serverTimestamp(),
+        }).catch(() => {})
+      } catch (err) {
+        log.warn('Failed to link referral into sponsor document:', err)
+      }
+    }
+
+    return { user, profile: cleanUserDoc }
+  } finally {
+    finishInFlight(null)
+  }
+}
+
+const inFlightUserRegistrations = new Map<string, Promise<UserProfile | null>>()
+
+function beginUserRegistrationInFlight(uid: string): (profile: UserProfile | null) => void {
+  let settled = false
+  let resolveFn: (profile: UserProfile | null) => void = () => {}
+  const promise = new Promise<UserProfile | null>((resolve) => {
+    resolveFn = resolve
+  })
+  inFlightUserRegistrations.set(uid, promise)
+  return (profile: UserProfile | null) => {
+    if (settled) return
+    settled = true
+    inFlightUserRegistrations.delete(uid)
+    resolveFn(profile)
+  }
+}
+
+/** Recursively strips `undefined` fields from plain objects while preserving Firestore FieldValues & arrays */
+export function stripUndefinedUserFields<T>(input: T): T {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return input
+  }
+  if (Object.getPrototypeOf(input) !== Object.prototype) {
+    return input
+  }
+  const cleaned: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (value === undefined) continue
+    cleaned[key] =
+      value !== null &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      Object.getPrototypeOf(value) === Object.prototype
+        ? stripUndefinedUserFields(value)
+        : value
+  }
+  return cleaned as T
+}
+
+export interface EnsureUserProfileDeps {
+  getProfile?: (uid: string) => Promise<UserProfile | null>
+  setUserDoc?: (uid: string, data: UserProfile, options?: { merge?: boolean }) => Promise<void>
+  detectGeo?: () => Promise<{ country: string; ip: string }>
+  saveCountry?: (uid: string, country: string, ip: string) => Promise<void>
+  publishCode?: (uid: string, code: string) => Promise<void>
+  ensureReferral?: (uid: string, code: string, referrerBy: string) => Promise<void>
+  ensureUnilevel?: (uid: string, email: string, code: string, referrerBy: string, referrerUid: string) => Promise<void>
+  logger?: Pick<Console, 'error' | 'warn'>
 }
 
 /** Ensures a Firestore profile exists for an authenticated user, creating one if missing */
-export async function ensureUserProfile(user: User): Promise<UserProfile | null> {
+export async function ensureUserProfile(user: User, deps?: EnsureUserProfileDeps): Promise<UserProfile | null> {
   if (!user || user.isAnonymous) return null
-  const existing = await getUserProfile(user.uid)
+  const log = deps?.logger ?? console
+  const getProfileFn = deps?.getProfile ?? ((uid: string) => getUserProfile(uid, { throwOnError: true }))
+  const setUserDocFn =
+    deps?.setUserDoc ??
+    ((uid: string, data: UserProfile, options?: { merge?: boolean }) =>
+      setDoc(doc(db, 'users', uid), data, options ?? { merge: true }))
+  const detectGeoFn = deps?.detectGeo ?? detectUserGeo
+  const saveCountryFn = deps?.saveCountry ?? saveDetectedCountry
+  const publishCodeFn = deps?.publishCode ?? publishPublicReferralCode
+  const ensureReferralFn = deps?.ensureReferral ?? ensureReferralAccount
+  const ensureUnilevelFn = deps?.ensureUnilevel ?? ensureUnilevelAccount
+
+  const pendingRegistration = inFlightUserRegistrations.get(user.uid)
+  if (pendingRegistration) {
+    const registeredProfile = await pendingRegistration
+    if (registeredProfile) {
+      return (await getProfileFn(user.uid)) ?? registeredProfile
+    }
+  }
+  const existing = await getProfileFn(user.uid)
   if (existing) {
-    // Check dedicated /countries/{uid} collection and auto-detect in background if missing
-    void getUserCountryRecord(user.uid).then(async (rec) => {
-      if (!rec || !existing.country) {
-        const geo = await detectUserGeo().catch(() => ({ country: 'United States', ip: '127.0.0.1' }))
-        await saveDetectedCountry(user.uid, geo.country, geo.ip).catch(() => {})
-        if (!existing.country) {
-          await updateDoc(doc(db, 'users', user.uid), { country: geo.country }).catch(() => {})
+    if (!deps?.setUserDoc) {
+      // Check dedicated /countries/{uid} collection and auto-detect in background if missing
+      void getUserCountryRecord(user.uid).then(async (rec) => {
+        if (!rec || !existing.country) {
+          const geo = await detectGeoFn().catch(() => ({ country: 'United States', ip: '127.0.0.1' }))
+          const safeCountry = geo?.country || 'United States'
+          const safeIp = geo?.ip || '127.0.0.1'
+          await saveCountryFn(user.uid, safeCountry, safeIp).catch(() => {})
+          if (!existing.country) {
+            await updateDoc(doc(db, 'users', user.uid), { country: safeCountry }).catch(() => {})
+          }
         }
-      }
-    })
+      })
+    }
     // Also ensure /referrals/{uid}, /unilevel/{uid}, and /publicReferralCodes/{CODE} exist
     const existingCode = existing.referral?.referralCode || generateReferralCode(user.email || '')
-    await publishPublicReferralCode(user.uid, existingCode)
-    await ensureReferralAccount(user.uid, existingCode, existing.referral?.referrerBy || '').catch(() => {})
-    await ensureUnilevelAccount(user.uid, user.email || '', existingCode, existing.referral?.referrerBy || '', existing.sponsorId || '').catch(() => {})
+    await publishCodeFn(user.uid, existingCode).catch(() => {})
+    await ensureReferralFn(user.uid, existingCode, existing.referral?.referrerBy || '').catch(() => {})
+    await ensureUnilevelFn(user.uid, user.email || '', existingCode, existing.referral?.referrerBy || '', existing.sponsorId || '').catch(() => {})
     return existing
   }
 
@@ -540,7 +713,9 @@ export async function ensureUserProfile(user: User): Promise<UserProfile | null>
   if (!cleanEmail) return null
   const myReferralCode = generateReferralCode(cleanEmail)
   const username = cleanEmail.split('@')[0] || 'User'
-  const geo = await detectUserGeo().catch(() => ({ country: 'United States', ip: '127.0.0.1' }))
+  const geo = await detectGeoFn().catch(() => ({ country: 'United States', ip: '127.0.0.1' }))
+  const safeCountry = geo?.country || 'United States'
+  const safeIp = geo?.ip || '127.0.0.1'
 
   const userDoc: UserProfile = {
     uid: user.uid,
@@ -548,7 +723,7 @@ export async function ensureUserProfile(user: User): Promise<UserProfile | null>
     username,
     status: 'active',
     createdAt: serverTimestamp(),
-    emailVerified: user.emailVerified,
+    emailVerified: Boolean(user.emailVerified),
     walletAddress: '',
     balance: 0,
     commissionBalance: 0,
@@ -560,21 +735,31 @@ export async function ensureUserProfile(user: User): Promise<UserProfile | null>
       userReferrals: [],
       joinDate: serverTimestamp(),
     },
-    country: geo.country,
+    country: safeCountry,
     twoFactorEnabled: false,
   }
+  const cleanUserDoc = stripUndefinedUserFields(userDoc)
 
   try {
-    await setDoc(doc(db, 'users', user.uid), userDoc, { merge: true })
-    await saveDetectedCountry(user.uid, geo.country, geo.ip).catch(() => {})
-    await publishPublicReferralCode(user.uid, myReferralCode)
-    await ensureReferralAccount(user.uid, myReferralCode, '')
-    await ensureUnilevelAccount(user.uid, cleanEmail, myReferralCode, '', '')
+    await setUserDocFn(user.uid, cleanUserDoc, { merge: true })
   } catch (err) {
-    console.error('Error creating profile in ensureUserProfile:', err)
+    const failureCode = (err as { code?: string })?.code || 'firestore/setdoc-failed'
+    log.error(
+      `[Firebase][ensureUserProfile] Firestore setDoc(/users/${user.uid}) failed [${failureCode}]:`,
+      err,
+    )
+    if (err && typeof err === 'object' && !('code' in err)) {
+      Object.assign(err as Record<string, unknown>, { code: failureCode })
+    }
+    throw err
   }
 
-  return userDoc
+  await saveCountryFn(user.uid, safeCountry, safeIp).catch(() => {})
+  await publishCodeFn(user.uid, myReferralCode).catch(() => {})
+  await ensureReferralFn(user.uid, myReferralCode, '').catch(() => {})
+  await ensureUnilevelFn(user.uid, cleanEmail, myReferralCode, '', '').catch(() => {})
+
+  return cleanUserDoc
 }
 
 /** Dedicated country detection document operations in /countries/{uid} */
@@ -639,21 +824,100 @@ export async function reloadCurrentUser(): Promise<User | null> {
   return auth.currentUser
 }
 
+/** Apply an email verification oobCode strictly when connected to Firebase Emulators */
+export async function applyEmailVerificationActionCode(
+  codeOrUrl: string,
+  deps?: { isEmulator?: boolean; applyCode?: (code: string) => Promise<void> },
+): Promise<void> {
+  const isEmulator = deps?.isEmulator ?? useFirebaseEmulators
+  if (!isEmulator) {
+    throw Object.assign(
+      new Error('Dev verification action code is disabled outside Firebase Emulators.'),
+      { code: 'auth/emulator-only' },
+    )
+  }
+  const code = extractVerificationOobCode(codeOrUrl)
+  if (!code) {
+    throw Object.assign(
+      new Error('Invalid verification link or oobCode.'),
+      { code: 'auth/invalid-action-code' },
+    )
+  }
+  if (deps?.applyCode) {
+    await deps.applyCode(code)
+    return
+  }
+  await applyActionCode(auth, code)
+}
+
 /** Fetch user profile from Firestore */
-export async function getUserProfile(uid: string): Promise<UserProfile | null> {
+export async function getUserProfile(
+  uid: string,
+  options?: { throwOnError?: boolean; logger?: Pick<Console, 'error'> },
+): Promise<UserProfile | null> {
   try {
     const snap = await getDoc(doc(db, 'users', uid))
     if (!snap.exists()) return null
     return snap.data() as UserProfile
   } catch (error) {
-    console.error('Error fetching user profile:', error)
+    const code = (error as { code?: string })?.code || 'firestore/getdoc-failed'
+    ;(options?.logger ?? console).error(`[Firebase][getUserProfile] Failed for /users/${uid} [${code}]:`, error)
+    if (options?.throwOnError) {
+      throw error
+    }
     return null
   }
 }
 
+export interface ResolveAuthProfileDeps {
+  getProfile?: (uid: string) => Promise<UserProfile | null>
+  ensureProfile?: (user: User) => Promise<UserProfile | null>
+  logger?: Pick<Console, 'error'>
+}
+
+/** Resolves a persisted Firestore UserProfile or throws with logged failure code (never returns null/in-memory) */
+export async function resolveAuthenticatedUserProfile(
+  loggedUser: User,
+  deps?: ResolveAuthProfileDeps,
+): Promise<UserProfile> {
+  const log = deps?.logger ?? console
+  const getProfileFn = deps?.getProfile ?? ((uid: string) => getUserProfile(uid, { throwOnError: true, logger: log }))
+  const ensureProfileFn = deps?.ensureProfile ?? ((u: User) => ensureUserProfile(u))
+
+  let prof: UserProfile | null = null
+  try {
+    prof = await getProfileFn(loggedUser.uid)
+    if (!prof) {
+      prof = await ensureProfileFn(loggedUser)
+    }
+  } catch (err) {
+    const code = (err as { code?: string })?.code || 'firestore/profile-unavailable'
+    log.error(`[Firebase][resolveAuthenticatedUserProfile] Profile resolution failed [${code}]:`, err)
+    if (err && typeof err === 'object' && !('code' in err)) {
+      Object.assign(err as Record<string, unknown>, { code })
+    }
+    throw err
+  }
+
+  if (!prof) {
+    const code = 'firestore/profile-null'
+    const err = Object.assign(
+      new Error(`No se encontró ni se pudo inicializar el perfil en /users/${loggedUser.uid} (${code}).`),
+      { code },
+    )
+    log.error(`[Firebase][resolveAuthenticatedUserProfile] Null profile for uid=${loggedUser.uid} [${code}]`)
+    throw err
+  }
+
+  return prof
+}
+
 /** Update user profile in Firestore and sync with Firebase Auth */
 export async function updateUserProfile(uid: string, updates: Partial<UserProfile>) {
-  await setDoc(doc(db, 'users', uid), updates as any, { merge: true })
+  const sanitizedUpdates = stripUndefinedUserFields(updates as Record<string, unknown>)
+  if (Object.keys(sanitizedUpdates).length > 0) {
+    await setDoc(doc(db, 'users', uid), sanitizedUpdates as any, { merge: true })
+  }
 
   // Synchronize displayName and photoURL with Firebase Auth if this is current user
   if (auth.currentUser && auth.currentUser.uid === uid) {

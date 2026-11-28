@@ -30,7 +30,7 @@ test('SCRUM-310 Task 2: AuthModal implements all 5 official visual views and FOM
   // Reference structural elements from 56863bf6:src/components/auth/AuthModal.tsx
   assert.match(content, /PouwMiner\s*<span[^>]*>\s*Auth\s*<\/span>/, 'Must include official PouwMiner Auth badge')
   assert.match(content, /Preventa Titan/, 'Must include Preventa Titan indicator in ribbon')
-  assert.match(content, /24 Cupos/, 'Must include 24 Cupos pill badge in ribbon')
+  assert.doesNotMatch(content, /24 Cupos/, '24 Cupos pill removed per EMBUDO-REDISENO-MODAL-REGISTRO')
   assert.match(content, /01\s*\/\s*ACCESO/, 'Must include official step indicator 01 / ACCESO')
   assert.match(content, /01\s*\/\s*REGISTRO/, 'Must include official step indicator 01 / REGISTRO')
   assert.match(content, /02\s*\/\s*SEGURIDAD/, 'Must include official step indicator 02 / SEGURIDAD')

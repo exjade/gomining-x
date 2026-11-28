@@ -1024,6 +1024,7 @@ export function WithdrawalForm({
         <div className="wth-header-brand">
           <div className="wth-kicker-row">
             <span className="wth-asset-pill" data-testid="withdrawal-asset-pill">
+              <span className="wth-live-dot" aria-hidden="true" />
               <svg
                 width="12"
                 height="12"
@@ -1038,7 +1039,7 @@ export function WithdrawalForm({
               </svg>
               {WITHDRAWAL_ASSET} · Retiro Directo
             </span>
-            <span className="wth-sla-badge" data-testid="withdrawal-sla-badge">
+            <span className="wth-sla-badge wth-tabular-mono" data-testid="withdrawal-sla-badge">
               Prioridad {membershipTier}: {slaLabel}
             </span>
           </div>
@@ -1049,7 +1050,10 @@ export function WithdrawalForm({
         </div>
 
         <div className="wth-balance-metrics">
-          <div className="wth-balance-block" data-testid="withdrawal-available-balance-box">
+          <div
+            className="wth-balance-block wth-balance-block--available"
+            data-testid="withdrawal-available-balance-box"
+          >
             <span className="wth-balance-label">Saldo Disponible</span>
             <span className="wth-balance-value wth-balance-value--available wth-tabular-mono">
               {snapshot.isLoadingConfig ? '---.--' : formatMicrosAsUsdt(availableMicros, 2)}
@@ -1095,7 +1099,10 @@ export function WithdrawalForm({
         {/* Left Column: Network, Destination Wallet & Amount */}
         <div className="wth-panel">
           <div className="wth-section-header">
-            <h3 className="wth-section-title">1. Parámetros de Envío On-Chain</h3>
+            <div className="wth-section-title-group">
+              <span className="wth-step-chip wth-tabular-mono">01 / ENVÍO</span>
+              <h3 className="wth-section-title">Parámetros de Envío On-Chain</h3>
+            </div>
             <span className="wth-field-hint wth-tabular-mono">
               Mínimo canónico: {MIN_WITHDRAWAL_USDT}.00 {WITHDRAWAL_ASSET}
             </span>
@@ -1105,13 +1112,16 @@ export function WithdrawalForm({
           <div className="wth-field-group">
             <div className="wth-field-label-row">
               <label className="wth-field-label">Red de Destino ({WITHDRAWAL_ASSET})</label>
-              <span className="wth-field-hint">
+              <span className="wth-field-hint wth-tabular-mono">
                 {snapshot.enabledNetworks.length} redes habilitadas
               </span>
             </div>
 
             {snapshot.isLoadingConfig && snapshot.enabledNetworks.length === 0 ? (
-              <div className="wth-skeleton-line" aria-busy="true" />
+              <div className="wth-skeleton-grid" aria-busy="true">
+                <div className="wth-skeleton-line" />
+                <div className="wth-skeleton-line" />
+              </div>
             ) : (
               <div
                 className="wth-network-grid"
@@ -1133,7 +1143,10 @@ export function WithdrawalForm({
                       data-testid={`withdrawal-network-option-${net.id}`}
                     >
                       <div className="wth-network-pill-top">
-                        <span className="wth-network-name">{net.network}</span>
+                        <span className="wth-network-name-wrap">
+                          <span className="wth-network-radio-dot" aria-hidden="true" />
+                          <span className="wth-network-name">{net.network}</span>
+                        </span>
                         <span className="wth-network-standard">{net.tokenStandard}</span>
                       </div>
                       <div className="wth-network-meta wth-tabular-mono">
@@ -1194,7 +1207,7 @@ export function WithdrawalForm({
           </div>
 
           {/* Amount Input + Authoritative MAX Button */}
-          <div className="wth-field-group">
+          <div className="wth-field-group wth-field-group--last">
             <div className="wth-field-label-row">
               <label className="wth-field-label" htmlFor={amountInputId}>
                 Monto Solicitado ({WITHDRAWAL_ASSET})
@@ -1263,10 +1276,13 @@ export function WithdrawalForm({
         </div>
 
         {/* Right Column: Live Authoritative Quote Breakdown & Submit */}
-        <aside className="wth-panel" aria-label="Resumen Autoritativo de Cotización">
+        <aside className="wth-panel wth-panel--receipt" aria-label="Resumen Autoritativo de Cotización">
           <div className="wth-section-header">
-            <h3 className="wth-section-title">2. Desglose Autoritativo de Retiro</h3>
-            <span className="wth-field-hint wth-tabular-mono">
+            <div className="wth-section-title-group">
+              <span className="wth-step-chip wth-tabular-mono">02 / LIQUIDACIÓN</span>
+              <h3 className="wth-section-title">Desglose Autoritativo de Retiro</h3>
+            </div>
+            <span className="wth-quote-standard-pill wth-tabular-mono">
               {snapshot.isQuoting ? 'Cotizando...' : selectedNet?.tokenStandard ?? 'USDT'}
             </span>
           </div>
@@ -1334,8 +1350,8 @@ export function WithdrawalForm({
               </span>
             </div>
 
-            <div className="wth-quote-row wth-quote-row--highlight">
-              <span className="wth-quote-label">Monto neto a recibir en destino</span>
+            <div className="wth-quote-row wth-quote-row--highlight wth-quote-row--net-box">
+              <span className="wth-quote-label wth-quote-label--net">Monto neto a recibir en destino</span>
               <span
                 className="wth-quote-value wth-quote-value--net wth-tabular-mono"
                 data-testid="quote-net-amount"
@@ -1370,9 +1386,22 @@ export function WithdrawalForm({
             disabled={snapshot.isSubmitting || snapshot.isLoadingConfig}
             data-testid="withdrawal-submit-btn"
           >
-            {snapshot.isSubmitting
-              ? 'Reservando fondos atómicamente...'
-              : `Solicitar Retiro en ${WITHDRAWAL_ASSET}`}
+            <span>
+              {snapshot.isSubmitting
+                ? 'Reservando fondos atómicamente...'
+                : `Solicitar Retiro en ${WITHDRAWAL_ASSET}`}
+            </span>
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              aria-hidden="true"
+            >
+              <path d="M5 12h14M13 6l6 6-6 6" />
+            </svg>
           </button>
 
           {snapshot.lastSubmittedWithdrawal && (

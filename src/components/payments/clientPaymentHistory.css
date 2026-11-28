@@ -1,0 +1,181 @@
+/**
+ * EMBUDO-REDISENO-TODO-PREVENTA · Item 1
+ * Complementary styles for `ClientPaymentHistory.tsx` extending approved `withdrawalShared.css` (`wth-*`).
+ *
+ * Craft & Anti-Slop invariants (`design-taste-frontend` + `emil-design-eng`):
+ * - Obsidian & Emerald surface palette (#050505 / #0a0b0e / #0e1015 + #10b981 / #34d399).
+ * - Zero purple/violet tints, explicit property transitions only, custom ease-out `cubic-bezier(0.23, 1, 0.32, 1)`.
+ * - Tactile `:active { transform: scale(0.97) }` feedback on filter tabs and action buttons.
+ * - Tabular numerals (`font-variant-numeric: tabular-nums`) to prevent layout shift.
+ */
+
+.cph-history-panel {
+  margin-top: 24px;
+}
+
+.cph-filter-group {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--wth-s-bg-input);
+  border: 1px solid var(--wth-s-border-subtle);
+}
+
+.cph-filter-btn {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--wth-s-text-secondary);
+  font-family: var(--wth-s-font-sans);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transform-origin: center;
+  transition:
+    transform 140ms var(--wth-s-ease-out),
+    background-color 160ms var(--wth-s-ease-out),
+    border-color 160ms var(--wth-s-ease-out),
+    color 160ms var(--wth-s-ease-out);
+}
+
+.cph-filter-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.cph-filter-btn--active {
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(52, 211, 153, 0.42);
+  color: var(--wth-s-accent-soft);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .cph-filter-btn:hover:not(.cph-filter-btn--active) {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--wth-s-text-primary);
+  }
+}
+
+.cph-feedback-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 16px 0;
+  padding: 11px 14px;
+  border-radius: 12px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.34);
+  color: var(--wth-s-accent-soft);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.cph-order-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cph-order-package-name {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--wth-s-text-primary);
+}
+
+.cph-order-id-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  font-size: 11.5px;
+  color: var(--wth-s-text-secondary);
+}
+
+.cph-tag-testnet {
+  background: var(--wth-s-warning-tint);
+  border-color: rgba(245, 158, 11, 0.36);
+  color: #fcd34d;
+}
+
+.cph-confirmations-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  background: var(--wth-s-bg-input);
+  border: 1px solid rgba(45, 212, 191, 0.24);
+}
+
+.cph-confirmations-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11.5px;
+  color: #5eead4;
+}
+
+.cph-confirmations-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.cph-confirmations-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #10b981, #2dd4bf);
+  transition: width 220ms var(--wth-s-ease-out);
+}
+
+.cph-btn-cancel {
+  border-color: rgba(244, 63, 94, 0.28);
+  color: #fda4af;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .cph-btn-cancel:hover:not(:disabled) {
+    border-color: rgba(244, 63, 94, 0.52);
+    background: var(--wth-s-danger-tint);
+    color: #ffe4e6;
+  }
+}
+
+@media (max-width: 640px) {
+  .cph-filter-group {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cph-order-card .wth-card-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cph-order-card .wth-card-actions .wth-btn-detail,
+  .cph-order-card .wth-card-actions .wth-btn-secondary {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cph-filter-btn,
+  .cph-confirmations-fill {
+    transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+    transform: none;
+  }
+
+  .cph-filter-btn:active:not(:disabled) {
+    transform: none;
+  }
+}

@@ -1,0 +1,1651 @@
+/* ==========================================================================
+   EMBUDO-BUILDER-CORRECCIONES
+   Obsidian Design System for MinerBuilderDialog + 2D Skin Selector
+   Strictly 2D skins in builder; 3D teardown stays exclusively in Mi Miner (F2)
+   ========================================================================== */
+
+.miner-builder-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9998 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px !important;
+  background: rgba(5, 6, 9, 0.84) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+}
+
+.miner-builder-modal.miner-builder-modal-custom,
+.miner-builder-modal.miner-builder-modal-workflow {
+  --mb-modal: #0b0c10;
+  --mb-panel: rgba(255, 255, 255, 0.03);
+  --mb-chip: rgba(255, 255, 255, 0.045);
+  --mb-input: rgba(255, 255, 255, 0.035);
+  --mb-control-hover: rgba(255, 255, 255, 0.08);
+  --mb-border: rgba(255, 255, 255, 0.1);
+  --mb-border-strong: rgba(255, 255, 255, 0.22);
+  --mb-text: #ffffff;
+  --mb-muted: rgba(255, 255, 255, 0.56);
+  --mb-accent: #10b981;
+  --mb-accent-hover: #34d399;
+  --mb-accent-soft: rgba(16, 185, 129, 0.14);
+
+  position: relative !important;
+  display: flex !important;
+  flex-direction: column !important;
+  width: min(1140px, calc(100vw - 32px)) !important;
+  max-width: 1140px !important;
+  height: auto !important;
+  max-height: calc(100dvh - 32px) !important;
+  min-height: 0 !important;
+  padding: 18px 22px !important;
+  gap: 12px !important;
+  overflow: hidden !important;
+  border-radius: 22px !important;
+  border: 1px solid rgba(255, 255, 255, 0.11) !important;
+  background: #0b0c10 !important;
+  color: #ffffff !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 32px 84px -16px rgba(0, 0, 0, 0.88) !important;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box !important;
+}
+
+.miner-builder-modal.miner-builder-modal-workflow {
+  width: min(680px, calc(100vw - 32px)) !important;
+  max-width: 680px !important;
+  overflow-y: auto !important;
+}
+
+/* Unified Top Bar — zero overlap with stepper */
+.builder-modal-topbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 30px;
+}
+
+.builder-modal-topbar-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.builder-modal-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #ffffff !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  line-height: 1.1 !important;
+  letter-spacing: -0.02em !important;
+}
+
+.builder-modal-brand-tag {
+  padding-left: 8px;
+  border-left: 1px solid rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.45) !important;
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 10px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  letter-spacing: 0.18em !important;
+  text-transform: uppercase;
+}
+
+.builder-modal-close-inline {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 30px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 9px !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: rgba(255, 255, 255, 0.65) !important;
+  font-size: 18px !important;
+  line-height: 1 !important;
+  cursor: pointer;
+  transition:
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .builder-modal-close-inline:hover {
+    color: #ffffff !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+    border-color: rgba(255, 255, 255, 0.24) !important;
+  }
+}
+
+.builder-modal-close-inline:active {
+  transform: scale(0.97) !important;
+}
+
+/* Funnel Stepper inside Builder */
+.miner-builder-modal-custom .embudo-f1-progress-builder,
+.miner-builder-modal-workflow .embudo-f1-progress-builder {
+  flex: 0 0 auto;
+  margin: 0 !important;
+  padding: 6px 10px !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  background: rgba(255, 255, 255, 0.025) !important;
+}
+
+/* Custom Creation Screen — Flex column with scrollable middle + sticky footer */
+.miner-builder-modal-custom .miner-creation-screen-custom {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  gap: 10px !important;
+  overflow: hidden !important;
+}
+
+.miner-builder-modal-custom .miner-custom-header {
+  display: flex !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 12px !important;
+  min-height: auto !important;
+  padding: 0 !important;
+  text-align: left !important;
+}
+
+.miner-builder-modal-custom .miner-custom-back {
+  display: inline-flex !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  width: auto !important;
+  min-width: 36px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 13px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  background: rgba(255, 255, 255, 0.045) !important;
+  color: rgba(255, 255, 255, 0.88) !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  cursor: pointer;
+  transition:
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 130ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .miner-builder-modal-custom .miner-custom-back:hover {
+    border-color: rgba(255, 255, 255, 0.3) !important;
+    background: rgba(255, 255, 255, 0.09) !important;
+    color: #ffffff !important;
+  }
+}
+
+.miner-builder-modal-custom .miner-custom-back:active {
+  transform: scale(0.97) !important;
+}
+
+.miner-builder-modal-custom .miner-custom-header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.miner-builder-modal-custom .miner-custom-header .eyebrow {
+  margin: 0 !important;
+  color: rgba(52, 211, 153, 0.9) !important;
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 10.5px !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0.2em !important;
+  text-transform: uppercase;
+}
+
+.miner-builder-modal-custom .miner-custom-header h2,
+.miner-builder-modal-workflow > h2 {
+  margin: 0 !important;
+  color: #ffffff !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 22px !important;
+  font-weight: 700 !important;
+  line-height: 1.15 !important;
+  letter-spacing: -0.025em !important;
+}
+
+.miner-builder-modal-workflow > .eyebrow {
+  margin: 0 !important;
+  color: rgba(52, 211, 153, 0.9) !important;
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 10.5px !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0.2em !important;
+}
+
+.miner-builder-modal-custom .miner-creation-content-custom {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  gap: 12px !important;
+  overflow: hidden !important;
+}
+
+/* 2-Column Cockpit Body (Left: 2D Skin Preview + 10 2D Skins | Right: Power Slider 22 Tiers + Calculator + Summary) */
+.builder-cockpit-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px 6px 6px 2px;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.builder-cockpit-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.builder-cockpit-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+}
+
+.builder-cockpit-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.96fr) minmax(0, 1.04fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.builder-cockpit-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* Left Column: Strictly 2D Skin Spotlight + 10 2D Skin Thumbnails */
+.builder-skin-showcase {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.builder-skin-hero-2d {
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #07080c;
+  overflow: hidden;
+}
+
+.builder-skin-hero-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 13px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.builder-skin-hero-identity {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.builder-skin-hero-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.builder-skin-hero-name {
+  color: #ffffff !important;
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.builder-skin-hero-sub {
+  color: rgba(255, 255, 255, 0.54) !important;
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.builder-skin-free-pill {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 185, 129, 0.36);
+  background: rgba(16, 185, 129, 0.12);
+  color: #6ee7b7 !important;
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  line-height: 1.1 !important;
+  white-space: nowrap;
+}
+
+.builder-skin-hero-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  min-height: 196px;
+  max-height: 248px;
+  padding: 12px;
+  background: radial-gradient(circle at 50% 42%, rgba(16, 185, 129, 0.08), rgba(7, 8, 12, 0.98) 72%);
+  box-sizing: border-box;
+}
+
+.builder-skin-hero-img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 10px;
+  transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1), transform 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.builder-skin-hero-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  padding: 8px 13px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.builder-skin-hero-spec {
+  color: #ffffff !important;
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+}
+
+.builder-skin-hero-note {
+  color: rgba(255, 255, 255, 0.52) !important;
+  font-size: 10.5px !important;
+  line-height: 1.25 !important;
+}
+
+.builder-skin-picker-card {
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.builder-skin-picker-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.builder-skin-eyebrow {
+  display: block;
+  color: rgba(52, 211, 153, 0.9) !important;
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0.16em !important;
+}
+
+.builder-skin-subtitle {
+  margin: 3px 0 0 !important;
+  color: rgba(255, 255, 255, 0.56) !important;
+  font-size: 11.5px !important;
+  line-height: 1.35 !important;
+}
+
+.builder-skin-selected-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.12);
+  color: #ffffff !important;
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 10.5px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  white-space: nowrap;
+}
+
+.builder-skin-accent-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.builder-skin-thumb-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.builder-skin-thumb-btn {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  min-width: 0 !important;
+  min-height: auto !important;
+  padding: 4px !important;
+  gap: 4px !important;
+  border-radius: 11px !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  color: rgba(255, 255, 255, 0.78) !important;
+  text-align: left !important;
+  cursor: pointer;
+  transition:
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 130ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .builder-skin-thumb-btn:hover {
+    border-color: rgba(255, 255, 255, 0.28) !important;
+    background: rgba(255, 255, 255, 0.065) !important;
+  }
+}
+
+.builder-skin-thumb-btn:active {
+  transform: scale(0.97) !important;
+}
+
+.builder-skin-thumb-btn-active {
+  border-color: #10b981 !important;
+  background: rgba(16, 185, 129, 0.14) !important;
+  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.38) !important;
+  color: #ffffff !important;
+}
+
+.builder-skin-thumb-frame {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #070a10;
+}
+
+.builder-skin-thumb-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.builder-skin-thumb-check {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 999px;
+  background: #10b981;
+  color: #04130d !important;
+  font-size: 10.5px !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+
+.builder-skin-thumb-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 2px 1px;
+  min-width: 0;
+}
+
+.builder-skin-thumb-code {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: rgba(255, 255, 255, 0.55) !important;
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 9.5px !important;
+  font-weight: 600 !important;
+  line-height: 1.1 !important;
+}
+
+.builder-skin-thumb-btn-active .builder-skin-thumb-code {
+  color: #6ee7b7 !important;
+}
+
+.builder-skin-thumb-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.builder-skin-thumb-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #ffffff !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 10.5px !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+}
+
+/* Right Column: Power Slider (22 Tiers) + Calculator + Summary */
+.miner-builder-modal-custom .embudo-f1-presale-notice {
+  margin: 0 !important;
+  padding: 8px 11px !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(16, 185, 129, 0.3) !important;
+  background: rgba(16, 185, 129, 0.08) !important;
+}
+
+.miner-builder-modal-custom .embudo-f1-presale-tag {
+  font-size: 9.5px !important;
+  line-height: 1.2 !important;
+}
+
+.miner-builder-modal-custom .embudo-f1-presale-copy {
+  color: rgba(255, 255, 255, 0.86) !important;
+  font-size: 11.5px !important;
+  line-height: 1.35 !important;
+}
+
+.miner-builder-modal-custom .miner-custom-card-list {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+.miner-builder-modal-custom .miner-custom-card {
+  padding: 13px 14px !important;
+  border-radius: 16px !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  background: rgba(255, 255, 255, 0.025) !important;
+}
+
+.miner-builder-modal-custom .panel-toolbar {
+  margin-bottom: 10px !important;
+}
+
+.miner-builder-modal-custom .panel-toolbar h3 {
+  color: #ffffff !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+}
+
+.miner-builder-modal-custom .panel-toolbar p {
+  margin: 2px 0 0 !important;
+  color: rgba(255, 255, 255, 0.52) !important;
+  font-size: 11.5px !important;
+  line-height: 1.3 !important;
+}
+
+.miner-builder-modal-custom .miner-option-badge {
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 10px !important;
+  line-height: 1 !important;
+  padding: 3px 8px !important;
+  color: rgba(255, 255, 255, 0.72) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.builder-power-hero-readout {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.builder-power-hero-th {
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 24px !important;
+  font-weight: 700 !important;
+  line-height: 1.1 !important;
+  color: #ffffff !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.builder-power-hero-th small {
+  margin-left: 5px;
+  color: #34d399 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+
+.builder-power-hero-price {
+  text-align: right;
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  line-height: 1.1 !important;
+  color: #34d399 !important;
+  font-variant-numeric: tabular-nums;
+}
+
+/* PowerSlider 22-tier chips + range slider — zero text clipping across 1 TH..5,000 TH */
+.miner-builder-modal-custom .miner-power-label > span,
+.miner-builder-modal-custom .miner-power-range-label,
+.miner-builder-modal-custom .miner-power-price > span {
+  color: rgba(255, 255, 255, 0.6) !important;
+  font-size: 11.5px !important;
+  line-height: 1.25 !important;
+}
+
+.miner-builder-modal-custom .miner-power-label strong,
+.miner-builder-modal-custom .miner-power-price strong {
+  color: #ffffff !important;
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 12px !important;
+  line-height: 1.25 !important;
+}
+
+.miner-builder-modal-custom .miner-power-arrow {
+  min-height: 34px !important;
+  height: 34px !important;
+  width: 30px !important;
+  border-radius: 9px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: #ffffff !important;
+  font-size: 16px !important;
+  line-height: 1 !important;
+  transition: background-color 150ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+.miner-builder-modal-custom .miner-power-arrow:active:not(:disabled) {
+  transform: scale(0.97) !important;
+}
+
+.miner-builder-modal-custom .miner-power-scroll {
+  padding: 4px 4px 6px !important;
+  gap: 6px !important;
+}
+
+.miner-builder-modal-custom .miner-power-chip {
+  flex: 0 0 auto !important;
+  min-width: 72px !important;
+  width: auto !important;
+  min-height: 34px !important;
+  height: 34px !important;
+  padding: 0 11px !important;
+  border-radius: 9px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  color: rgba(255, 255, 255, 0.78) !important;
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 11.5px !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  transition:
+    border-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 120ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+.miner-builder-modal-custom .miner-power-chip:active {
+  transform: scale(0.97) !important;
+}
+
+.miner-builder-modal-custom .miner-power-chip-main {
+  font-size: 11.5px !important;
+  line-height: 1 !important;
+}
+
+.miner-builder-modal-custom .miner-power-chip-active {
+  border-color: #10b981 !important;
+  background: rgba(16, 185, 129, 0.18) !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.45) !important;
+}
+
+.miner-builder-modal-custom .miner-power-range {
+  width: 100%;
+  accent-color: #10b981;
+  cursor: pointer;
+}
+
+.miner-builder-modal-custom .miner-energy-efficiency {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.miner-builder-modal-custom .miner-section-heading {
+  color: rgba(255, 255, 255, 0.65) !important;
+  font-size: 11.5px !important;
+}
+
+.miner-builder-modal-custom .miner-efficiency-chip {
+  padding: 3px 9px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+.miner-builder-modal-custom .miner-efficiency-chip strong,
+.miner-builder-modal-custom .miner-efficiency-mark {
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 11.5px !important;
+  line-height: 1 !important;
+}
+
+/* Compact Rewards Calculator */
+.miner-builder-modal-custom .miner-rewards-periods button,
+.miner-builder-modal-custom .miner-rewards-currency-buttons button,
+.miner-builder-modal-custom .miner-payment-option-buttons button {
+  min-height: 30px !important;
+  height: 30px !important;
+  font-size: 11.5px !important;
+  line-height: 1 !important;
+  border-radius: 8px !important;
+  transition:
+    background-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 150ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 120ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+.miner-builder-modal-custom .miner-rewards-periods button:active,
+.miner-builder-modal-custom .miner-rewards-currency-buttons button:active,
+.miner-builder-modal-custom .miner-payment-option-buttons button:active {
+  transform: scale(0.97) !important;
+}
+
+.miner-builder-modal-custom .miner-rewards-period-active,
+.miner-builder-modal-custom .miner-rewards-currency-active {
+  background: #ffffff !important;
+  color: #050505 !important;
+  border-color: #ffffff !important;
+}
+
+.miner-builder-modal-custom .miner-rewards-metric span,
+.miner-builder-modal-custom .miner-rewards-value-row span,
+.miner-builder-modal-custom .miner-rewards-note,
+.miner-builder-modal-custom .miner-reward-history span,
+.miner-builder-modal-custom .miner-config-summary span {
+  font-size: 11.5px !important;
+  line-height: 1.3 !important;
+}
+
+.miner-builder-modal-custom .miner-rewards-metric strong,
+.miner-builder-modal-custom .miner-rewards-value-row strong,
+.miner-builder-modal-custom .miner-config-summary strong {
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 12px !important;
+  line-height: 1.3 !important;
+}
+
+.miner-builder-modal-custom .miner-rewards-metric strong small {
+  font-size: 10.5px !important;
+}
+
+.miner-builder-modal-custom .miner-custom-traits-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 10px !important;
+  padding: 10px 12px !important;
+}
+
+.miner-builder-modal-custom .miner-custom-traits-copy strong {
+  display: block;
+  color: #ffffff !important;
+  font-size: 12px !important;
+  line-height: 1.25 !important;
+}
+
+.miner-builder-modal-custom .miner-custom-traits-copy small {
+  color: rgba(255, 255, 255, 0.56) !important;
+  font-size: 11px !important;
+  line-height: 1.25 !important;
+}
+
+.miner-builder-modal-custom .miner-promo span {
+  font-size: 11.5px !important;
+}
+
+.miner-builder-modal-custom .miner-promo input {
+  min-height: 36px !important;
+  height: 36px !important;
+  font-size: 12.5px !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: rgba(255, 255, 255, 0.035) !important;
+  color: #ffffff !important;
+}
+
+/* Sticky Bottom Action Bar — White Pill CTA + Back button */
+.miner-builder-modal-custom .builder-footer-actions,
+.miner-builder-modal-workflow .purchase-modal-actions {
+  display: flex !important;
+  flex: 0 0 auto !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  margin: 0 !important;
+  padding: 12px 0 0 !important;
+  min-height: auto !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.09) !important;
+  background: transparent !important;
+}
+
+.miner-builder-modal-custom .builder-back-step-btn,
+.miner-builder-modal-workflow .purchase-modal-actions .button-quiet {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  min-height: 40px !important;
+  height: 40px !important;
+  padding: 0 16px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  cursor: pointer;
+  transition:
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 130ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .miner-builder-modal-custom .builder-back-step-btn:hover,
+  .miner-builder-modal-workflow .purchase-modal-actions .button-quiet:hover {
+    border-color: rgba(255, 255, 255, 0.3) !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: #ffffff !important;
+  }
+}
+
+.miner-builder-modal-custom .builder-back-step-btn:active,
+.miner-builder-modal-workflow .purchase-modal-actions .button-quiet:active {
+  transform: scale(0.97) !important;
+}
+
+.miner-builder-modal-custom .builder-footer-actions .button-primary,
+.miner-builder-modal-workflow .purchase-modal-actions .button-primary {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  min-height: 42px !important;
+  height: 42px !important;
+  padding: 0 24px !important;
+  border-radius: 999px !important;
+  border: 1px solid #ffffff !important;
+  background: #ffffff !important;
+  color: #050505 !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  cursor: pointer;
+  transition:
+    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 130ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .miner-builder-modal-custom .builder-footer-actions .button-primary:hover:not(:disabled),
+  .miner-builder-modal-workflow .purchase-modal-actions .button-primary:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.9) !important;
+    color: #050505 !important;
+  }
+}
+
+.miner-builder-modal-custom .builder-footer-actions .button-primary:active:not(:disabled),
+.miner-builder-modal-workflow .purchase-modal-actions .button-primary:active:not(:disabled) {
+  transform: scale(0.97) !important;
+}
+
+.miner-builder-modal-workflow .purchase-modal-actions .button-primary:disabled {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+}
+
+.miner-builder-modal-workflow .purchase-modal-actions .button-secondary {
+  min-height: 40px !important;
+  height: 40px !important;
+  padding: 0 18px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(16, 185, 129, 0.45) !important;
+  background: rgba(16, 185, 129, 0.14) !important;
+  color: #6ee7b7 !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+/* Review stage cards aligned to Obsidian aesthetic */
+.miner-builder-modal-workflow .builder-review-grid > div,
+.miner-builder-modal-workflow .purchase-total,
+.miner-builder-modal-workflow .checkout-payment,
+.miner-builder-modal-workflow .simulation-warning,
+.miner-builder-modal-workflow .simulation-consent {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-radius: 14px !important;
+}
+
+.builder-review-skin-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.builder-review-skin-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  background: #070a10;
+}
+
+/* Responsive Tablet & Mobile */
+@media (max-width: 920px) {
+  .miner-builder-modal.miner-builder-modal-custom {
+    width: min(700px, calc(100vw - 20px)) !important;
+    max-height: 94dvh !important;
+    padding: 14px 16px !important;
+    border-radius: 18px !important;
+  }
+
+  .builder-cockpit-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .builder-skin-hero-stage {
+    min-height: 170px;
+    max-height: 210px;
+  }
+}
+
+@media (max-width: 560px) {
+  .miner-builder-backdrop {
+    align-items: center !important;
+    padding: 10px !important;
+  }
+
+  .miner-builder-modal.miner-builder-modal-custom {
+    width: calc(100vw - 20px) !important;
+    max-width: calc(100vw - 20px) !important;
+    border-radius: 18px !important;
+  }
+
+  .miner-builder-modal-custom .miner-custom-header {
+    padding: 0 !important;
+    min-height: auto !important;
+    flex-basis: auto !important;
+  }
+
+  .miner-builder-modal-custom .miner-custom-header h2,
+  .miner-builder-modal-workflow > h2 {
+    font-size: 19px !important;
+  }
+
+  .miner-builder-modal-custom .miner-custom-card-list {
+    padding: 0 !important;
+  }
+
+  .builder-skin-thumb-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .miner-builder-modal-custom .builder-footer-actions {
+    flex-direction: row !important;
+    gap: 8px !important;
+  }
+
+  .miner-builder-modal-custom .builder-footer-actions .button-primary {
+    flex: 1 1 auto !important;
+    padding: 0 14px !important;
+    font-size: 12.5px !important;
+  }
+}
+
+
+/* ==========================================================================
+   EMBUDO-BUILDER-SIMPLIFICAR-PAGO
+   1) PowerSlider slider-only + price/TH & total price
+   2) RewardsCalculator plain-language explanations (USD + PEARL/USDT)
+   3) Workflow Review Modal sticky footer & compact 1440x900 fit
+   4) WalletPaymentCheckout (.wallet-checkout-modal) Obsidian/Emerald Redesign
+   ========================================================================== */
+
+/* 1) Simplified PowerSlider (slider only, no tier chips carousel) */
+.miner-builder-modal-custom .miner-power-control {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.miner-builder-modal-custom .miner-power-range-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.miner-builder-modal-custom .miner-power-range-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.miner-builder-modal-custom .miner-power-range-tier {
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  color: #34d399 !important;
+}
+
+.miner-builder-modal-custom .miner-power-scale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.miner-builder-modal-custom .miner-power-price-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.miner-builder-modal-custom .miner-power-price-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 11px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.miner-builder-modal-custom .miner-power-price-cell span {
+  font-size: 10.5px !important;
+  color: rgba(255, 255, 255, 0.56) !important;
+  line-height: 1.2 !important;
+}
+
+.miner-builder-modal-custom .miner-power-price-cell strong {
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: #ffffff !important;
+  line-height: 1.2 !important;
+}
+
+.miner-builder-modal-custom .miner-power-price-total {
+  border-color: rgba(16, 185, 129, 0.32);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.miner-builder-modal-custom .miner-power-price-total strong {
+  color: #34d399 !important;
+}
+
+/* 2) Simplified RewardsCalculator plain-language metric explanations */
+.miner-builder-modal-custom .miner-rewards-metric {
+  align-items: flex-start !important;
+  gap: 12px !important;
+  padding: 7px 0 !important;
+}
+
+.miner-builder-modal-custom .miner-rewards-metric-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.miner-builder-modal-custom .miner-rewards-explain {
+  margin: 0 !important;
+  font-size: 10.5px !important;
+  line-height: 1.35 !important;
+  color: rgba(255, 255, 255, 0.48) !important;
+  font-weight: 400 !important;
+}
+
+.miner-builder-modal-custom .miner-rewards-metric strong {
+  flex: 0 0 auto;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.miner-builder-modal-custom .miner-rewards-net strong,
+.miner-builder-modal-custom .miner-rewards-roi strong {
+  color: #34d399 !important;
+}
+
+/* 3) Workflow Review Modal ("Revisa tu minero" / "Conectar wallet y pagar") — 1440x900 100% zoom fit */
+.miner-builder-modal.miner-builder-modal-workflow {
+  max-height: calc(100dvh - 32px) !important;
+  overflow: hidden !important;
+  padding: 16px 20px !important;
+  gap: 10px !important;
+}
+
+.miner-builder-modal-workflow .builder-workflow-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.miner-builder-modal-workflow .builder-review-grid {
+  gap: 8px !important;
+}
+
+.miner-builder-modal-workflow .builder-review-grid > div {
+  padding: 9px 12px !important;
+}
+
+.miner-builder-modal-workflow .purchase-total,
+.miner-builder-modal-workflow .checkout-payment,
+.miner-builder-modal-workflow .simulation-warning,
+.miner-builder-modal-workflow .simulation-consent {
+  padding: 10px 12px !important;
+  margin: 0 !important;
+  font-size: 12px !important;
+}
+
+.miner-builder-modal-workflow .purchase-modal-actions.builder-workflow-footer {
+  flex: 0 0 auto !important;
+  padding: 11px 0 0 !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.09) !important;
+  background: #0b0c10 !important;
+}
+
+.miner-builder-modal-workflow .purchase-modal-actions.purchase-modal-actions-inline {
+  padding: 6px 0 0 !important;
+  border-top: 0 !important;
+}
+
+/* 4) WalletPaymentCheckout (.wallet-checkout-modal) — Landing Obsidian + Emerald Redesign */
+.wallet-checkout-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 10000 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px !important;
+  background: rgba(5, 6, 9, 0.86) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+}
+
+.wallet-checkout-modal {
+  position: relative !important;
+  display: flex !important;
+  flex-direction: column !important;
+  width: min(560px, calc(100vw - 32px)) !important;
+  max-width: 560px !important;
+  max-height: calc(100dvh - 32px) !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border-radius: 22px !important;
+  border: 1px solid rgba(255, 255, 255, 0.11) !important;
+  background: #0b0c10 !important;
+  color: #ffffff !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 32px 84px -16px rgba(0, 0, 0, 0.88) !important;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box !important;
+}
+
+.wallet-checkout-modal .checkout-modal-header {
+  display: flex !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  padding: 14px 20px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09) !important;
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+
+.wallet-checkout-modal .checkout-modal-header h2 {
+  margin: 0 !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 17px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  letter-spacing: -0.02em !important;
+  color: #ffffff !important;
+}
+
+.wallet-checkout-modal .checkout-subtitle {
+  margin: 3px 0 0 !important;
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 10.5px !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase;
+  color: rgba(52, 211, 153, 0.88) !important;
+}
+
+.wallet-checkout-modal .checkout-close-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 9px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+  font-size: 14px !important;
+  cursor: pointer;
+  transition: background-color 150ms cubic-bezier(0.23, 1, 0.32, 1), color 150ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+.wallet-checkout-modal .checkout-close-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+}
+
+.wallet-checkout-modal .checkout-close-btn:active {
+  transform: scale(0.97) !important;
+}
+
+.wallet-checkout-modal .checkout-form-content,
+.wallet-checkout-modal .checkout-receipt-view,
+.wallet-checkout-modal .checkout-auth-gate {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  padding: 14px 20px 16px !important;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.wallet-checkout-modal .checkout-section {
+  margin-bottom: 10px !important;
+}
+
+.wallet-checkout-modal .checkout-label {
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+  margin-bottom: 6px !important;
+}
+
+.wallet-checkout-modal .checkout-network-grid {
+  gap: 7px !important;
+}
+
+.wallet-checkout-modal .network-chip-btn,
+.wallet-checkout-modal .currency-pill-btn {
+  border-radius: 11px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  color: rgba(255, 255, 255, 0.82) !important;
+  padding: 8px 11px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  transition: border-color 150ms cubic-bezier(0.23, 1, 0.32, 1), background-color 150ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+.wallet-checkout-modal .network-chip-btn:active,
+.wallet-checkout-modal .currency-pill-btn:active {
+  transform: scale(0.97) !important;
+}
+
+.wallet-checkout-modal .network-chip-btn.network-chip-active,
+.wallet-checkout-modal .currency-pill-btn.currency-pill-active {
+  border-color: #10b981 !important;
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.4) !important;
+}
+
+.wallet-checkout-modal .checkout-quote-card {
+  border-radius: 14px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  padding: 12px 14px !important;
+  margin-bottom: 10px !important;
+}
+
+.wallet-checkout-modal .quote-asset-pill {
+  color: #34d399 !important;
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-weight: 700 !important;
+}
+
+.wallet-checkout-modal .quote-tag-fee {
+  background: rgba(16, 185, 129, 0.14) !important;
+  color: #6ee7b7 !important;
+  border: 1px solid rgba(16, 185, 129, 0.3) !important;
+}
+
+/* Override any inline legacy purple accents inside WalletPaymentCheckout.tsx without modifying the frozen file */
+.wallet-checkout-modal [style*="rgba(124, 58, 237"] {
+  background: rgba(16, 185, 129, 0.07) !important;
+  border-color: rgba(16, 185, 129, 0.24) !important;
+  border-radius: 12px !important;
+  padding: 10px 12px !important;
+}
+
+.wallet-checkout-modal [style*="#a78bfa"],
+.wallet-checkout-modal [style*="#c4b5fd"] {
+  color: #6ee7b7 !important;
+}
+
+/* Sticky CTA Footer inside WalletPaymentCheckout */
+.wallet-checkout-modal .checkout-cta-box {
+  position: sticky !important;
+  bottom: -16px !important;
+  margin: 12px -20px -16px !important;
+  padding: 12px 20px 14px !important;
+  background: linear-gradient(180deg, rgba(11, 12, 16, 0.92) 0%, #0b0c10 28%) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.09) !important;
+  z-index: 4 !important;
+}
+
+.wallet-checkout-modal .button.button-primary,
+.wallet-checkout-modal .checkout-action-btn.button-primary {
+  width: 100% !important;
+  min-height: 42px !important;
+  border-radius: 999px !important;
+  border: 1px solid #10b981 !important;
+  background: #10b981 !important;
+  color: #04130d !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 13.5px !important;
+  font-weight: 700 !important;
+  transition: background-color 150ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1), opacity 150ms ease !important;
+}
+
+.wallet-checkout-modal .button.button-primary:hover:not(:disabled),
+.wallet-checkout-modal .checkout-action-btn.button-primary:hover:not(:disabled) {
+  background: #34d399 !important;
+  border-color: #34d399 !important;
+}
+
+.wallet-checkout-modal .button.button-secondary,
+.wallet-checkout-modal .checkout-action-btn.button-secondary {
+  width: 100% !important;
+  min-height: 40px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  background: rgba(255, 255, 255, 0.045) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  transition: background-color 150ms cubic-bezier(0.23, 1, 0.32, 1), border-color 150ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+.wallet-checkout-modal .button.button-secondary:hover:not(:disabled),
+.wallet-checkout-modal .checkout-action-btn.button-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+}
+
+.wallet-checkout-modal .button:active:not(:disabled) {
+  transform: scale(0.97) !important;
+}
+
+.wallet-checkout-modal .receipt-success-badge {
+  background: rgba(16, 185, 129, 0.16) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(16, 185, 129, 0.4) !important;
+}
+
+
+/* ==========================================================================
+   EMBUDO-CIERRE-REANUDAR-BANNER
+   Dashboard (/home) persistent "Tu miner te espera" resume banner
+   ========================================================================== */
+.pending-miner-banner {
+  position: sticky;
+  top: 12px;
+  z-index: 25;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 14px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(16, 185, 129, 0.36);
+  background: linear-gradient(135deg, rgba(11, 12, 16, 0.96) 0%, rgba(12, 26, 22, 0.96) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 42px -12px rgba(0, 0, 0, 0.72);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color: #ffffff;
+}
+
+.pending-miner-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  flex: 1 1 320px;
+}
+
+.pending-miner-banner-thumb {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  border-radius: 12px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  flex: 0 0 auto;
+}
+
+.pending-miner-banner-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pending-miner-banner-kicker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: #34d399;
+}
+
+.pending-miner-banner-stage {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 185, 129, 0.32);
+  background: rgba(16, 185, 129, 0.12);
+  color: #a7f3d0;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.pending-miner-banner-copy h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #ffffff;
+}
+
+.pending-miner-banner-copy p {
+  margin: 0;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.pending-miner-banner-copy p strong {
+  color: #34d399;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.pending-miner-banner-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pending-miner-resume-btn {
+  min-height: 40px !important;
+  padding: 0 18px !important;
+  border-radius: 999px !important;
+  border: 1px solid #10b981 !important;
+  background: #10b981 !important;
+  color: #04130d !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  transition: background-color 150ms cubic-bezier(0.23, 1, 0.32, 1), transform 120ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+.pending-miner-resume-btn:hover {
+  background: #34d399 !important;
+}
+
+.pending-miner-resume-btn:active {
+  transform: scale(0.97) !important;
+}
+
+.pending-miner-verify-btn {
+  min-height: 38px !important;
+  padding: 0 14px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: #ffffff !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+}
+
+.pending-miner-dismiss-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.65);
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease, transform 120ms ease;
+}
+
+.pending-miner-dismiss-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.pending-miner-dismiss-btn:active {
+  transform: scale(0.97);
+}

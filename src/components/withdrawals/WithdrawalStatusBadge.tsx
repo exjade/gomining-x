@@ -162,7 +162,7 @@ export function WithdrawalStatusBadge({
 
   return (
     <span
-      className={`wth-status-badge wth-status-badge--${meta.tone}${className ? ` ${className}` : ''}`}
+      className={`wth-status-badge wth-status-badge--${meta.tone}${compact ? ' wth-status-badge--compact' : ''}${className ? ` ${className}` : ''}`}
       title={meta.description}
       data-status={meta.status}
       data-testid={`withdrawal-status-badge-${meta.status}`}
