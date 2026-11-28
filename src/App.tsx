@@ -38,6 +38,14 @@ import {
   resolvePresaleReviewModalityLabel,
   resolvePresaleStorefrontSections,
 } from './components/miner-builder/presaleCustomOnlyPolicy'
+import {
+  SHOW_STAGE2_BATTLES_MINER_WARS,
+  SHOW_STAGE2_EXTRA_EXPLORE_MODULES,
+  SHOW_STAGE2_POBOXES_AND_PROMOS,
+  SHOW_STAGE2_SUBSCRIPTIONS,
+  SHOW_STAGE2_TOPUP_AND_DEPOSIT,
+  isHiddenInPresaleStage1,
+} from './presaleStage1Flags'
 import { BitcoinMiningCalculator } from './BitcoinMiningCalculator'
 import { calculateMiningSettlement, REFERRAL_LEVEL_WEIGHTS } from './miningEconomics'
 import { resetMiningConfig, updateMiningConfig, useMiningConfig } from './miningConfig'
@@ -493,6 +501,7 @@ function AppContent() {
     return <Navigate to={verifyGateRedirect} replace />
   }
 
+  if (isHiddenInPresaleStage1(location.pathname)) return <Navigate to="/home" replace />
 
   const cleanPath = location.pathname.split('?')[0].split('#')[0].replace(/\/+$/, '').toLowerCase() || '/'
   const aliasTarget = routeAliases[cleanPath]
@@ -865,7 +874,7 @@ function AppContent() {
           setToast("Compra simulada completa; inventario y saldo actualizados")
         }}
       />}
-      {topUpOpen && <DemoTopUpDialog walletSession={effectiveWalletSession} onClose={() => setTopUpOpen(false)} onPayWithWallet={(amount, networkId, walletId) => {
+      {SHOW_STAGE2_TOPUP_AND_DEPOSIT && topUpOpen && <DemoTopUpDialog walletSession={effectiveWalletSession} onClose={() => setTopUpOpen(false)} onPayWithWallet={(amount, networkId, walletId) => {
         if (!user || user.isAnonymous) {
           setTopUpOpen(false)
           openAuthModal('register')
@@ -1105,7 +1114,12 @@ function MoreNavigation() {
     <summary aria-label={t('nav.more_sections')}>•••</summary>
     <div className="nav-dropdown">
       {navGroups.filter((group) => group.label !== 'Panel').map((group) => {
-        const visibleItems = group.items.filter((item: NavItem) => item.path !== '/gmt-wallets' && !isDisabledRoute(item.path))
+        const visibleItems = group.items.filter(
+          (item: NavItem) =>
+            item.path !== '/gmt-wallets' &&
+            !isDisabledRoute(item.path) &&
+            !isHiddenInPresaleStage1(item.path),
+        )
         if (!visibleItems.length) return null
         return <section className="nav-dropdown-group" key={group.label}>
           <h2>{groupLabelMap[group.label] || group.label}</h2>
@@ -1228,7 +1242,7 @@ function Page({
                   <p className="page-description">{localizedDescription}</p>
                 </div>
               </div>
-              {screen.action && screen.action !== 'Filtros' && pathname !== '/nft-miners' && !pathname.startsWith('/nft-rewards/') && !pathname.startsWith('/nft-referral') && pathname !== '/withdraw/GOMINING' && <button className="button button-primary" onClick={() => {
+              {screen.action && screen.action !== 'Filtros' && !(pathname === '/finance/wallets/virtual' && screen.action === 'Recargar' && !SHOW_STAGE2_TOPUP_AND_DEPOSIT) && pathname !== '/nft-miners' && !pathname.startsWith('/nft-rewards/') && !pathname.startsWith('/nft-referral') && pathname !== '/withdraw/GOMINING' && <button className="button button-primary" onClick={() => {
                 if (pathname === '/finance/wallets/virtual' && screen.action === 'Recargar') { openTopUp(); return }
                 openAction(screen.action!, pathname === '/buy/GOMINING' ? 'La ruta de compra de GOMINING se conserva para la tokenómica. El inventario y la cotización de este token aún no están conectados; esta acción no abre un carrito ni envía fondos.' : actionDetail(screen.action!))
               }}>{screen.action}<span>↗</span></button>}
@@ -1367,19 +1381,23 @@ function HomeDashboard({ openMinerBuilder, openTopUp }: { openMinerBuilder: () =
         </div>
         <div className="quick-actions">
           <QuickAction icon="◈" label={isEn ? 'Buy miner' : 'Comprar minero'} onClick={openMinerBuilder} />
-          <QuickAction icon="↓" label={isEn ? 'Top up' : 'Recargar'} onClick={openTopUp} />
+          {SHOW_STAGE2_TOPUP_AND_DEPOSIT && (
+            <QuickAction icon="↓" label={isEn ? 'Top up' : 'Recargar'} onClick={openTopUp} />
+          )}
           <QuickAction icon="▦" label={isEn ? 'My farm' : 'Mi granja'} to="/nft-miners" />
           <QuickAction icon="◎" label={isEn ? 'Referrals & Unilevel' : 'Referidos y Unilevel'} to="/nft-referral" />
           <QuickAction icon="↑" label={isEn ? 'Withdraw USDT' : 'Retiros USDT'} to="/withdraw/GOMINING" />
         </div>
       </section>
 
-      <div className="market-strip f5-glass-card">
-        <MarketItem name="BTC" value={isEn ? '$90,000.00 · historical reference' : '$90,000.00 · referencia histórica'} />
-        <div className="market-divider" />
-        <MarketItem name="GOMINING" value={isEn ? 'Simulated' : 'Simulado'} />
-        <span className="market-status"><span />{isEn ? 'Simulated price reference' : 'Referencia de precios simulada'}</span>
-      </div>
+      {SHOW_STAGE2_EXTRA_EXPLORE_MODULES && (
+        <div className="market-strip f5-glass-card">
+          <MarketItem name="BTC" value={isEn ? '$90,000.00 · historical reference' : '$90,000.00 · referencia histórica'} />
+          <div className="market-divider" />
+          <MarketItem name="GOMINING" value={isEn ? 'Simulated' : 'Simulado'} />
+          <span className="market-status"><span />{isEn ? 'Simulated price reference' : 'Referencia de precios simulada'}</span>
+        </div>
+      )}
 
       <MiningQuestBoard minerCountOverride={totalMinersCount} />
 
@@ -1388,18 +1406,26 @@ function HomeDashboard({ openMinerBuilder, openTopUp }: { openMinerBuilder: () =
         <DashboardCard tone="green" kicker={isEn ? 'DIRECT REFERRALS & UNILEVEL' : 'REFERIDOS DIRECTOS & UNILEVEL'} title={isEn ? 'Affiliate network' : 'Red de afiliados'} body={isEn ? 'Share your referral link and track your direct referrals and Unilevel tree.' : 'Comparte tu enlace de invitación y consulta tus referidos directos y red Unilevel.'} action={isEn ? 'Open referrals' : 'Abrir referidos'} to="/nft-referral" icon="◎" />
         <DashboardCard tone="teal" kicker={isEn ? 'PRESALE · FREE BASE SKIN ($0)' : 'PREVENTA · SKIN BASE GRATIS ($0)'} title={isEn ? '22 power tiers' : '22 niveles TH/s'} body={isEn ? 'Choose your power tier with base 2D skin included at $0 in presale.' : 'Configura tus TH/s con skin base 2D incluida a $0 USD durante la preventa.'} action={isEn ? 'Configure miner' : 'Comprar minero'} onClick={openMinerBuilder} icon="◈" />
         <DashboardCard tone="green" kicker={isEn ? 'WEB3 WALLET & ORDERS' : 'CARTERA & HISTORIAL DE COMPRAS'} title={isEn ? 'On-chain status' : 'Órdenes y retiros'} body={isEn ? 'Manage your EVM, Solana or TRON wallet, order history and USDT withdrawals.' : 'Gestiona tu billetera EVM, Solana o TRON, tu historial de compras y retiros USDT.'} action={isEn ? 'Open wallet' : 'Ver cartera y órdenes'} to="/gmt-wallets" icon="◌" />
-        <DashboardCard tone="gold" kicker={isEn ? 'VIP LEVEL · DEMO' : 'NIVEL VIP · DEMO'} title="Bronze II" body={isEn ? 'Explore subscription benefits.' : 'Explora los beneficios de suscripción.'} action={isEn ? 'View benefits' : 'Ver beneficios'} to="/subscriptions" icon="◈" />
-        <DashboardCard tone="platinum" kicker="PLATINUM+" title={demo.subscription ? (isEn ? `Active · ${demo.subscription.cycle === 'monthly' ? 'monthly' : 'annual'}` : `Activo · ${demo.subscription.cycle === 'monthly' ? 'mensual' : 'anual'}`) : (isEn ? 'Subscription' : 'Suscripción')} body={demo.subscription ? (isEn ? '+1% active power boost during this session.' : '+1% sobre potencia activa durante esta sesión.') : (isEn ? 'Activate a local subscription to check the perk.' : 'Activa una suscripción local para consultar el beneficio.')} action={isEn ? 'View subscriptions' : 'Ver suscripciones'} to="/subscriptions" icon="✦" />
-        <DashboardCard tone="green" kicker={isEn ? 'PROMOTIONS' : 'PROMOCIONES'} title={isEn ? 'Platform news' : 'Novedades de la plataforma'} body={isEn ? 'Check current MVP promotions.' : 'Consulta las promociones vigentes del MVP.'} action={isEn ? 'View promos' : 'Ver promos'} to="/promos" icon="✦" />
+        {SHOW_STAGE2_SUBSCRIPTIONS && (
+          <>
+            <DashboardCard tone="gold" kicker={isEn ? 'VIP LEVEL · DEMO' : 'NIVEL VIP · DEMO'} title="Bronze II" body={isEn ? 'Explore subscription benefits.' : 'Explora los beneficios de suscripción.'} action={isEn ? 'View benefits' : 'Ver beneficios'} to="/subscriptions" icon="◈" />
+            <DashboardCard tone="platinum" kicker="PLATINUM+" title={demo.subscription ? (isEn ? `Active · ${demo.subscription.cycle === 'monthly' ? 'monthly' : 'annual'}` : `Activo · ${demo.subscription.cycle === 'monthly' ? 'mensual' : 'anual'}`) : (isEn ? 'Subscription' : 'Suscripción')} body={demo.subscription ? (isEn ? '+1% active power boost during this session.' : '+1% sobre potencia activa durante esta sesión.') : (isEn ? 'Activate a local subscription to check the perk.' : 'Activa una suscripción local para consultar el beneficio.')} action={isEn ? 'View subscriptions' : 'Ver suscripciones'} to="/subscriptions" icon="✦" />
+          </>
+        )}
+        {SHOW_STAGE2_POBOXES_AND_PROMOS && (
+          <DashboardCard tone="green" kicker={isEn ? 'PROMOTIONS' : 'PROMOCIONES'} title={isEn ? 'Platform news' : 'Novedades de la plataforma'} body={isEn ? 'Check current MVP promotions.' : 'Consulta las promociones vigentes del MVP.'} action={isEn ? 'View promos' : 'Ver promos'} to="/promos" icon="✦" />
+        )}
       </div>
 
-      <section className="explore-section">
-        <div className="section-heading"><div><p className="eyebrow">{isEn ? 'KEEP EXPLORING' : 'SIGUE EXPLORANDO'}</p><h2>{isEn ? 'More to discover' : 'Más para descubrir'}</h2></div><span className="section-counter">2 / 2</span></div>
-        <div className="explore-grid">
-          <ExploreCard icon="▧" title={isEn ? 'Create a miner' : 'Crear un minero'} subtitle={isEn ? 'Configure hashrate and review purchase' : 'Configura la potencia y revisa la compra'} badge={isAuth ? undefined : 'LOCAL'} onClick={openMinerBuilder} />
-          <ExploreCard icon="∑" title={isEn ? 'Mining calculator' : 'Calculadora de minería'} subtitle={isEn ? 'Hashrate and estimated gross earnings by model' : 'Hashrate e ingreso bruto estimado por modelo'} badge={isEn ? 'ESTIMATE' : 'ESTIMACIÓN'} to="/mining-calculator" />
-        </div>
-      </section>
+      {SHOW_STAGE2_EXTRA_EXPLORE_MODULES && (
+        <section className="explore-section">
+          <div className="section-heading"><div><p className="eyebrow">{isEn ? 'KEEP EXPLORING' : 'SIGUE EXPLORANDO'}</p><h2>{isEn ? 'More to discover' : 'Más para descubrir'}</h2></div><span className="section-counter">2 / 2</span></div>
+          <div className="explore-grid">
+            <ExploreCard icon="▧" title={isEn ? 'Create a miner' : 'Crear un minero'} subtitle={isEn ? 'Configure hashrate and review purchase' : 'Configura la potencia y revisa la compra'} badge={isAuth ? undefined : 'LOCAL'} onClick={openMinerBuilder} />
+            <ExploreCard icon="∑" title={isEn ? 'Mining calculator' : 'Calculadora de minería'} subtitle={isEn ? 'Hashrate and estimated gross earnings by model' : 'Hashrate e ingreso bruto estimado por modelo'} badge={isEn ? 'ESTIMATE' : 'ESTIMACIÓN'} to="/mining-calculator" />
+          </div>
+        </section>
+      )}
 
       <section className="mining-source-panel content-panel f5-glass-card">
         <div className="panel-toolbar">
@@ -1414,15 +1440,19 @@ function HomeDashboard({ openMinerBuilder, openTopUp }: { openMinerBuilder: () =
         <p className="mining-source-note"><span>i</span> {isEn ? 'Estimation uses public Kryptex API. On-chain history consulted on Pearl.' : 'La estimación usa la API pública de Kryptex. El historial on-chain se consulta en Pearl; no se fabrican shares ni pagos.'}</p>
       </section>
 
-      <section className="explore-section platform-features-section">
-        <div className="section-heading"><div><p className="eyebrow">{isEn ? 'PLATFORM MODULES' : 'MÓDULOS DE LA PLATAFORMA'}</p><h2>{isEn ? 'Mining, subscriptions & payouts' : 'Minería, suscripciones y pagos'}</h2></div><span className="section-counter">LOCAL</span></div>
-        <div className="platform-feature-grid">
-          <ExploreCard icon="✧" title={isEn ? 'Monthly and annual subscriptions' : 'Suscripciones mensuales y anuales'} subtitle={isEn ? '1% active power boost and priority queue' : '1% de potencia activa y retiro sin cola diaria'} badge="VIP" to="/subscriptions" />
-          <ExploreCard icon="◎" title={isEn ? 'Referrals and Unilevel' : 'Referidos y Unilevel'} subtitle={isEn ? '10% direct bonus and 20-levels distribution' : '10% directo y simulador de escenarios'} badge="20 NIVELES" to="/nft-referral" />
-          <ExploreCard icon="◉" title={isEn ? 'Connect wallets' : 'Conectar carteras'} subtitle={isEn ? 'Buyer connection and multi-chain wallets' : 'Conexión de comprador y direcciones Solflare Bridge'} badge="WEB3" to="/gmt-wallets" />
-          <ExploreCard icon="∑" title={isEn ? 'Hashrate & potential returns' : 'Hashrate y ganancias posibles'} subtitle={isEn ? 'Estimate profitability across catalog models' : 'Estima el rendimiento de los modelos del catálogo'} badge="CALCULADORA" to="/mining-calculator" />
-        </div>
-      </section>
+      {SHOW_STAGE2_EXTRA_EXPLORE_MODULES && (
+        <section className="explore-section platform-features-section">
+          <div className="section-heading"><div><p className="eyebrow">{isEn ? 'PLATFORM MODULES' : 'MÓDULOS DE LA PLATAFORMA'}</p><h2>{isEn ? 'Mining, subscriptions & payouts' : 'Minería, suscripciones y pagos'}</h2></div><span className="section-counter">LOCAL</span></div>
+          <div className="platform-feature-grid">
+            {SHOW_STAGE2_SUBSCRIPTIONS && (
+              <ExploreCard icon="✧" title={isEn ? 'Monthly and annual subscriptions' : 'Suscripciones mensuales y anuales'} subtitle={isEn ? '1% active power boost and priority queue' : '1% de potencia activa y retiro sin cola diaria'} badge="VIP" to="/subscriptions" />
+            )}
+            <ExploreCard icon="◎" title={isEn ? 'Referrals and Unilevel' : 'Referidos y Unilevel'} subtitle={isEn ? '10% direct bonus and 20-levels distribution' : '10% directo y simulador de escenarios'} badge="20 NIVELES" to="/nft-referral" />
+            <ExploreCard icon="◉" title={isEn ? 'Connect wallets' : 'Conectar carteras'} subtitle={isEn ? 'Buyer connection and multi-chain wallets' : 'Conexión de comprador y direcciones Solflare Bridge'} badge="WEB3" to="/gmt-wallets" />
+            <ExploreCard icon="∑" title={isEn ? 'Hashrate & potential returns' : 'Hashrate y ganancias posibles'} subtitle={isEn ? 'Estimate profitability across catalog models' : 'Estima el rendimiento de los modelos del catálogo'} badge="CALCULADORA" to="/mining-calculator" />
+          </div>
+        </section>
+      )}
     </div>
   )
 }
@@ -1437,8 +1467,9 @@ function MiningQuestBoard({ minerCountOverride }: { minerCountOverride?: number 
   const minerCount = minerCountOverride !== undefined ? minerCountOverride : (user ? realMiners.length : demo.miners.length)
   const minerProgress = Math.min(minerCount, minerGoal)
   const subscriptionComplete = Boolean(demo.subscription)
-  const completed = Number(minerProgress > 0) + Number(subscriptionComplete)
-  const progress = Math.round((completed / 2) * 100)
+  const totalGoals = SHOW_STAGE2_SUBSCRIPTIONS ? 2 : 1
+  const completed = Number(minerProgress > 0) + (SHOW_STAGE2_SUBSCRIPTIONS ? Number(subscriptionComplete) : 0)
+  const progress = Math.round((completed / totalGoals) * 100)
   return <section className="quest-board f5-glass-card" aria-labelledby="quest-board-title">
     <div className="quest-board-heading">
       <div>
@@ -1446,7 +1477,7 @@ function MiningQuestBoard({ minerCountOverride }: { minerCountOverride?: number 
         <h2 id="quest-board-title">{isEn ? 'Get your farm running' : 'Pon tu granja en marcha'}</h2>
         <p>{isEn ? 'Acquire your first presale miner with free base skin ($0) to activate your farm.' : 'Adquiere tu primer minero en preventa con skin base gratis ($0) para activar tu granja.'}</p>
       </div>
-      <span className="quest-progress-count">{completed}<small> / 2</small></span>
+      <span className="quest-progress-count">{completed}<small> / {totalGoals}</small></span>
     </div>
     <div className="quest-progress-track" role="progressbar" aria-label="Progreso de activación de granja" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><span style={{ width: `${progress}%` }} /></div>
     <div className="quest-cards">
@@ -1455,11 +1486,13 @@ function MiningQuestBoard({ minerCountOverride }: { minerCountOverride?: number 
         <span className="quest-copy"><strong>{isEn ? 'Acquire your first miner' : 'Adquiere tu primer minero'}</strong><small>{minerProgress > 0 ? (isEn ? 'Miner active in your farm' : 'Minero registrado en tu granja') : (isEn ? 'Choose TH/s power & free base skin' : 'Elige potencia TH/s y skin base gratis')}</small></span>
         <span className="quest-arrow">↗</span>
       </Link>
-      <Link to="/subscriptions" className={`quest-card ${subscriptionComplete ? 'quest-card-complete' : ''}`}>
-        <span className="quest-icon">{subscriptionComplete ? '✓' : '02'}</span>
-        <span className="quest-copy"><strong>{isEn ? 'Explore Platinum+' : 'Explora Platinum+'}</strong><small>{subscriptionComplete ? (isEn ? 'Active boost during this session' : 'Beneficio activo durante esta sesión') : (isEn ? 'Learn about the power bonus' : 'Conoce el bonus de potencia disponible')}</small></span>
-        <span className="quest-arrow">↗</span>
-      </Link>
+      {SHOW_STAGE2_SUBSCRIPTIONS && (
+        <Link to="/subscriptions" className={`quest-card ${subscriptionComplete ? 'quest-card-complete' : ''}`}>
+          <span className="quest-icon">{subscriptionComplete ? '✓' : '02'}</span>
+          <span className="quest-copy"><strong>{isEn ? 'Explore Platinum+' : 'Explora Platinum+'}</strong><small>{subscriptionComplete ? (isEn ? 'Active boost during this session' : 'Beneficio activo durante esta sesión') : (isEn ? 'Learn about the power bonus' : 'Conoce el bonus de potencia disponible')}</small></span>
+          <span className="quest-arrow">↗</span>
+        </Link>
+      )}
     </div>
   </section>
 }
@@ -1975,7 +2008,12 @@ function RewardsPanel({ pathname, openAction }: { pathname: string; openAction: 
   const isPool = pathname === '/nft-rewards/pool'
   return (
     <section className="rewards-panel-wrap">
-      <div className="route-tabs"><Link className={!isPool ? 'route-tab route-tab-active' : 'route-tab'} to="/nft-rewards/solo">Minería</Link><Link className={isPool ? 'route-tab route-tab-active' : 'route-tab'} to="/nft-rewards/pool">Miner Wars</Link></div>
+      <div className="route-tabs">
+        <Link className={!isPool ? 'route-tab route-tab-active' : 'route-tab'} to="/nft-rewards/solo">Minería</Link>
+        {SHOW_STAGE2_BATTLES_MINER_WARS && (
+          <Link className={isPool ? 'route-tab route-tab-active' : 'route-tab'} to="/nft-rewards/pool">Miner Wars</Link>
+        )}
+      </div>
       <section className="content-panel rewards-panel">
         <div className="panel-toolbar"><div><h2>{isPool ? 'Miner Wars' : 'Recompensas de minería'}</h2><p>Datos de cuenta desconectados en la réplica local.</p></div><button className="button button-quiet" onClick={() => openAction('Ajustes de las recompensas', actionDetail('Ajustes de las recompensas'))}>Ajustes de las recompensas</button></div>
         {!isPool && <><div className="maintenance-tile"><span className="card-icon purple">✦</span><div><strong>Descuento de mantenimiento</strong><small>El valor de la cuenta no se conserva en esta réplica.</small></div><span className="placeholder-value">—</span></div><button className="history-toggle" onClick={() => setHistoricalOpen((open) => !open)}>Tasa histórica de BTC <span>{historicalOpen ? '⌃' : '⌄'}</span></button>{historicalOpen && <div className="history-empty">No hay datos de simulación para la tasa histórica.</div>}</>}
@@ -2024,9 +2062,11 @@ function FormPanel({ screen, pathname, openAction, addProduct, onPayWithWallet, 
               <p>Una transferencia a la dirección del operador no acredita automáticamente el saldo de esta réplica. El crédito local es independiente.</p>
             </div>
             <div className="form-actions-row">
-              <button className="button button-primary" disabled={!Number.isFinite(value) || value <= 0} onClick={() => onPayWithWallet('Recarga de saldo', value)}>
-                Pagar con wallet <span>↗</span>
-              </button>
+              {SHOW_STAGE2_TOPUP_AND_DEPOSIT && (
+                <button className="button button-primary" disabled={!Number.isFinite(value) || value <= 0} onClick={() => onPayWithWallet('Recarga de saldo', value)}>
+                  Pagar con wallet <span>↗</span>
+                </button>
+              )}
               <button className="button button-secondary" disabled={!Number.isFinite(value) || value <= 0} onClick={() => {
                 const receipt = addDemoBalance(value, 'Depósito local')
                 setFeedback(receipt ? `Recarga local aplicada. Referencia ${receipt.id}.` : 'Ingresa un importe mayor que cero.')
@@ -2441,7 +2481,7 @@ function MinerBuilderDialog({
     const tabs: MinerCategoryTab[] = ['packages']
     if (storefrontSections.showPresale) tabs.push('presale')
     if (storefrontSections.showLaunch) tabs.push('launch')
-    if (storefrontSections.showMonthly) tabs.push('monthly')
+    if (storefrontSections.showMonthly && SHOW_STAGE2_SUBSCRIPTIONS) tabs.push('monthly')
     return tabs
   }, [storefrontSections])
 

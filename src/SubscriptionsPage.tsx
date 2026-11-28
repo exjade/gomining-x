@@ -4,6 +4,7 @@ import { useAuth } from './AuthContext'
 import { usePersonalization } from './personalization'
 import { customMinerPriceTiers } from './minerCatalog'
 import type { PaymentCurrency } from './paymentQuote'
+import { SHOW_STAGE2_SUBSCRIPTIONS } from './presaleStage1Flags'
 
 export function SubscriptionsPage({
   onPayWithWallet,
@@ -101,6 +102,7 @@ export function SubscriptionsPage({
         </div>
       )}
 
+      {SHOW_STAGE2_SUBSCRIPTIONS && (
       <div className="subscription-platinum-card f5-glass-card">
         <div className="subscription-header-banner">
           <div className="subscription-star-wrapper">
@@ -266,6 +268,7 @@ export function SubscriptionsPage({
           </div>
         )}
       </div>
+      )}
 
       {/* Canonical 22 Power Tiers Matrix (customMinerPriceTiers: price strictly by power, skins free in presale) */}
       <section className="subscription-tiers-panel f5-glass-card" aria-labelledby="subscription-tiers-heading">

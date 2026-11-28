@@ -10,6 +10,7 @@ import {
 import { detectUserGeo } from './geoIp'
 import { usePersonalization } from './personalization'
 import { useDemoSession } from './demoStore'
+import { SHOW_STAGE2_SUBSCRIPTIONS, SHOW_STAGE2_TRAIT_CUSTOMIZER } from './presaleStage1Flags'
 import type { WalletSession } from './walletSession'
 import {
   generateBase32Secret,
@@ -622,27 +623,29 @@ export function ProfilePage({
         </div>
       </div>
 
-      {/* VIP LEVEL & PLATINUM+ CARDS */}
-      <div className="profile-tier-grid">
-        <div className="profile-tier-card">
-          <div className="profile-tier-icon gold">◈</div>
-          <div className="profile-tier-info">
-            <span className="profile-tier-label">{t('profile.vip_level')}</span>
-            <strong className="profile-tier-value">Bronze I</strong>
+      {/* VIP LEVEL & PLATINUM+ CARDS (Etapa 2: oculto en Preventa Etapa 1) */}
+      {SHOW_STAGE2_SUBSCRIPTIONS && (
+        <div className="profile-tier-grid">
+          <div className="profile-tier-card">
+            <div className="profile-tier-icon gold">◈</div>
+            <div className="profile-tier-info">
+              <span className="profile-tier-label">{t('profile.vip_level')}</span>
+              <strong className="profile-tier-value">Bronze I</strong>
+            </div>
           </div>
-        </div>
 
-        <Link to="/subscriptions" className="profile-tier-card interactive">
-          <div className="profile-tier-icon platinum">✧</div>
-          <div className="profile-tier-info">
-            <span className="profile-tier-label">{t('profile.platinum_plus')}</span>
-            <strong className="profile-tier-value">
-              {demo.subscription ? t('profile.active_subscription') : t('profile.subscribe')}
-            </strong>
-          </div>
-          <span className="profile-card-arrow">›</span>
-        </Link>
-      </div>
+          <Link to="/subscriptions" className="profile-tier-card interactive">
+            <div className="profile-tier-icon platinum">✧</div>
+            <div className="profile-tier-info">
+              <span className="profile-tier-label">{t('profile.platinum_plus')}</span>
+              <strong className="profile-tier-value">
+                {demo.subscription ? t('profile.active_subscription') : t('profile.subscribe')}
+              </strong>
+            </div>
+            <span className="profile-card-arrow">›</span>
+          </Link>
+        </div>
+      )}
 
       {/* ACCOUNT SECURITY BLOCK: EMAIL (VERIFIED) & 2FA */}
       <div className="profile-section-card">
@@ -721,7 +724,7 @@ export function ProfilePage({
               <div key={m.id} className="profile-miner-row">
                 <div
                   className="profile-miner-preview"
-                  style={{ backgroundColor: m.visualTraits?.bodyColor || '#1e1b4b' }}
+                  style={{ backgroundColor: m.visualTraits?.bodyColor || '#0f2922' }}
                 >
                   <span className="profile-miner-symbol">▧</span>
                 </div>
@@ -749,13 +752,23 @@ export function ProfilePage({
                 </div>
 
                 <div className="profile-miner-actions">
-                  <button
-                    type="button"
-                    className="button button-secondary button-small"
-                    onClick={() => navigate(`/miners/${m.id}/customize`)}
-                  >
-                    {t('profile.customize_miner')}
-                  </button>
+                  {SHOW_STAGE2_TRAIT_CUSTOMIZER ? (
+                    <button
+                      type="button"
+                      className="button button-secondary button-small"
+                      onClick={() => navigate(`/miners/${m.id}/customize`)}
+                    >
+                      {t('profile.customize_miner')}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="button button-secondary button-small"
+                      onClick={() => navigate(`/nft-miners/${encodeURIComponent(m.id)}`)}
+                    >
+                      {language === 'en' ? 'Open Miner HUB' : 'Abrir HUB'}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -778,39 +791,57 @@ export function ProfilePage({
         )}
       </div>
 
-      {/* PAYMENTS QUICK LINKS (Matching UI-UX Screenshot) */}
+      {/* PAYMENTS QUICK LINKS (Etapa 1 Preventa: Cartera/Historial y Retiros; Suscripciones oculto hasta Etapa 2) */}
       <div className="profile-section-card profile-menu-card">
         <h4 style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 800, color: 'var(--muted)', letterSpacing: '0.08em' }}>
           {t('profile.payments_title')}
         </h4>
-        <Link to="/finance/wallets/virtual" className="profile-menu-row">
+        <Link to="/gmt-wallets" className="profile-menu-row">
           <div className="profile-menu-item-left">
-            <span className="profile-menu-icon">💳</span>
-            <span>{t('profile.my_cards')}</span>
+            <span className="profile-menu-icon">◌</span>
+            <span>{language === 'en' ? 'Web3 Wallet & Purchase History' : 'Cartera Web3 e Historial de Compras'}</span>
           </div>
           <span>›</span>
         </Link>
-        <Link to="/subscriptions" className="profile-menu-row">
+        <Link to="/withdraw/GOMINING" className="profile-menu-row">
           <div className="profile-menu-item-left">
-            <span className="profile-menu-icon">✧</span>
-            <span>{t('profile.subscriptions')}</span>
+            <span className="profile-menu-icon">↑</span>
+            <span>{language === 'en' ? 'USDT Withdrawals' : 'Retiros USDT'}</span>
           </div>
           <span>›</span>
         </Link>
-        <div
-          className="profile-menu-row"
-          style={{ cursor: 'pointer' }}
-          onClick={() => copyToClipboard(t('profile.pay_later_info'), t('profile.info_label'))}
-        >
-          <div className="profile-menu-item-left">
-            <span className="profile-menu-icon">⏱</span>
-            <span>{t('profile.pay_later')}</span>
-          </div>
-          <span>›</span>
-        </div>
+        {SHOW_STAGE2_SUBSCRIPTIONS && (
+          <>
+            <Link to="/finance/wallets/virtual" className="profile-menu-row">
+              <div className="profile-menu-item-left">
+                <span className="profile-menu-icon">💳</span>
+                <span>{t('profile.my_cards')}</span>
+              </div>
+              <span>›</span>
+            </Link>
+            <Link to="/subscriptions" className="profile-menu-row">
+              <div className="profile-menu-item-left">
+                <span className="profile-menu-icon">✧</span>
+                <span>{t('profile.subscriptions')}</span>
+              </div>
+              <span>›</span>
+            </Link>
+            <div
+              className="profile-menu-row"
+              style={{ cursor: 'pointer' }}
+              onClick={() => copyToClipboard(t('profile.pay_later_info'), t('profile.info_label'))}
+            >
+              <div className="profile-menu-item-left">
+                <span className="profile-menu-icon">⏱</span>
+                <span>{t('profile.pay_later')}</span>
+              </div>
+              <span>›</span>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* SUPPORT QUICK LINKS (Matching UI-UX Screenshot) */}
+      {/* SUPPORT QUICK LINKS */}
       <div className="profile-section-card profile-menu-card">
         <h4 style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 800, color: 'var(--muted)', letterSpacing: '0.08em' }}>
           {t('profile.support_title')}
@@ -818,25 +849,27 @@ export function ProfilePage({
         <div
           className="profile-menu-row"
           style={{ cursor: 'pointer' }}
-          onClick={() => copyToClipboard('soporte@gomining.com', t('profile.support_email_copied'))}
+          onClick={() => copyToClipboard('soporte@pouwminer.com', t('profile.support_email_copied'))}
         >
           <div className="profile-menu-item-left">
-            <span className="profile-menu-icon">🎧</span>
+            <span className="profile-menu-icon">◉</span>
             <span>{t('profile.support')}</span>
           </div>
           <span>›</span>
         </div>
-        <div
-          className="profile-menu-row"
-          style={{ cursor: 'pointer' }}
-          onClick={() => navigate('/academy/courses/bitcoin-and-mining')}
-        >
-          <div className="profile-menu-item-left">
-            <span className="profile-menu-icon">?</span>
-            <span>{t('profile.faq')}</span>
+        {SHOW_STAGE2_SUBSCRIPTIONS && (
+          <div
+            className="profile-menu-row"
+            style={{ cursor: 'pointer' }}
+            onClick={() => navigate('/academy/courses/bitcoin-and-mining')}
+          >
+            <div className="profile-menu-item-left">
+              <span className="profile-menu-icon">?</span>
+              <span>{t('profile.faq')}</span>
+            </div>
+            <span>›</span>
           </div>
-          <span>›</span>
-        </div>
+        )}
       </div>
 
       {/* LOGOUT BUTTON */}

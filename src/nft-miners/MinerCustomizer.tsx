@@ -1,17 +1,20 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
 import type { StoredMiner } from '../firebase'
 import { usePersonalization } from '../personalization'
-import { subscribeToSingleMinerDoc } from '../userMinersStore'
-import { LockedTraitModal } from './LockedTraitModal'
-import { MinerAppearancePreview } from './MinerAppearancePreview'
+import {
+  SHOW_STAGE2_MINER_TASKS_AND_UPGRADES,
+  SHOW_STAGE2_TRAIT_CUSTOMIZER,
+} from '../presaleStage1Flags'
+import { getUserMinersFromStore, subscribeToSingleMinerDoc } from '../userMinersStore'
 import {
   TeardownMinerPreview,
-  TeardownSkinDesignPicker,
   resolveDesignSpecFromSkin,
-  type TeardownDesignSpec,
+  type TeardownBackendTelemetry,
 } from '../components/teardown-miner-preview'
+import { LockedTraitModal } from './LockedTraitModal'
+import { MinerAppearancePreview } from './MinerAppearancePreview'
 import { derivedDemoBlockedDetail } from './derived-demo-recolor'
 import { getActiveProgressProvider, getDevUnlockRules, type PieceAccessRule } from './unlock-engine'
 import { EXPLICIT_NONE_APPEARANCE, getTraitAccess } from './appearance'
@@ -81,12 +84,49 @@ export function MinerCustomizer() {
   if (lookupState === 'loading') return <MinerLoading />
   if (!storedMiner && !parityMiner) return <MinerNotFound />
   const miner = parityMiner ?? customizationMinerFromStored(storedMiner!)
+  const sharedFarmMiners = uid && !parityMiner ? getUserMinersFromStore(uid) : null
+  const farmMinersList = sharedFarmMiners && sharedFarmMiners.length > 0
+    ? sharedFarmMiners
+    : storedMiner
+      ? [storedMiner]
+      : []
+  const farmPowerTh = farmMinersList.length > 0
+    ? farmMinersList.reduce((sum, item) => sum + (item.powerTh || 0), 0)
+    : miner.powerTh
+  const validFarmEfficiencies = farmMinersList
+    .map((item) => item.efficiencyWattsPerTh ?? item.efficiency)
+    .filter((val): val is number => typeof val === 'number' && Number.isFinite(val) && val > 0)
+  const farmEfficiency = validFarmEfficiencies.length > 0
+    ? validFarmEfficiencies.reduce((sum, val) => sum + val, 0) / validFarmEfficiencies.length
+    : miner.efficiency
+
+  // Real/derived telemetry ONLY — strictly omits prlPerHour, pearlPerDay, usdPerDay
+  const hubTelemetry: TeardownBackendTelemetry = {
+    ...(typeof storedMiner?.price === 'number' && Number.isFinite(storedMiner.price)
+      ? { priceUsd: storedMiner.price }
+      : {}),
+    ...(storedMiner?.currency ? { currency: storedMiner.currency } : {}),
+    ...(storedMiner?.status ? { minerStatus: storedMiner.status } : {}),
+    ...(storedMiner?.packageId ? { packageId: storedMiner.packageId } : {}),
+    ...((storedMiner?.cadence ?? storedMiner?.purchaseMode)
+      ? { purchaseMode: storedMiner.cadence ?? storedMiner.purchaseMode }
+      : {}),
+    ...(storedMiner?.network ? { minerNetwork: storedMiner.network } : {}),
+    ...(storedMiner?.ownerWallet ? { ownerWallet: storedMiner.ownerWallet } : {}),
+    ...(storedMiner?.txHash ? { txHash: storedMiner.txHash } : {}),
+    activeMinersCount: farmMinersList.length > 0 ? farmMinersList.length : 1,
+    farmPowerTh,
+    farmEfficiency,
+  }
+
   const saveAppearance = parityMiner
     ? async (_targetId: string, _appearance: MinerAppearance) => {}
     : (targetId: string, appearance: MinerAppearance) => saveOwnedMinerAppearance(uid, targetId, appearance)
   return <>
     {error && <p className="pwm-catalog-error" role="alert">{t('minerCustomization.catalogUnavailable')}</p>}
-    {isCustomizeRoute ? <CustomizeMiner miner={miner} catalog={catalog} saveAppearance={saveAppearance} /> : <MinerDetails miner={miner} catalog={catalog} />}
+    {isCustomizeRoute && SHOW_STAGE2_TRAIT_CUSTOMIZER
+      ? <CustomizeMiner miner={miner} catalog={catalog} saveAppearance={saveAppearance} telemetry={hubTelemetry} />
+      : <MinerDetails miner={miner} catalog={catalog} telemetry={hubTelemetry} />}
   </>
 }
 
@@ -103,12 +143,35 @@ function MinerNotFound() {
     </section>
   )
 }
-function MinerDetails({ miner, catalog }: { miner: MinerCustomizationMiner; catalog: CustomizationCatalog }) {
-  const { t } = usePersonalization()
-  const [activeTab, setActiveTab] = useState<DetailTab>('tasks')
+function MinerDetails({
+  miner,
+  catalog,
+  telemetry,
+}: {
+  miner: MinerCustomizationMiner
+  catalog: CustomizationCatalog
+  telemetry?: TeardownBackendTelemetry
+}) {
+  const { t, theme } = usePersonalization()
+  const visibleDetailTabs = useMemo<readonly DetailTab[]>(
+    () => (SHOW_STAGE2_MINER_TASKS_AND_UPGRADES ? DETAIL_TABS : (['properties', 'appearance'] as const)),
+    [],
+  )
+  const [activeTab, setActiveTab] = useState<DetailTab>(
+    SHOW_STAGE2_MINER_TASKS_AND_UPGRADES ? 'tasks' : 'properties',
+  )
   const [taskFilter, setTaskFilter] = useState<TaskFilter>('active')
   const detailTabButtons = useRef<Array<HTMLButtonElement | null>>([])
   const appearance = miner.appearance
+  const appearanceDraft = useMemo(() => appearanceDraftFromSaved(miner.appearance), [miner.appearance])
+  const resolvedDesign = useMemo(
+    () =>
+      resolveDesignSpecFromSkin({
+        appearance: appearanceDraft,
+        fallbackSlug: 'v04-kraken',
+      }),
+    [appearanceDraft],
+  )
   const appearanceCategories = appearanceCategoriesFromCatalog(catalog)
   const purchasedTraitValues = (category: 'display' | 'items') => (miner.traits?.purchased ?? [])
     .map((traitId) => MINER_APPEARANCE_TRAIT_BY_ID.get(traitId))
@@ -124,34 +187,40 @@ function MinerDetails({ miner, catalog }: { miner: MinerCustomizationMiner; cata
     if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return
     event.preventDefault()
     const direction = event.key === 'ArrowRight' ? 1 : -1
-    const nextIndex = (index + direction + DETAIL_TABS.length) % DETAIL_TABS.length
-    selectDetailTab(DETAIL_TABS[nextIndex], nextIndex)
+    const nextIndex = (index + direction + visibleDetailTabs.length) % visibleDetailTabs.length
+    selectDetailTab(visibleDetailTabs[nextIndex], nextIndex)
   }
 
   return (
-    <section className="pwm-miner-flow pwm-detail-flow">
+    <section className="pwm-miner-flow pwm-detail-flow" data-testid="miner-details-hub-view">
       <Link className="pwm-back-link" to="/nft-miners"><span aria-hidden="true">‹</span> {t('common.back').replace(/^←\s*/, '')}</Link>
       <div className="pwm-miner-detail-layout">
-        <div className="pwm-detail-art-panel">
+        <div className="pwm-detail-art-panel" data-testid="miner-detail-art-panel">
           <TeardownMinerPreview
             miner={miner}
-            appearanceOverride={appearanceDraftFromSaved(miner.appearance)}
+            appearanceOverride={appearanceDraft}
             catalogOverride={catalog}
-            designId={resolveDesignSpecFromSkin({ appearance: miner.appearance }).slug}
+            designId={resolvedDesign.designId}
+            theme={theme === 'light' ? 'light' : 'dark'}
+            telemetry={telemetry}
           />
-          <div className="pwm-detail-art-actions">
-            <Link className="pwm-button pwm-button-primary" to={`/nft-miners/${encodeURIComponent(miner.id)}/customize`}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5M4 20l4.2-1 10.4-10.4a2.1 2.1 0 0 0-3-3L5.2 16 4 20Zm9.6-13.6 3 3M3 5h4M5 3v4" /></svg>{t('minerCustomization.customize')}</Link>
-            <button className="pwm-button pwm-button-muted" type="button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 14.4 5l3.5-.1.4 3.5 2.8 2.1-1.5 3.2 1.1 3.4-3.2 1.4-1.7 3.1-3.4-1.1-3.4 1.1-1.7-3.1-3.2-1.4 1.1-3.4-1.5-3.2 2.8-2.1.4-3.5 3.5.1L12 2.5Z"/><path d="m9 15 6-6m-4.7.2h.1m2.4 5.6h.1" /></svg>{t('minerCustomization.applyPromoCode')}</button>
-          </div>
+          {SHOW_STAGE2_TRAIT_CUSTOMIZER && (
+            <div className="pwm-detail-art-actions">
+              <Link className="pwm-button pwm-button-primary" to={`/nft-miners/${encodeURIComponent(miner.id)}/customize`}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5M4 20l4.2-1 10.4-10.4a2.1 2.1 0 0 0-3-3L5.2 16 4 20Zm9.6-13.6 3 3M3 5h4M5 3v4" /></svg>{t('minerCustomization.customize')}</Link>
+              <button className="pwm-button pwm-button-muted" type="button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 14.4 5l3.5-.1.4 3.5 2.8 2.1-1.5 3.2 1.1 3.4-3.2 1.4-1.7 3.1-3.4-1.1-3.4 1.1-1.7-3.1-3.2-1.4 1.1-3.4-1.5-3.2 2.8-2.1.4-3.5 3.5.1L12 2.5Z"/><path d="m9 15 6-6m-4.7.2h.1m2.4 5.6h.1" /></svg>{t('minerCustomization.applyPromoCode')}</button>
+            </div>
+          )}
         </div>
         <div className="pwm-miner-detail-content">
           <div className="pwm-detail-title-row">
             <div>
-              <p className="pwm-brand-label">Pouwminers</p>
+              <p className="pwm-brand-label">PouwMiner · HUB Preventa</p>
               <h1>{miner.name}</h1>
               <span className="pwm-detail-miner-id">#{miner.id}</span>
             </div>
-            <button className="pwm-icon-button" type="button" disabled aria-label={t('minerCustomization.share')} title={t('minerCustomization.share')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m0 0L8 7m4-4 4 4M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8" /></svg></button>
+            {SHOW_STAGE2_TRAIT_CUSTOMIZER && (
+              <button className="pwm-icon-button" type="button" disabled aria-label={t('minerCustomization.share')} title={t('minerCustomization.share')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m0 0L8 7m4-4 4 4M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8" /></svg></button>
+            )}
           </div>
           <div className="pwm-miner-stats">
             <div><span className="pwm-stat-icon pwm-stat-power"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.7 2 5.5 13h5.3L10.1 22 19 10.4h-5.4L13.7 2Z" /></svg></span><span><small>{t('minerCustomization.power').toUpperCase()}</small><strong>{miner.powerTh.toFixed(4)} TH</strong></span></div>
@@ -159,7 +228,7 @@ function MinerDetails({ miner, catalog }: { miner: MinerCustomizationMiner; cata
           </div>
           <section className="pwm-detail-content-card">
             <div className="pwm-detail-tabs" role="tablist" aria-label={t('minerCustomization.detailTabs')}>
-              {DETAIL_TABS.map((tab, index) => (
+              {visibleDetailTabs.map((tab, index) => (
                 <button
                   ref={(element) => { detailTabButtons.current[index] = element }}
                   key={tab}
@@ -176,7 +245,7 @@ function MinerDetails({ miner, catalog }: { miner: MinerCustomizationMiner; cata
               ))}
             </div>
             <div id="pwm-detail-tabpanel" className="pwm-detail-appearance-body" role="tabpanel" aria-labelledby={`pwm-detail-tab-${activeTab}`}>
-              {activeTab === 'tasks' && <div className="pwm-detail-tasks">
+              {SHOW_STAGE2_MINER_TASKS_AND_UPGRADES && activeTab === 'tasks' && <div className="pwm-detail-tasks">
                 <div className="pwm-task-status-tabs" role="group" aria-label={t('minerCustomization.taskStatus')}>
                   <button type="button" className={taskFilter === 'active' ? 'pwm-task-status-tab pwm-task-status-tab-active' : 'pwm-task-status-tab'} aria-pressed={taskFilter === 'active'} onClick={() => setTaskFilter('active')}>{t('minerCustomization.activeTasks')}</button>
                   <button type="button" className={taskFilter === 'inactive' ? 'pwm-task-status-tab pwm-task-status-tab-active' : 'pwm-task-status-tab'} aria-pressed={taskFilter === 'inactive'} onClick={() => setTaskFilter('inactive')}>{t('minerCustomization.inactiveTasks')}</button>
@@ -213,21 +282,30 @@ function MinerDetails({ miner, catalog }: { miner: MinerCustomizationMiner; cata
                   </> : <div className="pwm-task-inactive-empty pwm-task-neutral-data" role="status">{t('minerCustomization.tasksEmpty')}</div>}
                 </div>
               </div>}
-              {activeTab === 'upgrades' && <div className="pwm-detail-neutral-empty" role="status">{t('minerCustomization.emptyState')}</div>}
+              {SHOW_STAGE2_MINER_TASKS_AND_UPGRADES && activeTab === 'upgrades' && <div className="pwm-detail-neutral-empty" role="status">{t('minerCustomization.emptyState')}</div>}
               {activeTab === 'properties' && <dl className="pwm-detail-properties">
                 <dt>{t('minerCustomization.properties.id')}</dt><dd>{miner.id}</dd>
                 <dt>{t('minerCustomization.properties.power')}</dt><dd>{miner.powerTh.toFixed(4)} TH</dd>
                 <dt>{t('minerCustomization.properties.efficiency')}</dt><dd>{miner.efficiency} W/TH</dd>
-                <dt>{t('minerCustomization.properties.purchasedTraits')}</dt><dd>{purchasedTraitIds}</dd>
-              </dl>}              {activeTab === 'appearance' && <ul className="pwm-detail-trait-list">
+                <dt>Skin Base (Preventa)</dt><dd>{resolvedDesign.name} · Gratis ($0)</dd>
+                {telemetry?.packageId && <><dt>Paquete</dt><dd>{telemetry.packageId}</dd></>}
+                {telemetry?.minerStatus && <><dt>Estado</dt><dd>{telemetry.minerStatus.toUpperCase()}</dd></>}
+                {telemetry?.priceUsd !== undefined && <><dt>Precio registrado</dt><dd>${telemetry.priceUsd.toFixed(2)} {telemetry.currency || 'USD'}</dd></>}
+                {telemetry?.minerNetwork && <><dt>Red</dt><dd>{telemetry.minerNetwork}</dd></>}
+                {telemetry?.txHash && <><dt>TxHash</dt><dd>{telemetry.txHash.slice(0, 10)}…{telemetry.txHash.slice(-6)}</dd></>}
+                {SHOW_STAGE2_TRAIT_CUSTOMIZER && <><dt>{t('minerCustomization.properties.purchasedTraits')}</dt><dd>{purchasedTraitIds}</dd></>}
+              </dl>}
+              {activeTab === 'appearance' && <ul className="pwm-detail-trait-list">
                 {appearanceCategories.map((category) => {
                   const traitId = appearance?.[category.payloadKey]
                   const effectiveTraitId = traitId === EXPLICIT_NONE_APPEARANCE ? null : traitId ?? catalog.base.default_appearance[category.id]
                   const trait = category.traits.find((item) => item.trait_id === effectiveTraitId)
                   return <li key={category.id}><span>{t(`minerCustomization.category.${category.id}`)}</span><strong>{trait?.value ?? 'None'}</strong></li>
                 })}
-                <li><span>Display</span><strong>{purchasedTraitValues('display')}</strong></li>
-                <li><span>Items</span><strong>{purchasedTraitValues('items')}</strong></li>
+                {SHOW_STAGE2_TRAIT_CUSTOMIZER && <>
+                  <li><span>Display</span><strong>{purchasedTraitValues('display')}</strong></li>
+                  <li><span>Items</span><strong>{purchasedTraitValues('items')}</strong></li>
+                </>}
               </ul>}
             </div>
           </section>
@@ -237,10 +315,20 @@ function MinerDetails({ miner, catalog }: { miner: MinerCustomizationMiner; cata
   )
 }
 
-function CustomizeMiner({ miner, catalog, saveAppearance }: { miner: MinerCustomizationMiner; catalog: CustomizationCatalog; saveAppearance: (minerId: string, appearance: MinerAppearance) => Promise<void> }) {
+function CustomizeMiner({
+  miner,
+  catalog,
+  saveAppearance,
+  telemetry,
+}: {
+  miner: MinerCustomizationMiner
+  catalog: CustomizationCatalog
+  saveAppearance: (minerId: string, appearance: MinerAppearance) => Promise<void>
+  telemetry?: TeardownBackendTelemetry
+}) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { t } = usePersonalization()
+  const { t, theme } = usePersonalization()
   const progress = getActiveProgressProvider(location.search).getSnapshot()
   const appearanceCategories = appearanceCategoriesFromCatalog(catalog)
   const [devUnlockRules, setDevUnlockRules] = useState<ReadonlyMap<string, PieceAccessRule>>()
@@ -331,13 +419,6 @@ function CustomizeMiner({ miner, catalog, saveAppearance }: { miner: MinerCustom
     chooseCategory(appearanceCategories[nextIndex].id, nextIndex)
   }
 
-  const activeDesign = resolveDesignSpecFromSkin({ appearance: draft })
-  const handleSelectPresaleDesign = (design: TeardownDesignSpec) => {
-    setDraft((current) =>
-      selectAppearanceTrait(current, 'wall', design.skinTraitId, progress, miner, unlockRules, appearanceCategories),
-    )
-  }
-
   return (
     <section className="pwm-miner-flow pwm-customizer-flow">
       <header className="pwm-customizer-header">
@@ -353,11 +434,9 @@ function CustomizeMiner({ miner, catalog, saveAppearance }: { miner: MinerCustom
           miner={miner}
           appearanceOverride={draft}
           catalogOverride={catalog}
-          designId={activeDesign.slug}
-        />
-        <TeardownSkinDesignPicker
-          activeDesign={activeDesign}
-          onSelectDesign={handleSelectPresaleDesign}
+          designId={resolveDesignSpecFromSkin({ appearance: draft, fallbackSlug: 'v04-kraken' }).designId}
+          theme={theme === 'light' ? 'light' : 'dark'}
+          telemetry={telemetry}
         />
         <section className="pwm-customizer-card" aria-label={t('minerCustomization.customizerLabel')}>
           <div className="pwm-customizer-tabs" role="tablist" aria-label={t('minerCustomization.categories')}>

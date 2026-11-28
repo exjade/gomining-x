@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import '../withdrawals/withdrawalShared.css'
+import './clientPaymentHistory.css'
 import { cancelPaymentIntent } from '../../services/payments/paymentGatewayClient'
 import {
   buildClientOrderExplorerUrl,
@@ -10,6 +12,7 @@ import {
 } from './clientPaymentHistoryService'
 
 type FilterKey = 'all' | 'active' | 'settled' | 'closed'
+type StatusBadgeTone = 'neutral' | 'warning' | 'info' | 'accent' | 'success' | 'danger'
 
 const ACTIVE_STATUS_SET = new Set<ClientOrderStatus>(['OPEN', 'AWAITING', 'PROCESSING', 'UNDERPAID'])
 const CLOSED_STATUS_SET = new Set<ClientOrderStatus>(['FAILED', 'EXPIRED', 'CANCELLED', 'REVERSED'])
@@ -21,16 +24,16 @@ const FILTER_TABS: ReadonlyArray<{ key: FilterKey; label: string }> = [
   { key: 'closed', label: 'Cerrados' },
 ]
 
-const STATUS_META: Record<ClientOrderStatus, { label: string; tone: string }> = {
-  OPEN: { label: 'Abierta', tone: '#94a3b8' },
-  AWAITING: { label: 'Esperando pago', tone: '#f59e0b' },
-  PROCESSING: { label: 'Confirmando en bloque', tone: '#38bdf8' },
-  SETTLED: { label: 'Paid — Minero Activo', tone: '#22c55e' },
-  UNDERPAID: { label: 'Pago incompleto', tone: '#f97316' },
-  FAILED: { label: 'Fallido', tone: '#ef4444' },
-  EXPIRED: { label: 'Expirada', tone: '#94a3b8' },
-  CANCELLED: { label: 'Cancelada', tone: '#94a3b8' },
-  REVERSED: { label: 'Revertida', tone: '#ef4444' },
+const STATUS_META: Record<ClientOrderStatus, { label: string; tone: StatusBadgeTone }> = {
+  OPEN: { label: 'Abierta', tone: 'neutral' },
+  AWAITING: { label: 'Esperando pago', tone: 'warning' },
+  PROCESSING: { label: 'Confirmando en bloque', tone: 'info' },
+  SETTLED: { label: 'Paid — Minero Activo', tone: 'success' },
+  UNDERPAID: { label: 'Pago incompleto', tone: 'warning' },
+  FAILED: { label: 'Fallido', tone: 'danger' },
+  EXPIRED: { label: 'Expirada', tone: 'neutral' },
+  CANCELLED: { label: 'Cancelada', tone: 'neutral' },
+  REVERSED: { label: 'Revertida', tone: 'danger' },
 }
 
 function formatOrderDate(iso: string): string {
@@ -94,216 +97,223 @@ export function ClientPaymentHistory({ uid }: { uid: string }) {
 
   return (
     <section
-      className="content-panel"
-      style={{ marginTop: 24 }}
+      className="wth-history-panel cph-history-panel"
       aria-label="Historial de Pagos"
+      data-testid="client-payment-history"
     >
-      <div className="panel-toolbar" style={{ flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <p className="card-kicker">MIS ÓRDENES ON-CHAIN · TIEMPO REAL</p>
-          <h3 style={{ margin: '2px 0 4px' }}>Historial de Pagos</h3>
-          <p style={{ margin: 0, fontSize: 13, color: '#94a3b8' }}>
-            Seguimiento en vivo de tus compras de mineros y suscripciones sincronizado con tu cuenta.
+      <header className="wth-history-panel-header">
+        <div className="wth-history-panel-heading">
+          <span className="wth-history-kicker wth-tabular-mono">
+            MIS ÓRDENES ON-CHAIN · TIEMPO REAL
+          </span>
+          <h3 className="wth-history-panel-title">Historial de Compras</h3>
+          <p className="wth-history-panel-subtitle">
+            Seguimiento en vivo de tus compras de mineros en preventa sincronizado con tu cuenta.
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <div className="cph-filter-group" role="group" aria-label="Filtrar órdenes">
           {FILTER_TABS.map((tab) => (
             <button
               key={tab.key}
               type="button"
-              className={filter === tab.key ? 'button button-primary button-small' : 'button button-secondary button-small'}
+              className={
+                filter === tab.key
+                  ? 'cph-filter-btn cph-filter-btn--active'
+                  : 'cph-filter-btn'
+              }
+              aria-pressed={filter === tab.key}
               onClick={() => setFilter(tab.key)}
             >
               {tab.label}
             </button>
           ))}
         </div>
-      </div>
+      </header>
 
-      {feedback && (
-        <p className="inline-feedback" role="status" style={{ marginTop: 12 }}>
-          {feedback}
-        </p>
-      )}
-      {error && (
-        <p className="inline-feedback" role="alert" style={{ marginTop: 12 }}>
-          {error}
-        </p>
-      )}
+      <div className="wth-history-shell">
+        {feedback && (
+          <div className="cph-feedback-banner" role="status">
+            <span>{feedback}</span>
+          </div>
+        )}
+        {error && (
+          <div className="wth-history-error-box" role="alert">
+            <span>{error}</span>
+          </div>
+        )}
 
-      {loading ? (
-        <div className="empty-state" style={{ marginTop: 14 }}>
-          <strong>Sincronizando historial de pagos…</strong>
-          <span>Conectando con tus órdenes en tiempo real.</span>
-        </div>
-      ) : filteredOrders.length === 0 ? (
-        <div className="empty-state" style={{ marginTop: 14 }}>
-          <strong>Sin órdenes registradas</strong>
-          <span>
-            {filter === 'all'
-              ? 'Cuando inicies una compra de minero o suscripción, aparecerá aquí en tiempo real.'
-              : 'No hay órdenes que coincidan con el filtro seleccionado.'}
-          </span>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
-          {filteredOrders.map((order) => {
-            const meta = STATUS_META[order.status] ?? STATUS_META.OPEN
-            const explorerUrl = buildClientOrderExplorerUrl(order)
-            const cancellable = canCancelClientOrder(order)
-            const isCancelling = cancellingId === order.orderId
-            const progressPct = Math.min(
-              100,
-              Math.round((order.confirmations / Math.max(1, order.requiredConfirmations)) * 100),
-            )
-
-            return (
-              <article
-                key={order.orderId}
-                style={{
-                  border: '1px solid rgba(148,163,184,0.2)',
-                  borderRadius: 12,
-                  padding: '14px 16px',
-                  background: 'rgba(15,23,42,0.45)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 10,
-                }}
+        {loading ? (
+          <div aria-busy="true" data-testid="payment-history-loading">
+            <div className="wth-skeleton-row" />
+            <div className="wth-skeleton-row" />
+            <div className="wth-skeleton-row" />
+          </div>
+        ) : filteredOrders.length === 0 ? (
+          <div className="wth-empty-state" data-testid="payment-history-empty">
+            <span className="wth-empty-icon" aria-hidden="true">
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <strong>{order.packageName}</strong>
-                      <span style={{ fontSize: 11, color: '#94a3b8' }}>
-                        {order.productType === 'subscription'
-                          ? 'Suscripción'
-                          : `${order.powerTh} TH/s`}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 10,
-                          fontWeight: 700,
-                          padding: '2px 6px',
-                          borderRadius: 6,
-                          border: `1px solid ${order.networkMode === 'mainnet' ? '#22c55e' : '#f59e0b'}`,
-                          color: order.networkMode === 'mainnet' ? '#22c55e' : '#f59e0b',
-                        }}
-                      >
-                        {order.networkMode === 'mainnet' ? 'MAINNET' : 'TESTNET'}
-                      </span>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <path d="M14 2v6h6" />
+                <path d="M8 13h8" />
+                <path d="M8 17h5" />
+              </svg>
+            </span>
+            <h4 className="wth-empty-title">Sin órdenes registradas</h4>
+            <p className="wth-empty-desc">
+              {filter === 'all'
+                ? 'Cuando inicies una compra de minero en preventa, aparecerá aquí en tiempo real con su estado y hash verificable.'
+                : 'No hay órdenes que coincidan con el filtro seleccionado.'}
+            </p>
+          </div>
+        ) : (
+          <div className="wth-cards-list" data-testid="payment-history-cards">
+            {filteredOrders.map((order) => {
+              const meta = STATUS_META[order.status] ?? STATUS_META.OPEN
+              const explorerUrl = buildClientOrderExplorerUrl(order)
+              const cancellable = canCancelClientOrder(order)
+              const isCancelling = cancellingId === order.orderId
+              const progressPct = Math.min(
+                100,
+                Math.round((order.confirmations / Math.max(1, order.requiredConfirmations)) * 100),
+              )
+
+              return (
+                <article
+                  key={order.orderId}
+                  className="wth-history-card cph-order-card"
+                  data-testid={`payment-order-card-${order.orderId}`}
+                >
+                  <div className="wth-card-top">
+                    <div className="wth-cell-stack">
+                      <div className="cph-order-id-row">
+                        <span className="wth-tabular-mono">{formatOrderDate(order.createdAt)}</span>
+                        <span aria-hidden="true">·</span>
+                        <code className="wth-tabular-mono wth-mono-capsule">{order.orderId}</code>
+                        <span
+                          className={
+                            order.networkMode === 'mainnet'
+                              ? 'wth-mini-tag wth-mini-tag--emerald wth-tabular-mono'
+                              : 'wth-mini-tag cph-tag-testnet wth-tabular-mono'
+                          }
+                        >
+                          {order.networkMode === 'mainnet' ? 'MAINNET' : 'TESTNET'}
+                        </span>
+                      </div>
+
+                      <div className="cph-order-title-row">
+                        <strong className="cph-order-package-name">{order.packageName}</strong>
+                        <span className="wth-network-tag wth-tabular-mono">
+                          {order.productType === 'subscription'
+                            ? 'Suscripción'
+                            : `${order.powerTh} TH/s`}
+                        </span>
+                      </div>
                     </div>
-                    <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
-                      Orden <code>{order.orderId}</code> · {formatOrderDate(order.createdAt)}
-                    </div>
+
+                    <span className={`wth-status-badge wth-status-badge--${meta.tone}`}>
+                      <span className="wth-status-dot" aria-hidden="true" />
+                      <span>{meta.label}</span>
+                    </span>
                   </div>
 
-                  <div style={{ textAlign: 'right' }}>
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        fontSize: 12,
-                        fontWeight: 700,
-                        padding: '4px 10px',
-                        borderRadius: 999,
-                        border: `1px solid ${meta.tone}`,
-                        color: meta.tone,
-                      }}
-                    >
-                      {meta.label}
-                    </span>
-                    <div style={{ fontSize: 13, fontWeight: 700, marginTop: 4 }}>
+                  <div className="wth-card-meta-row">
+                    <span className="wth-cell-secondary">Importe</span>
+                    <strong className="wth-tabular-mono wth-card-amount">
                       ${order.amountUsd.toFixed(2)} USD
                       {order.cryptoAmount ? (
-                        <span style={{ fontSize: 11, fontWeight: 400, color: '#94a3b8', marginLeft: 6 }}>
-                          ({order.cryptoAmount})
-                        </span>
+                        <span className="wth-card-network"> ({order.cryptoAmount})</span>
                       ) : null}
-                    </div>
+                    </strong>
                   </div>
-                </div>
 
-                {order.status === 'PROCESSING' && (
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#38bdf8', marginBottom: 4 }}>
-                      <span>Confirmaciones de bloque</span>
-                      <strong>
-                        {order.confirmations} / {order.requiredConfirmations}
-                      </strong>
+                  {order.status === 'PROCESSING' && (
+                    <div className="cph-confirmations-block">
+                      <div className="cph-confirmations-head">
+                        <span>Confirmaciones de bloque</span>
+                        <strong className="wth-tabular-mono">
+                          {order.confirmations} / {order.requiredConfirmations}
+                        </strong>
+                      </div>
+                      <div className="cph-confirmations-track">
+                        <div
+                          className="cph-confirmations-fill"
+                          style={{ width: `${progressPct}%` }}
+                        />
+                      </div>
                     </div>
-                    <div
-                      style={{
-                        width: '100%',
-                        height: 6,
-                        borderRadius: 999,
-                        background: 'rgba(148,163,184,0.2)',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: `${progressPct}%`,
-                          height: '100%',
-                          background: '#38bdf8',
-                          transition: 'width 200ms ease',
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
+                  )}
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                    {order.paymentNetwork && (
-                      <span style={{ color: '#cbd5e1' }}>
-                        Red: <strong>{order.paymentNetwork.toUpperCase()}</strong>
-                      </span>
-                    )}
-                    {order.txHash && (
-                      explorerUrl ? (
-                        <a
-                          href={explorerUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ color: '#a78bfa' }}
-                        >
-                          Ver tx ({order.txHash.slice(0, 8)}…{order.txHash.slice(-6)}) ↗
-                        </a>
+                  <div className="wth-card-meta-row">
+                    <span className="wth-cell-secondary">Red / Transacción</span>
+                    <div className="wth-chip-inline">
+                      {order.paymentNetwork && (
+                        <span className="wth-network-tag wth-tabular-mono">
+                          {order.paymentNetwork.toUpperCase()}
+                        </span>
+                      )}
+                      {order.txHash ? (
+                        explorerUrl ? (
+                          <a
+                            href={explorerUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="wth-explorer-link wth-tabular-mono"
+                          >
+                            Ver tx ({order.txHash.slice(0, 8)}…{order.txHash.slice(-6)}) ↗
+                          </a>
+                        ) : (
+                          <code className="wth-tabular-mono wth-mono-capsule">
+                            {order.txHash.slice(0, 10)}…
+                          </code>
+                        )
                       ) : (
-                        <code style={{ color: '#94a3b8' }}>
-                          {order.txHash.slice(0, 10)}…
-                        </code>
-                      )
-                    )}
+                        <span className="wth-tx-pending wth-tabular-mono">
+                          <span className="wth-tx-pending-dot" aria-hidden="true" />
+                          Sin hash enviado
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {order.activatedMinerId && (
-                      <Link
-                        className="button button-secondary button-small"
-                        to={`/nft-miners/${encodeURIComponent(order.activatedMinerId)}`}
-                      >
-                        Ver minero ({order.activatedMinerId}) ↗
-                      </Link>
-                    )}
+                  {(order.activatedMinerId || cancellable) && (
+                    <div className="wth-card-actions">
+                      {order.activatedMinerId && (
+                        <Link
+                          className="wth-btn-detail"
+                          to={`/nft-miners/${encodeURIComponent(order.activatedMinerId)}`}
+                        >
+                          Ver minero ({order.activatedMinerId}) ↗
+                        </Link>
+                      )}
 
-                    {cancellable && (
-                      <button
-                        type="button"
-                        className="button button-quiet button-small"
-                        disabled={isCancelling}
-                        onClick={() => void handleCancelOrder(order)}
-                      >
-                        {isCancelling ? 'Cancelando…' : 'Cancelar orden'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </article>
-            )
-          })}
-        </div>
-      )}
+                      {cancellable && (
+                        <button
+                          type="button"
+                          className="wth-btn-secondary cph-btn-cancel"
+                          disabled={isCancelling}
+                          onClick={() => void handleCancelOrder(order)}
+                        >
+                          {isCancelling ? 'Cancelando…' : 'Cancelar orden'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </article>
+              )
+            })}
+          </div>
+        )}
+      </div>
     </section>
   )
 }

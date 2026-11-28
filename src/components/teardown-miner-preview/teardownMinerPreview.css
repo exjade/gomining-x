@@ -99,13 +99,13 @@
 }
 
 .teardown-view-btn-active {
-  background: #7540ed;
-  color: #ffffff;
+  background: #10b981;
+  color: #04130d;
 }
 
 .teardown-view-btn-active:hover:not(:disabled) {
-  background: #8452f7;
-  color: #ffffff;
+  background: #34d399;
+  color: #04130d;
 }
 
 .teardown-preview-stage {
@@ -182,11 +182,11 @@
 
 .teardown-skin-picker-active {
   flex: 0 0 auto;
-  border: 1px solid rgba(117, 64, 237, 0.45);
+  border: 1px solid rgba(52, 211, 153, 0.42);
   border-radius: 10px;
   padding: 4px 9px;
-  background: rgba(117, 64, 237, 0.16);
-  color: #e6ddff;
+  background: rgba(16, 185, 129, 0.14);
+  color: #6ee7b7;
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
@@ -227,13 +227,13 @@
 
 .teardown-skin-pill:focus-visible,
 .teardown-view-btn:focus-visible {
-  outline: 2px solid #a57bff;
+  outline: 2px solid rgba(52, 211, 153, 0.72);
   outline-offset: 2px;
 }
 
 .teardown-skin-pill-selected {
-  border-color: #824ff6;
-  background: rgba(117, 64, 237, 0.22);
+  border-color: rgba(52, 211, 153, 0.55);
+  background: rgba(16, 185, 129, 0.18);
   color: #ffffff;
 }
 

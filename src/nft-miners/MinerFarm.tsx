@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { usePersonalization } from '../personalization'
+import { SHOW_STAGE2_SUBSCRIPTIONS } from '../presaleStage1Flags'
 import { useRealtimeUserMiners } from '../userMinersStore'
 import { MinerAppearancePreview } from './MinerAppearancePreview'
 import { customizationMinerFromStored, type MinerCustomizationMiner } from './miner-customization-model'
@@ -37,7 +38,9 @@ export function MinerFarm({ openMinerBuilder, uid, minersOverride }: { openMiner
           <div className="pwm-farm-metric"><span className="pwm-farm-metric-icon pwm-farm-icon-miners"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.2"/><path d="M12 1.8v3M12 19.2v3M1.8 12h3M19.2 12h3M4.8 4.8l2.1 2.1m10.2 10.2 2.1 2.1m0-14.4-2.1 2.1M6.9 17.1l-2.1 2.1"/></svg></span><span><small>{t('minerCustomization.miners').toUpperCase()}</small><strong>{miners.length}</strong></span><button type="button" aria-label={t('minerCustomization.createMiner')} onClick={openMinerBuilder}>＋</button></div>
           <div className="pwm-farm-metric"><span className="pwm-farm-metric-icon pwm-farm-icon-power"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M13.4 1.8 4.5 13h6l-.1 9.2L19.5 11h-6.1z" fill="currentColor" stroke="none"/></svg></span><span><small>{t('minerCustomization.power').toUpperCase()}</small><strong>{totalPowerTh.toFixed(2)} TH</strong></span></div>
           <div className="pwm-farm-metric"><span className="pwm-farm-metric-icon pwm-farm-icon-efficiency"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 2v5m8-5v5M6 7h12v4a6 6 0 0 1-5 5.9V22h-2v-5.1A6 6 0 0 1 6 11z" fill="currentColor" stroke="none"/></svg></span><span><small>{t('minerCustomization.efficiency').toUpperCase()}</small><strong>{averageEfficiency === null ? '—' : `${averageEfficiency.toFixed(0)} W/TH`}</strong></span></div>
-          <div className="pwm-farm-metric"><span className="pwm-farm-metric-icon pwm-farm-icon-discount"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m12 2 2.2 2 3-.4 1.1 2.8 2.8 1.1-.4 3 2 2.2-2 2.2.4 3-2.8 1.1-1.1 2.8-3-.4-2.2-2-3 .4-1.1-2.8-2.8-1.1.4-3-2-2.2-2-2.2-.4-3 2.8-1.1 1.1-2.8 3 .4z"/><circle cx="9" cy="9" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1" fill="currentColor" stroke="none"/><path d="m15.8 8.2-7.6 7.6"/></svg></span><span><small>{t('minerCustomization.discount').toUpperCase()}</small><strong title={t('minerCustomization.metricUnavailable')}>—</strong></span><button type="button" aria-label={t('minerCustomization.metricUnavailable')} disabled>＋</button></div>
+          {SHOW_STAGE2_SUBSCRIPTIONS && (
+            <div className="pwm-farm-metric"><span className="pwm-farm-metric-icon pwm-farm-icon-discount"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m12 2 2.2 2 3-.4 1.1 2.8 2.8 1.1-.4 3 2 2.2-2 2.2.4 3-2.8 1.1-1.1 2.8-3-.4-2.2-2-3 .4-1.1-2.8-2.8-1.1.4-3-2-2.2-2-2.2-.4-3 2.8-1.1 1.1-2.8 3 .4z"/><circle cx="9" cy="9" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1" fill="currentColor" stroke="none"/><path d="m15.8 8.2-7.6 7.6"/></svg></span><span><small>{t('minerCustomization.discount').toUpperCase()}</small><strong title={t('minerCustomization.metricUnavailable')}>—</strong></span><button type="button" aria-label={t('minerCustomization.metricUnavailable')} disabled>＋</button></div>
+          )}
         </div>
       </section>
       <div className="pwm-farm-banner f5-glass-card"><span className="pwm-farm-banner-mark">P</span><span><strong>{t('minerCustomization.bannerTitle')}</strong><small>{t('minerCustomization.bannerDescription')}</small></span><span aria-hidden="true">›</span></div>
