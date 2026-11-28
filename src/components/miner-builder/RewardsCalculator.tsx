@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { PaymentOptions, type MaintenanceToken } from './PaymentOptions'
 
 export type RewardPeriod = 'daily' | 'monthly' | 'annual'
@@ -21,7 +20,6 @@ export function RewardsCalculator({
   periodMaintenanceTokenAmount,
   netRewardUsd,
   displayRoi,
-  showCurrencySelector = false,
 }: {
   roiPeriod: RewardPeriod
   setRoiPeriod: (period: RewardPeriod) => void
@@ -36,69 +34,88 @@ export function RewardsCalculator({
   displayRoi: number
   showCurrencySelector?: boolean
 }) {
-  const [maintenanceCurrency, setMaintenanceCurrency] = useState<'GOMINING' | 'BTC'>('GOMINING')
-  const maintenanceDisplayAmount = maintenanceCurrency === 'BTC'
-    ? periodMaintenanceUsd / btcPriceUsd
-    : periodMaintenanceTokenAmount
+  const tokenPrecision = maintenanceToken === 'USDT' ? 2 : 4
 
   return (
-    <section className="miner-rewards-calculator">
+    <section className="miner-rewards-calculator" data-testid="builder-rewards-calculator">
       <div className="miner-rewards-periods" role="group" aria-label="Periodo de recompensas">
         {periods.map((period) => (
-          <button key={period.id} type="button" aria-pressed={roiPeriod === period.id} className={roiPeriod === period.id ? 'miner-rewards-period-active' : ''} onClick={() => setRoiPeriod(period.id)}>
+          <button
+            key={period.id}
+            type="button"
+            aria-pressed={roiPeriod === period.id}
+            className={roiPeriod === period.id ? 'miner-rewards-period-active' : ''}
+            onClick={() => setRoiPeriod(period.id)}
+          >
             {period.label}
           </button>
         ))}
       </div>
+
       <div className="miner-rewards-reference">
         <div className="miner-rewards-value-row">
-          <span>Precio BTC de referencia <span className="miner-info-icon" aria-hidden="true">i</span></span>
-          <strong>${btcPriceUsd.toLocaleString('en-US')} USD <span className="miner-rewards-chevron" aria-hidden="true">⌄</span></strong>
+          <span>Precio BTC de referencia</span>
+          <strong>${btcPriceUsd.toLocaleString('en-US')} USD</strong>
         </div>
         <PaymentOptions maintenanceToken={maintenanceToken} onChange={setMaintenanceToken} />
-        {showCurrencySelector && (
-          <div className="miner-rewards-currency">
-            <span>Mantenimiento</span>
-            <div role="group" aria-label="Moneda de mantenimiento" className="miner-rewards-currency-buttons">
-              {(['GOMINING', 'BTC'] as const).map((currency) => (
-                <button key={currency} type="button" aria-pressed={maintenanceCurrency === currency} className={maintenanceCurrency === currency ? 'miner-rewards-currency-active' : ''} onClick={() => setMaintenanceCurrency(currency)}>
-                  {currency}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
+
       <div className="miner-rewards-metrics">
         <div className="miner-rewards-metric">
-          <span>Pago estimado de pool:</span>
-          <strong>${poolPayoutUsd.toFixed(2)} USD<small>{periodBtcEstimate.toFixed(8)} BTC{showCurrencySelector && <span className="miner-coin-icon miner-coin-icon-btc" aria-hidden="true">₿</span>}</small></strong>
+          <div className="miner-rewards-metric-copy">
+            <span>Pago estimado de pool</span>
+            <p className="miner-rewards-explain">
+              Lo que produce tu potencia (TH/s) en el pool antes de descontar operación.
+            </p>
+          </div>
+          <strong>
+            ${poolPayoutUsd.toFixed(2)} USD
+            <small>{periodBtcEstimate.toFixed(8)} BTC</small>
+          </strong>
         </div>
+
         <div className="miner-rewards-metric">
-          <span className="miner-maintenance-label">
-            Mantenimiento:
-            {maintenanceToken === 'PEARL' && <small>HASTA -20%</small>}
-          </span>
-          <strong>-${periodMaintenanceUsd.toFixed(2)} USD<small>{(showCurrencySelector ? maintenanceDisplayAmount : periodMaintenanceTokenAmount).toFixed(8)} {showCurrencySelector ? maintenanceCurrency : maintenanceToken}{showCurrencySelector && <span className={maintenanceCurrency === 'BTC' ? 'miner-coin-icon miner-coin-icon-btc' : 'miner-coin-icon miner-coin-icon-gomining'} aria-hidden="true">{maintenanceCurrency === 'BTC' ? '₿' : 'G'}</span>}</small></strong>
+          <div className="miner-rewards-metric-copy">
+            <span className="miner-maintenance-label">
+              Mantenimiento
+              {maintenanceToken === 'PEARL' && <small>HASTA -20%</small>}
+            </span>
+            <p className="miner-rewards-explain">
+              Electricidad y hospedaje en data center. Con PEARL ahorras hasta 20% frente a USDT.
+            </p>
+          </div>
+          <strong>
+            -${periodMaintenanceUsd.toFixed(2)} USD
+            <small>
+              ≈ {periodMaintenanceTokenAmount.toFixed(tokenPrecision)} {maintenanceToken}
+            </small>
+          </strong>
         </div>
+
         <div className="miner-rewards-metric miner-rewards-net">
-          <span>Recompensa neta estimada: <span className="miner-info-icon" aria-hidden="true">i</span></span>
+          <div className="miner-rewards-metric-copy">
+            <span>Recompensa neta estimada</span>
+            <p className="miner-rewards-explain">
+              Ganancia limpia que queda para ti después de cubrir el mantenimiento.
+            </p>
+          </div>
           <strong>${netRewardUsd.toFixed(2)} USD</strong>
         </div>
+
         <div className="miner-rewards-metric miner-rewards-roi">
-          <span>ROI estimado anual: <span className="miner-info-icon" aria-hidden="true">i</span></span>
+          <div className="miner-rewards-metric-copy">
+            <span>ROI estimado anual</span>
+            <p className="miner-rewards-explain">
+              Porcentaje anual proyectado sobre el valor del minero (referencia variable).
+            </p>
+          </div>
           <strong>hasta {displayRoi}%</strong>
         </div>
       </div>
+
       <small className="miner-rewards-note">
-        *El token de mantenimiento ({maintenanceToken}) se deposita y se convierte en Crédito de Mantenimiento para descontar costos diarios.
+        *El token de mantenimiento ({maintenanceToken}) se usa como Crédito de Mantenimiento para cubrir los costos diarios de operación en USD.
       </small>
-      {showCurrencySelector && (
-        <div className="miner-reward-history" role="note">
-          <span className="miner-reward-history-icon" aria-hidden="true">◷</span>
-          <span>Historial de recompensas</span>
-        </div>
-      )}
     </section>
   )
 }
