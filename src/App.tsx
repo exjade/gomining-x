@@ -23,6 +23,8 @@ import { useRealtimeUserMiners } from './userMinersStore'
 import { MinerCreationScreen } from './components/miner-builder/MinerCreationScreen'
 import { CreateMinerModal } from './components/miner-builder/CreateMinerModal'
 import { BuilderSkinShowcase, resolveBuilderDesignSpec } from './components/miner-builder/BuilderSkinShowcase'
+import { saveOwnedMinerAppearance } from './nft-miners/miner-customization-repository'
+import { minerAppearanceFromDraft } from './nft-miners/appearance'
 import { MinerOptionList } from './components/miner-builder/MinerOptionList'
 import { MinerTabs, type MinerCategoryTab } from './components/miner-builder/MinerTabs'
 import { PowerSlider } from './components/miner-builder/PowerSlider'
@@ -47,6 +49,7 @@ import {
   EmbudoFunnelProgress,
   EmbudoPresaleSkinNotice,
   advanceEmbudoF1Stage,
+  clearEmbudoF1State,
   dismissPendingEmbudoPurchase,
   emitLeadCapturedEvent,
   hasCompletedPurchaseOrFunnelReceipt,
@@ -57,6 +60,7 @@ import {
   readEmbudoF1State,
   readEmbudoPresaleSelection,
   readLeadCommunicationConsent,
+  resolvePostPaymentTransition,
   resumeEmbudoF1Modal,
   returnEmbudoF1ToRegister,
   saveBuilderSelectedDesign,
@@ -81,7 +85,10 @@ import {
   resolvePendingRecoveryCheckout,
   sanitizeFirestoreErrorMessage,
 } from './minerPurchaseFlow'
+import { doc, updateDoc } from 'firebase/firestore'
+import type { DocumentData, UpdateData } from 'firebase/firestore'
 import {
+  db,
   subscribeToStorefrontSections,
   savePurchasedMiner,
   type StorefrontSectionsConfig,
@@ -121,6 +128,12 @@ import {
 } from './services/session/accountSessionIsolation'
 
 type PendingAction = { title: string; detail: string; productId?: string }
+
+const updateCosmeticMinerDirect = (
+  ownerUid: string,
+  targetMinerId: string,
+  updates: Record<string, unknown>,
+) => updateDoc(doc(db, 'miners', ownerUid, 'miner', targetMinerId), updates as UpdateData<DocumentData>)
 
 function formatMinerAcquiredAt(value: string) {
   const date = new Date(value)
@@ -904,6 +917,29 @@ function AppContent() {
           if (!result.ok) {
             return { ok: false, message: result.message }
           }
+          const chosenDesign = resolveBuilderDesignSpec(input.selectedSkin ?? readBuilderSelectedDesign())
+          try {
+            await saveOwnedMinerAppearance(
+              user.uid,
+              result.minerId,
+              minerAppearanceFromDraft(
+                {
+                  wall_id: chosenDesign.skinTraitId,
+                  body_id: null,
+                  bottom_id: null,
+                  fans_id: null,
+                  screen_id: null,
+                  buttons_id: null,
+                  top_id: null,
+                  stickers_id: null,
+                },
+                new Date().toISOString(),
+              ),
+              updateCosmeticMinerDirect,
+            )
+          } catch {
+            // Non-blocking: miner purchase succeeded; default appearance remains valid
+          }
           const receipt: DemoReceipt = {
             id: result.minerId,
             kind: 'miner',
@@ -957,17 +993,61 @@ function AppContent() {
         setPaymentReceipts((items) => [receipt, ...items].slice(0, 20))
         const receiptEvent = `${receipt.id} · ${receipt.quote.networkName} · ${receipt.transactionHash.slice(0, 14)}…`
         setSessionEvents((items) => [receiptEvent, ...items].slice(0, 5))
-        setToast('¡Pago verificado y enviado on-chain! Redirigiendo a customización...')
-        if (receipt.minerId) {
-          if (paidRedirectTimerRef.current !== null) {
-            window.clearTimeout(paidRedirectTimerRef.current)
-          }
-          paidRedirectTimerRef.current = window.setTimeout(() => {
-            paidRedirectTimerRef.current = null
-            setWalletCheckout(null)
-            navigate(`/miners/${receipt.minerId}/customize`)
-          }, 1400)
+        const postPayment = resolvePostPaymentTransition({
+          isFunnelActive: readEmbudoF1State().active,
+          isAuthenticated,
+          isEmailVerified,
+          minerId: receipt.minerId,
+        })
+        const selectedSkinSlug =
+          walletCheckout.selectedSkin ??
+          readEmbudoF1State().selectedDesignSlug ??
+          readBuilderSelectedDesign()
+        const chosenDesign = resolveBuilderDesignSpec(selectedSkinSlug)
+        if (user && !user.isAnonymous && receipt.minerId) {
+          void saveOwnedMinerAppearance(
+            user.uid,
+            receipt.minerId,
+            minerAppearanceFromDraft(
+              {
+                wall_id: chosenDesign.skinTraitId,
+                body_id: null,
+                bottom_id: null,
+                fans_id: null,
+                screen_id: null,
+                buttons_id: null,
+                top_id: null,
+                stickers_id: null,
+              },
+              new Date().toISOString(),
+            ),
+            updateCosmeticMinerDirect,
+          ).catch(() => {})
         }
+        setToast(postPayment.toastMessage)
+        if (postPayment.openVerifyEmailModal) {
+          advanceEmbudoF1Stage('verify-email', undefined, {
+            lastMinerId: receipt.minerId,
+            selectedDesignSlug: chosenDesign.slug,
+          })
+        } else if (postPayment.nextStage === 'dashboard') {
+          clearEmbudoF1State()
+        }
+        if (paidRedirectTimerRef.current !== null) {
+          window.clearTimeout(paidRedirectTimerRef.current)
+        }
+        paidRedirectTimerRef.current = window.setTimeout(() => {
+          paidRedirectTimerRef.current = null
+          setWalletCheckout(null)
+          if (postPayment.openVerifyEmailModal) {
+            navigate(postPayment.destination, { replace: true })
+            openAuthModal('verify-email')
+          } else if (postPayment.destination === '/home' || postPayment.destination === '/') {
+            navigate(postPayment.destination, { replace: true })
+          } else {
+            navigate(postPayment.destination)
+          }
+        }, 1400)
       }} />}
       {toast && <div className="toast" role="status"><span>✓</span>{toast}</div>}
       <AuthModal />

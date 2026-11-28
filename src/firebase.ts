@@ -29,6 +29,7 @@ import {
   type Timestamp,
   type FieldValue,
 } from 'firebase/firestore'
+import { getFunctions, connectFunctionsEmulator } from 'firebase/functions'
 import type { MinerAppearance } from './nft-miners/appearance'
 
 import { detectUserGeo } from './geoIp.ts'
@@ -65,6 +66,7 @@ if (isNode && firebaseConfig.projectId === 'salad-miners') {
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const db = getFirestore(app)
+export const functions = getFunctions(app)
 
 const isLoopbackBrowserHost =
   typeof window !== 'undefined' &&
@@ -88,10 +90,15 @@ if (useFirebaseEmulators) {
       ? '100.89.0.52'
       : (env.VITE_FIREBASE_FIRESTORE_EMULATOR_HOST || '127.0.0.1')
     const firestoreEmulatorPort = Number(env.VITE_FIREBASE_FIRESTORE_EMULATOR_PORT || 8080)
+    const functionsEmulatorHost = isTailscaleOrigin
+      ? '100.89.0.52'
+      : (env.VITE_FIREBASE_FUNCTIONS_EMULATOR_HOST || '127.0.0.1')
+    const functionsEmulatorPort = Number(env.VITE_FIREBASE_FUNCTIONS_EMULATOR_PORT || 5001)
     connectAuthEmulator(auth, authEmulatorUrl, { disableWarnings: true })
     if (String(env.VITE_USE_FIRESTORE_EMULATOR ?? 'true').toLowerCase() !== 'false') {
       connectFirestoreEmulator(db, firestoreEmulatorHost, firestoreEmulatorPort)
     }
+    connectFunctionsEmulator(functions, functionsEmulatorHost, functionsEmulatorPort)
     emulatorGuard.__firebaseEmulatorsConnected = true
   }
 }
