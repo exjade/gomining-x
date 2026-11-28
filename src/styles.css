@@ -2963,10 +2963,42 @@ h1, h2, h3, h4, h5, h6,
 }
 .quote-address {
   background: rgba(255, 255, 255, 0.08);
+  border: none;
   padding: 2px 6px;
   border-radius: 6px;
   color: #38bdf8;
+  font-family: monospace;
+  font-size: inherit;
+  line-height: inherit;
   cursor: pointer;
+}
+[data-theme='light'] .quote-address {
+  background: rgba(15, 23, 42, 0.08);
+  color: #0284c7;
+}
+.checkout-gas-notice {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #fde68a;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+[data-theme='light'] .checkout-gas-notice {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(217, 119, 6, 0.4);
+  color: #92400e;
+}
+.network-chip-btn:focus-visible,
+.currency-pill-btn:focus-visible,
+.quote-address:focus-visible,
+.checkout-close-btn:focus-visible,
+.checkout-action-btn:focus-visible {
+  outline: 2px solid #a78bfa;
+  outline-offset: 2px;
 }
 .quote-tag-fee {
   background: rgba(234, 179, 8, 0.15);

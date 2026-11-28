@@ -993,4 +993,159 @@ describe('POUW Checkout: All Enabled Networks, 1-Click Wallet Switch & PouwMiner
       )
     })
   })
+
+  describe('Block 5: SPOT_PRICE_UNAVAILABLE classification, RPC congestion guidance, Ethereum Mainnet gas notice & WCAG 2.1 AA checkout contracts', () => {
+    async function loadClassifyPaymentError() {
+      const checkoutSrc = readText('src/WalletPaymentCheckout.tsx')
+      const match = checkoutSrc.match(/export function sanitizeErrorReason[\s\S]*?(?=export function WalletPaymentCheckout)/)
+      assert.ok(match, 'Expected sanitizeErrorReason..classifyPaymentError block in src/WalletPaymentCheckout.tsx')
+      const transpiled = ts.transpileModule(match[0], {
+        compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+      })
+      return (await import(`data:text/javascript;base64,${Buffer.from(transpiled.outputText).toString('base64')}`)) as {
+        classifyPaymentError: (err: unknown, networkName: string) => {
+          message: string
+          kind: string
+          name?: string
+          code?: number | string
+          shortMessage?: string
+          category: string
+        }
+      }
+    }
+
+    it('classifies SPOT_PRICE_UNAVAILABLE (reasonCode and spot price text) distinctly before RPC_ERROR with congestion & USDT guidance', async () => {
+      const { classifyPaymentError } = await loadClassifyPaymentError()
+
+      const callableErr = {
+        code: 'functions/unavailable',
+        message: 'Payment verification service temporarily unavailable',
+        details: { reasonCode: 'SPOT_PRICE_UNAVAILABLE' },
+      }
+      const res = classifyPaymentError(callableErr, 'Ethereum')
+      assert.equal(res.kind, 'SPOT_PRICE_UNAVAILABLE')
+      assert.equal(res.category, 'SPOT_PRICE_UNAVAILABLE')
+      assert.equal(res.code, 'SPOT_PRICE_UNAVAILABLE')
+      assert.equal(
+        res.message,
+        'El servicio de cotización está temporalmente congestionado para Ethereum. Intenta de nuevo en unos segundos o paga en USDT (precio fijo en USD).',
+      )
+      assert.doesNotMatch(res.message, /proveedor RPC/i, 'SPOT_PRICE_UNAVAILABLE must not blame RPC provider')
+
+      // Spot price message mentioning "provider" and "503" must still classify as SPOT_PRICE_UNAVAILABLE, not RPC_ERROR
+      const providerMsgRes = classifyPaymentError(
+        { code: 503, message: 'Spot price provider returned HTTP 503 for ETH' },
+        'Ethereum',
+      )
+      assert.equal(providerMsgRes.kind, 'SPOT_PRICE_UNAVAILABLE')
+      assert.equal(providerMsgRes.category, 'SPOT_PRICE_UNAVAILABLE')
+      assert.equal(providerMsgRes.code, 503)
+      assert.match(providerMsgRes.message, /congestionado/i)
+      assert.match(providerMsgRes.message, /USDT/)
+
+      // Spanish "cotización spot" text fallback
+      const spanishSpotRes = classifyPaymentError(new Error('Fallo al consultar cotización spot para SOL'), 'Solana')
+      assert.equal(spanishSpotRes.kind, 'SPOT_PRICE_UNAVAILABLE')
+      assert.match(spanishSpotRes.message, /Solana/)
+      assert.match(spanishSpotRes.message, /USDT/)
+    })
+
+    it('preserves SCRUM-246 RPC_ERROR prefix and adds congestion guidance', async () => {
+      const { classifyPaymentError } = await loadClassifyPaymentError()
+
+      const rpcErr = new Error('HTTP 503 Service Unavailable from RPC gateway')
+      const res = classifyPaymentError(rpcErr, 'Ethereum')
+      assert.equal(res.kind, 'RPC_ERROR')
+      assert.equal(res.category, 'RPC_ERROR')
+      assert.match(res.message, /^Error de comunicación con el proveedor RPC en la red Ethereum/)
+      assert.match(res.message, /La red puede estar congestionada; intenta de nuevo en unos momentos\.$/)
+    })
+
+    it('enforces Ethereum Mainnet gas notice, WCAG 2.1 AA checkout markup, 8 useEffect invariant, and :focus-visible / gas-notice CSS contracts', () => {
+      const checkoutSrc = readText('src/WalletPaymentCheckout.tsx')
+      const stylesSrc = readText('src/styles.css')
+
+      // Ethereum Mainnet non-blocking gas notice with exact gating and copy
+      assert.match(
+        checkoutSrc,
+        /displayNetworkId === 'ethereum'\s*&&\s*\(!intent\?\.networkMode \|\| intent\.networkMode === 'mainnet'\)\s*&&\s*!isWrongWalletFamily\s*&&\s*!hasBroadcastTxLock/,
+        'Ethereum gas notice must be gated to ethereum mainnet (or unset networkMode) without wrong-wallet-family or F-01 lock',
+      )
+      assert.ok(checkoutSrc.includes('data-testid="checkout-eth-gas-notice"'))
+      assert.match(
+        checkoutSrc,
+        /data-testid="checkout-eth-gas-notice"[^>]*role="note"[^>]*className="checkout-gas-notice"/,
+        'Ethereum gas notice must declare role="note" and className="checkout-gas-notice"',
+      )
+      assert.ok(
+        checkoutSrc.includes(
+          'Aviso de red: Ethereum Mainnet suele tener comisiones de gas más altas o congestión. Para comisiones mínimas, puedes elegir BNB Chain, Polygon, Arbitrum, Optimism, Solana o TRON en USDT.',
+        ),
+        'Ethereum gas notice must include the exact approved copy',
+      )
+
+      // WCAG 2.1 AA group labels (0 orphan <label className="checkout-label">)
+      assert.equal(
+        checkoutSrc.includes('<label className="checkout-label">'),
+        false,
+        'Orphan <label className="checkout-label"> without htmlFor must be replaced by span + role="group"',
+      )
+      assert.ok(checkoutSrc.includes('<span id="checkout-network-label" className="checkout-label">1. Red de pago</span>'))
+      assert.ok(checkoutSrc.includes('<div className="checkout-network-grid" role="group" aria-labelledby="checkout-network-label">'))
+      assert.ok(checkoutSrc.includes('<span id="checkout-currency-label" className="checkout-label">2. Moneda de pago</span>'))
+      assert.ok(checkoutSrc.includes('<div className="currency-selector-row" role="group" aria-labelledby="checkout-currency-label">'))
+
+      // aria-pressed on network chips and currency pills
+      assert.ok(checkoutSrc.includes('aria-pressed={displayNetworkId === net.id}'))
+      assert.ok(checkoutSrc.includes('aria-pressed={displayUseUsdt}'))
+      assert.ok(checkoutSrc.includes('aria-pressed={!displayUseUsdt}'))
+
+      // Keyboard-accessible treasury address copy button
+      assert.equal(
+        checkoutSrc.includes('<code className="quote-address"'),
+        false,
+        'quote-address must be converted from <code onClick> to <button type="button">',
+      )
+      assert.match(
+        checkoutSrc,
+        /<button[\s\S]*?type="button"[\s\S]*?className="quote-address"[\s\S]*?aria-label="Copiar dirección de tesorería autoritativa"/,
+        'Treasury address copy control must be a <button type="button" className="quote-address"> with accessible aria-label',
+      )
+
+      // Live regions for copyStatus and every .checkout-error-banner
+      assert.match(
+        checkoutSrc,
+        /\{copyStatus && <p className="copy-notice-text" role="status" aria-live="polite">\{copyStatus\}<\/p>\}/,
+        'copyStatus notice must declare role="status" aria-live="polite"',
+      )
+      const errorBannerTags = checkoutSrc.match(/<div className="checkout-error-banner"[^>]*>/g) ?? []
+      assert.ok(errorBannerTags.length >= 2, 'Expected both terminal and form .checkout-error-banner elements')
+      for (const tag of errorBannerTags) {
+        assert.ok(tag.includes('role="alert"'), `Error banner missing role="alert": ${tag}`)
+        assert.ok(tag.includes('aria-live="assertive"'), `Error banner missing aria-live="assertive": ${tag}`)
+      }
+
+      // Preserve exact useEffect count (8 -> 8)
+      const useEffectCalls = checkoutSrc.match(/\buseEffect\s*\(/g) ?? []
+      assert.equal(useEffectCalls.length, 8, `Expected exactly 8 useEffect calls, found ${useEffectCalls.length}`)
+
+      // CSS contracts: .checkout-gas-notice (dark + light), button.quote-address monospace reset, and :focus-visible
+      const gasNoticeBlock = extractBlock(stylesSrc, '.checkout-gas-notice {')
+      assert.match(gasNoticeBlock, /font-size:\s*12px/)
+      assert.match(gasNoticeBlock, /line-height:\s*1\.45/)
+      assert.ok(stylesSrc.includes("[data-theme='light'] .checkout-gas-notice {"))
+
+      const quoteAddrBlock = extractBlock(stylesSrc, '.quote-address {')
+      assert.match(quoteAddrBlock, /border:\s*none/)
+      assert.match(quoteAddrBlock, /font-family:\s*monospace/)
+      assert.match(quoteAddrBlock, /font-size:\s*inherit/)
+
+      const focusVisibleMatch = stylesSrc.match(
+        /\.network-chip-btn:focus-visible,[\s\S]*?\.currency-pill-btn:focus-visible,[\s\S]*?\.quote-address:focus-visible,[\s\S]*?\.checkout-close-btn:focus-visible,[\s\S]*?\.checkout-action-btn:focus-visible\s*\{[\s\S]*?\}/,
+      )
+      assert.ok(focusVisibleMatch, 'Expected :focus-visible rule covering all 5 interactive checkout controls')
+      assert.match(focusVisibleMatch[0], /outline:\s*2px solid #a78bfa/)
+      assert.match(focusVisibleMatch[0], /outline-offset:\s*2px/)
+    })
+  })
 })

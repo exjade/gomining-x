@@ -424,6 +424,20 @@ export function classifyPaymentError(
   }
 
   if (
+    reasonCode === 'SPOT_PRICE_UNAVAILABLE' ||
+    /spot price|cotizaci[oó]n spot/.test(checkText)
+  ) {
+    return {
+      message: `El servicio de cotización está temporalmente congestionado para ${networkName}. Intenta de nuevo en unos segundos o paga en USDT (precio fijo en USD).`,
+      kind: 'SPOT_PRICE_UNAVAILABLE',
+      name: safeName,
+      code: reasonCode || code,
+      shortMessage: safeShortMessage,
+      category: 'SPOT_PRICE_UNAVAILABLE',
+    }
+  }
+
+  if (
     rootName.includes('Rpc') ||
     rootName.includes('Timeout') ||
     rootName.includes('Http') ||
@@ -439,7 +453,7 @@ export function classifyPaymentError(
   ) {
     const detail = cleanReason ? ` (${cleanReason})` : ''
     return {
-      message: `Error de comunicación con el proveedor RPC en la red ${networkName}${detail}. Intenta de nuevo en unos segundos.`,
+      message: `Error de comunicación con el proveedor RPC en la red ${networkName}${detail}. La red puede estar congestionada; intenta de nuevo en unos momentos.`,
       kind: 'RPC_ERROR',
       name: safeName,
       code,
@@ -1827,7 +1841,7 @@ export function WalletPaymentCheckout({
                     ? 'Esta orden de pago fue cancelada antes de recibir fondos.'
                     : 'El tiempo de validez (TTL) de la cotización expiró. Genera una nueva cotización para continuar.'}
             </p>
-            {error && <div className="checkout-error-banner" role="alert">{error}</div>}
+            {error && <div className="checkout-error-banner" role="alert" aria-live="assertive">{error}</div>}
             <div className="receipt-actions">
               {currentExplorerUrl && (
                 <a
@@ -1924,14 +1938,15 @@ export function WalletPaymentCheckout({
                     </div>
 
                     <div className="checkout-section">
-                      <label className="checkout-label">1. Red de pago</label>
-                      <div className="checkout-network-grid">
+                      <span id="checkout-network-label" className="checkout-label">1. Red de pago</span>
+                      <div className="checkout-network-grid" role="group" aria-labelledby="checkout-network-label">
                         {enabledNetworks.map((net) => (
                           <button
                             key={net.id}
                             type="button"
                             className={`network-chip-btn ${displayNetworkId === net.id ? 'network-chip-active' : ''} ${methodUpdating && pendingMethodSelection?.networkId === net.id ? 'network-chip-pending' : ''}`}
                             disabled={loadingIntent || paying || cancelling || retryingVerification || hasBroadcastTxLock}
+                            aria-pressed={displayNetworkId === net.id}
                             onClick={() => {
                               hasManualNetworkSelectionRef.current = true
                               const nextUseUsdt = resolveNetworkSelectionUseUsdt({
@@ -1959,12 +1974,13 @@ export function WalletPaymentCheckout({
                     </div>
 
                     <div className="checkout-section">
-                      <label className="checkout-label">2. Moneda de pago</label>
-                      <div className="currency-selector-row">
+                      <span id="checkout-currency-label" className="checkout-label">2. Moneda de pago</span>
+                      <div className="currency-selector-row" role="group" aria-labelledby="checkout-currency-label">
                         <button
                           type="button"
                           className={`currency-pill-btn ${displayUseUsdt ? 'currency-pill-active' : ''} ${methodUpdating && pendingMethodSelection !== null && displayUseUsdt ? 'currency-pill-pending' : ''}`}
                           disabled={loadingIntent || paying || cancelling || retryingVerification || hasBroadcastTxLock || (isWrongWalletFamily && !pendingMethodSelection)}
+                          aria-pressed={displayUseUsdt}
                           onClick={() => void handleSelectNetworkOrAsset(displayNetworkId, true)}
                         >
                           <CryptoIcon symbol="USDT" size="sm" />
@@ -1987,6 +2003,7 @@ export function WalletPaymentCheckout({
                           type="button"
                           className={`currency-pill-btn ${!displayUseUsdt ? 'currency-pill-active' : ''} ${methodUpdating && pendingMethodSelection !== null && !displayUseUsdt ? 'currency-pill-pending' : ''}`}
                           disabled={loadingIntent || paying || cancelling || retryingVerification || hasBroadcastTxLock || (isWrongWalletFamily && !pendingMethodSelection)}
+                          aria-pressed={!displayUseUsdt}
                           onClick={() => void handleSelectNetworkOrAsset(displayNetworkId, false)}
                         >
                           <CryptoIcon symbol={NATIVE_SYMBOL_BY_NETWORK[displayNetworkId] as CryptoSymbol} size="sm" />
@@ -1997,6 +2014,12 @@ export function WalletPaymentCheckout({
                         </button>
                       </div>
                     </div>
+
+                    {displayNetworkId === 'ethereum' && (!intent?.networkMode || intent.networkMode === 'mainnet') && !isWrongWalletFamily && !hasBroadcastTxLock ? (
+                      <div data-testid="checkout-eth-gas-notice" role="note" className="checkout-gas-notice">
+                        Aviso de red: Ethereum Mainnet suele tener comisiones de gas más altas o congestión. Para comisiones mínimas, puedes elegir BNB Chain, Polygon, Arbitrum, Optimism, Solana o TRON en USDT.
+                      </div>
+                    ) : null}
                   </>
                 )}
 
@@ -2034,9 +2057,15 @@ export function WalletPaymentCheckout({
                       <div className="quote-breakdown-details">
                         <div className="quote-line">
                           <span>Tesorería autoritativa:</span>
-                          <code className="quote-address" onClick={() => handleCopy(intent.treasuryAddress!)} title="Haz clic para copiar">
+                          <button
+                            type="button"
+                            className="quote-address"
+                            aria-label="Copiar dirección de tesorería autoritativa"
+                            onClick={() => handleCopy(intent.treasuryAddress!)}
+                            title="Haz clic para copiar"
+                          >
                             {intent.treasuryAddress.slice(0, 8)}...{intent.treasuryAddress.slice(-6)}
-                          </code>
+                          </button>
                         </div>
                         <div className="quote-line">
                           <span>Validez (TTL):</span>
@@ -2079,8 +2108,8 @@ export function WalletPaymentCheckout({
                   )}
                 </div>
 
-                {copyStatus && <p className="copy-notice-text">{copyStatus}</p>}
-                {error && <div className="checkout-error-banner" role="alert">{error}</div>}
+                {copyStatus && <p className="copy-notice-text" role="status" aria-live="polite">{copyStatus}</p>}
+                {error && <div className="checkout-error-banner" role="alert" aria-live="assertive">{error}</div>}
 
                 {hasBroadcastTxLock && (
                   <div
