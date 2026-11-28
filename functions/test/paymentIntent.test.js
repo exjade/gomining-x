@@ -1145,7 +1145,7 @@ test('IMP-3: convertUsdToAtomic supports >8 decimal and scientific-notation spot
   assert.equal(sciSpot.expectedAmountAtomic, '2000000000000');
 });
 
-test('IMP-4: createDefaultSpotPriceProvider wraps res.json() errors, passes timeout signal, and returns 502 on invalid upstream quote', async () => {
+test('IMP-4: createDefaultSpotPriceProvider wraps res.json() errors, passes timeout signal, and fails closed with 503 on invalid upstream quotes across all providers', async () => {
   let receivedSignal = null;
   const providerInvalidJson = createDefaultSpotPriceProvider({
     fetchImpl: async (_url, opts) => {
@@ -1164,18 +1164,23 @@ test('IMP-4: createDefaultSpotPriceProvider wraps res.json() errors, passes time
   );
   assert.ok(receivedSignal, 'expected AbortSignal timeout on upstream fetch');
 
+  let badUsdCalls = 0;
   const providerBadUsd = createDefaultSpotPriceProvider({
-    fetchImpl: async () => ({
-      ok: true,
-      async json() {
-        return { binancecoin: { usd: -5 } };
-      }
-    })
+    fetchImpl: async () => {
+      badUsdCalls += 1;
+      return {
+        ok: true,
+        async json() {
+          return { binancecoin: { usd: -5 } };
+        }
+      };
+    }
   });
   await assert.rejects(
     () => providerBadUsd({ assetSymbol: 'BNB', networkId: 'bsc' }),
-    (err) => err instanceof PaymentConfigError && err.code === 'INVALID_SPOT_PRICE' && err.statusCode === 502
+    (err) => err instanceof PaymentIntentError && err.code === 'SPOT_PRICE_UNAVAILABLE' && err.statusCode === 503
   );
+  assert.equal(badUsdCalls, 3, 'invalid upstream price must fall through all 3 spot providers before failing closed');
 });
 
 test('IMP-5: rejects Firestore path-traversal doc IDs and non-string packageId with typed 400 errors', async () => {
@@ -2176,4 +2181,388 @@ test('SCRUM-373-5: multiple in-place method switches (bsc/USDT -> polygon/POL ->
   // Route remained bsc/BNB untouched after rejected TOCTOU race
   assert.equal(store.get(`payment_intents/${initial.intentId}`).paymentNetwork, 'bsc');
   assert.equal(store.get(`payment_intents/${initial.intentId}`).paymentAsset, 'BNB');
+});
+
+// ============================================================================
+// 8. SPOT PRICE CACHE, IN-FLIGHT DEDUP & MULTI-PROVIDER FALLBACK TESTS
+// ============================================================================
+
+test('createDefaultSpotPriceProvider: caches by uppercase symbol within cacheTtlMs, expires past TTL, isolates instances, and respects env PAYMENT_SPOT_CACHE_TTL_MS', async () => {
+  let currentNow = 1_700_000_000_000;
+  let fetchCalls = 0;
+  let price = 3200.5;
+  const provider = createDefaultSpotPriceProvider({
+    now: () => currentNow,
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      return {
+        ok: true,
+        async json() {
+          return { ethereum: { usd: price } };
+        }
+      };
+    }
+  });
+
+  const first = await provider({ assetSymbol: 'eth', networkId: 'ethereum' });
+  assert.deepEqual(first, { priceUsd: '3200.5', source: 'COINGECKO_SIMPLE_PRICE' });
+  assert.equal(fetchCalls, 1);
+
+  // Mutating returned object must not corrupt cached entry
+  first.priceUsd = '0.01';
+  first.source = 'TAMPERED';
+
+  currentNow += 44_999;
+  const second = await provider({ assetSymbol: 'ETH', networkId: 'ethereum' });
+  assert.deepEqual(second, { priceUsd: '3200.5', source: 'COINGECKO_SIMPLE_PRICE' });
+  assert.equal(fetchCalls, 1);
+
+  // Separate provider instance does not share cache
+  let otherCalls = 0;
+  const otherProvider = createDefaultSpotPriceProvider({
+    now: () => currentNow,
+    fetchImpl: async () => {
+      otherCalls += 1;
+      return {
+        ok: true,
+        async json() {
+          return { ethereum: { usd: 3210 } };
+        }
+      };
+    }
+  });
+  const otherQuote = await otherProvider({ assetSymbol: 'ETH', networkId: 'ethereum' });
+  assert.deepEqual(otherQuote, { priceUsd: '3210', source: 'COINGECKO_SIMPLE_PRICE' });
+  assert.equal(otherCalls, 1);
+
+  // Advance past default 45000ms TTL -> expires and refetches
+  currentNow += 1;
+  price = 3250.25;
+  const refreshed = await provider({ assetSymbol: 'ETH', networkId: 'ethereum' });
+  assert.deepEqual(refreshed, { priceUsd: '3250.25', source: 'COINGECKO_SIMPLE_PRICE' });
+  assert.equal(fetchCalls, 2);
+
+  // Respects valid env.PAYMENT_SPOT_CACHE_TTL_MS
+  let envNow = 1_700_000_000_000;
+  let envCalls = 0;
+  const envProvider = createDefaultSpotPriceProvider({
+    env: { PAYMENT_SPOT_CACHE_TTL_MS: '10000' },
+    now: () => envNow,
+    fetchImpl: async () => {
+      envCalls += 1;
+      return { ok: true, async json() { return { solana: { usd: 185 } }; } };
+    }
+  });
+  await envProvider({ assetSymbol: 'SOL', networkId: 'solana' });
+  envNow += 9_999;
+  await envProvider({ assetSymbol: 'SOL', networkId: 'solana' });
+  assert.equal(envCalls, 1);
+  envNow += 1;
+  await envProvider({ assetSymbol: 'SOL', networkId: 'solana' });
+  assert.equal(envCalls, 2);
+
+  // Empty, whitespace, negative, >300000, or non-integer env values fall back to default 45000ms (never coerce '' -> 0)
+  for (const invalidEnvTtl of ['', '   ', '-1', '300001', '12.5', 'abc']) {
+    let t = 1_700_000_000_000;
+    let calls = 0;
+    const fallbackTtlProvider = createDefaultSpotPriceProvider({
+      env: { PAYMENT_SPOT_CACHE_TTL_MS: invalidEnvTtl },
+      now: () => t,
+      fetchImpl: async () => {
+        calls += 1;
+        return { ok: true, async json() { return { binancecoin: { usd: 600 } }; } };
+      }
+    });
+    await fallbackTtlProvider({ assetSymbol: 'BNB', networkId: 'bsc' });
+    t += 44_000;
+    await fallbackTtlProvider({ assetSymbol: 'BNB', networkId: 'bsc' });
+    assert.equal(calls, 1, `Invalid env PAYMENT_SPOT_CACHE_TTL_MS=${JSON.stringify(invalidEnvTtl)} must fall back to 45000ms cache`);
+  }
+
+  // Explicit cacheTtlMs: 0 disables caching
+  let zeroCalls = 0;
+  const uncachedProvider = createDefaultSpotPriceProvider({
+    cacheTtlMs: 0,
+    now: () => currentNow,
+    fetchImpl: async () => {
+      zeroCalls += 1;
+      return { ok: true, async json() { return { tron: { usd: 0.25 } }; } };
+    }
+  });
+  await uncachedProvider({ assetSymbol: 'TRX', networkId: 'tron' });
+  await uncachedProvider({ assetSymbol: 'TRX', networkId: 'tron' });
+  assert.equal(zeroCalls, 2);
+});
+
+test('createDefaultSpotPriceProvider: deduplicates concurrent in-flight requests and cleans up after failure', async () => {
+  let fetchCalls = 0;
+  let releaseFetch;
+  const gate = new Promise((resolve) => {
+    releaseFetch = resolve;
+  });
+
+  const provider = createDefaultSpotPriceProvider({
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      await gate;
+      return {
+        ok: true,
+        async json() {
+          return { solana: { usd: 192.4 } };
+        }
+      };
+    }
+  });
+
+  const pending = Promise.all([
+    provider({ assetSymbol: 'SOL', networkId: 'solana' }),
+    provider({ assetSymbol: 'sol', networkId: 'solana' }),
+    provider({ assetSymbol: 'SOL', networkId: 'solana' })
+  ]);
+  releaseFetch();
+  const [q1, q2, q3] = await pending;
+  assert.equal(fetchCalls, 1);
+  assert.deepEqual(q1, { priceUsd: '192.4', source: 'COINGECKO_SIMPLE_PRICE' });
+  assert.deepEqual(q2, { priceUsd: '192.4', source: 'COINGECKO_SIMPLE_PRICE' });
+  assert.deepEqual(q3, { priceUsd: '192.4', source: 'COINGECKO_SIMPLE_PRICE' });
+  assert.notEqual(q1, q2);
+
+  // Concurrent failure cleans up inFlight and does not cache failure
+  let shouldFail = true;
+  let failureCycleCalls = 0;
+  const flakyProvider = createDefaultSpotPriceProvider({
+    fetchImpl: async () => {
+      failureCycleCalls += 1;
+      await new Promise((r) => setTimeout(r, 10));
+      if (shouldFail) {
+        return { ok: false, status: 503, async json() { return {}; } };
+      }
+      return { ok: true, async json() { return { solana: { usd: 195.5 } }; } };
+    }
+  });
+
+  const settled = await Promise.allSettled([
+    flakyProvider({ assetSymbol: 'SOL', networkId: 'solana' }),
+    flakyProvider({ assetSymbol: 'SOL', networkId: 'solana' })
+  ]);
+  assert.equal(failureCycleCalls, 3, 'concurrent failure shares one 3-provider chain attempt');
+  for (const outcome of settled) {
+    assert.equal(outcome.status, 'rejected');
+    assert.ok(outcome.reason instanceof PaymentIntentError);
+    assert.equal(outcome.reason.code, 'SPOT_PRICE_UNAVAILABLE');
+    assert.equal(outcome.reason.statusCode, 503);
+  }
+
+  shouldFail = false;
+  const recovered = await flakyProvider({ assetSymbol: 'SOL', networkId: 'solana' });
+  assert.deepEqual(recovered, { priceUsd: '195.5', source: 'COINGECKO_SIMPLE_PRICE' });
+  assert.equal(failureCycleCalls, 4);
+});
+
+test('createDefaultSpotPriceProvider: falls back from CoinGecko 429 or invalid price to Coinbase Spot and caches result', async () => {
+  const seenUrls = [];
+  const seenSignals = [];
+  let currentNow = 1_700_000_000_000;
+  const provider = createDefaultSpotPriceProvider({
+    now: () => currentNow,
+    fetchImpl: async (url, opts) => {
+      seenUrls.push(url);
+      seenSignals.push(opts && opts.signal);
+      if (url.includes('coingecko.com')) {
+        return { ok: false, status: 429, async json() { return { status: { error_code: 429 } }; } };
+      }
+      if (url === 'https://api.coinbase.com/v2/prices/ETH-USD/spot') {
+        return { ok: true, async json() { return { data: { base: 'ETH', currency: 'USD', amount: '3125.45' } }; } };
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    }
+  });
+
+  const quote = await provider({ assetSymbol: 'ETH', networkId: 'ethereum' });
+  assert.deepEqual(quote, { priceUsd: '3125.45', source: 'COINBASE_SPOT' });
+  assert.equal(seenUrls.length, 2);
+  assert.equal(seenUrls[1], 'https://api.coinbase.com/v2/prices/ETH-USD/spot');
+  assert.ok(seenSignals[0] && seenSignals[1] && seenSignals[0] !== seenSignals[1], 'each attempt must receive a fresh AbortSignal');
+
+  // Cached hit avoids further HTTP calls
+  currentNow += 10_000;
+  const cachedQuote = await provider({ assetSymbol: 'ETH', networkId: 'ethereum' });
+  assert.deepEqual(cachedQuote, { priceUsd: '3125.45', source: 'COINBASE_SPOT' });
+  assert.equal(seenUrls.length, 2);
+
+  // CoinGecko HTTP 200 with negative price (-5) falls back to Coinbase Spot
+  const invalidPrimaryProvider = createDefaultSpotPriceProvider({
+    fetchImpl: async (url) => {
+      if (url.includes('coingecko.com')) {
+        return { ok: true, async json() { return { ethereum: { usd: -5 } }; } };
+      }
+      if (url === 'https://api.coinbase.com/v2/prices/ETH-USD/spot') {
+        return { ok: true, async json() { return { data: { amount: '3100.2' } }; } };
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    }
+  });
+  const recovered = await invalidPrimaryProvider({ assetSymbol: 'ETH', networkId: 'ethereum' });
+  assert.deepEqual(recovered, { priceUsd: '3100.2', source: 'COINBASE_SPOT' });
+});
+
+test('createDefaultSpotPriceProvider: falls back from CoinGecko 503 + Coinbase 503/invalid to Kraken Public Ticker across all supported symbols', async () => {
+  const expectedKrakenPairs = {
+    ETH: 'ETHUSD',
+    SOL: 'SOLUSD',
+    POL: 'POLUSD',
+    AVAX: 'AVAXUSD',
+    TRX: 'TRXUSD',
+    BNB: 'BNBUSD'
+  };
+
+  for (const [symbol, expectedPair] of Object.entries(expectedKrakenPairs)) {
+    const urls = [];
+    const provider = createDefaultSpotPriceProvider({
+      fetchImpl: async (url) => {
+        urls.push(url);
+        if (url.includes('coingecko.com')) {
+          return { ok: false, status: 503, async json() { return {}; } };
+        }
+        if (url.includes('api.coinbase.com')) {
+          return { ok: false, status: 503, async json() { return {}; } };
+        }
+        if (url === `https://api.kraken.com/0/public/Ticker?pair=${expectedPair}`) {
+          return {
+            ok: true,
+            async json() {
+              return { error: [], result: { [`X${expectedPair}`]: { c: ['38.75000', '12.0'] } } };
+            }
+          };
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      }
+    });
+
+    const quote = await provider({ assetSymbol: symbol, networkId: 'avalanche' });
+    assert.deepEqual(quote, { priceUsd: '38.75', source: 'KRAKEN_TICKER' });
+    assert.equal(urls.length, 3);
+    assert.equal(urls[2], `https://api.kraken.com/0/public/Ticker?pair=${expectedPair}`);
+  }
+
+  // Coinbase boolean/zero amount must NOT be accepted as valid price (Number(true) === 1 trap) and falls through to Kraken
+  for (const badAmount of [true, false, '0', '', null]) {
+    const provider = createDefaultSpotPriceProvider({
+      fetchImpl: async (url) => {
+        if (url.includes('coingecko.com')) return { ok: false, status: 429, async json() { return {}; } };
+        if (url.includes('api.coinbase.com')) return { ok: true, async json() { return { data: { amount: badAmount } }; } };
+        return { ok: true, async json() { return { error: [], result: { XETHZUSD: { c: ['2999.99', '1'] } } }; } };
+      }
+    });
+    const quote = await provider({ assetSymbol: 'ETH', networkId: 'ethereum' });
+    assert.deepEqual(quote, { priceUsd: '2999.99', source: 'KRAKEN_TICKER' });
+  }
+});
+
+test('createDefaultSpotPriceProvider: fails closed with 503 SPOT_PRICE_UNAVAILABLE when all 3 providers fail without caching the error', async () => {
+  let calls = 0;
+  let succeedNow = false;
+  const provider = createDefaultSpotPriceProvider({
+    fetchImpl: async (url) => {
+      calls += 1;
+      if (succeedNow) {
+        return { ok: true, async json() { return { avalanche: undefined, 'avalanche-2': { usd: 42.1 } }; } };
+      }
+      if (url.includes('coingecko.com')) {
+        return { ok: false, status: 429, async json() { return {}; } };
+      }
+      if (url.includes('api.coinbase.com')) {
+        throw new Error('AbortError: timeout');
+      }
+      // Kraken returns non-empty error array -> invalid
+      return { ok: true, async json() { return { error: ['EQuery:Unknown asset pair'], result: {} }; } };
+    }
+  });
+
+  await assert.rejects(
+    () => provider({ assetSymbol: 'AVAX', networkId: 'avalanche' }),
+    (err) => err instanceof PaymentIntentError && err.code === 'SPOT_PRICE_UNAVAILABLE' && err.statusCode === 503
+  );
+  assert.equal(calls, 3);
+
+  // Error was not cached: next call recovers immediately
+  succeedNow = true;
+  const quote = await provider({ assetSymbol: 'AVAX', networkId: 'avalanche' });
+  assert.deepEqual(quote, { priceUsd: '42.1', source: 'COINGECKO_SIMPLE_PRICE' });
+  assert.equal(calls, 4);
+});
+
+test('payments/index getDefaultHandlers: shares lazy container-scoped spot cache and in-flight deduplication across separate invocations', async () => {
+  const paymentsIndex = require('../src/payments');
+  assert.equal(typeof paymentsIndex.getDefaultHandlers, 'function');
+
+  const { db } = createInMemoryFirestore(buildSeededDocs());
+  const env = buildTestEnv();
+  let fetchCalls = 0;
+  let releaseFetch;
+  const gate = new Promise((resolve) => {
+    releaseFetch = resolve;
+  });
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    fetchCalls += 1;
+    assert.ok(url.includes('coingecko.com'), `Unexpected URL: ${url}`);
+    await gate;
+    return {
+      ok: true,
+      async json() {
+        return { ethereum: { usd: 3300 } };
+      }
+    };
+  };
+
+  try {
+    const handlersA = paymentsIndex.getDefaultHandlers({ db, env });
+    const handlersB = paymentsIndex.getDefaultHandlers({ db, env });
+    const pending = Promise.all([
+      handlersA.handleCreatePaymentIntent({
+        auth: { uid: 'u1', token: {} },
+        data: {
+          productType: 'miner',
+          packageId: 'minerx-02',
+          networkId: 'arbitrum',
+          assetSymbol: 'ETH',
+          senderWallet: '0x9999999999999999999999999999999999999999'
+        }
+      }),
+      handlersB.handleCreatePaymentIntent({
+        auth: { uid: 'u1', token: {} },
+        data: {
+          productType: 'miner',
+          packageId: 'minerx-02',
+          networkId: 'arbitrum',
+          assetSymbol: 'ETH',
+          senderWallet: '0x9999999999999999999999999999999999999999'
+        }
+      })
+    ]);
+    releaseFetch();
+    const [intentA, intentB] = await pending;
+    assert.equal(intentA.quotedSpotUsd, '3300');
+    assert.equal(intentB.quotedSpotUsd, '3300');
+    assert.equal(fetchCalls, 1, 'concurrent getDefaultHandlers invocations must deduplicate in-flight spot fetch');
+
+    // Third sequential invocation reuses the same cached spot quote with 0 additional HTTP calls
+    const handlersC = paymentsIndex.getDefaultHandlers({ db, env });
+    const intentC = await handlersC.handleCreatePaymentIntent({
+      auth: { uid: 'u1', token: {} },
+      data: {
+        productType: 'miner',
+        packageId: 'minerx-02',
+        networkId: 'arbitrum',
+        assetSymbol: 'ETH',
+        senderWallet: '0x9999999999999999999999999999999999999999'
+      }
+    });
+    assert.equal(intentC.quotedSpotUsd, '3300');
+    assert.equal(fetchCalls, 1, 'sequential getDefaultHandlers invocation within TTL must hit shared container cache');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

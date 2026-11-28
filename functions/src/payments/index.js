@@ -10,7 +10,7 @@ const paymentSettlementService = require('./paymentSettlementService');
 const paymentReconciler = require('./paymentReconciler');
 
 const { PaymentConfigError } = paymentConfig;
-const { PaymentIntentError, createPaymentIntentService } = paymentIntentService;
+const { PaymentIntentError, createDefaultSpotPriceProvider, createPaymentIntentService } = paymentIntentService;
 const { EvmVerifierError } = evmVerifier;
 const { SolanaVerifierError } = solanaVerifier;
 const { TronVerifierError } = tronVerifier;
@@ -286,8 +286,20 @@ function createPaymentHandlers({
   });
 }
 
-function getDefaultHandlers() {
-  return createPaymentHandlers({ db: getDefaultDb() });
+let defaultSpotPriceProvider = null;
+
+function getDefaultHandlers({ db = getDefaultDb(), env = process.env } = {}) {
+  if (!defaultSpotPriceProvider) {
+    defaultSpotPriceProvider = createDefaultSpotPriceProvider({
+      env,
+      fetchImpl: (...args) => globalThis.fetch(...args)
+    });
+  }
+  return createPaymentHandlers({
+    db,
+    env,
+    spotPriceProvider: defaultSpotPriceProvider
+  });
 }
 
 const createPaymentIntent = onCall({ cors: true }, async (request) =>
@@ -324,6 +336,7 @@ module.exports = Object.freeze({
   reconcilePendingPayments,
   resolveIsAdmin,
   mapToHttpsError,
+  getDefaultHandlers,
   createPaymentHandlers,
   paymentConfig,
   paymentIntentService,

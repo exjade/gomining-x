@@ -27,6 +27,10 @@ const IDEMPOTENCY_KEY_PATTERN = /^[a-zA-Z0-9._:-]{8,128}$/;
 const CONTROL_CHAR_PATTERN = /[\u0000-\u001F\u007F]/;
 const MAX_CANCEL_REASON_LENGTH = 200;
 const DEFAULT_SPOT_TIMEOUT_MS = 5000;
+const DEFAULT_SPOT_CACHE_TTL_MS = 45000;
+const MAX_SPOT_CACHE_TTL_MS = 300000;
+const DEFAULT_COINBASE_SPOT_BASE_URL = 'https://api.coinbase.com/v2/prices';
+const DEFAULT_KRAKEN_TICKER_URL = 'https://api.kraken.com/0/public/Ticker';
 
 const COINGECKO_ID_BY_SYMBOL = Object.freeze({
   BNB: 'binancecoin',
@@ -35,6 +39,24 @@ const COINGECKO_ID_BY_SYMBOL = Object.freeze({
   SOL: 'solana',
   TRX: 'tron',
   AVAX: 'avalanche-2'
+});
+
+const COINBASE_PAIR_BY_SYMBOL = Object.freeze({
+  BNB: 'BNB-USD',
+  ETH: 'ETH-USD',
+  POL: 'POL-USD',
+  SOL: 'SOL-USD',
+  TRX: 'TRX-USD',
+  AVAX: 'AVAX-USD'
+});
+
+const KRAKEN_PAIR_BY_SYMBOL = Object.freeze({
+  ETH: 'ETHUSD',
+  SOL: 'SOLUSD',
+  POL: 'POLUSD',
+  AVAX: 'AVAXUSD',
+  TRX: 'TRXUSD',
+  BNB: 'BNBUSD'
 });
 
 class PaymentIntentError extends Error {
@@ -92,16 +114,118 @@ function resolveCustomMinerPrice(powerTh) {
   });
 }
 
+function parseSpotCacheTtlMs(raw) {
+  if (typeof raw !== 'number' && (typeof raw !== 'string' || raw.trim() === '')) {
+    return null;
+  }
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 && n <= MAX_SPOT_CACHE_TTL_MS ? n : null;
+}
+
+function parsePositiveUsd(raw) {
+  if (typeof raw !== 'number' && (typeof raw !== 'string' || raw.trim() === '')) {
+    return null;
+  }
+  const usd = typeof raw === 'number' ? raw : Number(raw);
+  return typeof usd === 'number' && Number.isFinite(usd) && usd > 0 ? usd : null;
+}
+
 function createDefaultSpotPriceProvider({
   env = process.env,
   fetchImpl = globalThis.fetch,
-  timeoutMs = DEFAULT_SPOT_TIMEOUT_MS
+  timeoutMs = DEFAULT_SPOT_TIMEOUT_MS,
+  cacheTtlMs,
+  now = Date.now
 } = {}) {
   const baseUrl =
     (env && env.PAYMENT_SPOT_PRICE_API_URL) ||
     'https://api.coingecko.com/api/v3/simple/price';
+  const effectiveCacheTtlMs =
+    parseSpotCacheTtlMs(cacheTtlMs) ??
+    parseSpotCacheTtlMs(env && env.PAYMENT_SPOT_CACHE_TTL_MS) ??
+    DEFAULT_SPOT_CACHE_TTL_MS;
+  const cache = new Map();
+  const inFlight = new Map();
 
-  return async function defaultSpotPriceProvider({ assetSymbol }) {
+  async function fetchJsonWithTimeout(url) {
+    const fetchOpts = { method: 'GET', headers: { accept: 'application/json' } };
+    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+      fetchOpts.signal = AbortSignal.timeout(timeoutMs);
+    }
+    const res = await fetchImpl(url, fetchOpts);
+    if (!res || !res.ok) {
+      throw new Error(`HTTP ${res ? res.status : 'UNKNOWN'}`);
+    }
+    return res.json();
+  }
+
+  async function querySpotProviders(symbol, coinId) {
+    const attempts = [
+      {
+        name: 'coingecko',
+        source: 'COINGECKO_SIMPLE_PRICE',
+        url: `${baseUrl}?ids=${encodeURIComponent(coinId)}&vs_currencies=usd`,
+        extractUsd(body) {
+          const raw =
+            body && typeof body === 'object' && Object.hasOwn(body, coinId) && body[coinId]
+              ? body[coinId].usd
+              : undefined;
+          return typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? raw : null;
+        }
+      }
+    ];
+    if (Object.hasOwn(COINBASE_PAIR_BY_SYMBOL, symbol)) {
+      attempts.push({
+        name: 'coinbase',
+        source: 'COINBASE_SPOT',
+        url: `${DEFAULT_COINBASE_SPOT_BASE_URL}/${encodeURIComponent(COINBASE_PAIR_BY_SYMBOL[symbol])}/spot`,
+        extractUsd(body) {
+          return parsePositiveUsd(body && typeof body === 'object' && body.data ? body.data.amount : undefined);
+        }
+      });
+    }
+    if (Object.hasOwn(KRAKEN_PAIR_BY_SYMBOL, symbol)) {
+      attempts.push({
+        name: 'kraken',
+        source: 'KRAKEN_TICKER',
+        url: `${DEFAULT_KRAKEN_TICKER_URL}?pair=${encodeURIComponent(KRAKEN_PAIR_BY_SYMBOL[symbol])}`,
+        extractUsd(body) {
+          if (!body || typeof body !== 'object' || !Array.isArray(body.error) || body.error.length !== 0) {
+            return null;
+          }
+          const resultObj = body.result;
+          if (!resultObj || typeof resultObj !== 'object' || Array.isArray(resultObj)) {
+            return null;
+          }
+          const firstKey = Object.keys(resultObj)[0];
+          const ticker = firstKey ? resultObj[firstKey] : null;
+          return parsePositiveUsd(ticker && Array.isArray(ticker.c) ? ticker.c[0] : undefined);
+        }
+      });
+    }
+
+    const failures = [];
+    for (const attempt of attempts) {
+      try {
+        const body = await fetchJsonWithTimeout(attempt.url);
+        const usd = attempt.extractUsd(body);
+        if (usd !== null) {
+          return { priceUsd: String(usd), source: attempt.source };
+        }
+        failures.push(`${attempt.name}: invalid price`);
+      } catch (err) {
+        failures.push(`${attempt.name}: ${err && err.message ? err.message : String(err)}`);
+      }
+    }
+
+    throw new PaymentIntentError(
+      'SPOT_PRICE_UNAVAILABLE',
+      `All spot price providers failed for ${symbol} (${failures.join('; ')})`,
+      503
+    );
+  }
+
+  return async function defaultSpotPriceProvider({ assetSymbol } = {}) {
     if (typeof fetchImpl !== 'function') {
       throw new PaymentIntentError('SPOT_PRICE_UNAVAILABLE', 'No fetch implementation available for spot quotes', 503);
     }
@@ -111,51 +235,36 @@ function createDefaultSpotPriceProvider({
       throw new PaymentIntentError('SPOT_PRICE_UNAVAILABLE', `No spot price mapping for asset: ${symbol}`, 400);
     }
 
-    const url = `${baseUrl}?ids=${encodeURIComponent(coinId)}&vs_currencies=usd`;
-    const fetchOpts = { method: 'GET', headers: { accept: 'application/json' } };
-    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
-      fetchOpts.signal = AbortSignal.timeout(timeoutMs);
+    const cached = cache.get(symbol);
+    if (cached) {
+      if (now() < cached.expiresAtMs) {
+        return { priceUsd: cached.priceUsd, source: cached.source };
+      }
+      cache.delete(symbol);
     }
 
-    let res;
-    try {
-      res = await fetchImpl(url, fetchOpts);
-    } catch (err) {
-      throw new PaymentIntentError(
-        'SPOT_PRICE_UNAVAILABLE',
-        `Spot price request failed for ${symbol}: ${err && err.message ? err.message : String(err)}`,
-        503
-      );
+    let pending = inFlight.get(symbol);
+    if (!pending) {
+      pending = (async () => {
+        try {
+          const quote = await querySpotProviders(symbol, coinId);
+          if (effectiveCacheTtlMs > 0) {
+            cache.set(symbol, {
+              priceUsd: quote.priceUsd,
+              source: quote.source,
+              expiresAtMs: now() + effectiveCacheTtlMs
+            });
+          }
+          return quote;
+        } finally {
+          inFlight.delete(symbol);
+        }
+      })();
+      inFlight.set(symbol, pending);
     }
 
-    if (!res || !res.ok) {
-      throw new PaymentIntentError(
-        'SPOT_PRICE_UNAVAILABLE',
-        `Spot price provider returned HTTP ${res ? res.status : 'UNKNOWN'} for ${symbol}`,
-        503
-      );
-    }
-
-    let body;
-    try {
-      body = await res.json();
-    } catch (err) {
-      throw new PaymentIntentError(
-        'SPOT_PRICE_UNAVAILABLE',
-        `Spot price provider returned invalid JSON for ${symbol}: ${err && err.message ? err.message : String(err)}`,
-        503
-      );
-    }
-
-    const usd = body && body[coinId] ? body[coinId].usd : undefined;
-    if (typeof usd !== 'number' || !Number.isFinite(usd) || usd <= 0) {
-      throw new PaymentConfigError('INVALID_SPOT_PRICE', `Invalid spot USD price returned for ${symbol}: ${usd}`, 502);
-    }
-
-    return {
-      priceUsd: String(usd),
-      source: 'COINGECKO_SIMPLE_PRICE'
-    };
+    const resolved = await pending;
+    return { priceUsd: resolved.priceUsd, source: resolved.source };
   };
 }
 
@@ -301,7 +410,7 @@ function createPaymentIntentService({
     throw new TypeError('db with collection() and runTransaction() is required');
   }
 
-  const resolveSpotPrice = spotPriceProvider || createDefaultSpotPriceProvider({ env, fetchImpl });
+  const resolveSpotPrice = spotPriceProvider || createDefaultSpotPriceProvider({ env, fetchImpl, now });
   const generateId = idGenerator || (() => `pi_${crypto.randomUUID().replace(/-/g, '')}`);
 
   async function resolveAuthoritativeProduct({ requestedProductType, packageId, powerTh }) {
