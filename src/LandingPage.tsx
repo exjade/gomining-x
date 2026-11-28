@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import './landing.css'
+import './components/sections/landingResponsiveOverrides.css'
 import { useLenisScroll } from './hooks/useLenisScroll'
 import { ScrollProgressBar } from './components/ui/ScrollProgressBar'
 import { SideScrollTracker } from './components/ui/SideScrollTracker'

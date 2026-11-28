@@ -65,22 +65,22 @@ export function Navbar({ onOpenAuth, onOpenLegal }: NavbarProps) {
         initial={{ y: 0, opacity: 1 }}
         animate={scrolled ? { y: -90, opacity: 0, pointerEvents: 'none' } : { y: 0, opacity: 1, pointerEvents: 'auto' }}
         transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-        className="fixed top-0 left-0 right-0 z-40 bg-transparent py-5 sm:py-6"
+        className="fixed top-0 left-0 right-0 z-40 bg-transparent py-3.5 sm:py-6"
         role="navigation"
         aria-label="Barra de cabecera PouwMiner"
       >
-        <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-3.5 sm:px-6 flex items-center justify-between gap-2">
           {/* Brand Logo - SpaceX style custom typography */}
           <a
             href="#hero"
-            className="flex items-center gap-3 focus:outline-none"
+            className="flex items-center gap-2 sm:gap-3 min-w-0 shrink focus:outline-none"
             aria-label="PouwMiner Inicio"
           >
             <PowMinerLogo size="md" showSubtitle />
           </a>
 
           {/* Right Action Island: Clean, uncluttered, no overlapping links */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <button
               type="button"
               onClick={() => onOpenAuth ? onOpenAuth('login') : handleNavClick('#comenzar')}
@@ -92,8 +92,9 @@ export function Navbar({ onOpenAuth, onOpenLegal }: NavbarProps) {
 
             <button
               type="button"
+              data-testid="navbar-preorder-btn"
               onClick={() => onOpenAuth ? onOpenAuth('register') : handleNavClick('#preventa')}
-              className="px-4 py-1.5 sm:px-5 sm:py-2 rounded-full bg-white hover:bg-white/90 text-[#050505] font-semibold text-xs tracking-tight transition-all active:scale-[0.97] shadow-lg shadow-white/5"
+              className="px-3 py-1.5 sm:px-5 sm:py-2 rounded-full bg-white hover:bg-white/90 text-[#050505] font-semibold text-[11px] sm:text-xs tracking-tight whitespace-nowrap transition-all active:scale-[0.97] shadow-lg shadow-white/5"
             >
               <span>Pre-ordenar</span>
             </button>

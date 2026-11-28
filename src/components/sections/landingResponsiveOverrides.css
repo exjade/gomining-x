@@ -1,0 +1,249 @@
+/* Scoped responsive & fixed-viewport overrides for LandingPage (.pouw-landing-root).
+ * Zero bare global selectors — preserves SCRUM-251 / SCRUM-309 CSS isolation and exact git blobs
+ * on locked components (HeroSection, ProductSection, IntroPreloader, SideScrollTracker, ScrollProgressBar).
+ */
+
+/* 1. CRITICAL FIX: src/styles.css:1737 sets `animation: route-enter ... both` leaving permanent
+ *    `transform: translateY(0)` on `.route-transition`, which hijacks the containing block of ALL
+ *    `position: fixed` descendants (IntroPreloader, SideScrollTracker, ScrollProgressBar, Navbar,
+ *    StickyEarningsBar). Disabling that transform on the landing shell restores true viewport-fixed
+ *    floating behavior across the entire page and restores IntroPreloader on mobile viewports. */
+.app-shell-source-landing .route-transition {
+  animation: none !important;
+  transform: none !important;
+}
+
+/* 1b. GPU fill-rate cap on IntroPreloader's 120px/140px Gaussian blur layers (outside <main>)
+ *     so mobile GPUs maintain smooth 60fps intro playback without modifying locked IntroPreloader.tsx. */
+div.pouw-landing-root > div.fixed div[class*='blur-['] {
+  --tw-blur: blur(22px) !important;
+  filter: blur(22px) !important;
+  transform: translateZ(0) !important;
+  backface-visibility: hidden !important;
+}
+
+/* 2. Neutralize global src/styles.css:1627-1635 `14px !important` & `min-height: 44px` explosion
+ *    on Tailwind utility classes inside the landing page so mobile/desktop cards never collide or clip. */
+div.pouw-landing-root .text-\[8px\] { font-size: 8px !important; line-height: 1.25 !important; }
+div.pouw-landing-root .text-\[9px\] { font-size: 9px !important; line-height: 1.25 !important; }
+div.pouw-landing-root .text-\[10px\] { font-size: 10px !important; line-height: 1.3 !important; }
+div.pouw-landing-root .text-\[11px\] { font-size: 11px !important; line-height: 1.35 !important; }
+div.pouw-landing-root .text-xs { font-size: 12px !important; line-height: 1.4 !important; }
+div.pouw-landing-root .text-sm { font-size: 14px !important; line-height: 1.45 !important; }
+div.pouw-landing-root .text-base { font-size: 16px !important; line-height: 1.5 !important; }
+div.pouw-landing-root .text-lg { font-size: 18px !important; line-height: 1.4 !important; }
+div.pouw-landing-root .text-xl { font-size: 20px !important; line-height: 1.3 !important; }
+div.pouw-landing-root .text-2xl { font-size: 24px !important; line-height: 1.25 !important; }
+div.pouw-landing-root .text-3xl { font-size: 30px !important; line-height: 1.15 !important; }
+div.pouw-landing-root .text-4xl { font-size: 36px !important; line-height: 1.05 !important; }
+div.pouw-landing-root .text-5xl { font-size: 46px !important; line-height: 1 !important; }
+div.pouw-landing-root .text-6xl { font-size: 56px !important; line-height: 1 !important; }
+div.pouw-landing-root .text-7xl { font-size: 68px !important; line-height: 0.98 !important; }
+div.pouw-landing-root .text-8xl { font-size: 84px !important; line-height: 0.96 !important; }
+
+@media (min-width: 640px) {
+  div.pouw-landing-root .sm\:text-\[9px\] { font-size: 9px !important; }
+  div.pouw-landing-root .sm\:text-\[10px\] { font-size: 10px !important; }
+  div.pouw-landing-root .sm\:text-\[11px\] { font-size: 11px !important; }
+  div.pouw-landing-root .sm\:text-xs { font-size: 12px !important; }
+  div.pouw-landing-root .sm\:text-sm { font-size: 14px !important; }
+  div.pouw-landing-root .sm\:text-base { font-size: 16px !important; }
+  div.pouw-landing-root .sm\:text-2xl { font-size: 24px !important; }
+  div.pouw-landing-root .sm\:text-3xl { font-size: 30px !important; }
+  div.pouw-landing-root .sm\:text-4xl { font-size: 36px !important; }
+  div.pouw-landing-root .sm\:text-5xl { font-size: 48px !important; }
+  div.pouw-landing-root .sm\:text-6xl { font-size: 60px !important; }
+  div.pouw-landing-root .sm\:text-7xl { font-size: 72px !important; }
+}
+
+@media (min-width: 768px) {
+  div.pouw-landing-root .md\:text-7xl { font-size: 72px !important; }
+  div.pouw-landing-root .md\:text-8xl { font-size: 88px !important; }
+}
+
+@media (min-width: 1024px) {
+  div.pouw-landing-root .lg\:text-base { font-size: 16px !important; }
+  div.pouw-landing-root .lg\:text-3xl { font-size: 30px !important; }
+  div.pouw-landing-root .lg\:text-8xl { font-size: 92px !important; }
+}
+
+@media (min-width: 1280px) {
+  div.pouw-landing-root .xl\:text-9xl { font-size: 112px !important; line-height: 0.95 !important; }
+}
+
+/* Keep compact icon/dot buttons in Navbar and SideScrollTracker free from 44px height bloat */
+div.pouw-landing-root aside[aria-label*="progreso de scroll"] button,
+div.pouw-landing-root header[role="navigation"] button {
+  min-height: 0 !important;
+}
+
+/* 3. Continuous floating SideScrollTracker + ScrollProgressBar across the entire landing */
+div.pouw-landing-root aside[aria-label*="progreso de scroll"] {
+  position: fixed !important;
+  top: 50% !important;
+  right: 12px !important;
+  transform: translateY(-50%) !important;
+  z-index: 45 !important;
+}
+
+@media (min-width: 640px) {
+  div.pouw-landing-root aside[aria-label*="progreso de scroll"] {
+    right: 24px !important;
+  }
+}
+
+/* 4. Mobile responsive fixes (360px & 390px) — modeling the crisp layout of the miner HTML sims */
+@media (max-width: 639px) {
+  /* Compact floating side scroll tracker on narrow phones so it never blocks copy */
+  div.pouw-landing-root aside[aria-label*="progreso de scroll"] {
+    right: 6px !important;
+    gap: 6px !important;
+    opacity: 0.88;
+  }
+
+  div.pouw-landing-root aside[aria-label*="progreso de scroll"] > div:first-child {
+    min-width: 34px !important;
+    padding: 3px 5px !important;
+  }
+
+  div.pouw-landing-root aside[aria-label*="progreso de scroll"] > div:nth-child(2) {
+    height: 76px !important;
+  }
+
+  div.pouw-landing-root aside[aria-label*="progreso de scroll"] > div:nth-child(3) {
+    gap: 6px !important;
+  }
+
+  /* Navbar logo stays crisp & visible without ever colliding with Pre-ordenar pill on 360px/390px */
+  div.pouw-landing-root header[role="navigation"] a[aria-label="PouwMiner Inicio"] {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: calc(100vw - 178px);
+    overflow: hidden;
+  }
+
+  div.pouw-landing-root header[role="navigation"] a[aria-label="PouwMiner Inicio"] svg {
+    width: clamp(128px, 39vw, 168px) !important;
+    height: auto !important;
+    max-width: 100% !important;
+    display: block;
+  }
+
+  /* Hero section: prevent floating RETORNO DIARIO & EFICIENCIA ASIC badges from overlapping or clipping */
+  div.pouw-landing-root #hero .lg\:col-span-5 {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+    align-items: stretch !important;
+    margin-top: 12px !important;
+  }
+
+  div.pouw-landing-root #hero .lg\:col-span-5 > div:nth-child(3) {
+    grid-column: 1 / -1 !important;
+    order: -1 !important;
+    margin-bottom: 4px;
+  }
+
+  div.pouw-landing-root #hero .lg\:col-span-5 > div:nth-child(1),
+  div.pouw-landing-root #hero .lg\:col-span-5 > div:nth-child(2) {
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    padding: 10px 11px !important;
+    margin: 0 !important;
+  }
+
+  div.pouw-landing-root #hero .lg\:col-span-5 > div:nth-child(1) .text-base,
+  div.pouw-landing-root #hero .lg\:col-span-5 > div:nth-child(2) .text-base {
+    font-size: 13.5px !important;
+    line-height: 1.25 !important;
+    word-break: break-word;
+  }
+
+  div.pouw-landing-root #hero h1 {
+    font-size: 40px !important;
+    line-height: 0.98 !important;
+  }
+
+  /* ProductSection (#producto): Infraestructura 3D chips, component tabs & 4-stat grid */
+  div.pouw-landing-root #producto {
+    padding-top: 76px !important;
+    padding-bottom: 76px !important;
+  }
+
+  div.pouw-landing-root #producto h2 {
+    font-size: 36px !important;
+    line-height: 1.04 !important;
+  }
+
+  /* Keep exploded 3D telemetry chips strictly inside the viewport with zero edge clipping */
+  div.pouw-landing-root #producto .lg\:col-span-7 .rounded-full {
+    left: 6px !important;
+    right: auto !important;
+    max-width: calc(100% - 12px) !important;
+    padding: 4px 9px !important;
+    letter-spacing: 0.06em !important;
+    font-size: 8.5px !important;
+    white-space: nowrap;
+  }
+
+  div.pouw-landing-root #producto .lg\:col-span-7 .rounded-full:nth-of-type(2) {
+    left: auto !important;
+    right: 6px !important;
+  }
+
+  /* Component selector tabs: never truncate "Chasis de / Cámara de / Núcleo Neural / Placa Madre" */
+  div.pouw-landing-root #producto .lg\:col-span-5 .grid-cols-2 {
+    gap: 8px !important;
+  }
+
+  div.pouw-landing-root #producto .lg\:col-span-5 .grid-cols-2 button {
+    padding: 10px 11px !important;
+    min-height: 58px !important;
+  }
+
+  div.pouw-landing-root #producto .lg\:col-span-5 .grid-cols-2 button .truncate {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    word-break: break-word !important;
+    line-height: 1.25 !important;
+    font-size: 11.5px !important;
+  }
+
+  /* Benchmark stats card: prevent DISPONIBILIDAD DE RED & LIQUIDACIÓN EN PEARL from colliding */
+  div.pouw-landing-root #producto .grid.grid-cols-2.sm\:grid-cols-4 {
+    gap: 16px 10px !important;
+    padding: 18px 12px !important;
+  }
+
+  div.pouw-landing-root #producto .grid.grid-cols-2.sm\:grid-cols-4 .text-3xl {
+    font-size: 21px !important;
+    line-height: 1.15 !important;
+  }
+
+  div.pouw-landing-root #producto .grid.grid-cols-2.sm\:grid-cols-4 .text-\[10px\] {
+    font-size: 9px !important;
+    letter-spacing: 0.06em !important;
+    line-height: 1.3 !important;
+    word-break: break-word;
+  }
+
+  /* StickyEarningsBar compact on 360px/390px */
+  div.pouw-landing-root aside[aria-label*="Barra flotante"] {
+    padding: 5px 10px !important;
+    gap: 8px !important;
+    max-width: calc(100vw - 16px) !important;
+  }
+
+  /* Fade SideScrollTracker while embedded 3D HUD is open on mobile so it never overlaps zoom +/- or POOL WORKERS */
+  div.pouw-landing-root:has(#choose-earnings-hud-shell[data-hud-open="true"]) aside[aria-label*="progreso de scroll"] {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+}
