@@ -152,11 +152,28 @@ class TronUniversalAdapter extends AdapterBlueprint {
     }
   }
 
+  private hydrateTronRpcMethods(wcProvider: UniversalProviderLike | undefined): void {
+    const providerWithRpc = wcProvider as
+      | (UniversalProviderLike & {
+          rpcProviders?: Record<string, { namespace?: { methods?: string[] } } | undefined>
+        })
+      | undefined
+    const tronNamespace = providerWithRpc?.rpcProviders?.tron?.namespace
+    if (tronNamespace && (!Array.isArray(tronNamespace.methods) || tronNamespace.methods.length === 0)) {
+      const sessionMethods = providerWithRpc?.session?.namespaces?.tron?.methods
+      tronNamespace.methods =
+        Array.isArray(sessionMethods) && sessionMethods.length > 0
+          ? [...sessionMethods]
+          : ['tron_signTransaction', 'tron_signMessage']
+    }
+  }
+
   override async signMessage(params: AdapterBlueprint.SignMessageParams): Promise<AdapterBlueprint.SignMessageResult> {
     const provider = params.provider as UniversalProviderLike | undefined
     if (!provider) {
       throw new Error('TronUniversalAdapter:signMessage - provider is undefined')
     }
+    this.hydrateTronRpcMethods(provider)
     const res = (await provider.request({
       method: 'tron_signMessage',
       params: { address: params.address, message: params.message },
@@ -178,7 +195,9 @@ class TronUniversalAdapter extends AdapterBlueprint {
 
   override getWalletConnectProvider(params?: AdapterBlueprint.GetWalletConnectProviderParams): UniversalProviderLike {
     const connector = this.connectors.find((c) => c.type === 'WALLET_CONNECT')
-    return (connector?.provider ?? params?.provider ?? this.provider) as UniversalProviderLike
+    const wcProvider = (connector?.provider ?? params?.provider ?? this.provider) as UniversalProviderLike | undefined
+    this.hydrateTronRpcMethods(wcProvider)
+    return wcProvider as UniversalProviderLike
   }
 
   override async estimateGas(): Promise<AdapterBlueprint.EstimateGasTransactionResult> { return { gas: 0n } }

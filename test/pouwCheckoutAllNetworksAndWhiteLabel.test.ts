@@ -637,4 +637,103 @@ describe('POUW Checkout: All Enabled Networks, 1-Click Wallet Switch & PouwMiner
       )
     })
   })
+
+  describe('Block 3: Mobile TRON INSUFFICIENT_FUNDS classification & mobile-first responsive checkout contracts', () => {
+    it('classifies TronGrid ContractValidateException balance, account-not-exist, energy, and bandwidth errors as clean Spanish INSUFFICIENT_FUNDS without leaking Java exceptions', async () => {
+      const checkoutSrc = readText('src/WalletPaymentCheckout.tsx')
+      const match = checkoutSrc.match(/export function sanitizeErrorReason[\s\S]*?(?=export function WalletPaymentCheckout)/)
+      assert.ok(match, 'Expected sanitizeErrorReason..classifyPaymentError block in src/WalletPaymentCheckout.tsx')
+      const transpiled = ts.transpileModule(match[0], {
+        compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+      })
+      const mod = (await import(`data:text/javascript;base64,${Buffer.from(transpiled.outputText).toString('base64')}`)) as {
+        classifyPaymentError: (err: unknown, networkName: string) => {
+          message: string
+          kind: string
+          category: string
+        }
+      }
+
+      const tronInsufficientCases = [
+        'TRON_TX_BUILD_FAILED: class org.tron.core.exception.ContractValidateException : Validate TransferContract error, balance',
+        'TRON_TX_BUILD_FAILED: class org.tron.core.exception.ContractValidateException : Validate TransferContract error, balance is not sufficient.',
+        'TRON_BROADCAST_FAILED: TRON broadcast failed: Account not exist',
+        'TRON_TX_BUILD_FAILED: class org.tron.core.exception.ContractValidateException : account [TNQpsnHA1234567890] does not exist',
+        'TRON_TX_BUILD_FAILED: not enough energy',
+        'TRON_TX_BUILD_FAILED: not enough bandwidth',
+      ]
+
+      for (const rawMsg of tronInsufficientCases) {
+        const result = mod.classifyPaymentError(new Error(rawMsg), 'TRON')
+        assert.equal(result.kind, 'INSUFFICIENT_FUNDS', `Expected INSUFFICIENT_FUNDS for: ${rawMsg}`)
+        assert.equal(result.category, 'INSUFFICIENT_FUNDS')
+        assert.ok(result.message.includes('TRON'), `Message must mention TRON, got: ${result.message}`)
+        assert.match(result.message, /fondos insuficientes/i)
+        assert.match(result.message, /comisión|activación|gas/i)
+        assert.equal(result.message.includes('ContractValidateException'), false, 'Must not leak raw ContractValidateException')
+        assert.equal(result.message.includes('org.tron'), false, 'Must not leak raw Java package name')
+      }
+
+      // User rejections (4001 / 5000) remain strictly isolated as USER_REJECTION
+      assert.equal(mod.classifyPaymentError({ code: 4001, message: 'User rejected' }, 'TRON').kind, 'USER_REJECTION')
+      assert.equal(mod.classifyPaymentError({ code: 5000, message: 'User rejected' }, 'TRON').kind, 'USER_REJECTION')
+    })
+
+    it('enforces mobile-first checkout modal CSS (dvh/svh max-height, internal scroll, sticky safe-area CTA, .checkout-error-banner wrapping, 520px bottom-sheet) and wrapping connected-wallet card', () => {
+      const stylesSrc = readText('src/styles.css')
+      const checkoutSrc = readText('src/WalletPaymentCheckout.tsx')
+
+      const overlayBlock = extractBlock(stylesSrc, '.wallet-checkout-overlay {')
+      assert.match(overlayBlock, /overflow-y:\s*auto/)
+      assert.match(overlayBlock, /overscroll-behavior:\s*contain/)
+      assert.match(overlayBlock, /env\(safe-area-inset-top\)/)
+      assert.match(overlayBlock, /env\(safe-area-inset-bottom\)/)
+      assert.match(overlayBlock, /box-sizing:\s*border-box/)
+
+      const modalBlock = extractBlock(stylesSrc, '.wallet-checkout-modal {')
+      assert.match(modalBlock, /max-height:\s*92vh/)
+      assert.match(modalBlock, /max-height:\s*calc\(100dvh\s*-\s*24px\)/)
+      assert.match(modalBlock, /max-height:\s*calc\(100svh\s*-\s*24px\)/)
+      assert.match(modalBlock, /overflow:\s*hidden/)
+      assert.match(modalBlock, /box-sizing:\s*border-box/)
+
+      const headerBlock = extractBlock(stylesSrc, '.checkout-modal-header {')
+      assert.match(headerBlock, /flex-shrink:\s*0/)
+      assert.match(headerBlock, /gap:\s*12px/)
+
+      const scrollBodyMatch = stylesSrc.match(/\.checkout-form-content,\s*\.checkout-receipt-view,\s*\.checkout-auth-gate\s*\{[\s\S]*?\}/)
+      assert.ok(scrollBodyMatch, 'Expected shared scrollable body rule for .checkout-form-content, .checkout-receipt-view, .checkout-auth-gate')
+      assert.match(scrollBodyMatch[0], /overflow-y:\s*auto/)
+      assert.match(scrollBodyMatch[0], /min-height:\s*0/)
+      assert.match(scrollBodyMatch[0], /flex:\s*1\s+1\s+auto/)
+
+      const ctaBoxBlock = extractBlock(stylesSrc, '.checkout-cta-box {')
+      assert.match(ctaBoxBlock, /position:\s*sticky/)
+      assert.match(ctaBoxBlock, /bottom:\s*0/)
+      assert.match(ctaBoxBlock, /env\(safe-area-inset-bottom\)/)
+
+      const errorBannerBlock = extractBlock(stylesSrc, '.checkout-error-banner {')
+      assert.match(errorBannerBlock, /overflow-wrap:\s*anywhere/)
+      assert.match(errorBannerBlock, /word-break:\s*break-word/)
+
+      const mobileMediaBlock = extractBlock(stylesSrc, '@media (max-width: 520px) {')
+      assert.match(mobileMediaBlock, /\.wallet-checkout-overlay[\s\S]*?align-items:\s*flex-end/)
+      assert.match(mobileMediaBlock, /\.wallet-checkout-modal[\s\S]*?max-height:\s*92dvh/)
+      assert.match(mobileMediaBlock, /\.wallet-checkout-modal[\s\S]*?border-radius:\s*20px\s+20px\s+0\s+0/)
+      assert.match(mobileMediaBlock, /\.wallet-checkout-modal[\s\S]*?env\(safe-area-inset-bottom\)/)
+      assert.match(mobileMediaBlock, /\.network-chip-btn[\s\S]*?\.currency-pill-btn[\s\S]*?min-width:\s*0/)
+      assert.match(mobileMediaBlock, /\.quote-asset-pill[\s\S]*?overflow-wrap:\s*anywhere/)
+      assert.match(mobileMediaBlock, /\.quote-line[\s\S]*?flex-wrap:\s*wrap/)
+
+      // Green connected-wallet card wraps cleanly on 360px screens
+      const switchBtnIdx = checkoutSrc.indexOf('data-testid="checkout-switch-wallet-btn"')
+      assert.notEqual(switchBtnIdx, -1)
+      const greenCardStart = checkoutSrc.lastIndexOf('rgba(34, 197, 94, 0.1)', switchBtnIdx)
+      assert.notEqual(greenCardStart, -1)
+      const greenCardTagStart = checkoutSrc.lastIndexOf('<div', greenCardStart)
+      const greenCardSlice = checkoutSrc.slice(greenCardTagStart, switchBtnIdx)
+      assert.match(greenCardSlice, /flexWrap:\s*'wrap'/, 'Connected wallet green card must set flexWrap: wrap')
+      assert.match(greenCardSlice, /minWidth:\s*0/, 'Connected wallet left info block must set minWidth: 0')
+    })
+  })
 })

@@ -182,6 +182,9 @@ export type ClassifiedPaymentError = {
   category: string
 }
 
+const INSUFFICIENT_FUNDS_PATTERN =
+  /insufficient.*(?:funds|balance|gas|energy|bandwidth)|exceeds balance|gas required exceeds|saldo insuficiente|validate (?:transfercontract|triggersmartcontract|transferassetcontract) error,\s*balance|balance is not sufficient|account (?:\[[^\]]+\] )?(?:does )?not exist|not enough (?:energy|bandwidth)/
+
 export function classifyPaymentError(
   err: unknown,
   networkName: string,
@@ -347,10 +350,10 @@ export function classifyPaymentError(
 
   if (
     rootName === 'InsufficientFundsError' ||
-    /insufficient.*(?:funds|balance|gas)|exceeds balance|gas required exceeds|saldo insuficiente/.test(checkText)
+    INSUFFICIENT_FUNDS_PATTERN.test(checkText)
   ) {
     return {
-      message: `No se pudo procesar la transacción en la red ${networkName} (fondos insuficientes para el pago o para el gas de red).`,
+      message: `No se pudo procesar la transacción en la red ${networkName} (fondos insuficientes para el pago o para el gas de red / comisión o activación de cuenta).`,
       kind: 'INSUFFICIENT_FUNDS',
       name: safeName,
       code,
@@ -1660,8 +1663,8 @@ export function WalletPaymentCheckout({
               <>
                 {isWalletConnected && (
                   <>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 14px', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: 10, marginBottom: 12 }}>
-                      <div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 14px', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: 10, marginBottom: 12 }}>
+                      <div style={{ minWidth: 0 }}>
                         <strong style={{ fontSize: 12, color: '#22c55e', display: 'block' }}>
                           {isEvmWallet
                             ? 'Billetera EVM conectada'
@@ -1673,7 +1676,7 @@ export function WalletPaymentCheckout({
                           {activeAddress.slice(0, 8)}...{activeAddress.slice(-6)}
                         </code>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap', maxWidth: '100%' }}>
                         <span style={{ fontSize: 10, color: '#94a3b8', background: 'rgba(0,0,0,0.3)', padding: '3px 8px', borderRadius: 6 }}>
                           {activeNetworkConfig.name}
                         </span>

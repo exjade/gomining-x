@@ -22,20 +22,66 @@ export interface TronUnsignedTransaction {
   [key: string]: unknown
 }
 
+export const DEFAULT_TRON_WC_METHODS = ['tron_signTransaction', 'tron_signMessage'] as const
+
 export interface TronAppKitProvider {
   session?: {
+    topic?: string
     namespaces?: {
       tron?: {
         accounts?: string[]
         chains?: string[]
+        methods?: string[]
       }
     }
+  }
+  namespaces?: Record<
+    string,
+    { chains?: string[]; methods?: string[]; events?: string[] } | undefined
+  >
+  rpcProviders?: Record<
+    string,
+    { namespace?: { accounts?: string[]; chains?: string[]; methods?: string[] } } | undefined
+  >
+  client?: {
+    request?: (args: {
+      topic: string
+      chainId: string
+      request: { method: string; params: Record<string, unknown> }
+    }) => Promise<unknown>
   }
   request?: (
     args: { method: string; params: Record<string, unknown> | unknown[] },
     chainId?: string,
   ) => Promise<unknown>
   signTransaction?: (transaction: TronUnsignedTransaction) => Promise<unknown>
+}
+
+export function ensureTronProviderMethodsHydrated(provider: TronAppKitProvider | null | undefined): void {
+  if (!provider) return
+  const sessionMethods = provider.session?.namespaces?.tron?.methods
+  const resolvedMethods =
+    Array.isArray(sessionMethods) && sessionMethods.length > 0
+      ? [...sessionMethods]
+      : [...DEFAULT_TRON_WC_METHODS]
+
+  const tronNamespace = provider.rpcProviders?.tron?.namespace
+  if (tronNamespace && (!Array.isArray(tronNamespace.methods) || tronNamespace.methods.length === 0)) {
+    tronNamespace.methods = [...resolvedMethods]
+  }
+
+  // UniversalProvider.validateChain throws if this.namespaces is non-empty (e.g. eip155) and lacks tron.
+  if (
+    provider.namespaces &&
+    Object.keys(provider.namespaces).length > 0 &&
+    !Object.keys(provider.namespaces).some((k) => k === 'tron' || k.startsWith('tron:'))
+  ) {
+    provider.namespaces.tron = {
+      chains: provider.session?.namespaces?.tron?.chains ?? ['tron:0x2b6653dc', 'tron:0xcd8690dc'],
+      methods: [...resolvedMethods],
+      events: [],
+    }
+  }
 }
 
 export function encodeTrc20TransferParameter(recipientBase58: string, amountAtomic: string | bigint): string {
@@ -240,7 +286,32 @@ export async function submitTronTransactionViaProvider(input: SubmitTronTransact
   const caipNetworkId = networkMode === 'mainnet' ? 'tron:0x2b6653dc' : 'tron:0xcd8690dc'
   let signedResponse: unknown
 
-  if (typeof provider.request === 'function') {
+  ensureTronProviderMethodsHydrated(provider)
+
+  const tronRpcMethods = provider.rpcProviders?.tron?.namespace?.methods
+  const hasIncompleteTronRpcProvider =
+    !provider.rpcProviders?.tron ||
+    !Array.isArray(tronRpcMethods) ||
+    tronRpcMethods.length === 0
+
+  if (
+    provider.session?.topic &&
+    typeof provider.client?.request === 'function' &&
+    hasIncompleteTronRpcProvider
+  ) {
+    // Re-throw any rejection (including 4001/5000) immediately without retrying via fallback methods.
+    signedResponse = await provider.client.request({
+      topic: provider.session.topic,
+      chainId: caipNetworkId,
+      request: {
+        method: 'tron_signTransaction',
+        params: {
+          address: senderAddress,
+          transaction,
+        },
+      },
+    })
+  } else if (typeof provider.request === 'function') {
     // Re-throw any rejection (including 4001/5000) immediately without retrying via fallback methods.
     signedResponse = await provider.request(
       {

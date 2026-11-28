@@ -460,6 +460,278 @@ describe('SCRUM-381 (PG-07 / ADR-0013): Client USDT-First 8 Networks & TRON TRC-
       )
       assert.equal(signAttempts, 1, '4001 user rejection must NOT trigger fallback signTransaction retry')
     })
+
+    it('hydrates UniversalProvider rpcProviders.tron.namespace.methods (and non-empty namespaces lacking tron) to prevent undefined.includes crash on mobile session restore', async () => {
+      const tronPayment = await import('../src/tronPayment.ts')
+      const fakeFetch = (async () => ({
+        ok: true,
+        async json() {
+          return { result: true, txid: VALID_TRON_TX_HASH }
+        },
+      })) as unknown as typeof fetch
+      const unsignedTx = { txID: VALID_TRON_TX_HASH, raw_data: {} }
+
+      // 1. Real UniversalProvider@2.23.7 restore bug: rpcProviders.tron.namespace exists without methods
+      //    plus non-empty namespaces containing only eip155 (triggers validateChain failure if unhydrated)
+      const mobileProvider: {
+        namespaces: Record<string, { chains?: string[]; methods?: string[]; events?: string[] }>
+        rpcProviders: { tron: { namespace: { accounts: string[]; chains: string[]; methods?: string[] } } }
+        request: (args: { method: string; params: Record<string, unknown> | unknown[] }, chainId?: string) => Promise<unknown>
+      } = {
+        namespaces: {
+          eip155: { chains: ['eip155:56'], methods: ['eth_sendTransaction'], events: [] },
+        },
+        rpcProviders: {
+          tron: {
+            namespace: {
+              accounts: [`tron:0x2b6653dc:${TRON_SENDER}`],
+              chains: ['tron:0x2b6653dc'],
+            },
+          },
+        },
+        async request(args, chainId) {
+          assert.equal(chainId, 'tron:0x2b6653dc')
+          if (!Object.keys(this.namespaces).includes('tron')) {
+            throw new Error("Namespace 'tron' is not configured. Please call connect() first with namespace config.")
+          }
+          // Mirrors GenericProvider.request(): this.namespace.methods.includes(e.request.method)
+          const methods = this.rpcProviders.tron.namespace.methods as unknown as string[]
+          if (!methods.includes(args.method)) {
+            throw new Error(`Unsupported method: ${args.method}`)
+          }
+          return { result: { ...unsignedTx, signature: ['sig_mobile_hydrated'] } }
+        },
+      }
+
+      const txHash = await tronPayment.submitTronTransactionViaProvider({
+        provider: mobileProvider,
+        transaction: unsignedTx,
+        senderAddress: TRON_SENDER,
+        networkMode: 'mainnet',
+        env: {},
+        fetchImpl: fakeFetch,
+      })
+      assert.equal(txHash, VALID_TRON_TX_HASH)
+      assert.deepEqual(mobileProvider.rpcProviders.tron.namespace.methods, ['tron_signTransaction', 'tron_signMessage'])
+      assert.deepEqual(mobileProvider.namespaces.tron?.methods, ['tron_signTransaction', 'tron_signMessage'])
+
+      // 2. Hydrates from session.namespaces.tron.methods when non-empty, and falls back when empty []
+      const sessionMethods = ['tron_signTransaction']
+      const providerWithSessionMethods: {
+        session: { namespaces: { tron: { methods: string[] } } }
+        rpcProviders: { tron: { namespace: { accounts: string[]; chains: string[]; methods?: string[] } } }
+        request: (args: { method: string; params: Record<string, unknown> | unknown[] }) => Promise<unknown>
+      } = {
+        session: { namespaces: { tron: { methods: sessionMethods } } },
+        rpcProviders: {
+          tron: {
+            namespace: {
+              accounts: [`tron:0x2b6653dc:${TRON_SENDER}`],
+              chains: ['tron:0x2b6653dc'],
+            },
+          },
+        },
+        async request(args) {
+          const methods = this.rpcProviders.tron.namespace.methods as unknown as string[]
+          assert.equal(methods.includes(args.method), true)
+          return { result: true, txid: VALID_TRON_TX_HASH }
+        },
+      }
+      assert.equal(
+        await tronPayment.submitTronTransactionViaProvider({
+          provider: providerWithSessionMethods,
+          transaction: unsignedTx,
+          senderAddress: TRON_SENDER,
+          networkMode: 'mainnet',
+          env: {},
+          fetchImpl: fakeFetch,
+        }),
+        VALID_TRON_TX_HASH,
+      )
+      assert.deepEqual(providerWithSessionMethods.rpcProviders.tron.namespace.methods, ['tron_signTransaction'])
+      assert.notEqual(providerWithSessionMethods.rpcProviders.tron.namespace.methods, sessionMethods)
+
+      const providerWithEmptySessionMethods: {
+        session: { namespaces: { tron: { methods: string[] } } }
+        rpcProviders: { tron: { namespace: { accounts: string[]; chains: string[]; methods?: string[] } } }
+        request: (args: { method: string; params: Record<string, unknown> | unknown[] }) => Promise<unknown>
+      } = {
+        session: { namespaces: { tron: { methods: [] } } },
+        rpcProviders: {
+          tron: {
+            namespace: {
+              accounts: [`tron:0x2b6653dc:${TRON_SENDER}`],
+              chains: ['tron:0x2b6653dc'],
+            },
+          },
+        },
+        async request(args) {
+          const methods = this.rpcProviders.tron.namespace.methods as unknown as string[]
+          assert.equal(methods.includes(args.method), true)
+          return { result: true, txid: VALID_TRON_TX_HASH }
+        },
+      }
+      assert.equal(
+        await tronPayment.submitTronTransactionViaProvider({
+          provider: providerWithEmptySessionMethods,
+          transaction: unsignedTx,
+          senderAddress: TRON_SENDER,
+          networkMode: 'mainnet',
+          env: {},
+          fetchImpl: fakeFetch,
+        }),
+        VALID_TRON_TX_HASH,
+      )
+      assert.deepEqual(providerWithEmptySessionMethods.rpcProviders.tron.namespace.methods, ['tron_signTransaction', 'tron_signMessage'])
+
+      // 3. Reproduces UniversalProvider.updateNamespaceChain()/Pe() leaving rpcProviders.tron.namespace.methods === [] (empty array)
+      const providerWithEmptyRpcMethods: {
+        rpcProviders: { tron: { namespace: { accounts: string[]; chains: string[]; methods: string[] } } }
+        request: (args: { method: string; params: Record<string, unknown> | unknown[] }) => Promise<unknown>
+      } = {
+        rpcProviders: {
+          tron: {
+            namespace: {
+              accounts: [`tron:0x2b6653dc:${TRON_SENDER}`],
+              chains: ['tron:0x2b6653dc'],
+              methods: [],
+            },
+          },
+        },
+        async request(args) {
+          // Mirrors GenericProvider.request(): empty methods [] routes to read-only HTTP proxy instead of WalletConnect
+          if (!this.rpcProviders.tron.namespace.methods.includes(args.method)) {
+            throw new Error(`HTTP proxy cannot sign method: ${args.method}`)
+          }
+          return { result: true, txid: VALID_TRON_TX_HASH }
+        },
+      }
+      assert.equal(
+        await tronPayment.submitTronTransactionViaProvider({
+          provider: providerWithEmptyRpcMethods,
+          transaction: unsignedTx,
+          senderAddress: TRON_SENDER,
+          networkMode: 'mainnet',
+          env: {},
+          fetchImpl: fakeFetch,
+        }),
+        VALID_TRON_TX_HASH,
+      )
+      assert.deepEqual(providerWithEmptyRpcMethods.rpcProviders.tron.namespace.methods, ['tron_signTransaction', 'tron_signMessage'])
+    })
+
+    it('dispatches directly via provider.client.request when rpcProviders.tron is missing and preserves strict 0-retry on 4001/5000 user rejection', async () => {
+      const tronPayment = await import('../src/tronPayment.ts')
+      const fakeFetch = (async () => ({
+        ok: true,
+        async json() {
+          return { result: true, txid: VALID_TRON_TX_HASH }
+        },
+      })) as unknown as typeof fetch
+      const unsignedTx = { txID: VALID_TRON_TX_HASH, raw_data: {} }
+
+      // Direct client.request dispatch when rpcProviders.tron is absent
+      const clientCalls: Array<{ topic: string; chainId: string; request: { method: string; params: Record<string, unknown> } }> = []
+      const txHash = await tronPayment.submitTronTransactionViaProvider({
+        provider: {
+          session: {
+            topic: 'wc_topic_mobile_tron_01',
+            namespaces: { tron: { accounts: [`tron:0x2b6653dc:${TRON_SENDER}`], chains: ['tron:0x2b6653dc'] } },
+          },
+          rpcProviders: {},
+          client: {
+            async request(args) {
+              clientCalls.push(args)
+              return { result: { ...unsignedTx, signature: ['sig_direct_client'] } }
+            },
+          },
+          async request() {
+            throw new Error('Must NOT invoke provider.request when rpcProviders.tron is absent and client.request + topic exist')
+          },
+        },
+        transaction: unsignedTx,
+        senderAddress: TRON_SENDER,
+        networkMode: 'mainnet',
+        env: {},
+        fetchImpl: fakeFetch,
+      })
+      assert.equal(txHash, VALID_TRON_TX_HASH)
+      assert.deepEqual(clientCalls, [
+        {
+          topic: 'wc_topic_mobile_tron_01',
+          chainId: 'tron:0x2b6653dc',
+          request: {
+            method: 'tron_signTransaction',
+            params: { address: TRON_SENDER, transaction: unsignedTx },
+          },
+        },
+      ])
+
+      // Direct client.request 4001, 5000 & UserRejectedRequestError rejections must rethrow immediately with 0 fallback retries
+      const rejectionCases: Array<{ label: string; makeErr: () => Error & { code?: number }; check: (err: Error & { code?: number }) => boolean }> = [
+        {
+          label: '4001',
+          makeErr: () => Object.assign(new Error('User rejected request'), { code: 4001 }),
+          check: (err) => err.code === 4001,
+        },
+        {
+          label: '5000',
+          makeErr: () => Object.assign(new Error('User rejected request'), { code: 5000 }),
+          check: (err) => err.code === 5000,
+        },
+        {
+          label: 'UserRejectedRequestError',
+          makeErr: () => Object.assign(new Error('User rejected the transaction'), { name: 'UserRejectedRequestError' }),
+          check: (err) => err.name === 'UserRejectedRequestError',
+        },
+      ]
+      for (const rc of rejectionCases) {
+        let signAttempts = 0
+        await assert.rejects(
+          () => tronPayment.submitTronTransactionViaProvider({
+            provider: {
+              session: { topic: 'wc_topic_mobile_reject' },
+              rpcProviders: {},
+              client: {
+                async request() {
+                  signAttempts += 1
+                  throw rc.makeErr()
+                },
+              },
+              async request() {
+                signAttempts += 1
+                return {}
+              },
+              async signTransaction() {
+                signAttempts += 1
+                return {}
+              },
+            },
+            transaction: unsignedTx,
+            senderAddress: TRON_SENDER,
+            networkMode: 'mainnet',
+            env: {},
+            fetchImpl: fakeFetch,
+          }),
+          rc.check,
+        )
+        assert.equal(signAttempts, 1, `Direct client.request rejection ${rc.label} must NOT retry via provider.request or signTransaction`)
+      }
+
+      // TronUniversalAdapter.getWalletConnectProvider & signMessage in src/appkitConfig.ts hydrate undefined rpcProviders.tron.namespace.methods
+      const appKitSrc = readText('src/appkitConfig.ts')
+      const hydrateBlock = extractBlock(appKitSrc, 'private hydrateTronRpcMethods(')
+      const getWcProviderBlock = extractBlock(appKitSrc, 'override getWalletConnectProvider(')
+      const signMsgBlock = extractBlock(appKitSrc, 'override async signMessage(')
+      assert.match(hydrateBlock, /rpcProviders\?\.tron\?\.namespace/)
+      assert.match(hydrateBlock, /!Array\.isArray\([^)]*\.methods\)/)
+      assert.match(hydrateBlock, /'tron_signTransaction',\s*'tron_signMessage'/)
+      assert.match(getWcProviderBlock, /this\.hydrateTronRpcMethods\(wcProvider\)/)
+      assert.match(signMsgBlock, /this\.hydrateTronRpcMethods\(provider\)/)
+      assert.equal(appKitSrc.includes('walletSession'), false)
+      assert.equal(appKitSrc.includes('app.gomining.com'), false)
+      assert.match(appKitSrc, /name:\s*'PouwMiner\.com'/)
+    })
   })
 
   describe('Task 5: 3-Family Coordinator, WalletSession <= 130 lines, WalletPanel, Checkout USDT-First & History', () => {
