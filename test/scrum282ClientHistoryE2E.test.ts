@@ -387,15 +387,15 @@ test('SCRUM-282 (W07.3 — Regresión e Integración Acumulada W01..W07): Verifi
   );
   assert.equal(
     sha256Of('src/components/withdrawals/WithdrawalForm.tsx'),
-    'D2DC0DA56B2C84865011FB6DB071BC71A7EF0EC914C021765425877AFE889BA0',
+    '9353DD259F83200FDB6E58EAF7E2EC1A09BA32B3E64C386E8993D7F01C7A5CDE',
   );
   assert.equal(
     sha256Of('src/components/withdrawals/WithdrawalHistory.tsx'),
-    '53894AF4FC9943EBFBB057EEF84D283EF1BF0CF30E8C20BBB7614E20D6F23B4C',
+    'F42BDA498A511279C308E7305FFE62FFB0AD0284D392525B3AAB73E613F908B3',
   );
   assert.equal(
     sha256Of('src/components/withdrawals/WithdrawalDetailsModal.tsx'),
-    '8026BB8E50582335B27BCB92882A40DF2398AA3FE299060C8D79AAFFDE99F5E3',
+    'EF99D93211230C69EC0988988B4564BDBA32D62A321189ACDE9246364C400268',
   );
 
   // Panel strictly reuses W06 shared UI and W07 service (no duplicate table/card/modal renderer)

@@ -380,11 +380,11 @@ test('SCRUM-281 (W06.5 — Regresión e Integración Acumulada W01..W06 + Parida
   );
   assert.equal(
     sha256Of(path.join(projectRoot, 'src/components/withdrawals/WithdrawalForm.tsx')),
-    'D2DC0DA56B2C84865011FB6DB071BC71A7EF0EC914C021765425877AFE889BA0',
+    '9353DD259F83200FDB6E58EAF7E2EC1A09BA32B3E64C386E8993D7F01C7A5CDE',
   );
   assert.equal(
     sha256Of(path.join(projectRoot, 'src/components/withdrawals/withdrawalForm.css')),
-    '49B916AB377507D936CCE7882F9D7213A9F637582AE28F17CD32D5BBD41F139B',
+    '260C236FF1F0855C91684E5B5FFA8242CE15B7727C440116AFD9B3D512F8C9B7',
   );
 
   // 2. Verify byte-for-byte parity between Client worktree and Admin worktree (if sibling exists)

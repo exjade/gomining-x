@@ -233,7 +233,8 @@ export function WithdrawalTxHash({
         className={`wth-tx-pending wth-tabular-mono${className ? ` ${className}` : ''}`}
         data-testid="withdrawal-txhash-pending"
       >
-        Pendiente de emisión
+        <span className="wth-tx-pending-dot" aria-hidden="true" />
+        <span>Pendiente de emisión</span>
       </span>
     );
   }
@@ -252,11 +253,11 @@ export function WithdrawalTxHash({
 
   return (
     <span
-      className={`wth-chip-inline${className ? ` ${className}` : ''}`}
+      className={`wth-chip-inline wth-chip-inline--txhash${className ? ` ${className}` : ''}`}
       data-testid="withdrawal-txhash-chip"
     >
       <code
-        className="wth-mono-value wth-tabular-mono"
+        className="wth-mono-value wth-mono-capsule wth-tabular-mono"
         title={cleanHash}
         data-testid="withdrawal-txhash-value"
       >

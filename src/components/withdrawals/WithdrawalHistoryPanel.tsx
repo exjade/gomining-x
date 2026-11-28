@@ -368,35 +368,13 @@ export function WithdrawalHistoryPanel({
       aria-label="Historial de Retiros USDT"
       data-testid="withdrawal-history-panel"
     >
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '12px',
-          marginBottom: '12px',
-          flexWrap: 'wrap',
-        }}
-      >
-        <div>
-          <h3
-            style={{
-              margin: 0,
-              fontSize: '16px',
-              fontWeight: 700,
-              letterSpacing: '-0.015em',
-              color: '#f3f5fa',
-            }}
-          >
-            Historial de Retiros en USDT
-          </h3>
-          <p
-            style={{
-              margin: '4px 0 0',
-              fontSize: '12px',
-              color: '#9ba3b8',
-            }}
-          >
+      <header className="wth-history-panel-header">
+        <div className="wth-history-panel-heading">
+          <span className="wth-history-kicker wth-tabular-mono">
+            LEDGER ON-CHAIN · HISTORIAL
+          </span>
+          <h3 className="wth-history-panel-title">Historial de Retiros en USDT</h3>
+          <p className="wth-history-panel-subtitle">
             Consulta tus solicitudes paginadas por orden cronológico descendente con confirmaciones y hash verificable.
           </p>
         </div>
