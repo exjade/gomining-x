@@ -65,7 +65,7 @@ import {
   type PaymentWalletFamily,
   type PendingMethodSelection,
 } from './services/payments/checkoutIntentCoordinator'
-import { appKitModal, appKitNetworks } from './appkitConfig'
+import { appKitModal, appKitNetworks, prepareWagmiEvmSigningProvider } from './appkitConfig'
 
 export type { PostTxPendingState, PackageSnapshot }
 
@@ -184,6 +184,27 @@ export type ClassifiedPaymentError = {
   category: string
 }
 
+function isGenericRpcPlaceholder(text: string | undefined): boolean {
+  if (!text) return true
+  const trimmed = text.trim()
+  return (
+    /^an unknown rpc error occurred\.?$/i.test(trimmed) ||
+    /^an unknown error occurred while executing the contract function\b/i.test(trimmed) ||
+    /^an error occurred\.?$/i.test(trimmed)
+  )
+}
+
+function pickPreferredErrorReason(
+  current: string,
+  candidates: Array<string | undefined>,
+): string {
+  if (current && !isGenericRpcPlaceholder(current)) return current
+  for (const candidate of candidates) {
+    if (candidate && !isGenericRpcPlaceholder(candidate)) return candidate
+  }
+  return current || candidates.find(Boolean) || ''
+}
+
 const INSUFFICIENT_FUNDS_PATTERN =
   /insufficient.*(?:funds|balance|gas|energy|bandwidth)|exceeds balance|gas required exceeds|saldo insuficiente|validate (?:transfercontract|triggersmartcontract|transferassetcontract) error,\s*balance|balance is not sufficient|account (?:\[[^\]]+\] )?(?:does )?not exist|not enough (?:energy|bandwidth)/
 
@@ -206,23 +227,33 @@ export function classifyPaymentError(
       walk?: (fn?: (e: unknown) => boolean) => unknown
       data?: { message?: string }
     }
+    const baseDetails = extractDetailsString(baseErr.details)
     reasonCode = extractDetailsReasonCode(baseErr.details)
-    rawReason =
-      baseErr.shortMessage ||
-      extractDetailsString(baseErr.details) ||
-      baseErr.data?.message ||
-      baseErr.message ||
-      reasonCode ||
-      ''
+    if (baseDetails) causeMessages += ' ' + baseDetails
+    rawReason = pickPreferredErrorReason('', [
+      baseErr.shortMessage,
+      baseDetails,
+      baseErr.data?.message,
+      baseErr.message,
+      reasonCode,
+    ])
     if (typeof baseErr.walk === 'function') {
       try {
         const root = baseErr.walk()
         if (root && root !== err) {
           const r = root as { name?: string; code?: number | string; details?: unknown; shortMessage?: string; data?: { message?: string }; message?: string }
+          const rDetails = extractDetailsString(r.details)
           rootName = r.name || rootName
           code = r.code ?? code
           if (!reasonCode) reasonCode = extractDetailsReasonCode(r.details)
-          if (!rawReason) rawReason = extractDetailsString(r.details) || r.shortMessage || r.data?.message || r.message || ''
+          if (rDetails) causeMessages += ' ' + rDetails
+          if (r.shortMessage) causeMessages += ' ' + r.shortMessage
+          rawReason = pickPreferredErrorReason(rawReason, [
+            rDetails,
+            r.shortMessage,
+            r.data?.message,
+            r.message,
+          ])
         }
       } catch {
         // ignore walk errors
@@ -242,14 +273,20 @@ export function classifyPaymentError(
         details?: unknown
         data?: { message?: string }
       }
+      const cDetails = extractDetailsString(cObj.details)
       if (code === undefined && cObj.code !== undefined) code = cObj.code
       if ((!rootName || rootName === 'Error') && cObj.name && cObj.name !== 'Error') {
         rootName = cObj.name
       }
       if (!reasonCode) reasonCode = extractDetailsReasonCode(cObj.details)
-      if (!rawReason) {
-        rawReason = cObj.shortMessage || extractDetailsString(cObj.details) || cObj.data?.message || cObj.message || ''
-      }
+      rawReason = pickPreferredErrorReason(rawReason, [
+        cObj.shortMessage,
+        cDetails,
+        cObj.data?.message,
+        cObj.message,
+      ])
+      if (cObj.shortMessage) causeMessages += ' ' + cObj.shortMessage
+      if (cDetails) causeMessages += ' ' + cDetails
       if (cObj.message) causeMessages += ' ' + cObj.message
       if (cObj.data?.message) causeMessages += ' ' + cObj.data.message
       curr = cObj.cause
@@ -365,6 +402,28 @@ export function classifyPaymentError(
   }
 
   if (
+    code === 5201 ||
+    code === 5101 ||
+    code === 4200 ||
+    codeStr === '5201' ||
+    codeStr === '5101' ||
+    codeStr === '4200' ||
+    rootName === 'UnsupportedProviderMethodError' ||
+    rootName === 'MethodNotSupportedRpcError' ||
+    /unknown method\(s\) requested|unsupported method|method[^\n]*not supported by wallet/.test(checkText)
+  ) {
+    const detail = cleanReason ? ` (${cleanReason})` : ''
+    return {
+      message: `La billetera no soporta el método de firma en ${networkName}${detail}. Reconecta tu billetera o usa su navegador integrado.`,
+      kind: 'UNSUPPORTED_METHOD',
+      name: safeName,
+      code,
+      shortMessage: safeShortMessage,
+      category: 'UNSUPPORTED_METHOD',
+    }
+  }
+
+  if (
     rootName.includes('Rpc') ||
     rootName.includes('Timeout') ||
     rootName.includes('Http') ||
@@ -438,7 +497,7 @@ export function WalletPaymentCheckout({
   const { chainId: appKitChainId, caipNetwork } = useAppKitNetwork()
   const { walletProvider: solanaProvider } = useAppKitProvider<SolanaAppKitProvider>('solana')
   const { walletProvider: tronProvider } = useAppKitProvider<TronAppKitProvider>('tron')
-  const { address: evmAddress, isConnected: isEvmConnected, chainId: wagmiChainId } = useAccount()
+  const { address: evmAddress, isConnected: isEvmConnected, chainId: wagmiChainId, connector: evmConnector } = useAccount()
   const { switchChainAsync } = useSwitchChain()
   const { sendTransactionAsync } = useSendTransaction()
   const { writeContractAsync } = useWriteContract()
@@ -1279,6 +1338,9 @@ export function WalletPaymentCheckout({
   const handleSwitchNetwork = async () => {
     setError('')
     try {
+      if (expectedEvmChainId > 0) {
+        await prepareWagmiEvmSigningProvider(undefined, evmConnector)
+      }
       if (isEvmWallet && isEvmConnected && switchChainAsync) {
         await switchChainAsync({ chainId: expectedEvmChainId })
       } else {
@@ -1287,6 +1349,9 @@ export function WalletPaymentCheckout({
           throw new Error(`Red objetivo no configurada en la pasarela de PouwMiner (chainId ${expectedEvmChainId}).`)
         }
         await appKitModal.switchNetwork(targetAppKitNet, { throwOnFailure: true })
+      }
+      if (expectedEvmChainId > 0) {
+        await prepareWagmiEvmSigningProvider(expectedEvmChainId, evmConnector)
       }
     } catch {
       setError(`Por favor confirma el cambio de red a ${activeNetworkConfig.name} en tu billetera.`)
@@ -1510,6 +1575,12 @@ export function WalletPaymentCheckout({
         }
         const recipient = requireTreasuryAddress(intent.treasuryAddress, 'evm') as `0x${string}`
         const atomicAmount = parsePositiveAtomicBigInt(intent.expectedAmountAtomic)
+        if (isEvmWallet && isEvmConnected) {
+          await prepareWagmiEvmSigningProvider(
+            expectedEvmChainId > 0 ? expectedEvmChainId : undefined,
+            evmConnector,
+          )
+        }
 
         if (intent.paymentAsset === 'USDT') {
           const tokenAddress = intent.tokenContractAddress?.trim() as `0x${string}` | undefined
@@ -1535,6 +1606,7 @@ export function WalletPaymentCheckout({
             account: activeAddress as `0x${string}`,
             to: recipient,
             value: atomicAmount,
+            data: '0x',
             ...(expectedEvmChainId > 0 ? { chainId: expectedEvmChainId } : {}),
           })
         }
