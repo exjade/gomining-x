@@ -1,0 +1,404 @@
+.embudo-f1-progress {
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.embudo-f1-progress-modal {
+  position: relative;
+  z-index: 10;
+  margin-bottom: 14px;
+}
+
+.embudo-f1-progress-builder {
+  margin: 0 0 14px;
+  border-color: var(--line, rgba(148, 163, 184, 0.24));
+  background: var(--surface-2, rgba(15, 23, 42, 0.4));
+}
+
+.embudo-f1-step-list {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.embudo-f1-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 1 auto;
+  gap: 5px;
+  min-width: max-content;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition:
+    background-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.embudo-f1-step-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 9.5px !important;
+  font-weight: 600;
+  line-height: 1 !important;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.embudo-f1-step-label {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 11.5px !important;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.1 !important;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.embudo-f1-step-current {
+  border-color: rgba(16, 185, 129, 0.45);
+  background: rgba(16, 185, 129, 0.14);
+}
+
+.embudo-f1-step-current .embudo-f1-step-index {
+  border-color: #10b981;
+  background: #10b981;
+  color: #04130d;
+  font-weight: 700;
+}
+
+.embudo-f1-step-current .embudo-f1-step-label {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.embudo-f1-step-done .embudo-f1-step-index {
+  border-color: rgba(16, 185, 129, 0.5);
+  background: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+}
+
+.embudo-f1-step-done .embudo-f1-step-label {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.embudo-f1-presale-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(16, 185, 129, 0.34);
+  background: rgba(16, 185, 129, 0.08);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.embudo-f1-presale-tag {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #10b981;
+  color: #04130d;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.embudo-f1-presale-copy {
+  color: var(--ink, #f8fafc);
+  font-weight: 500;
+}
+
+body.light-theme .embudo-f1-progress-builder .embudo-f1-step-index,
+:root[data-theme="light"] .embudo-f1-progress-builder .embudo-f1-step-index {
+  border-color: rgba(15, 23, 42, 0.2);
+  color: #475569;
+}
+
+body.light-theme .embudo-f1-progress-builder .embudo-f1-step-label,
+:root[data-theme="light"] .embudo-f1-progress-builder .embudo-f1-step-label {
+  color: #475569;
+}
+
+body.light-theme .embudo-f1-progress-builder .embudo-f1-step-current .embudo-f1-step-label,
+:root[data-theme="light"] .embudo-f1-progress-builder .embudo-f1-step-current .embudo-f1-step-label {
+  color: #064e3b;
+}
+
+body.light-theme .embudo-f1-progress-builder .embudo-f1-step-done .embudo-f1-step-index,
+:root[data-theme="light"] .embudo-f1-progress-builder .embudo-f1-step-done .embudo-f1-step-index {
+  color: #047857;
+}
+
+body.light-theme .embudo-f1-presale-copy,
+:root[data-theme="light"] .embudo-f1-presale-copy {
+  color: #0f172a;
+}
+
+@media (max-width: 600px) {
+  .embudo-f1-progress {
+    padding: 5px 6px;
+    margin-bottom: 12px;
+  }
+
+  .embudo-f1-step-list {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 6px;
+  }
+
+  .embudo-f1-step {
+    flex: 0 0 auto;
+    padding: 4px 7px;
+    gap: 4px;
+  }
+
+  .embudo-f1-step-index {
+    width: 16px;
+    height: 16px;
+    font-size: 9px !important;
+  }
+
+  .embudo-f1-step-label {
+    font-size: 10.5px !important;
+    text-align: left;
+  }
+
+  .embudo-f1-presale-notice {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+}
+
+
+/* Isolated AuthModal typographic hierarchy & compact control geometry
+   (ported from EMBUDO-F1/F2 without touching protected src/landing.css) */
+.pouw-auth-modal-root .auth-brand {
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  line-height: 1.1 !important;
+  letter-spacing: -0.02em !important;
+}
+
+.pouw-auth-modal-root .auth-brand-tag {
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 10px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  letter-spacing: 0.18em !important;
+}
+
+.pouw-auth-modal-root .auth-close {
+  width: 28px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 0 !important;
+}
+
+.pouw-auth-modal-root .auth-fomo-label {
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  line-height: 1.1 !important;
+  letter-spacing: 0.12em !important;
+}
+
+.pouw-auth-modal-root .auth-fomo-timer,
+.pouw-auth-modal-root .auth-fomo-timer span {
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 1.1 !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+.pouw-auth-modal-root .auth-eyebrow {
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 10.5px !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0.2em !important;
+}
+
+.pouw-auth-modal-root .auth-title {
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 26px !important;
+  font-weight: 700 !important;
+  line-height: 1.15 !important;
+  letter-spacing: -0.025em !important;
+  color: #ffffff !important;
+}
+
+.pouw-auth-modal-root .auth-subtitle,
+.pouw-auth-modal-root .auth-subtitle span {
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 13.5px !important;
+  font-weight: 400 !important;
+  line-height: 1.45 !important;
+}
+
+.pouw-auth-modal-root .auth-label {
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  line-height: 1.3 !important;
+}
+
+.pouw-auth-modal-root .auth-optional {
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 10px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  letter-spacing: 0.14em !important;
+}
+
+.pouw-auth-modal-root .auth-input {
+  min-height: 40px !important;
+  height: 40px !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 14px !important;
+  line-height: 1.35 !important;
+}
+
+.pouw-auth-modal-root .auth-cta {
+  min-height: 42px !important;
+  height: 42px !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+}
+
+.pouw-auth-modal-root .auth-secondary-btn {
+  min-height: 38px !important;
+  height: 38px !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+}
+
+.pouw-auth-modal-root .auth-inline-btn {
+  min-height: auto !important;
+  height: auto !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  line-height: 1.3 !important;
+}
+
+.pouw-auth-modal-root .auth-back-btn {
+  min-height: auto !important;
+  height: auto !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  line-height: 1.2 !important;
+}
+
+.pouw-auth-modal-root .auth-icon-btn {
+  min-height: 28px !important;
+  height: 28px !important;
+  width: 28px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.pouw-auth-modal-root .auth-footer {
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 12.5px !important;
+  line-height: 1.4 !important;
+}
+
+.pouw-auth-modal-root .auth-note,
+.pouw-auth-modal-root .auth-note span,
+.pouw-auth-modal-root .auth-note strong {
+  font-size: 11px !important;
+  line-height: 1.4 !important;
+}
+
+.pouw-auth-modal-root .auth-feedback,
+.pouw-auth-modal-root .auth-feedback span {
+  font-size: 12.5px !important;
+  line-height: 1.4 !important;
+}
+
+/* Pre-loaded presale config summary strip inside redesigned onboarding modal */
+.pouw-auth-modal-root .embudo-preloaded-config {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  margin-bottom: 12px;
+  padding: 8px 11px;
+  border-radius: 12px;
+  border: 1px solid rgba(16, 185, 129, 0.34);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.pouw-auth-modal-root .embudo-preloaded-k {
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.14em !important;
+  text-transform: uppercase;
+  color: #34d399 !important;
+}
+
+.pouw-auth-modal-root .embudo-preloaded-v {
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  line-height: 1.3 !important;
+  color: #ffffff !important;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 600px) {
+  .pouw-auth-modal-root .auth-title {
+    font-size: 21px !important;
+  }
+
+  .pouw-auth-modal-root .auth-subtitle,
+  .pouw-auth-modal-root .auth-subtitle span {
+    font-size: 12.5px !important;
+  }
+
+  .pouw-auth-modal-root .auth-fomo-label {
+    font-size: 10px !important;
+    letter-spacing: 0.08em !important;
+  }
+
+  .pouw-auth-modal-root .auth-fomo-timer,
+  .pouw-auth-modal-root .auth-fomo-timer span {
+    font-size: 11px !important;
+  }
+}

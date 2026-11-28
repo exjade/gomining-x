@@ -24,6 +24,12 @@ import { CtaSection } from './components/sections/CtaSection'
 import { Footer } from './components/sections/Footer'
 import { LegalModal, type LegalMode } from './components/legal/LegalModal'
 import type { AuthMode } from './components/ui/Navbar'
+import {
+  clearEmbudoF1State,
+  saveEmbudoPresaleSelection,
+  startEmbudoF1Registration,
+  type EmbudoPresaleSelection,
+} from './components/embudo-f1'
 
 interface LandingPageProps {
   openAuthModal: (mode?: 'login' | 'register' | 'verify-email') => void
@@ -54,10 +60,13 @@ export function LandingPage({ openAuthModal }: LandingPageProps) {
     document.title = 'PouwMiner.com · experiencia pública'
   }, [])
 
-  const handleOpenAuth = (mode?: AuthMode) => {
+  const handleOpenAuth = (mode?: AuthMode, prefill?: Partial<EmbudoPresaleSelection>) => {
     if (mode === 'login') {
+      clearEmbudoF1State()
       openAuthModal('login')
     } else {
+      saveEmbudoPresaleSelection(prefill ?? null)
+      startEmbudoF1Registration('landing')
       openAuthModal('register')
     }
   }
