@@ -71,9 +71,9 @@ export function WalletPanel({ session }: { session?: WalletSession }) {
     <div className="wallet-panel-container">
       <div className="wallet-card-header">
         <div>
-          <h2>Cartera Web3 (Reown AppKit)</h2>
+          <h2>Cartera Web3 · PouwMiner</h2>
           <p className="wallet-panel-desc">
-            Conecta o gestiona tu billetera EVM, Solana o TRON de forma segura mediante el selector unificado Reown AppKit (MetaMask, Phantom, Solflare, Trust Wallet, OKX, TronLink vía WalletConnect y +300 wallets).
+            Conecta o gestiona tu billetera EVM, Solana o TRON de forma segura en la pasarela de pagos de PouwMiner (MetaMask, Phantom, Solflare, Trust Wallet, OKX, TronLink y +300 wallets).
           </p>
         </div>
         <div className="wallet-header-actions">
@@ -100,7 +100,7 @@ export function WalletPanel({ session }: { session?: WalletSession }) {
       {isConnected && (
         <div className="connected-wallet-card" style={{ marginBottom: 24 }}>
           <div className="wallet-status-badge">
-            <span className="status-indicator-green" /> Conectada vía Reown AppKit
+            <span className="status-indicator-green" /> Billetera conectada
           </div>
 
           <div className="wallet-info-grid">
@@ -167,7 +167,7 @@ export function WalletPanel({ session }: { session?: WalletSession }) {
       >
         <div>
           <span style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', letterSpacing: '0.06em' }}>
-            REOWN APPKIT · EVM, SOLANA &amp; TRON
+            PASARELA POUWMINER · EVM, SOLANA &amp; TRON
           </span>
           <h3 style={{ margin: '4px 0 2px', fontSize: 16, color: '#f8fafc' }}>
             Conexión Unificada (+300 Wallets y QR Móvil)
@@ -182,7 +182,7 @@ export function WalletPanel({ session }: { session?: WalletSession }) {
           style={{ whiteSpace: 'nowrap' }}
           onClick={() => open()}
         >
-          {isConnected ? 'Gestionar en Reown AppKit' : 'Conectar con Reown AppKit'}
+          {isConnected ? 'Gestionar Billetera' : 'Conectar Billetera'}
         </button>
       </div>
 

@@ -587,10 +587,10 @@ describe('SCRUM-381 (PG-07 / ADR-0013): Client USDT-First 8 Networks & TRON TRC-
       // walletSession <= 130 lines with TRON support
       assert.ok(sessionSrc.split(/\r?\n/).length <= 130, 'walletSession.ts must remain <= 130 lines')
       assert.ok(sessionSrc.includes("'TRON'"), 'walletSession.ts must support TRON protocol')
-      assert.ok(sessionSrc.includes('Reown AppKit (TRON)'), 'walletSession.ts must label Reown AppKit (TRON)')
+      assert.ok(sessionSrc.includes('Billetera TRON'), 'walletSession.ts must label Billetera TRON')
 
       // WalletPanel TRON label
-      assert.match(panelSrc, /REOWN APPKIT · EVM, SOLANA (&amp;|&) TRON/, 'WalletPanel.tsx must display REOWN APPKIT · EVM, SOLANA & TRON')
+      assert.match(panelSrc, /PASARELA POUWMINER · EVM, SOLANA (&amp;|&) TRON/, 'WalletPanel.tsx must display PASARELA POUWMINER · EVM, SOLANA & TRON')
 
       // Checkout USDT-first order
       const networksMatch = checkoutSrc.match(/export const networks:[\s\S]*?\]/)

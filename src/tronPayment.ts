@@ -255,7 +255,7 @@ export async function submitTronTransactionViaProvider(input: SubmitTronTransact
   } else if (typeof provider.signTransaction === 'function') {
     signedResponse = await provider.signTransaction(transaction)
   } else {
-    throw new Error('La billetera TRON conectada no soporta firma directa en Reown AppKit.')
+    throw new Error('La billetera TRON conectada no soporta firma directa en el selector de billetera.')
   }
 
   if (typeof signedResponse === 'string' && TRON_TX_HASH_PATTERN.test(signedResponse.trim())) {

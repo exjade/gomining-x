@@ -2317,7 +2317,7 @@ function DemoTopUpDialog({ walletSession, onClose, onPayWithWallet, onConfirm }:
         <div className="modal-mark">↓</div>
         <p className="eyebrow">RECARGA</p>
         <h2 id="topup-title">Recargar saldo</h2>
-        <p className="modal-description">Elige la red; el checkout usará Reown AppKit para conectar y firmar el pago.</p>
+        <p className="modal-description">Elige la red; la pasarela de PouwMiner te permitirá conectar y firmar el pago.</p>
         {walletSession.connection && <div className="topup-connected-wallet"><strong>Wallet conectada · {walletSession.connection.name}</strong><code>{walletSession.connection.shortAddress}</code></div>}
         <div className="topup-wallet-selection">
           <label className="field-label">Red
@@ -2330,7 +2330,7 @@ function DemoTopUpDialog({ walletSession, onClose, onPayWithWallet, onConfirm }:
         <div className="quick-topup-options">{[100, 500, 1000].map((preset) => <button className="filter-chip" type="button" onClick={() => setAmount(String(preset))} key={preset}>{formatDemoCurrency(preset)}</button>)}</div>
         <div className="simulation-warning"><span>i</span><span>La transferencia envía fondos al destino configurado, pero no acredita el saldo local hasta que exista una verificación de depósitos.</span></div>
         <div className="topup-modal-actions">
-          <button className="button button-primary" disabled={!valid} onClick={() => onPayWithWallet(value, networkId, 'reown')}>{walletSession.connection ? `Pagar con ${walletSession.connection.name}` : 'Conectar con Reown AppKit y pagar'} <span>↗</span></button>
+          <button className="button button-primary" disabled={!valid} onClick={() => onPayWithWallet(value, networkId, 'reown')}>{walletSession.connection ? `Pagar con ${walletSession.connection.name}` : 'Conectar billetera y pagar'} <span>↗</span></button>
           <button className="button button-secondary" disabled={!valid} onClick={() => onConfirm(value)}>Añadir saldo local</button>
           <button className="button button-quiet" onClick={onClose}>Cancelar</button>
         </div>

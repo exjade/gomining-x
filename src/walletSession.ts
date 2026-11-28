@@ -94,17 +94,17 @@ export function useWalletSession(): WalletSession {
     return {
       id: 'reown',
       name: isEvm
-        ? (chain?.name ?? caipNetwork?.name ?? 'Reown AppKit (EVM)')
+        ? (chain?.name ?? caipNetwork?.name ?? 'Billetera EVM')
         : isTron
-          ? 'Reown AppKit (TRON)'
-          : 'Reown AppKit (Solana)',
+          ? 'Billetera TRON'
+          : 'Billetera Solana',
       protocol: isEvm ? 'EIP-1193' : isTron ? 'TRON' : 'Solana',
       network: networkLabel,
       address: activeAddress,
       shortAddress: formatShortAddress(activeAddress),
       disconnectProvider: disconnect,
       sendPayment: async () => {
-        throw new Error('Los pagos Web3 deben ejecutarse desde el checkout oficial con Reown AppKit.')
+        throw new Error('Los pagos Web3 deben ejecutarse desde la pasarela oficial de PouwMiner.')
       },
     }
   }, [isConnected, activeAddress, isEvm, isTron, chain?.name, caipNetwork?.name, disconnect])

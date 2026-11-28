@@ -3,6 +3,7 @@ import {
   isValidSolanaAddress,
   isValidTronAddress,
   type BackendPaymentNetworkId,
+  type PaymentNetworkId,
   type PaymentNetworkMode,
 } from '../../paymentDestinations.ts'
 import type { PaymentAssetSymbol, PaymentIntentRecord, PaymentIntentStatus, PaymentProductType } from './paymentGatewayClient'
@@ -153,6 +154,50 @@ export interface ResolvedMultichainWallet {
   isEvmWallet: boolean
   isSolanaWallet: boolean
   isTronWallet: boolean
+}
+
+export type PaymentWalletFamily = 'evm' | 'solana' | 'tron'
+
+export function getPaymentNetworkFamily(networkId: PaymentNetworkId): PaymentWalletFamily {
+  if (networkId === 'solana') return 'solana'
+  if (networkId === 'tron') return 'tron'
+  return 'evm'
+}
+
+export function getAppKitNamespaceForFamily(family: PaymentWalletFamily): 'eip155' | 'solana' | 'tron' {
+  if (family === 'solana') return 'solana'
+  if (family === 'tron') return 'tron'
+  return 'eip155'
+}
+
+export function getWalletFamilyLabel(family: PaymentWalletFamily): string {
+  if (family === 'solana') return 'Solana'
+  if (family === 'tron') return 'TRON'
+  return 'EVM'
+}
+
+export function isWalletFamilyCompatibleWithNetwork(input: {
+  networkId: PaymentNetworkId
+  isEvmWallet: boolean
+  isSolanaWallet: boolean
+  isTronWallet: boolean
+}): boolean {
+  const family = getPaymentNetworkFamily(input.networkId)
+  if (family === 'solana') return input.isSolanaWallet
+  if (family === 'tron') return input.isTronWallet
+  return input.isEvmWallet
+}
+
+export function resolveNetworkSelectionUseUsdt(input: {
+  currentUseUsdt: boolean
+  hasTargetUsdtContract: boolean
+  isWalletConnected: boolean
+  isTargetFamilyCompatible: boolean
+}): boolean {
+  if (input.isWalletConnected && !input.isTargetFamilyCompatible) {
+    return input.currentUseUsdt
+  }
+  return input.currentUseUsdt && input.hasTargetUsdtContract
 }
 
 const DISCONNECTED_WALLET: ResolvedMultichainWallet = {
@@ -474,7 +519,7 @@ export function validateEvmSigningParity(input: EvmSigningParityInput): EvmSigni
   if (active.toLowerCase() !== wagmi.toLowerCase()) {
     return {
       ok: false,
-      error: 'La cuenta activa en Reown AppKit no coincide con el firmante EVM de tu billetera. Reconecta o sincroniza tu cuenta antes de pagar.',
+      error: 'La cuenta activa en el selector de billetera no coincide con el firmante EVM de tu billetera. Reconecta o sincroniza tu cuenta antes de pagar.',
     }
   }
   if (sender && (!isValidEvmAddress(sender) || sender.toLowerCase() !== active.toLowerCase())) {
@@ -539,7 +584,7 @@ export function validateSolanaClusterParity(input: SolanaClusterParityInput): So
       ok: false,
       expectedLabel,
       actualLabel,
-      error: `No se pudo confirmar la red activa de tu billetera Solana. Asegúrate de seleccionar ${expectedLabel} en Reown AppKit antes de firmar.`,
+      error: `No se pudo confirmar la red activa de tu billetera Solana. Asegúrate de seleccionar ${expectedLabel} en el selector de billetera antes de firmar.`,
     }
   }
 
@@ -672,7 +717,7 @@ export function validateTronClusterParity(input: TronClusterParityInput): TronCl
       ok: false,
       expectedLabel,
       actualLabel: 'red TRON no detectada',
-      error: `No se pudo confirmar la red activa de tu billetera TRON. Asegúrate de seleccionar ${expectedLabel} en Reown AppKit antes de firmar.`,
+      error: `No se pudo confirmar la red activa de tu billetera TRON. Asegúrate de seleccionar ${expectedLabel} en el selector de billetera antes de firmar.`,
     }
   }
 
@@ -758,5 +803,5 @@ export async function submitSolanaTransactionViaProvider(
     const signedTx = await provider.signTransaction(transaction)
     return await connection.sendRawTransaction(signedTx.serialize())
   }
-  throw new Error('La billetera Solana conectada no soporta firma directa en Reown AppKit.')
+  throw new Error('La billetera Solana conectada no soporta firma directa en el selector de billetera.')
 }
