@@ -736,4 +736,261 @@ describe('POUW Checkout: All Enabled Networks, 1-Click Wallet Switch & PouwMiner
       assert.match(greenCardSlice, /minWidth:\s*0/, 'Connected wallet left info block must set minWidth: 0')
     })
   })
+
+  describe('Block 4: Smooth 0ms method selection, rapid-tap coalescing & tactile CSS contracts', () => {
+    it('coalesces rapid queued selections in resolveNextQueuedMethodSelection without redundant RPCs', () => {
+      type PendingMethodSelectionLike = { networkId: PaymentNetworkId; useUsdt: boolean }
+      const api = coordinator as unknown as {
+        resolveNextQueuedMethodSelection?: (input: {
+          queued: PendingMethodSelectionLike | null
+          completedNetworkId: PaymentNetworkId
+          completedUseUsdt: boolean
+        }) => PendingMethodSelectionLike | null
+      }
+
+      assert.equal(
+        typeof api.resolveNextQueuedMethodSelection,
+        'function',
+        'checkoutIntentCoordinator must export resolveNextQueuedMethodSelection',
+      )
+
+      const resolve = api.resolveNextQueuedMethodSelection!
+
+      // null queued -> null
+      assert.equal(
+        resolve({ queued: null, completedNetworkId: 'bnb', completedUseUsdt: true }),
+        null,
+      )
+
+      // identical to just-completed selection -> null (0 redundant RPC)
+      assert.equal(
+        resolve({
+          queued: { networkId: 'polygon', useUsdt: true },
+          completedNetworkId: 'polygon',
+          completedUseUsdt: true,
+        }),
+        null,
+      )
+
+      // different asset on same network -> dispatches queued selection
+      assert.deepEqual(
+        resolve({
+          queued: { networkId: 'polygon', useUsdt: false },
+          completedNetworkId: 'polygon',
+          completedUseUsdt: true,
+        }),
+        { networkId: 'polygon', useUsdt: false },
+      )
+
+      // different network (including rapid back-and-forth BNB -> Polygon -> BNB) -> dispatches queued selection
+      assert.deepEqual(
+        resolve({
+          queued: { networkId: 'bnb', useUsdt: true },
+          completedNetworkId: 'polygon',
+          completedUseUsdt: true,
+        }),
+        { networkId: 'bnb', useUsdt: true },
+      )
+    })
+
+    it('wires 0ms pendingMethodSelection, queuedMethodSelectionRef coalescing, non-collapsing quote card, interactive chips/pills, and locked Pagar CTA in WalletPaymentCheckout.tsx', () => {
+      const checkoutSrc = readText('src/WalletPaymentCheckout.tsx')
+
+      // Separate instant visual state & refs (with synchronous intentRef/hasBroadcastTxLockRef to avoid stale closures on chained drains)
+      assert.match(
+        checkoutSrc,
+        /const \[pendingMethodSelection,\s*setPendingMethodSelection\]\s*=\s*useState<PendingMethodSelection \| null>\(null\)/,
+      )
+      assert.match(
+        checkoutSrc,
+        /const queuedMethodSelectionRef\s*=\s*useRef<PendingMethodSelection \| null>\(null\)/,
+      )
+      assert.match(checkoutSrc, /const intentRef\s*=\s*useRef<PaymentIntentRecord \| null>\(intent\)/)
+      assert.match(checkoutSrc, /const hasBroadcastTxLockRef\s*=\s*useRef\(hasBroadcastTxLock\)/)
+      assert.match(
+        checkoutSrc,
+        /const displayNetworkId(?::\s*PaymentNetworkId)?\s*=\s*pendingMethodSelection\?\.networkId\s*\?\?\s*effectiveNetworkId/,
+      )
+      assert.match(
+        checkoutSrc,
+        /const displayUseUsdt(?::\s*boolean)?\s*=\s*pendingMethodSelection\?\.useUsdt\s*\?\?\s*useUsdt/,
+      )
+
+      // handleSelectNetworkOrAsset coalescing, incompatible sequence invalidation, 0ms highlight & finally drain
+      const selectBlock = extractBlock(checkoutSrc, 'const handleSelectNetworkOrAsset = async')
+      assert.ok(selectBlock.includes('queuedMethodSelectionRef.current'), 'handleSelectNetworkOrAsset must coalesce via queuedMethodSelectionRef')
+      assert.ok(selectBlock.includes('setPendingMethodSelection('), 'handleSelectNetworkOrAsset must apply 0ms pendingMethodSelection')
+      assert.ok(selectBlock.includes('resolveNextQueuedMethodSelection('), 'handleSelectNetworkOrAsset finally must drain via resolveNextQueuedMethodSelection')
+      assert.ok(selectBlock.includes('hasBroadcastTxLockRef.current'), 'handleSelectNetworkOrAsset must check synchronous hasBroadcastTxLockRef')
+      assert.ok(selectBlock.includes('intentRef.current'), 'handleSelectNetworkOrAsset must read synchronous intentRef for chained rapid taps')
+
+      // Preserve SCRUM-373 MEDIUM-02: setPendingMethodSelection before try {, setNetworkId(nextNet) strictly after await selectPaymentMethod inside try {
+      const tryIdx = selectBlock.indexOf('try {')
+      const awaitSelectIdx = selectBlock.indexOf('await selectPaymentMethod(')
+      const inPlaceSetNetIdx = selectBlock.indexOf('setNetworkId(nextNet)', tryIdx)
+      assert.ok(tryIdx > 0 && awaitSelectIdx > tryIdx && inPlaceSetNetIdx > awaitSelectIdx)
+
+      // Step 1, createFreshIntent, and unmount clear queuedMethodSelectionRef
+      const step1Section = checkoutSrc.slice(checkoutSrc.indexOf('// Step 1:'), checkoutSrc.indexOf('// Step 2:'))
+      assert.ok(step1Section.includes('queuedMethodSelectionRef.current = null'))
+      assert.ok(step1Section.includes('setPendingMethodSelection('))
+      const freshBlock = extractBlock(checkoutSrc, 'const createFreshIntent = useCallback')
+      assert.ok(freshBlock.includes('queuedMethodSelectionRef.current = null'))
+      assert.ok(freshBlock.includes('setPendingMethodSelection(null)'))
+
+      // 1. Red de pago chips: interactive during methodUpdating, uses displayNetworkId/displayUseUsdt and network-chip-pending
+      const networkSectionStart = checkoutSrc.indexOf('1. Red de pago')
+      const currencySectionStart = checkoutSrc.indexOf('2. Moneda de pago')
+      assert.ok(networkSectionStart > 0 && currencySectionStart > networkSectionStart)
+      const networkSection = checkoutSrc.slice(networkSectionStart, currencySectionStart)
+      assert.ok(networkSection.includes('displayNetworkId === net.id'))
+      assert.ok(networkSection.includes('network-chip-pending'))
+      assert.ok(networkSection.includes('currentUseUsdt: displayUseUsdt'))
+      const chipDisabledMatch = networkSection.match(/className=\{`network-chip-btn[^`]*`\}[\s\S]*?disabled=\{([^}]+)\}/)
+      assert.ok(chipDisabledMatch, 'Expected .network-chip-btn disabled expression')
+      assert.equal(/\bmethodUpdating\b/.test(chipDisabledMatch[1]), false, '.network-chip-btn must NOT be disabled during methodUpdating')
+      assert.match(chipDisabledMatch[1], /\bhasBroadcastTxLock\b/, '.network-chip-btn must remain disabled under F-01 hasBroadcastTxLock')
+
+      // 2. Moneda de pago pills: interactive during methodUpdating, keeps isWrongWalletFamily, uses displayNetworkId/displayUseUsdt and currency-pill-pending
+      const quoteCardStart = checkoutSrc.indexOf('<div className="checkout-quote-card">')
+      assert.ok(quoteCardStart > currencySectionStart)
+      const currencySection = checkoutSrc.slice(currencySectionStart, quoteCardStart)
+      assert.ok(currencySection.includes('displayUseUsdt'))
+      assert.ok(currencySection.includes('currency-pill-pending'))
+      assert.ok(currencySection.includes('handleSelectNetworkOrAsset(displayNetworkId, true)'))
+      assert.ok(currencySection.includes('handleSelectNetworkOrAsset(displayNetworkId, false)'))
+      const pillDisabledMatches = [...currencySection.matchAll(/className=\{`currency-pill-btn[^`]*`\}[\s\S]*?disabled=\{([^}]+)\}/g)]
+      assert.equal(pillDisabledMatches.length, 2)
+      for (const m of pillDisabledMatches) {
+        assert.equal(/\bmethodUpdating\b/.test(m[1]), false, '.currency-pill-btn must NOT be disabled during methodUpdating')
+        assert.match(m[1], /\bisWrongWalletFamily\b/, '.currency-pill-btn must keep isWrongWalletFamily guard')
+        assert.match(m[1], /\bhasBroadcastTxLock\b/, '.currency-pill-btn must keep hasBroadcastTxLock guard')
+      }
+
+      // Quote card keeps AWAITING structure visible with checkout-quote-updating & Actualizando cotización...
+      const ctaBoxStart = checkoutSrc.indexOf('<div className="checkout-cta-box">')
+      assert.ok(ctaBoxStart > quoteCardStart)
+      const quoteCardSrc = checkoutSrc.slice(quoteCardStart, ctaBoxStart)
+      assert.ok(quoteCardSrc.includes('checkout-quote-updating'))
+      assert.ok(quoteCardSrc.includes('checkout-inline-spinner'))
+      assert.ok(quoteCardSrc.includes('Actualizando cotización...'))
+      assert.ok(quoteCardSrc.includes('<QuoteDetailsSkeleton />'))
+
+      // Main Pagar CTA remains disabled while methodUpdating || Boolean(pendingMethodSelection) and displays Actualizando cotización...
+      const ctaBoxSrc = checkoutSrc.slice(ctaBoxStart)
+      const onClickPayIdx = ctaBoxSrc.indexOf('onClick={handlePay}')
+      assert.notEqual(onClickPayIdx, -1, 'Expected onClick={handlePay} in .checkout-cta-box')
+      const payBtnStart = ctaBoxSrc.lastIndexOf('<button', onClickPayIdx)
+      const payBtnEnd = ctaBoxSrc.indexOf('</button>', onClickPayIdx)
+      assert.ok(payBtnStart >= 0 && payBtnEnd > payBtnStart)
+      const payBtnSrc = ctaBoxSrc.slice(payBtnStart, payBtnEnd)
+      const payDisabledMatch = payBtnSrc.match(/disabled=\{([^}]+)\}/)
+      assert.ok(payDisabledMatch, 'Expected disabled={...} on main Pagar button')
+      assert.match(payDisabledMatch[1], /\bmethodUpdating\b/, 'Pagar CTA must stay disabled while methodUpdating')
+      assert.match(payDisabledMatch[1], /\bBoolean\(pendingMethodSelection\)/, 'Pagar CTA must stay disabled while pendingMethodSelection is active')
+      assert.ok(payBtnSrc.includes('Actualizando cotización...'), 'Pagar CTA must display Actualizando cotización... while updating')
+    })
+
+    it('enforces tactile micro-interactions, disabled clarity, pending/updating styles, and prefers-reduced-motion in src/styles.css', () => {
+      const stylesSrc = readText('src/styles.css')
+
+      const chipBlock = extractBlock(stylesSrc, '.network-chip-btn {')
+      assert.match(chipBlock, /touch-action:\s*manipulation/)
+      assert.match(chipBlock, /-webkit-tap-highlight-color:\s*transparent/)
+      assert.match(chipBlock, /transition:\s*transform 120ms ease,\s*background-color 160ms ease,\s*border-color 160ms ease,\s*opacity 160ms ease/)
+
+      const pillBlock = extractBlock(stylesSrc, '.currency-pill-btn {')
+      assert.match(pillBlock, /touch-action:\s*manipulation/)
+      assert.match(pillBlock, /-webkit-tap-highlight-color:\s*transparent/)
+      assert.match(pillBlock, /transition:\s*transform 120ms ease,\s*background-color 160ms ease,\s*border-color 160ms ease,\s*opacity 160ms ease/)
+
+      const activePressMatch = stylesSrc.match(/\.network-chip-btn:active:not\(:disabled\),\s*\.currency-pill-btn:active:not\(:disabled\)\s*\{[\s\S]*?\}/)
+      assert.ok(activePressMatch, 'Expected tactile :active:not(:disabled) press rule for network chips and currency pills')
+      assert.match(activePressMatch[0], /transform:\s*scale\(0\.97\)/)
+
+      const disabledRuleMatch = stylesSrc.match(/\.network-chip-btn:disabled,\s*\.currency-pill-btn:disabled\s*\{[\s\S]*?\}/)
+      assert.ok(disabledRuleMatch, 'Expected clear :disabled rule for network chips and currency pills')
+      assert.match(disabledRuleMatch[0], /opacity:\s*0\.48/)
+      assert.match(disabledRuleMatch[0], /cursor:\s*not-allowed/)
+
+      assert.ok(stylesSrc.includes('.network-chip-pending {'))
+      assert.ok(stylesSrc.includes('.currency-pill-pending {'))
+      assert.ok(stylesSrc.includes('.checkout-quote-updating {'))
+      const spinnerBlock = extractBlock(stylesSrc, '.checkout-inline-spinner {')
+      assert.match(spinnerBlock, /width:\s*14px/)
+      assert.match(spinnerBlock, /height:\s*14px/)
+      assert.ok(stylesSrc.includes('@keyframes checkout-spin'))
+
+      // Checkout-scoped prefers-reduced-motion block disables transitions, press scale, and spinner animation
+      const checkoutReducedMotionIdx = stylesSrc.indexOf('.checkout-inline-spinner {', stylesSrc.indexOf('@media (max-width: 520px) {'))
+      assert.notEqual(checkoutReducedMotionIdx, -1, 'Expected @media (prefers-reduced-motion: reduce) handling .checkout-inline-spinner in checkout modal section')
+      const reducedBlockStart = stylesSrc.lastIndexOf('@media (prefers-reduced-motion: reduce)', checkoutReducedMotionIdx)
+      assert.notEqual(reducedBlockStart, -1)
+      const reducedBlock = extractBlock(stylesSrc.slice(reducedBlockStart), '@media (prefers-reduced-motion: reduce)')
+      assert.match(reducedBlock, /\.checkout-inline-spinner[\s\S]*?animation:\s*none/)
+      assert.match(reducedBlock, /\.network-chip-btn[\s\S]*?transition:\s*none/)
+
+      // Review Fix #3 (Light Theme): legible contrast overrides for checkout updating badge, spinner, and chips/pills
+      assert.match(stylesSrc, /\[data-theme='light'\]\s+\.checkout-quote-updating-badge\s*\{[\s\S]*?color:\s*#5b21b6/)
+      assert.match(stylesSrc, /\[data-theme='light'\]\s+\.checkout-inline-spinner\s*\{[\s\S]*?border-color:\s*rgba\(15,\s*23,\s*42/)
+    })
+
+    it('Review Fix #1/#2: keeps methodInFlightRef serialized across incompatible taps via methodVisualSupersededRef and prevents mid-flight wrong-family/wrong-chain UI desync', () => {
+      const checkoutSrc = readText('src/WalletPaymentCheckout.tsx')
+
+      // Fix #1 (CRITICAL): incompatible tap must NEVER reset methodInFlightRef.current = false or bump methodSeqRef while RPC is in flight
+      assert.match(checkoutSrc, /const methodVisualSupersededRef = useRef\(false\)/)
+      const selectBlock = extractBlock(checkoutSrc, 'const handleSelectNetworkOrAsset = async')
+      const incompatibleStart = selectBlock.indexOf('!isWalletFamilyCompatibleWithNetwork(')
+      const incompatibleReturnIdx = selectBlock.indexOf('return', incompatibleStart)
+      assert.ok(incompatibleStart > 0 && incompatibleReturnIdx > incompatibleStart)
+      const incompatibleBranch = selectBlock.slice(incompatibleStart, incompatibleReturnIdx)
+      assert.equal(
+        incompatibleBranch.includes('methodInFlightRef.current = false'),
+        false,
+        'Incompatible tap must NOT clear methodInFlightRef while an RPC is still executing on backend',
+      )
+      assert.equal(
+        incompatibleBranch.includes('methodSeqRef.current +='),
+        false,
+        'Incompatible tap must NOT discard backend intent truth by bumping methodSeqRef while an RPC is still executing',
+      )
+      assert.ok(
+        incompatibleBranch.includes('methodVisualSupersededRef.current = true'),
+        'Incompatible tap during in-flight RPC must mark methodVisualSupersededRef.current = true so UI stays on incompatible preview while intentRef still receives server truth',
+      )
+      assert.ok(
+        selectBlock.includes('handleSelectRef.current(nextQueued.networkId, nextQueued.useUsdt)'),
+        'finally queue drain must invoke handleSelectRef.current to avoid stale boolean closure guards',
+      )
+
+      // Fix #2 (IMPORTANT): mid-flight transition from incompatible family or wrong EVM chain clears stale mismatch UI immediately
+      assert.match(
+        checkoutSrc,
+        /const isWrongEvmChain\s*=\s*!isSolana[\s\S]*?!isTron\s*&&\s*!methodUpdating\s*&&\s*!pendingMethodSelection/,
+        'isWrongEvmChain must suppress stale switch-chain CTA while methodUpdating or pendingMethodSelection is active',
+      )
+      const currencySectionStart = checkoutSrc.indexOf('2. Moneda de pago')
+      const quoteCardStart = checkoutSrc.indexOf('<div className="checkout-quote-card">')
+      const ctaBoxStart = checkoutSrc.indexOf('<div className="checkout-cta-box">')
+      const currencySection = checkoutSrc.slice(currencySectionStart, quoteCardStart)
+      const quoteCardSrc = checkoutSrc.slice(quoteCardStart, ctaBoxStart)
+      const ctaBoxSrc = checkoutSrc.slice(ctaBoxStart)
+      assert.match(
+        currencySection,
+        /isWrongWalletFamily\s*&&\s*!pendingMethodSelection/,
+        '.currency-pill-btn must become interactive immediately when transitioning to a compatible pendingMethodSelection',
+      )
+      assert.match(
+        quoteCardSrc,
+        /isWrongWalletFamily\s*&&\s*!hasBroadcastTxLock\s*&&\s*!methodUpdating\s*&&\s*!pendingMethodSelection/,
+        'Quote card must hide stale wrong-family warning while switching to a compatible network',
+      )
+      assert.match(
+        ctaBoxSrc,
+        /isWrongWalletFamily\s*&&\s*!methodUpdating\s*&&\s*!pendingMethodSelection/,
+        'CTA box must show disabled Actualizando cotización... instead of stale Cambiar a billetera while switching to a compatible network',
+      )
+    })
+  })
 })

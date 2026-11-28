@@ -50,6 +50,7 @@ import {
   resolveActiveMultichainWallet,
   resolveAutoAlignedNetworkOnWalletSwitch,
   resolveNetworkSelectionUseUsdt,
+  resolveNextQueuedMethodSelection,
   resolvePendingMethodSyncKey,
   runDeduplicatedIntentInit,
   shouldAutoVerifyBroadcastIntent,
@@ -62,6 +63,7 @@ import {
   writeBroadcastTxLock,
   type BroadcastTxLock,
   type PaymentWalletFamily,
+  type PendingMethodSelection,
 } from './services/payments/checkoutIntentCoordinator'
 import { appKitModal, appKitNetworks } from './appkitConfig'
 
@@ -471,9 +473,12 @@ export function WalletPaymentCheckout({
     return Boolean(getPaymentNetworkConfig(initialNet).usdtContractAddress)
   })
   const [intent, setIntent] = useState<PaymentIntentRecord | null>(null)
+  const intentRef = useRef<PaymentIntentRecord | null>(intent)
+  intentRef.current = intent
   const [initRetryNonce, setInitRetryNonce] = useState(0)
   const [loadingIntent, setLoadingIntent] = useState(false)
   const [methodUpdating, setMethodUpdating] = useState(false)
+  const [pendingMethodSelection, setPendingMethodSelection] = useState<PendingMethodSelection | null>(null)
   const [paying, setPaying] = useState(false)
   const [retryingVerification, setRetryingVerification] = useState(false)
   const [cancelling, setCancelling] = useState(false)
@@ -486,6 +491,9 @@ export function WalletPaymentCheckout({
   const isMountedRef = useRef(true)
   const methodSeqRef = useRef(0)
   const methodInFlightRef = useRef(false)
+  const methodVisualSupersededRef = useRef(false)
+  const queuedMethodSelectionRef = useRef<PendingMethodSelection | null>(null)
+  const handleSelectRef = useRef<(nextNet: PaymentNetworkId, nextUseUsdt: boolean) => Promise<void>>(async () => undefined)
   const freshInFlightRef = useRef(false)
   const payInFlightRef = useRef(false)
   const retryInFlightRef = useRef(false)
@@ -521,6 +529,8 @@ export function WalletPaymentCheckout({
   const effectiveNetworkId: PaymentNetworkId = enabledNetworks.some((n) => n.id === networkId)
     ? networkId
     : (enabledNetworks[0]?.id ?? 'bnb')
+  const displayNetworkId: PaymentNetworkId = pendingMethodSelection?.networkId ?? effectiveNetworkId
+  const displayUseUsdt: boolean = pendingMethodSelection?.useUsdt ?? useUsdt
   const selectedNetworkFamily = getPaymentNetworkFamily(effectiveNetworkId)
   const connectedWalletFamily: PaymentWalletFamily | null = isEvmWallet
     ? 'evm'
@@ -564,20 +574,30 @@ export function WalletPaymentCheckout({
     !hasNetworkSelectionMismatch &&
     numericChainId > 0 &&
     numericChainId !== expectedEvmChainId &&
-    !isTron
+    !isTron &&
+    !methodUpdating &&
+    !pendingMethodSelection
 
   const latestSelectionRef = useRef({
     isWalletConnected,
+    isEvmWallet,
+    isSolanaWallet,
+    isTronWallet,
     isWrongWalletFamily,
     effectiveNetworkId,
+    useUsdt,
     selectedAsset,
     activeAddress,
     destinationName: activeDestination.name,
   })
   latestSelectionRef.current = {
     isWalletConnected,
+    isEvmWallet,
+    isSolanaWallet,
+    isTronWallet,
     isWrongWalletFamily,
     effectiveNetworkId,
+    useUsdt,
     selectedAsset,
     activeAddress,
     destinationName: activeDestination.name,
@@ -585,7 +605,10 @@ export function WalletPaymentCheckout({
 
   useEffect(() => {
     isMountedRef.current = true
-    return () => { isMountedRef.current = false }
+    return () => {
+      isMountedRef.current = false
+      queuedMethodSelectionRef.current = null
+    }
   }, [])
 
   const activeIntentId = intent?.intentId ?? ''
@@ -616,6 +639,8 @@ export function WalletPaymentCheckout({
       : null) ?? persistedBroadcastTxLock
   const lockedTxHash = activeBroadcastTxLock?.txHash || (!isTerminalIntent ? (intent?.txHash?.trim() || '') : '')
   const hasBroadcastTxLock = Boolean(lockedTxHash)
+  const hasBroadcastTxLockRef = useRef(hasBroadcastTxLock)
+  hasBroadcastTxLockRef.current = hasBroadcastTxLock
   const autoVerifyScopeKey = activeIntentId && lockedTxHash ? `${activeIntentId}:${lockedTxHash}` : ''
   const autoVerifyAttempts = autoVerifyState.key === autoVerifyScopeKey ? autoVerifyState.attempts : 0
   const autoVerifying = shouldAutoVerifyBroadcastIntent({
@@ -648,10 +673,13 @@ export function WalletPaymentCheckout({
   ) => {
     if (!isAuthenticated || !userUid || loadingIntent || freshInFlightRef.current || methodInFlightRef.current) return
     freshInFlightRef.current = true
+    methodVisualSupersededRef.current = false
+    queuedMethodSelectionRef.current = null
     failedSyncKeyRef.current = null
     const nextSessionKey = generateCheckoutIdempotencyKey()
     sessionKeyRef.current = nextSessionKey
     const seq = ++methodSeqRef.current
+    setPendingMethodSelection(null)
     setLoadingIntent(true)
     setError('')
     try {
@@ -678,6 +706,7 @@ export function WalletPaymentCheckout({
           : {}),
       })
       if (isMountedRef.current && methodSeqRef.current === seq) {
+        intentRef.current = created
         setIntent(created)
         if (created.paymentNetwork) {
           setNetworkId(toClientPaymentNetworkId(created.paymentNetwork))
@@ -704,7 +733,10 @@ export function WalletPaymentCheckout({
     let cancelled = false
     const initSeq = ++methodSeqRef.current
     methodInFlightRef.current = false
+    methodVisualSupersededRef.current = false
+    queuedMethodSelectionRef.current = null
     failedSyncKeyRef.current = null
+    setPendingMethodSelection((prev) => (prev === null ? prev : null))
     setMethodUpdating(false)
 
     const init = async () => {
@@ -714,6 +746,7 @@ export function WalletPaymentCheckout({
         if (initialIntentId?.trim()) {
           const existing = await getPaymentIntent(initialIntentId.trim())
           if (cancelled || !isMountedRef.current) return
+          intentRef.current = existing
           setIntent(existing)
           if (existing.paymentNetwork) {
             setNetworkId(toClientPaymentNetworkId(existing.paymentNetwork))
@@ -745,6 +778,7 @@ export function WalletPaymentCheckout({
           }),
         )
         if (cancelled || !isMountedRef.current || methodSeqRef.current !== initSeq) return
+        intentRef.current = created
         setIntent(created)
         if (created.paymentNetwork) {
           setNetworkId(toClientPaymentNetworkId(created.paymentNetwork))
@@ -769,6 +803,8 @@ export function WalletPaymentCheckout({
   useEffect(() => {
     if (!isWalletConnected) {
       prevWalletFamilyRef.current = null
+      queuedMethodSelectionRef.current = null
+      setPendingMethodSelection((prev) => (prev === null ? prev : null))
       return
     }
     if (!isAuthenticated || !intent || loadingIntent || methodUpdating || paying || cancelling || retryingVerification || methodInFlightRef.current) {
@@ -789,6 +825,8 @@ export function WalletPaymentCheckout({
     })
     if (alignedNet) {
       hasManualNetworkSelectionRef.current = false
+      queuedMethodSelectionRef.current = null
+      setPendingMethodSelection((prev) => (prev === null ? prev : null))
       setNetworkId(alignedNet)
       setUseUsdt(Boolean(getPaymentNetworkConfig(alignedNet, intent.networkMode).usdtContractAddress))
       if (!isTerminalIntent) {
@@ -802,6 +840,8 @@ export function WalletPaymentCheckout({
     }
 
     if (isWrongWalletFamily) {
+      queuedMethodSelectionRef.current = null
+      setPendingMethodSelection((prev) => (prev === null ? prev : null))
       return
     }
 
@@ -825,6 +865,7 @@ export function WalletPaymentCheckout({
     if (!syncKey) return
 
     const seq = ++methodSeqRef.current
+    methodVisualSupersededRef.current = false
     methodInFlightRef.current = true
     setMethodUpdating(true)
     setError('')
@@ -839,23 +880,56 @@ export function WalletPaymentCheckout({
         })
         if (isMountedRef.current && methodSeqRef.current === seq) {
           failedSyncKeyRef.current = null
+          intentRef.current = updated
           setIntent(updated)
-          if (updated.paymentNetwork) {
-            setNetworkId(toClientPaymentNetworkId(updated.paymentNetwork))
-          }
-          if (updated.paymentAsset) {
-            setUseUsdt(updated.paymentAsset === 'USDT')
+          if (!methodVisualSupersededRef.current) {
+            if (updated.paymentNetwork) {
+              setNetworkId(toClientPaymentNetworkId(updated.paymentNetwork))
+            }
+            if (updated.paymentAsset) {
+              setUseUsdt(updated.paymentAsset === 'USDT')
+            }
           }
         }
       } catch (err) {
-        if (isMountedRef.current && methodSeqRef.current === seq) {
+        if (isMountedRef.current && methodSeqRef.current === seq && !methodVisualSupersededRef.current) {
           failedSyncKeyRef.current = syncKey
           setError(classifyPaymentError(err, sel.destinationName).message)
         }
       } finally {
         if (methodSeqRef.current === seq) {
           methodInFlightRef.current = false
-          if (isMountedRef.current) setMethodUpdating(false)
+          const wasSuperseded = methodVisualSupersededRef.current
+          methodVisualSupersededRef.current = false
+          const queued = queuedMethodSelectionRef.current
+          queuedMethodSelectionRef.current = null
+          const nextQueued = resolveNextQueuedMethodSelection({
+            queued,
+            completedNetworkId: sel.effectiveNetworkId,
+            completedUseUsdt: targetAsset === 'USDT',
+          })
+          const latestSel = latestSelectionRef.current
+          if (
+            nextQueued &&
+            isMountedRef.current &&
+            !hasBroadcastTxLockRef.current &&
+            !freshInFlightRef.current &&
+            !payInFlightRef.current &&
+            !retryInFlightRef.current
+          ) {
+            void handleSelectRef.current(nextQueued.networkId, nextQueued.useUsdt)
+          } else if (
+            wasSuperseded &&
+            isMountedRef.current &&
+            latestSel.isWalletConnected &&
+            !latestSel.isWrongWalletFamily &&
+            !hasBroadcastTxLockRef.current
+          ) {
+            void handleSelectRef.current(latestSel.effectiveNetworkId, latestSel.useUsdt)
+          } else if (!wasSuperseded && isMountedRef.current) {
+            setPendingMethodSelection((prev) => (prev === null ? prev : null))
+            setMethodUpdating(false)
+          }
         }
       }
     }
@@ -905,7 +979,10 @@ export function WalletPaymentCheckout({
     const poll = async () => {
       try {
         const refreshed = await getPaymentIntent(intent.intentId)
-        if (!cancelled) setIntent(refreshed)
+        if (!cancelled) {
+          intentRef.current = refreshed
+          setIntent(refreshed)
+        }
       } catch {
         // Keep polling on transient network errors
       }
@@ -1019,84 +1096,131 @@ export function WalletPaymentCheckout({
   }, [intent, effectiveNetworkId, activeDestination.blockExplorer, activeNetworkConfig.name, selectedAsset, activeAddress, productName, onPaid])
 
   const handleSelectNetworkOrAsset = async (nextNet: PaymentNetworkId, nextUseUsdt: boolean) => {
-    if (loadingIntent || methodUpdating || methodInFlightRef.current || freshInFlightRef.current || paying || cancelling || retryingVerification || hasBroadcastTxLock) return
     if (
-      isWalletConnected &&
+      loadingIntent ||
+      freshInFlightRef.current ||
+      paying ||
+      payInFlightRef.current ||
+      cancelling ||
+      retryingVerification ||
+      retryInFlightRef.current ||
+      hasBroadcastTxLock ||
+      hasBroadcastTxLockRef.current
+    ) {
+      if (!methodInFlightRef.current) {
+        queuedMethodSelectionRef.current = null
+        setPendingMethodSelection((prev) => (prev === null ? prev : null))
+        setMethodUpdating(false)
+      }
+      return
+    }
+    const sel = latestSelectionRef.current
+    if (
+      sel.isWalletConnected &&
       !isWalletFamilyCompatibleWithNetwork({
         networkId: nextNet,
-        isEvmWallet,
-        isSolanaWallet,
-        isTronWallet,
+        isEvmWallet: sel.isEvmWallet,
+        isSolanaWallet: sel.isSolanaWallet,
+        isTronWallet: sel.isTronWallet,
       })
     ) {
+      if (methodInFlightRef.current) {
+        methodVisualSupersededRef.current = true
+      }
+      queuedMethodSelectionRef.current = null
+      setPendingMethodSelection(null)
+      setMethodUpdating(false)
       setNetworkId(nextNet)
       setUseUsdt(nextUseUsdt)
       setError('')
       return
     }
+    if (methodInFlightRef.current) {
+      methodVisualSupersededRef.current = false
+      const queuedSelection: PendingMethodSelection = { networkId: nextNet, useUsdt: nextUseUsdt }
+      queuedMethodSelectionRef.current = queuedSelection
+      setPendingMethodSelection(queuedSelection)
+      setMethodUpdating(true)
+      return
+    }
+    const currentIntent = intentRef.current
     const nextAsset: PaymentAssetSymbol = nextUseUsdt ? 'USDT' : NATIVE_SYMBOL_BY_NETWORK[nextNet]
     const nextBackendNet = toBackendPaymentNetworkId(nextNet)
-    const cleanActiveAddress = activeAddress.trim()
-    const intentSender = intent?.senderWallet?.trim() ?? ''
+    const cleanActiveAddress = sel.activeAddress.trim()
+    const intentSender = currentIntent?.senderWallet?.trim() ?? ''
     const matchesIntentSender = !cleanActiveAddress || (
       Boolean(intentSender) &&
-      (isEvmWallet
+      (sel.isEvmWallet
         ? intentSender.toLowerCase() === cleanActiveAddress.toLowerCase()
         : intentSender === cleanActiveAddress)
     )
     if (
-      intent?.status === 'AWAITING' &&
-      Boolean(intent?.treasuryAddress) &&
-      !isIntentExpired &&
-      intent?.paymentNetwork === nextBackendNet &&
-      intent?.paymentAsset === nextAsset &&
+      currentIntent?.status === 'AWAITING' &&
+      Boolean(currentIntent?.treasuryAddress) &&
+      canMutateIntentMethodInPlace(currentIntent, Date.now()) &&
+      currentIntent?.paymentNetwork === nextBackendNet &&
+      currentIntent?.paymentAsset === nextAsset &&
       matchesIntentSender
     ) {
-      if (nextNet !== effectiveNetworkId) setNetworkId(nextNet)
-      if (nextUseUsdt !== useUsdt) setUseUsdt(nextUseUsdt)
-      if (error) setError('')
+      queuedMethodSelectionRef.current = null
+      setPendingMethodSelection(null)
+      setMethodUpdating(false)
+      if (nextNet !== sel.effectiveNetworkId) setNetworkId(nextNet)
+      if (nextUseUsdt !== sel.useUsdt) setUseUsdt(nextUseUsdt)
+      setError('')
       return
     }
-    if (!intent) {
+    if (!currentIntent) {
+      queuedMethodSelectionRef.current = null
+      setPendingMethodSelection(null)
+      setMethodUpdating(false)
       setNetworkId(nextNet)
       setUseUsdt(nextUseUsdt)
       setError('')
       setInitRetryNonce((n) => n + 1)
       return
     }
-    if (!canMutateIntentMethodInPlace(intent, Date.now())) {
+    if (!canMutateIntentMethodInPlace(currentIntent, Date.now())) {
+      queuedMethodSelectionRef.current = null
+      setPendingMethodSelection(null)
+      setMethodUpdating(false)
       setNetworkId(nextNet)
       setUseUsdt(nextUseUsdt)
       return
     }
 
     const targetDestinationName = (destinations.find((d) => d.id === nextNet) ?? activeDestination).name
+    setPendingMethodSelection({ networkId: nextNet, useUsdt: nextUseUsdt })
+    methodVisualSupersededRef.current = false
     const seq = ++methodSeqRef.current
     methodInFlightRef.current = true
     setMethodUpdating(true)
     setError('')
     try {
       const updated = await selectPaymentMethod({
-        intentId: intent.intentId,
+        intentId: currentIntent.intentId,
         networkId: nextBackendNet,
         assetSymbol: nextAsset,
-        ...(activeAddress ? { senderWallet: activeAddress } : {}),
+        ...(sel.activeAddress ? { senderWallet: sel.activeAddress } : {}),
       })
       if (isMountedRef.current && methodSeqRef.current === seq) {
         failedSyncKeyRef.current = null
-        setNetworkId(nextNet)
-        setUseUsdt(nextUseUsdt)
+        intentRef.current = updated
         setIntent(updated)
+        if (!methodVisualSupersededRef.current) {
+          setNetworkId(nextNet)
+          setUseUsdt(nextUseUsdt)
+        }
       }
     } catch (err) {
-      if (isMountedRef.current && methodSeqRef.current === seq) {
+      if (isMountedRef.current && methodSeqRef.current === seq && !methodVisualSupersededRef.current) {
         failedSyncKeyRef.current =
           failedSyncKeyRef.current ??
           resolvePendingMethodSyncKey({
-            intent,
-            isWalletConnected,
-            isEvmWallet,
-            activeAddress,
+            intent: currentIntent,
+            isWalletConnected: sel.isWalletConnected,
+            isEvmWallet: sel.isEvmWallet,
+            activeAddress: sel.activeAddress,
             targetNetworkId: nextBackendNet,
             targetAsset: nextAsset,
             failedSyncKey: null,
@@ -1106,10 +1230,41 @@ export function WalletPaymentCheckout({
     } finally {
       if (methodSeqRef.current === seq) {
         methodInFlightRef.current = false
-        if (isMountedRef.current) setMethodUpdating(false)
+        const wasSuperseded = methodVisualSupersededRef.current
+        methodVisualSupersededRef.current = false
+        const queued = queuedMethodSelectionRef.current
+        queuedMethodSelectionRef.current = null
+        const nextQueued = resolveNextQueuedMethodSelection({
+          queued,
+          completedNetworkId: nextNet,
+          completedUseUsdt: nextUseUsdt,
+        })
+        const latestSel = latestSelectionRef.current
+        if (
+          nextQueued &&
+          isMountedRef.current &&
+          !hasBroadcastTxLockRef.current &&
+          !freshInFlightRef.current &&
+          !payInFlightRef.current &&
+          !retryInFlightRef.current
+        ) {
+          void handleSelectRef.current(nextQueued.networkId, nextQueued.useUsdt)
+        } else if (
+          wasSuperseded &&
+          isMountedRef.current &&
+          latestSel.isWalletConnected &&
+          !latestSel.isWrongWalletFamily &&
+          !hasBroadcastTxLockRef.current
+        ) {
+          void handleSelectRef.current(latestSel.effectiveNetworkId, latestSel.useUsdt)
+        } else if (!wasSuperseded && isMountedRef.current) {
+          setPendingMethodSelection(null)
+          setMethodUpdating(false)
+        }
       }
     }
   }
+  handleSelectRef.current = handleSelectNetworkOrAsset
 
   const handleCopy = async (text: string) => {
     try {
@@ -1144,6 +1299,7 @@ export function WalletPaymentCheckout({
     setError('')
     try {
       const cancelledIntent = await cancelPaymentIntent(intent.intentId, 'USER_CANCELLED')
+      intentRef.current = cancelledIntent
       setIntent(cancelledIntent)
     } catch (err) {
       setError(classifyPaymentError(err, activeNetworkConfig.name).message)
@@ -1204,6 +1360,7 @@ export function WalletPaymentCheckout({
 
   const handlePay = async () => {
     if (payInFlightRef.current) return
+    if (methodInFlightRef.current || methodUpdating || pendingMethodSelection) return
     if (!user || user.isAnonymous) {
       setError('Debes iniciar sesión con una cuenta registrada para completar la compra.')
       openAuthModal('register')
@@ -1397,6 +1554,7 @@ export function WalletPaymentCheckout({
         broadcastAt: Date.now(),
       }
       writeBroadcastTxLock(nextLock)
+      hasBroadcastTxLockRef.current = true
       setBroadcastTxLock(nextLock)
 
       if (activeAddress) {
@@ -1700,12 +1858,12 @@ export function WalletPaymentCheckout({
                           <button
                             key={net.id}
                             type="button"
-                            className={`network-chip-btn ${effectiveNetworkId === net.id ? 'network-chip-active' : ''}`}
-                            disabled={loadingIntent || methodUpdating || paying || cancelling || retryingVerification || hasBroadcastTxLock}
+                            className={`network-chip-btn ${displayNetworkId === net.id ? 'network-chip-active' : ''} ${methodUpdating && pendingMethodSelection?.networkId === net.id ? 'network-chip-pending' : ''}`}
+                            disabled={loadingIntent || paying || cancelling || retryingVerification || hasBroadcastTxLock}
                             onClick={() => {
                               hasManualNetworkSelectionRef.current = true
                               const nextUseUsdt = resolveNetworkSelectionUseUsdt({
-                                currentUseUsdt: useUsdt,
+                                currentUseUsdt: displayUseUsdt,
                                 hasTargetUsdtContract: Boolean(getPaymentNetworkConfig(net.id, intent?.networkMode).usdtContractAddress),
                                 isWalletConnected,
                                 isTargetFamilyCompatible: isWalletFamilyCompatibleWithNetwork({
@@ -1720,6 +1878,9 @@ export function WalletPaymentCheckout({
                           >
                             <CryptoIcon symbol={net.icon} size="sm" />
                             <span>{net.label}</span>
+                            {methodUpdating && pendingMethodSelection?.networkId === net.id ? (
+                              <span className="checkout-inline-spinner" aria-hidden="true" />
+                            ) : null}
                           </button>
                         ))}
                       </div>
@@ -1730,31 +1891,37 @@ export function WalletPaymentCheckout({
                       <div className="currency-selector-row">
                         <button
                           type="button"
-                          className={`currency-pill-btn ${useUsdt ? 'currency-pill-active' : ''}`}
-                          disabled={loadingIntent || methodUpdating || paying || cancelling || retryingVerification || hasBroadcastTxLock || isWrongWalletFamily}
-                          onClick={() => void handleSelectNetworkOrAsset(effectiveNetworkId, true)}
+                          className={`currency-pill-btn ${displayUseUsdt ? 'currency-pill-active' : ''} ${methodUpdating && pendingMethodSelection !== null && displayUseUsdt ? 'currency-pill-pending' : ''}`}
+                          disabled={loadingIntent || paying || cancelling || retryingVerification || hasBroadcastTxLock || (isWrongWalletFamily && !pendingMethodSelection)}
+                          onClick={() => void handleSelectNetworkOrAsset(displayNetworkId, true)}
                         >
                           <CryptoIcon symbol="USDT" size="sm" />
                           <span>
                             Tether USD (USDT{' '}
-                            {effectiveNetworkId === 'tron'
+                            {displayNetworkId === 'tron'
                               ? 'TRC-20'
-                              : effectiveNetworkId === 'solana'
+                              : displayNetworkId === 'solana'
                                 ? 'SPL'
-                                : effectiveNetworkId === 'bnb'
+                                : displayNetworkId === 'bnb'
                                   ? 'BEP-20'
                                   : 'ERC-20'}
                             )
                           </span>
+                          {methodUpdating && pendingMethodSelection !== null && displayUseUsdt ? (
+                            <span className="checkout-inline-spinner" aria-hidden="true" />
+                          ) : null}
                         </button>
                         <button
                           type="button"
-                          className={`currency-pill-btn ${!useUsdt ? 'currency-pill-active' : ''}`}
-                          disabled={loadingIntent || methodUpdating || paying || cancelling || retryingVerification || hasBroadcastTxLock || isWrongWalletFamily}
-                          onClick={() => void handleSelectNetworkOrAsset(effectiveNetworkId, false)}
+                          className={`currency-pill-btn ${!displayUseUsdt ? 'currency-pill-active' : ''} ${methodUpdating && pendingMethodSelection !== null && !displayUseUsdt ? 'currency-pill-pending' : ''}`}
+                          disabled={loadingIntent || paying || cancelling || retryingVerification || hasBroadcastTxLock || (isWrongWalletFamily && !pendingMethodSelection)}
+                          onClick={() => void handleSelectNetworkOrAsset(displayNetworkId, false)}
                         >
-                          <CryptoIcon symbol={NATIVE_SYMBOL_BY_NETWORK[effectiveNetworkId] as CryptoSymbol} size="sm" />
-                          <span>Moneda Nativa ({NATIVE_SYMBOL_BY_NETWORK[effectiveNetworkId]})</span>
+                          <CryptoIcon symbol={NATIVE_SYMBOL_BY_NETWORK[displayNetworkId] as CryptoSymbol} size="sm" />
+                          <span>Moneda Nativa ({NATIVE_SYMBOL_BY_NETWORK[displayNetworkId]})</span>
+                          {methodUpdating && pendingMethodSelection !== null && !displayUseUsdt ? (
+                            <span className="checkout-inline-spinner" aria-hidden="true" />
+                          ) : null}
                         </button>
                       </div>
                     </div>
@@ -1762,7 +1929,7 @@ export function WalletPaymentCheckout({
                 )}
 
                 <div className="checkout-quote-card">
-                  {isWrongWalletFamily && !hasBroadcastTxLock ? (
+                  {isWrongWalletFamily && !hasBroadcastTxLock && !methodUpdating && !pendingMethodSelection ? (
                     <div data-testid="checkout-wrong-wallet-family-notice" role="status" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       <strong style={{ fontSize: 13, color: '#fbbf24' }}>
                         Billetera incompatible con {selectedNetworkConfig.name}
@@ -1771,10 +1938,19 @@ export function WalletPaymentCheckout({
                         Tu billetera actual es {connectedWalletLabel}. Para pagar en {selectedNetworkConfig.name}, cambia a una billetera compatible con {requiredWalletLabel}.
                       </p>
                     </div>
-                  ) : loadingIntent || methodUpdating ? (
+                  ) : loadingIntent || (methodUpdating && (!intent || intent.status !== 'AWAITING' || !intent.treasuryAddress)) ? (
                     <QuoteDetailsSkeleton />
                   ) : intent && intent.status === 'AWAITING' && intent.treasuryAddress ? (
-                    <>
+                    <div
+                      className={methodUpdating ? 'checkout-quote-content checkout-quote-updating' : 'checkout-quote-content'}
+                      aria-busy={methodUpdating || undefined}
+                    >
+                      {methodUpdating ? (
+                        <div className="checkout-quote-updating-badge" role="status" aria-live="polite">
+                          <span className="checkout-inline-spinner" aria-hidden="true" />
+                          <span>Actualizando cotización...</span>
+                        </div>
+                      ) : null}
                       <div className="quote-header-row">
                         <span className="quote-asset-pill">
                           {intent.expectedAmountDisplay} {intent.paymentAsset}
@@ -1799,7 +1975,7 @@ export function WalletPaymentCheckout({
                           <span>{intent.requiredConfirmations}</span>
                         </div>
                       </div>
-                    </>
+                    </div>
                   ) : error ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       <p className="quote-error-text">No se pudo obtener la cotización autoritativa del servidor.</p>
@@ -1886,7 +2062,7 @@ export function WalletPaymentCheckout({
                     >
                       {retryingVerification || paying ? 'Verificando transacción on-chain...' : 'Reintentar verificación on-chain'}
                     </button>
-                  ) : isWrongWalletFamily ? (
+                  ) : isWrongWalletFamily && !methodUpdating && !pendingMethodSelection ? (
                     <button
                       type="button"
                       data-testid="checkout-switch-wallet-family-btn"
@@ -1911,19 +2087,21 @@ export function WalletPaymentCheckout({
                       <button
                         type="button"
                         className="button button-primary checkout-action-btn"
-                        disabled={!intent || intent.status !== 'AWAITING' || isWrongWalletFamily || hasNetworkSelectionMismatch || loadingIntent || methodUpdating || paying || cancelling || isIntentExpired}
+                        disabled={!intent || intent.status !== 'AWAITING' || isWrongWalletFamily || hasNetworkSelectionMismatch || loadingIntent || methodUpdating || Boolean(pendingMethodSelection) || paying || cancelling || isIntentExpired}
                         onClick={handlePay}
                       >
                         {paying
                           ? 'Firmando y verificando on-chain...'
-                          : `Pagar ${intent?.expectedAmountDisplay ?? ''} ${intent?.paymentAsset ?? selectedAsset}`}
+                          : methodUpdating || pendingMethodSelection
+                            ? 'Actualizando cotización...'
+                            : `Pagar ${intent?.expectedAmountDisplay ?? ''} ${intent?.paymentAsset ?? selectedAsset}`}
                       </button>
                       {canCancel && (
                         <button
                           type="button"
                           className="button button-secondary checkout-action-btn"
                           style={{ marginTop: 8 }}
-                          disabled={cancelling || paying || loadingIntent || methodUpdating}
+                          disabled={cancelling || paying || loadingIntent || methodUpdating || Boolean(pendingMethodSelection)}
                           onClick={handleCancelIntent}
                         >
                           {cancelling ? 'Cancelando orden...' : 'Cancelar orden de pago'}

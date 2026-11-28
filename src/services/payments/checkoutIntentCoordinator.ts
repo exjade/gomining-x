@@ -188,6 +188,26 @@ export function isWalletFamilyCompatibleWithNetwork(input: {
   return input.isEvmWallet
 }
 
+export interface PendingMethodSelection {
+  networkId: PaymentNetworkId
+  useUsdt: boolean
+}
+
+export function resolveNextQueuedMethodSelection(input: {
+  queued: PendingMethodSelection | null
+  completedNetworkId: PaymentNetworkId
+  completedUseUsdt: boolean
+}): PendingMethodSelection | null {
+  if (!input.queued) return null
+  if (
+    input.queued.networkId === input.completedNetworkId &&
+    input.queued.useUsdt === input.completedUseUsdt
+  ) {
+    return null
+  }
+  return input.queued
+}
+
 export function resolveNetworkSelectionUseUsdt(input: {
   currentUseUsdt: boolean
   hasTargetUsdtContract: boolean

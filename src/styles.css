@@ -2805,7 +2805,9 @@ h1, h2, h3, h4, h5, h6,
   font-size: 13px;
   font-weight: 500;
   min-width: 0;
-  transition: all 0.2s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 120ms ease, background-color 160ms ease, border-color 160ms ease, opacity 160ms ease;
 }
 .network-chip-btn:hover {
   background: rgba(255, 255, 255, 0.09);
@@ -2814,6 +2816,10 @@ h1, h2, h3, h4, h5, h6,
   background: rgba(124, 58, 237, 0.15) !important;
   border-color: #7c3aed !important;
   color: #ffffff;
+}
+.network-chip-pending {
+  border-color: rgba(167, 139, 250, 0.85) !important;
+  box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.35);
 }
 
 .currency-selector-row {
@@ -2833,12 +2839,28 @@ h1, h2, h3, h4, h5, h6,
   cursor: pointer;
   font-size: 13px;
   min-width: 0;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 120ms ease, background-color 160ms ease, border-color 160ms ease, opacity 160ms ease;
 }
 .currency-pill-active {
   background: rgba(16, 185, 129, 0.15) !important;
   border-color: #10b981 !important;
   color: #ffffff;
   font-weight: 600;
+}
+.currency-pill-pending {
+  border-color: rgba(52, 211, 153, 0.85) !important;
+  box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.35);
+}
+.network-chip-btn:active:not(:disabled),
+.currency-pill-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.network-chip-btn:disabled,
+.currency-pill-btn:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
 }
 
 .checkout-quote-card {
@@ -2849,6 +2871,65 @@ h1, h2, h3, h4, h5, h6,
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+.checkout-quote-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: opacity 160ms ease;
+}
+.checkout-quote-updating {
+  opacity: 0.72;
+}
+.checkout-quote-updating-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #c4b5fd;
+}
+.checkout-inline-spinner {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  margin-left: auto;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: currentColor;
+  display: inline-block;
+  animation: checkout-spin 0.65s linear infinite;
+}
+.checkout-quote-updating-badge .checkout-inline-spinner {
+  margin-left: 0;
+}
+@keyframes checkout-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+[data-theme='light'] .network-chip-btn,
+[data-theme='light'] .currency-pill-btn {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+[data-theme='light'] .network-chip-active {
+  color: #4c1d95;
+}
+[data-theme='light'] .currency-pill-active {
+  color: #065f46;
+}
+[data-theme='light'] .checkout-quote-card {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+[data-theme='light'] .checkout-quote-updating-badge {
+  color: #5b21b6;
+}
+[data-theme='light'] .checkout-inline-spinner {
+  border-color: rgba(15, 23, 42, 0.22);
+  border-top-color: currentColor;
 }
 .quote-header-row {
   display: flex;
@@ -2999,6 +3080,21 @@ h1, h2, h3, h4, h5, h6,
   .quote-line {
     flex-wrap: wrap;
     gap: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .network-chip-btn,
+  .currency-pill-btn,
+  .checkout-quote-content {
+    transition: none;
+  }
+  .network-chip-btn:active:not(:disabled),
+  .currency-pill-btn:active:not(:disabled) {
+    transform: none;
+  }
+  .checkout-inline-spinner {
+    animation: none;
   }
 }
 
