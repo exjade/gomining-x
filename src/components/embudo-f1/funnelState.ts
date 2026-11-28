@@ -377,6 +377,59 @@ export function isEmbudoF1Active(storage?: StorageLike | null, now = Date.now())
   return readEmbudoF1State(storage, now).active
 }
 
+export function pauseEmbudoF1Modal(
+  storage?: StorageLike | null,
+  now = Date.now(),
+): EmbudoF1State {
+  const current = readEmbudoF1State(storage, now)
+  if (!current.active || (current.stage !== 'configuring' && current.stage !== 'paying')) {
+    return current
+  }
+  const next: EmbudoF1State = {
+    ...current,
+    paused: true,
+  }
+  const store = resolveStorage(storage)
+  if (store) {
+    try {
+      store.setItem(EMBUDO_F1_STORAGE_KEY, JSON.stringify(next))
+    } catch {
+      // ignore storage errors
+    }
+  }
+  return next
+}
+
+export function resumeEmbudoF1Modal(
+  storage?: StorageLike | null,
+  now = Date.now(),
+): EmbudoF1State {
+  const current = readEmbudoF1State(storage, now)
+  if (!current.active) return current
+  const next: EmbudoF1State = {
+    ...current,
+    paused: false,
+  }
+  const store = resolveStorage(storage)
+  if (store) {
+    try {
+      store.setItem(EMBUDO_F1_STORAGE_KEY, JSON.stringify(next))
+    } catch {
+      // ignore storage errors
+    }
+  }
+  return next
+}
+
+export function hasPendingEmbudoPurchase(storage?: StorageLike | null, now = Date.now()): boolean {
+  const state = readEmbudoF1State(storage, now)
+  return state.active && (state.stage === 'configuring' || state.stage === 'paying')
+}
+
+export function dismissPendingEmbudoPurchase(storage?: StorageLike | null): void {
+  clearEmbudoF1State(storage)
+  clearEmbudoPresaleSelection(storage)
+}
 
 export function hasEmbudoF1QueryFlag(search: string): boolean {
   return new URLSearchParams(search).get('embudo') === 'f1'

@@ -47,11 +47,15 @@ import {
   EmbudoFunnelProgress,
   EmbudoPresaleSkinNotice,
   advanceEmbudoF1Stage,
+  dismissPendingEmbudoPurchase,
   hasCompletedPurchaseOrFunnelReceipt,
   hasEmbudoF1QueryFlag,
+  hasPendingEmbudoPurchase,
+  pauseEmbudoF1Modal,
   readBuilderSelectedDesign,
   readEmbudoF1State,
   readEmbudoPresaleSelection,
+  resumeEmbudoF1Modal,
   returnEmbudoF1ToRegister,
   saveBuilderSelectedDesign,
   saveEmbudoPresaleSelection,
@@ -393,7 +397,7 @@ function AppContent() {
   useEffect(() => {
     if (!isAuthenticated || loading || walletCheckout) return
     const funnelState = readEmbudoF1State()
-    if (funnelState.revisitingRegister) return
+    if (funnelState.revisitingRegister || funnelState.paused) return
     if (funnelState.stage === 'configuring' && location.pathname === '/home') {
       const params = new URLSearchParams(location.search)
       if (params.get('modal') !== 'paywall-create') {
@@ -514,9 +518,24 @@ function AppContent() {
     }
     navigate('/home?modal=paywall-create')
   }
-  const closeMinerBuilder = () => navigate(location.pathname === '/home' ? '/home' : location.pathname, { replace: true })
+  const closeMinerBuilder = () => {
+    const currentStage = readEmbudoF1State().stage
+    if (currentStage === 'configuring' || currentStage === 'paying') {
+      // EMBUDO-CIERRE-REANUDAR-BANNER: conservar stage + selección al cerrar para reanudar desde /home
+      pauseEmbudoF1Modal()
+    }
+    navigate(location.pathname === '/home' ? '/home' : location.pathname, { replace: true })
+  }
   const closeWalletCheckout = (requestPending?: boolean, notice?: string) => {
     setWalletCheckout(null)
+    const currentStage = readEmbudoF1State().stage
+    if (currentStage === 'paying' || currentStage === 'configuring') {
+      pauseEmbudoF1Modal()
+      navigate('/home', { replace: true })
+      if (notice) setToast(notice)
+      else if (requestPending) setToast('Cerraste el checkout. Tu miner guardado te espera en tu dashboard para continuar con el pago.')
+      return
+    }
     const params = new URLSearchParams(location.search)
     if (params.get('gmPay') === '1' || params.has('gmPayIntentId')) {
       for (const key of ['gmPay', 'gmPayIntentId', 'gmPayCurrency', 'gmPayNetwork', 'gmPayWallet']) params.delete(key)
@@ -1152,12 +1171,23 @@ function Page({
 }
 
 function HomeDashboard({ openMinerBuilder, openTopUp }: { openMinerBuilder: () => void; openTopUp: () => void }) {
-  const { user, profile } = useAuth()
+  const { user, profile, openAuthModal } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
   const demo = useDemoSession()
   const { language } = usePersonalization()
   const { miners: realMiners } = useRealtimeUserMiners(user?.uid)
   const isEn = language === 'en'
   const isAuth = Boolean(user && !user.isAnonymous)
+  const isEmailVerified = Boolean(user?.emailVerified)
+  const [bannerRevision, setBannerRevision] = useState(0)
+  const pendingState = useMemo(() => readEmbudoF1State(), [bannerRevision, realMiners.length, location.search])
+  const pendingSelection = useMemo(() => readEmbudoPresaleSelection(), [bannerRevision, location.search])
+  const pendingDesign = useMemo(
+    () => resolveBuilderDesignSpec(pendingState.selectedDesignSlug || pendingSelection.designSlug),
+    [pendingSelection.designSlug, pendingState.selectedDesignSlug],
+  )
+  const showPendingMinerBanner = hasPendingEmbudoPurchase() && (pendingState.stage === 'configuring' || pendingState.stage === 'paying')
   const totalMinersCount = isAuth ? realMiners.length : demo.miners.length
   const totalFarmPowerTh = isAuth
     ? realMiners.reduce((total, miner) => total + (miner.powerTh || 0), 0)
@@ -1165,6 +1195,70 @@ function HomeDashboard({ openMinerBuilder, openTopUp }: { openMinerBuilder: () =
 
   return (
     <>
+      {showPendingMinerBanner && (
+        <section
+          className="pending-miner-banner"
+          data-testid="pending-miner-banner"
+          aria-label="Tu miner te espera"
+        >
+          <div className="pending-miner-banner-left">
+            <img
+              src={pendingDesign.transparentImagePath}
+              alt={pendingDesign.name}
+              className="pending-miner-banner-thumb"
+            />
+            <div className="pending-miner-banner-copy">
+              <div className="pending-miner-banner-kicker">
+                <span>TU MINER TE ESPERA</span>
+                <span className="pending-miner-banner-stage" data-testid="pending-miner-stage-badge">
+                  {pendingState.stage === 'paying' ? 'Paso guardado · Pagar' : 'Paso guardado · Configurar'}
+                </span>
+              </div>
+              <h2>{pendingDesign.name} · {pendingSelection.powerTh.toLocaleString('es-MX')} TH/s</h2>
+              <p>
+                Precio Génesis reservado: <strong>{formatCatalogPrice(pendingSelection.priceUsd, 'USD')}</strong> · Skin 2D gratis ($0)
+              </p>
+            </div>
+          </div>
+          <div className="pending-miner-banner-actions">
+            <button
+              type="button"
+              className="button button-primary pending-miner-resume-btn"
+              data-testid="pending-miner-resume-btn"
+              onClick={() => {
+                resumeEmbudoF1Modal()
+                setBannerRevision((r) => r + 1)
+                navigate('/home?modal=paywall-create&embudo=f1')
+              }}
+            >
+              Continuar con el pago <span>→</span>
+            </button>
+            {isAuth && !isEmailVerified && (
+              <button
+                type="button"
+                className="button button-secondary pending-miner-verify-btn"
+                data-testid="pending-miner-verify-email-btn"
+                onClick={() => openAuthModal('verify-email')}
+              >
+                Verificar correo
+              </button>
+            )}
+            <button
+              type="button"
+              className="pending-miner-dismiss-btn"
+              data-testid="pending-miner-dismiss-btn"
+              aria-label="Descartar compra pendiente"
+              onClick={() => {
+                dismissPendingEmbudoPurchase()
+                setBannerRevision((r) => r + 1)
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        </section>
+      )}
+
       <section className="account-hero">
         <div className="account-hero-heading">
           <div>
@@ -2301,6 +2395,7 @@ function MinerBuilderDialog({
       }
       setReceipt(result.receipt)
       setStage('receipt')
+      dismissPendingEmbudoPurchase()
     } catch (cause) {
       setFeedback(sanitizeFirestoreErrorMessage(cause instanceof Error ? cause.message : null, isAuth ? 'No se pudo procesar la compra.' : 'No se pudo procesar la acción.'))
     }

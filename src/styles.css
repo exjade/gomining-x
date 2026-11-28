@@ -7223,10 +7223,336 @@ body:has(.miner-builder-modal) { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .miner-builder-modal *,
   .miner-builder-modal *::before,
-  .miner-builder-modal *::after {
+  .miner-builder-modal *::after,
+  .pending-miner-banner,
+  .pending-miner-banner * {
     scroll-behavior: auto !important;
     transition-duration: .01ms !important;
     animation-duration: .01ms !important;
+  }
+}
+
+/* Pending Miner Resume Banner (/home above .account-hero) */
+.pending-miner-banner,
+section.pending-miner-banner {
+  position: relative;
+  top: auto;
+  z-index: 5;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: 100%;
+  margin: 0 0 16px;
+  padding: 16px 20px;
+  border-radius: 18px;
+  background: #0b0c10;
+  background-color: #0b0c10;
+  background-image: none;
+  border: 1px solid #10b981;
+  box-shadow:
+    inset 3px 0 0 #10b981,
+    0 14px 34px rgba(0, 0, 0, 0.38);
+  color: #f8fafc;
+}
+
+.pending-miner-banner-left,
+section.pending-miner-banner .pending-miner-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pending-miner-banner-thumb,
+section.pending-miner-banner .pending-miner-banner-thumb {
+  display: block;
+  width: 72px;
+  height: 72px;
+  min-width: 72px;
+  min-height: 72px;
+  flex: 0 0 72px;
+  padding: 6px;
+  border-radius: 14px;
+  object-fit: contain;
+  background: radial-gradient(circle at 50% 42%, rgba(16, 185, 129, 0.18), rgba(255, 255, 255, 0.02) 72%);
+  border: 1px solid rgba(16, 185, 129, 0.34);
+}
+
+.pending-miner-banner-copy,
+section.pending-miner-banner .pending-miner-banner-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pending-miner-banner-kicker,
+section.pending-miner-banner .pending-miner-banner-kicker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 1px;
+  color: #10b981;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.2;
+}
+
+.pending-miner-banner-kicker > span:first-child,
+section.pending-miner-banner .pending-miner-banner-kicker > span:first-child {
+  color: #10b981;
+  text-transform: uppercase;
+}
+
+.pending-miner-banner-stage,
+section.pending-miner-banner .pending-miner-banner-stage {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.14);
+  border: 1px solid rgba(16, 185, 129, 0.36);
+  color: #6ee7b7;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.pending-miner-banner-copy h2,
+section.pending-miner-banner .pending-miner-banner-copy h2 {
+  margin: 0;
+  color: #f8fafc;
+  font-family: Manrope, 'DM Sans', sans-serif;
+  font-size: clamp(16px, 1.5vw, 19px);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.pending-miner-banner-copy p,
+section.pending-miner-banner .pending-miner-banner-copy p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 12.5px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+.pending-miner-banner-copy p strong,
+section.pending-miner-banner .pending-miner-banner-copy p strong {
+  color: #10b981;
+  font-weight: 700;
+}
+
+.pending-miner-banner-actions,
+section.pending-miner-banner .pending-miner-banner-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.pending-miner-resume-btn,
+section.pending-miner-banner .button.pending-miner-resume-btn {
+  min-height: 40px !important;
+  padding: 0 16px !important;
+  gap: 8px;
+  border-radius: 11px !important;
+  border: 1px solid #10b981 !important;
+  background: #10b981 !important;
+  color: #04130d !important;
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.22);
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+.pending-miner-resume-btn span,
+section.pending-miner-banner .button.pending-miner-resume-btn span {
+  display: inline-block;
+  font-size: 14px;
+  line-height: 1;
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.pending-miner-resume-btn:hover,
+section.pending-miner-banner .button.pending-miner-resume-btn:hover {
+  background: #34d399 !important;
+  border-color: #34d399 !important;
+  box-shadow: 0 10px 24px rgba(16, 185, 129, 0.3);
+  filter: none;
+  transform: translateY(-1px);
+}
+
+.pending-miner-resume-btn:hover span,
+section.pending-miner-banner .button.pending-miner-resume-btn:hover span {
+  transform: translateX(2px);
+}
+
+.pending-miner-resume-btn:active,
+section.pending-miner-banner .button.pending-miner-resume-btn:active {
+  transform: scale(0.97) !important;
+}
+
+.pending-miner-verify-btn,
+section.pending-miner-banner .button.pending-miner-verify-btn {
+  min-height: 40px !important;
+  padding: 0 14px !important;
+  border-radius: 11px !important;
+  border: 1px solid rgba(16, 185, 129, 0.38) !important;
+  background: rgba(16, 185, 129, 0.1) !important;
+  color: #a7f3d0 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  white-space: nowrap;
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+.pending-miner-verify-btn:hover,
+section.pending-miner-banner .button.pending-miner-verify-btn:hover {
+  background: rgba(16, 185, 129, 0.18) !important;
+  border-color: #10b981 !important;
+  color: #ecfdf5 !important;
+  filter: none;
+  transform: translateY(-1px);
+}
+
+.pending-miner-verify-btn:active,
+section.pending-miner-banner .button.pending-miner-verify-btn:active {
+  transform: scale(0.97) !important;
+}
+
+.pending-miner-dismiss-btn,
+section.pending-miner-banner .pending-miner-dismiss-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: #94a3b8;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.pending-miner-dismiss-btn:hover,
+section.pending-miner-banner .pending-miner-dismiss-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #f8fafc;
+}
+
+.pending-miner-dismiss-btn:active,
+section.pending-miner-banner .pending-miner-dismiss-btn:active {
+  transform: scale(0.97);
+}
+
+section.pending-miner-banner .button:focus-visible,
+section.pending-miner-banner .pending-miner-dismiss-btn:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: 2px;
+}
+
+@media (max-width: 860px) {
+  .pending-miner-banner,
+  section.pending-miner-banner {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 14px;
+    padding: 16px;
+  }
+
+  .pending-miner-banner-left,
+  section.pending-miner-banner .pending-miner-banner-left {
+    flex: 0 0 auto;
+    align-items: flex-start;
+    padding-right: 46px;
+  }
+
+  .pending-miner-banner-actions,
+  section.pending-miner-banner .pending-miner-banner-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: stretch;
+    gap: 8px;
+  }
+
+  .pending-miner-resume-btn,
+  .pending-miner-verify-btn,
+  section.pending-miner-banner .button.pending-miner-resume-btn,
+  section.pending-miner-banner .button.pending-miner-verify-btn {
+    flex: 1 1 180px;
+    width: 100%;
+  }
+
+  .pending-miner-dismiss-btn,
+  section.pending-miner-banner .pending-miner-dismiss-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .pending-miner-banner,
+  section.pending-miner-banner {
+    padding: 14px;
+    border-radius: 16px;
+  }
+
+  .pending-miner-banner-left,
+  section.pending-miner-banner .pending-miner-banner-left {
+    gap: 12px;
+    padding-right: 46px;
+  }
+
+  .pending-miner-banner-copy h2,
+  section.pending-miner-banner .pending-miner-banner-copy h2 {
+    font-size: 15.5px;
+  }
+
+  .pending-miner-banner-copy p,
+  section.pending-miner-banner .pending-miner-banner-copy p {
+    font-size: 12px;
+  }
+
+  .pending-miner-resume-btn,
+  .pending-miner-verify-btn,
+  section.pending-miner-banner .button.pending-miner-resume-btn,
+  section.pending-miner-banner .button.pending-miner-verify-btn {
+    flex: 1 1 100%;
   }
 }
 
