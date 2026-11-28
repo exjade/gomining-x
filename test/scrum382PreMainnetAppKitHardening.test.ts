@@ -223,6 +223,175 @@ describe('SCRUM-382: Pre-Mainnet Reown AppKit Multichain Hardening (F-01..F-07)'
         'Connect-wallet gate must NOT hide the post-broadcast lock banner and retry verification CTA when !isWalletConnected',
       )
     })
+
+    it('enforces bounded post-broadcast auto-verify policy in shouldAutoVerifyBroadcastIntent across all valid and invalid states', () => {
+      const api = coordinator as unknown as {
+        POST_BROADCAST_AUTO_VERIFY_INTERVAL_MS?: number
+        POST_BROADCAST_AUTO_VERIFY_MAX_ATTEMPTS?: number
+        shouldAutoVerifyBroadcastIntent?: (input: {
+          intentStatus: string | null | undefined
+          lockedTxHash: string | null | undefined
+          isPaying: boolean
+          attemptsUsed: number
+        }) => boolean
+      }
+
+      assert.equal(api.POST_BROADCAST_AUTO_VERIFY_INTERVAL_MS, 4000)
+      assert.equal(api.POST_BROADCAST_AUTO_VERIFY_MAX_ATTEMPTS, 15)
+      assert.equal(typeof api.shouldAutoVerifyBroadcastIntent, 'function', 'must export shouldAutoVerifyBroadcastIntent')
+
+      // Valid AWAITING + lockedTxHash + !isPaying + attemptsUsed < 15
+      for (const attemptsUsed of [0, 1, 7, 14]) {
+        assert.equal(
+          api.shouldAutoVerifyBroadcastIntent!({
+            intentStatus: 'AWAITING',
+            lockedTxHash: '0xabc123def456',
+            isPaying: false,
+            attemptsUsed,
+          }),
+          true,
+          `Expected true for AWAITING with attemptsUsed=${attemptsUsed}`,
+        )
+      }
+
+      // Must return false for every status other than AWAITING
+      for (const status of ['OPEN', 'PROCESSING', 'SETTLED', 'UNDERPAID', 'FAILED', 'EXPIRED', 'CANCELLED', null, undefined]) {
+        assert.equal(
+          api.shouldAutoVerifyBroadcastIntent!({
+            intentStatus: status,
+            lockedTxHash: '0xabc123def456',
+            isPaying: false,
+            attemptsUsed: 0,
+          }),
+          false,
+          `Expected false for status=${String(status)}`,
+        )
+      }
+
+      // Must return false when lockedTxHash is empty/whitespace/null/undefined
+      for (const emptyHash of ['', '   ', null, undefined]) {
+        assert.equal(
+          api.shouldAutoVerifyBroadcastIntent!({
+            intentStatus: 'AWAITING',
+            lockedTxHash: emptyHash,
+            isPaying: false,
+            attemptsUsed: 0,
+          }),
+          false,
+          `Expected false for lockedTxHash=${JSON.stringify(emptyHash)}`,
+        )
+      }
+
+      // Must return false while paying
+      assert.equal(
+        api.shouldAutoVerifyBroadcastIntent!({
+          intentStatus: 'AWAITING',
+          lockedTxHash: '0xabc123def456',
+          isPaying: true,
+          attemptsUsed: 0,
+        }),
+        false,
+        'Expected false when isPaying is true',
+      )
+
+      // Must return false when attempts exhausted or invalid numeric values
+      for (const badAttempts of [15, 16, 100, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+        assert.equal(
+          api.shouldAutoVerifyBroadcastIntent!({
+            intentStatus: 'AWAITING',
+            lockedTxHash: '0xabc123def456',
+            isPaying: false,
+            attemptsUsed: badAttempts,
+          }),
+          false,
+          `Expected false for attemptsUsed=${String(badAttempts)}`,
+        )
+      }
+    })
+
+    it('wires silent post-broadcast auto-verification with retryInFlightRef, calm waiting banner, cleanup, zero re-signing, and preserved F-01 fallback CTA', () => {
+      const checkoutSrc = readText('src/WalletPaymentCheckout.tsx')
+
+      assert.ok(checkoutSrc.includes('POST_BROADCAST_AUTO_VERIFY_INTERVAL_MS'), 'Checkout must import/use POST_BROADCAST_AUTO_VERIFY_INTERVAL_MS')
+      assert.ok(checkoutSrc.includes('shouldAutoVerifyBroadcastIntent'), 'Checkout must import/use shouldAutoVerifyBroadcastIntent')
+      assert.match(checkoutSrc, /const retryInFlightRef = useRef\(false\)/, 'Checkout must declare retryInFlightRef to serialize manual and automatic verification')
+
+      // Manual handleRetryVerification must share retryInFlightRef and never re-sign
+      const retryBlock = extractBlock(checkoutSrc, 'const handleRetryVerification = async')
+      const retryGuardIdx = retryBlock.indexOf('retryInFlightRef.current')
+      const retrySetIdx = retryBlock.indexOf('retryInFlightRef.current = true')
+      const retryResetIdx = retryBlock.indexOf('retryInFlightRef.current = false')
+      assert.ok(retryGuardIdx > 0 && retrySetIdx > retryGuardIdx && retryResetIdx > retrySetIdx, 'handleRetryVerification must guard, set, and release retryInFlightRef in finally')
+
+      // Silent auto-verify effect must use interval, concurrency guard, cleanup, lock clear, and zero signing calls
+      const autoVerifyAnchor = '// Silent post-broadcast auto-verification'
+      const autoVerifyStart = checkoutSrc.indexOf(autoVerifyAnchor)
+      assert.ok(autoVerifyStart > 0, 'Checkout must declare the silent post-broadcast auto-verification effect')
+      const autoVerifyBlock = extractBlock(checkoutSrc.slice(autoVerifyStart), 'useEffect(')
+      assert.ok(autoVerifyBlock.includes('confirmPaymentIntent('), 'Auto-verify effect must call confirmPaymentIntent')
+      assert.ok(autoVerifyBlock.includes('retryInFlightRef.current'), 'Auto-verify effect must guard with retryInFlightRef.current')
+      assert.ok(autoVerifyBlock.includes('payInFlightRef.current'), 'Auto-verify effect must guard with payInFlightRef.current')
+      assert.ok(autoVerifyBlock.includes('POST_BROADCAST_AUTO_VERIFY_INTERVAL_MS'), 'Auto-verify effect must schedule ticks every POST_BROADCAST_AUTO_VERIFY_INTERVAL_MS')
+      assert.ok(autoVerifyBlock.includes('window.clearInterval('), 'Auto-verify effect must clean up interval on unmount or exit')
+      assert.ok(autoVerifyBlock.includes('clearBroadcastTxLock('), 'Auto-verify effect must clear lock when backend reaches terminal state')
+      assert.equal(autoVerifyBlock.includes('writeContractAsync'), false, 'Auto-verify effect must NEVER call writeContractAsync')
+      assert.equal(autoVerifyBlock.includes('sendTransactionAsync'), false, 'Auto-verify effect must NEVER call sendTransactionAsync')
+      assert.equal(autoVerifyBlock.includes('submitSolanaTransactionViaProvider'), false, 'Auto-verify effect must NEVER re-sign Solana tx')
+      assert.equal(autoVerifyBlock.includes('submitTronTransactionViaProvider'), false, 'Auto-verify effect must NEVER re-sign TRON tx')
+
+      // Banner renders calm waiting copy while autoVerifying and preserves amber manual fallback + F-01 testids & CTA
+      assert.ok(checkoutSrc.includes('data-testid="checkout-broadcast-lock-banner"'), 'Must preserve checkout-broadcast-lock-banner testid')
+      assert.ok(checkoutSrc.includes('data-testid="checkout-retry-verification-btn"'), 'Must preserve checkout-retry-verification-btn testid')
+      assert.ok(
+        checkoutSrc.includes('Transacción enviada — esperando confirmación de la red...'),
+        'Banner must render calm waiting title while autoVerifying is active',
+      )
+      assert.ok(
+        checkoutSrc.includes('Transacción ya enviada on-chain (pago bloqueado para evitar doble cobro)'),
+        'Banner must preserve amber manual-recovery fallback title',
+      )
+      assert.ok(checkoutSrc.includes('Reintentar verificación on-chain'), 'Must preserve exact backup CTA label')
+    })
+
+    it('prevents post-broadcast amber flash during initial confirmPaymentIntent, bridges manual retry to in-flight auto-verify, and guards stale intent updates in handleRetryVerification', () => {
+      const checkoutSrc = readText('src/WalletPaymentCheckout.tsx')
+
+      // Important #1: keep calm waiting banner active while handlePay awaits initial confirmPaymentIntent after setting lock
+      assert.match(
+        checkoutSrc,
+        /const showCalmAutoVerify = \(autoVerifying \|\| \(paying && hasBroadcastTxLock && activeIntentStatus === 'AWAITING'\)\) && !error/,
+        'showCalmAutoVerify must cover the initial post-broadcast confirmPaymentIntent window while paying is true',
+      )
+      assert.ok(
+        checkoutSrc.includes("retryingVerification || paying ? 'Verificando transacción on-chain...' : 'Reintentar verificación on-chain'"),
+        'Retry CTA must display verifying copy while initial post-broadcast verification or manual retry is in flight',
+      )
+
+      // Important #2: bridge manual retry with in-flight auto-verify promise instead of dead-clicking
+      assert.match(
+        checkoutSrc,
+        /const autoVerifyInFlightRef = useRef<\{ intentId: string; promise: Promise<[^>]+> \} \| null>\(null\)/,
+        'Checkout must track in-flight auto-verify promise in autoVerifyInFlightRef',
+      )
+      const retryBlock = extractBlock(checkoutSrc, 'const handleRetryVerification = async')
+      assert.ok(
+        retryBlock.includes('autoVerifyInFlightRef.current'),
+        'handleRetryVerification must attach to an in-flight auto-verify promise for the same intent instead of silently dropping the click',
+      )
+
+      // Important #3: guard stale intent and unmount in handleRetryVerification
+      assert.match(
+        checkoutSrc,
+        /const activeIntentIdRef = useRef\(activeIntentId\)/,
+        'Checkout must mirror activeIntentId into activeIntentIdRef synchronously during render',
+      )
+      assert.ok(
+        retryBlock.includes('activeIntentIdRef.current !== targetIntentId') &&
+        retryBlock.includes('prev && prev.intentId === targetIntentId') &&
+        retryBlock.includes('isMountedRef.current && activeIntentIdRef.current === targetIntentId'),
+        'handleRetryVerification must drop stale state/error updates after intent switch or unmount',
+      )
+    })
   })
 
   describe('F-02: Strict namespace isolation and address validation in resolveActiveMultichainWallet', () => {

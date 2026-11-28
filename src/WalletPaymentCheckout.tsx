@@ -31,11 +31,13 @@ import {
   createPaymentIntent,
   getPaymentIntent,
   selectPaymentMethod,
+  type ConfirmPaymentIntentResult,
   type PaymentAssetSymbol,
   type PaymentIntentRecord,
   type PaymentProductType,
 } from './services/payments/paymentGatewayClient'
 import {
+  POST_BROADCAST_AUTO_VERIFY_INTERVAL_MS,
   buildCheckoutProductSignature,
   canMutateIntentMethodInPlace,
   clearBroadcastTxLock,
@@ -44,6 +46,7 @@ import {
   resolveActiveMultichainWallet,
   resolvePendingMethodSyncKey,
   runDeduplicatedIntentInit,
+  shouldAutoVerifyBroadcastIntent,
   shouldClearBroadcastTxLock,
   submitSolanaTransactionViaProvider,
   validateEvmSigningParity,
@@ -463,6 +466,7 @@ export function WalletPaymentCheckout({
   const [retryingVerification, setRetryingVerification] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [broadcastTxLock, setBroadcastTxLock] = useState<BroadcastTxLock | null>(null)
+  const [autoVerifyState, setAutoVerifyState] = useState<{ key: string; attempts: number }>({ key: '', attempts: 0 })
   const [error, setError] = useState('')
   const [copyStatus, setCopyStatus] = useState('')
   const [nowMs, setNowMs] = useState(() => Date.now())
@@ -472,6 +476,8 @@ export function WalletPaymentCheckout({
   const methodInFlightRef = useRef(false)
   const freshInFlightRef = useRef(false)
   const payInFlightRef = useRef(false)
+  const retryInFlightRef = useRef(false)
+  const autoVerifyInFlightRef = useRef<{ intentId: string; promise: Promise<ConfirmPaymentIntentResult> } | null>(null)
   const failedSyncKeyRef = useRef<string | null>(null)
 
   const userUid = user?.uid ?? ''
@@ -553,6 +559,8 @@ export function WalletPaymentCheckout({
   }, [])
 
   const activeIntentId = intent?.intentId ?? ''
+  const activeIntentIdRef = useRef(activeIntentId)
+  activeIntentIdRef.current = activeIntentId
   const activeIntentStatus = intent?.status
   const isTerminalIntent = shouldClearBroadcastTxLock(activeIntentStatus)
 
@@ -578,6 +586,15 @@ export function WalletPaymentCheckout({
       : null) ?? persistedBroadcastTxLock
   const lockedTxHash = activeBroadcastTxLock?.txHash || (!isTerminalIntent ? (intent?.txHash?.trim() || '') : '')
   const hasBroadcastTxLock = Boolean(lockedTxHash)
+  const autoVerifyScopeKey = activeIntentId && lockedTxHash ? `${activeIntentId}:${lockedTxHash}` : ''
+  const autoVerifyAttempts = autoVerifyState.key === autoVerifyScopeKey ? autoVerifyState.attempts : 0
+  const autoVerifying = shouldAutoVerifyBroadcastIntent({
+    intentStatus: activeIntentStatus,
+    lockedTxHash,
+    isPaying: paying,
+    attemptsUsed: autoVerifyAttempts,
+  })
+  const showCalmAutoVerify = (autoVerifying || (paying && hasBroadcastTxLock && activeIntentStatus === 'AWAITING')) && !error
 
   const expiresAtMs = intent?.expiresAt ? Date.parse(intent.expiresAt) : Number.NaN
   const remainingMs = Number.isFinite(expiresAtMs) ? Math.max(0, expiresAtMs - nowMs) : 0
@@ -818,6 +835,63 @@ export function WalletPaymentCheckout({
     }
   }, [intent?.intentId, intent?.status])
 
+  // Silent post-broadcast auto-verification while AWAITING + broadcast lock active (handles RPC mempool propagation lag)
+  useEffect(() => {
+    if (!autoVerifying || !activeIntentId || !lockedTxHash) return
+    let cancelled = false
+    const targetIntentId = activeIntentId
+    const targetTxHash = lockedTxHash
+    const targetUid = userUid
+    const scopeKey = autoVerifyScopeKey
+
+    const verify = async () => {
+      if (cancelled || retryInFlightRef.current || payInFlightRef.current) return
+      retryInFlightRef.current = true
+      const run = confirmPaymentIntent(targetIntentId, targetTxHash)
+      autoVerifyInFlightRef.current = { intentId: targetIntentId, promise: run }
+      try {
+        const confirmation = await run
+        if (cancelled || !isMountedRef.current) return
+        if (shouldClearBroadcastTxLock(confirmation.status)) {
+          clearBroadcastTxLock(targetUid, targetIntentId)
+          setBroadcastTxLock(null)
+        }
+        if (confirmation.status !== 'AWAITING') {
+          setError('')
+        }
+        setIntent((prev) => (prev && prev.intentId === targetIntentId ? {
+          ...prev,
+          status: confirmation.status,
+          txHash: confirmation.txHash ?? targetTxHash,
+          confirmations: confirmation.confirmations ?? prev.confirmations,
+          requiredConfirmations: confirmation.requiredConfirmations ?? prev.requiredConfirmations,
+          activatedMinerId: confirmation.activatedMinerId ?? prev.activatedMinerId,
+          settledAt: confirmation.settledAt ?? prev.settledAt,
+        } : prev))
+      } catch {
+        // Absorb transient RPC/network errors silently; manual retry CTA stays available.
+      } finally {
+        if (autoVerifyInFlightRef.current?.promise === run) {
+          autoVerifyInFlightRef.current = null
+        }
+        retryInFlightRef.current = false
+        if (!cancelled && isMountedRef.current) {
+          setAutoVerifyState((prev) =>
+            prev.key === scopeKey
+              ? { key: scopeKey, attempts: prev.attempts + 1 }
+              : { key: scopeKey, attempts: 1 },
+          )
+        }
+      }
+    }
+
+    const interval = window.setInterval(() => { void verify() }, POST_BROADCAST_AUTO_VERIFY_INTERVAL_MS)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [autoVerifying, activeIntentId, lockedTxHash, userUid, autoVerifyScopeKey])
+
   // Emit onPaid receipt strictly once when backend reaches SETTLED
   useEffect(() => {
     if (!intent || intent.status !== 'SETTLED' || settledNotifiedRef.current === intent.intentId) return
@@ -971,18 +1045,34 @@ export function WalletPaymentCheckout({
   }
 
   const handleRetryVerification = async () => {
-    if (!intent || retryingVerification || paying) return
+    if (!intent || retryingVerification || paying || payInFlightRef.current) return
+    const targetIntentId = intent.intentId
+    const targetUid = userUid
     const txHashToConfirm = activeBroadcastTxLock?.txHash || intent.txHash?.trim() || ''
     if (!txHashToConfirm) return
+    const inFlightAutoVerify =
+      autoVerifyInFlightRef.current?.intentId === targetIntentId
+        ? autoVerifyInFlightRef.current.promise
+        : null
+    if (retryInFlightRef.current && !inFlightAutoVerify) return
+    const ownsRetryLock = !inFlightAutoVerify
+    if (ownsRetryLock) {
+      retryInFlightRef.current = true
+    }
     setRetryingVerification(true)
     setError('')
     try {
-      const confirmation = await confirmPaymentIntent(intent.intentId, txHashToConfirm)
+      const confirmation = inFlightAutoVerify
+        ? await inFlightAutoVerify
+        : await confirmPaymentIntent(targetIntentId, txHashToConfirm)
       if (shouldClearBroadcastTxLock(confirmation.status)) {
-        clearBroadcastTxLock(userUid, intent.intentId)
-        setBroadcastTxLock(null)
+        clearBroadcastTxLock(targetUid, targetIntentId)
+        if (isMountedRef.current && activeIntentIdRef.current === targetIntentId) {
+          setBroadcastTxLock(null)
+        }
       }
-      setIntent((prev) => prev ? {
+      if (!isMountedRef.current || activeIntentIdRef.current !== targetIntentId) return
+      setIntent((prev) => (prev && prev.intentId === targetIntentId ? {
         ...prev,
         status: confirmation.status,
         txHash: confirmation.txHash ?? txHashToConfirm,
@@ -990,11 +1080,16 @@ export function WalletPaymentCheckout({
         requiredConfirmations: confirmation.requiredConfirmations ?? prev.requiredConfirmations,
         activatedMinerId: confirmation.activatedMinerId ?? prev.activatedMinerId,
         settledAt: confirmation.settledAt ?? prev.settledAt,
-      } : prev)
+      } : prev))
     } catch (err) {
-      const classified = classifyPaymentError(err, activeNetworkConfig.name)
-      setError(classified.message)
+      if (isMountedRef.current && activeIntentIdRef.current === targetIntentId) {
+        const classified = classifyPaymentError(err, activeNetworkConfig.name)
+        setError(classified.message)
+      }
     } finally {
+      if (ownsRetryLock) {
+        retryInFlightRef.current = false
+      }
       if (isMountedRef.current) setRetryingVerification(false)
     }
   }
@@ -1598,8 +1693,8 @@ export function WalletPaymentCheckout({
                     data-testid="checkout-broadcast-lock-banner"
                     role="status"
                     style={{
-                      background: 'rgba(245, 158, 11, 0.12)',
-                      border: '1px solid rgba(245, 158, 11, 0.45)',
+                      background: showCalmAutoVerify ? 'rgba(124, 58, 237, 0.14)' : 'rgba(245, 158, 11, 0.12)',
+                      border: showCalmAutoVerify ? '1px solid rgba(139, 92, 246, 0.45)' : '1px solid rgba(245, 158, 11, 0.45)',
                       borderRadius: 10,
                       padding: '12px 14px',
                       marginBottom: 12,
@@ -1608,11 +1703,15 @@ export function WalletPaymentCheckout({
                       gap: 8,
                     }}
                   >
-                    <strong style={{ fontSize: 13, color: '#fbbf24' }}>
-                      Transacción ya enviada on-chain (pago bloqueado para evitar doble cobro)
+                    <strong style={{ fontSize: 13, color: showCalmAutoVerify ? '#c4b5fd' : '#fbbf24' }}>
+                      {showCalmAutoVerify
+                        ? 'Transacción enviada — esperando confirmación de la red...'
+                        : 'Transacción ya enviada on-chain (pago bloqueado para evitar doble cobro)'}
                     </strong>
                     <p style={{ fontSize: 12, color: '#e2e8f0', margin: 0, lineHeight: 1.45 }}>
-                      Tu billetera ya emitió esta transferencia. No vuelvas a firmar un pago nuevo; reintenta la verificación on-chain para completar la acreditación.
+                      {showCalmAutoVerify
+                        ? 'Tu pago ya fue emitido on-chain y está protegido contra doble cobro. Detectaremos la confirmación automáticamente en unos segundos.'
+                        : 'Tu billetera ya emitió esta transferencia. No vuelvas a firmar un pago nuevo; reintenta la verificación on-chain para completar la acreditación.'}
                     </p>
                     <code style={{ fontSize: 11, color: '#cbd5e1' }}>
                       Hash: {lockedTxHash.slice(0, 18)}...{lockedTxHash.slice(-8)}
@@ -1639,7 +1738,7 @@ export function WalletPaymentCheckout({
                       disabled={retryingVerification || paying}
                       onClick={() => void handleRetryVerification()}
                     >
-                      {retryingVerification ? 'Verificando transacción on-chain...' : 'Reintentar verificación on-chain'}
+                      {retryingVerification || paying ? 'Verificando transacción on-chain...' : 'Reintentar verificación on-chain'}
                     </button>
                   ) : isWrongEvmChain ? (
                     <button

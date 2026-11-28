@@ -1,7 +1,7 @@
 import { createAppKit } from '@reown/appkit/react'
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
 import { SolanaAdapter } from '@reown/appkit-adapter-solana'
-import { AdapterBlueprint, CoreHelperUtil, WalletConnectConnector } from '@reown/appkit-controllers'
+import { AdapterBlueprint, ConnectorController, CoreHelperUtil, WalletConnectConnector } from '@reown/appkit-controllers'
 import {
   arbitrum,
   arbitrumSepolia,
@@ -85,6 +85,7 @@ class TronUniversalAdapter extends AdapterBlueprint {
         namespace: 'tron',
       }),
     )
+    ConnectorController.filterByNamespace('tron', true)
   }
 
   override async connect(params: AdapterBlueprint.ConnectParams): Promise<AdapterBlueprint.ConnectResult> {
@@ -261,3 +262,6 @@ export const appKitModal = createAppKit({
     swaps: false,
   },
 })
+
+// @reown/appkit-common@1.8.24 omits 'tron' from AVAILABLE_NAMESPACES, filtering TRON connectors out by default
+ConnectorController.filterByNamespace('tron', true)

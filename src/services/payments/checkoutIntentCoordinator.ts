@@ -427,6 +427,29 @@ export function shouldClearBroadcastTxLock(status: PaymentIntentStatus | null | 
   return Boolean(status && TERMINAL_LOCK_CLEAR_STATUSES.has(status))
 }
 
+export const POST_BROADCAST_AUTO_VERIFY_INTERVAL_MS = 4000
+export const POST_BROADCAST_AUTO_VERIFY_MAX_ATTEMPTS = 15
+
+export interface PostBroadcastAutoVerifyInput {
+  intentStatus: PaymentIntentStatus | null | undefined
+  lockedTxHash: string | null | undefined
+  isPaying: boolean
+  attemptsUsed: number
+}
+
+/** True strictly while a broadcast-locked AWAITING intent should silently auto-verify on-chain. */
+export function shouldAutoVerifyBroadcastIntent(input: PostBroadcastAutoVerifyInput): boolean {
+  return (
+    input.intentStatus === 'AWAITING' &&
+    typeof input.lockedTxHash === 'string' &&
+    input.lockedTxHash.trim().length > 0 &&
+    !input.isPaying &&
+    Number.isInteger(input.attemptsUsed) &&
+    input.attemptsUsed >= 0 &&
+    input.attemptsUsed < POST_BROADCAST_AUTO_VERIFY_MAX_ATTEMPTS
+  )
+}
+
 export interface EvmSigningParityInput {
   activeAddress?: string | null
   wagmiAddress?: string | null

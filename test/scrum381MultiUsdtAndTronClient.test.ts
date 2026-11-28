@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, it } from 'node:test'
 import ts from 'typescript'
+import { ConnectorController } from '@reown/appkit-controllers'
 import {
   arbitrum,
   arbitrumSepolia,
@@ -244,6 +245,104 @@ describe('SCRUM-381 (PG-07 / ADR-0013): Client USDT-First 8 Networks & TRON TRC-
         resolvers.getAppKitNetworksForMode('testnet', { VITE_PAYMENT_ENABLE_ETHEREUM: 'true' }).map((n: { id: unknown }) => n.id),
         [bscTestnet.id, polygonAmoy.id, arbitrumSepolia.id, optimismSepolia.id, avalancheFuji.id, sepolia.id, solanaDevnet.id, tronNileTestnet.id],
       )
+    })
+
+    it('enables TRON namespace in ConnectorController without disabling other namespaces or filtering out TRON WalletConnect connectors', () => {
+      const appKitSource = readText('src/appkitConfig.ts')
+      assert.match(
+        appKitSource,
+        /import\s*\{[^}]*\bConnectorController\b[^}]*\}\s*from\s*'@reown\/appkit-controllers'/,
+        'src/appkitConfig.ts must import ConnectorController from @reown/appkit-controllers',
+      )
+
+      const setUniversalProviderBlock = extractBlock(appKitSource, 'override async setUniversalProvider(')
+      const addConnectorIdx = setUniversalProviderBlock.indexOf('this.addConnector(')
+      const filterInAdapterIdx = setUniversalProviderBlock.indexOf("ConnectorController.filterByNamespace('tron', true)")
+      assert.ok(addConnectorIdx > 0, 'TronUniversalAdapter.setUniversalProvider must call this.addConnector(...)')
+      assert.ok(
+        filterInAdapterIdx > addConnectorIdx,
+        "TronUniversalAdapter.setUniversalProvider must call ConnectorController.filterByNamespace('tron', true) immediately after this.addConnector(...)",
+      )
+
+      const createAppKitIdx = appKitSource.indexOf('export const appKitModal = createAppKit(')
+      const filterAfterCreateIdx = appKitSource.indexOf(
+        "ConnectorController.filterByNamespace('tron', true)",
+        createAppKitIdx,
+      )
+      assert.ok(createAppKitIdx > 0, 'src/appkitConfig.ts must export appKitModal = createAppKit(...)')
+      assert.ok(
+        filterAfterCreateIdx > createAppKitIdx,
+        "src/appkitConfig.ts must call ConnectorController.filterByNamespace('tron', true) after createAppKit(...)",
+      )
+
+      const originalFilterMap = { ...ConnectorController.state.filterByNamespaceMap }
+      const originalAllConnectors = [...ConnectorController.state.allConnectors]
+      const originalConnectors = [...ConnectorController.state.connectors]
+
+      try {
+        // Real ConnectorController behavior before patch: 'tron' is omitted from AVAILABLE_NAMESPACES
+        assert.equal(
+          ConnectorController.getEnabledNamespaces().includes('tron'),
+          false,
+          "Before patch, 'tron' must not be in ConnectorController.getEnabledNamespaces()",
+        )
+        assert.equal(ConnectorController.areAllNamespacesEnabled(), true)
+
+        const tronWcConnector = {
+          id: 'walletConnect',
+          name: 'WalletConnect',
+          type: 'WALLET_CONNECT' as const,
+          chain: 'tron' as const,
+        }
+        ConnectorController.setConnectors([tronWcConnector as never])
+
+        const enabledBefore = ConnectorController.getEnabledConnectors(ConnectorController.getEnabledNamespaces())
+        assert.equal(
+          enabledBefore.some((connector) => connector.chain === 'tron'),
+          false,
+          "Before filterByNamespace('tron', true), TRON connector is filtered out by getEnabledConnectors(...)",
+        )
+
+        // Apply patch call on real ConnectorController
+        ConnectorController.filterByNamespace('tron', true)
+
+        const enabledNamespacesAfter = ConnectorController.getEnabledNamespaces()
+        assert.equal(
+          enabledNamespacesAfter.includes('tron'),
+          true,
+          "After filterByNamespace('tron', true), 'tron' must appear in getEnabledNamespaces()",
+        )
+        assert.equal(
+          ConnectorController.areAllNamespacesEnabled(),
+          true,
+          "After filterByNamespace('tron', true), areAllNamespacesEnabled() must remain true",
+        )
+
+        const enabledAfter = ConnectorController.getEnabledConnectors(enabledNamespacesAfter)
+        assert.equal(
+          enabledAfter.some((connector) => connector.chain === 'tron' && connector.id === 'walletConnect'),
+          true,
+          "After filterByNamespace('tron', true), TRON WalletConnect connector must not be filtered out",
+        )
+        assert.equal(
+          ConnectorController.state.connectors.some((connector) => connector.chain === 'tron' && connector.id === 'walletConnect'),
+          true,
+          'ConnectorController.state.connectors must expose the TRON WalletConnect connector',
+        )
+      } finally {
+        for (const key of Object.keys(ConnectorController.state.filterByNamespaceMap)) {
+          if (!Object.hasOwn(originalFilterMap, key)) {
+            delete (ConnectorController.state.filterByNamespaceMap as Record<string, boolean | undefined>)[key]
+          }
+        }
+        Object.assign(ConnectorController.state.filterByNamespaceMap, originalFilterMap)
+        ConnectorController.state.allConnectors.splice(
+          0,
+          ConnectorController.state.allConnectors.length,
+          ...originalAllConnectors,
+        )
+        ConnectorController.state.connectors = originalConnectors
+      }
     })
   })
 
