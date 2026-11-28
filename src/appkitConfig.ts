@@ -1,7 +1,7 @@
 import { createAppKit } from '@reown/appkit/react'
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
 import { SolanaAdapter } from '@reown/appkit-adapter-solana'
-import { AdapterBlueprint, ConnectorController, CoreHelperUtil, WalletConnectConnector } from '@reown/appkit-controllers'
+import { AdapterBlueprint, ChainController, ConnectionController, ConnectorController, CoreHelperUtil, WalletConnectConnector } from '@reown/appkit-controllers'
 import {
   arbitrum,
   arbitrumSepolia,
@@ -312,6 +312,108 @@ export const appKitModal = createAppKit({
 
 // @reown/appkit-common@1.8.24 omits 'tron' from AVAILABLE_NAMESPACES, filtering TRON connectors out by default
 ConnectorController.filterByNamespace('tron', true)
+
+export const KNOWN_APPKIT_NAMESPACES = ['eip155', 'solana', 'tron'] as const
+export type AppKitSanitizableNamespace = (typeof KNOWN_APPKIT_NAMESPACES)[number]
+
+export interface AppKitOpenOptions {
+  view?: 'Account' | 'Connect' | 'Networks' | 'ApproveTransaction' | 'AllWallets' | string
+  uri?: string
+  namespace?: AppKitSanitizableNamespace | string
+  arguments?: object
+}
+
+export interface SanitizeAppKitConnectionsDeps {
+  isolationLocked?: boolean
+  chainController?: {
+    state: { activeChain?: string }
+    getAccountData: (namespace?: AppKitSanitizableNamespace | string) => { caipAddress?: string } | undefined
+    setActiveNamespace: (namespace: AppKitSanitizableNamespace) => void
+  }
+  connectionController?: {
+    getConnections: (namespace?: AppKitSanitizableNamespace) => readonly unknown[]
+    setConnections: (connections: never[], namespace: AppKitSanitizableNamespace) => void
+  }
+  connectorController?: {
+    getConnectorId?: (namespace?: AppKitSanitizableNamespace) => string | undefined
+    removeConnectorId?: (namespace: AppKitSanitizableNamespace) => void
+  }
+  wagmiAdapter?: {
+    wagmiConfig?: { state?: { connections?: { size?: number } } }
+    clearConnections?: (emit?: boolean) => void
+  }
+}
+
+export interface SanitizeAppKitResult {
+  clearedNamespaces: AppKitSanitizableNamespace[]
+  syncedActiveNamespace?: AppKitSanitizableNamespace
+}
+
+/**
+ * Purges phantom AppKit/Wagmi connection entries on disconnected namespaces before opening the modal,
+ * preventing Reown W3mConnectingExternalView "This account is already linked" deadlocks and stale activeChain routing.
+ */
+export function sanitizeStaleAppKitConnectionsBeforeOpen(
+  options?: AppKitOpenOptions,
+  deps: SanitizeAppKitConnectionsDeps = {},
+): SanitizeAppKitResult {
+  const chainCtrl = deps.chainController ?? (ChainController as unknown as NonNullable<SanitizeAppKitConnectionsDeps['chainController']>)
+  const connectionCtrl = deps.connectionController ?? (ConnectionController as unknown as NonNullable<SanitizeAppKitConnectionsDeps['connectionController']>)
+  const connectorCtrl = deps.connectorController ?? (ConnectorController as unknown as NonNullable<SanitizeAppKitConnectionsDeps['connectorController']>)
+  const adapter = deps.wagmiAdapter ?? (wagmiAdapter as unknown as NonNullable<SanitizeAppKitConnectionsDeps['wagmiAdapter']>)
+
+  const clearedNamespaces: AppKitSanitizableNamespace[] = []
+  let firstConnectedNamespace: AppKitSanitizableNamespace | undefined
+  let isActiveChainConnected = false
+
+  for (const namespace of KNOWN_APPKIT_NAMESPACES) {
+    const caipAddress = chainCtrl.getAccountData(namespace)?.caipAddress
+    const isConnected = typeof caipAddress === 'string' && caipAddress.trim().length > 0
+
+    if (isConnected) {
+      firstConnectedNamespace ??= namespace
+      if (chainCtrl.state.activeChain === namespace) {
+        isActiveChainConnected = true
+      }
+      continue
+    }
+
+    const hasStaleConnections = connectionCtrl.getConnections(namespace).length > 0
+    const hasStaleConnectorId = Boolean(connectorCtrl.getConnectorId?.(namespace))
+    const hasStaleWagmiConnections = namespace === 'eip155' && (adapter.wagmiConfig?.state?.connections?.size ?? 0) > 0
+
+    if (!hasStaleConnections && !hasStaleConnectorId && !hasStaleWagmiConnections) {
+      continue
+    }
+
+    connectionCtrl.setConnections([], namespace)
+    connectorCtrl.removeConnectorId?.(namespace)
+    if (namespace === 'eip155') {
+      adapter.clearConnections?.()
+    }
+    clearedNamespaces.push(namespace)
+  }
+
+  let syncedActiveNamespace: AppKitSanitizableNamespace | undefined
+  if (!options?.namespace && !isActiveChainConnected && firstConnectedNamespace && !deps.isolationLocked) {
+    chainCtrl.setActiveNamespace(firstConnectedNamespace)
+    syncedActiveNamespace = firstConnectedNamespace
+  }
+
+  return { clearedNamespaces, syncedActiveNamespace }
+}
+
+/** Runs AppKit phantom-connection sanitization before opening the modal safely. */
+export function openAppKitSafely(
+  options?: Parameters<typeof appKitModal.open>[0],
+  deps: SanitizeAppKitConnectionsDeps & {
+    openModal?: (options?: Parameters<typeof appKitModal.open>[0]) => Promise<unknown> | void
+  } = {},
+): Promise<unknown> | void {
+  sanitizeStaleAppKitConnectionsBeforeOpen(options, deps)
+  const openModal = deps.openModal ?? ((opts?: Parameters<typeof appKitModal.open>[0]) => appKitModal.open(opts))
+  return openModal(options)
+}
 
 export interface EvmUniversalProviderLike {
   isWalletConnect?: boolean

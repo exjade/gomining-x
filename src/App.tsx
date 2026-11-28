@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAccount, useDisconnect as useWagmiDisconnect } from 'wagmi'
 import { useAppKit, useAppKitAccount } from '@reown/appkit/react'
+import { sanitizeStaleAppKitConnectionsBeforeOpen } from './appkitConfig'
 import { getScreen, isDisabledRoute, navGroups, routeAliases, type NavItem, type ScreenDefinition } from './catalog'
 import { getAuthRouteRedirect, isPublicAppRoute } from './authRoutePolicy'
 import { getSessionSnapshot } from './readAdapter'
@@ -509,6 +510,7 @@ function AppContent() {
                     return
                   }
                   if (isWagmiConnected || isAppKitConnected) {
+                    sanitizeStaleAppKitConnectionsBeforeOpen({ view: 'Account' }, { isolationLocked: pendingResidualWalletRef.current })
                     openAppKit({ view: 'Account' })
                   } else {
                     navigate('/gmt-wallets')
@@ -529,6 +531,7 @@ function AppContent() {
                     return
                   }
                   if (openAppKit) {
+                    sanitizeStaleAppKitConnectionsBeforeOpen(undefined, { isolationLocked: pendingResidualWalletRef.current })
                     openAppKit()
                   }
                 }}

@@ -3,6 +3,7 @@ import { useAppKit, useAppKitAccount, useAppKitNetwork, useDisconnect } from '@r
 import { useAccount } from 'wagmi'
 import type { PaymentNetworkId } from './paymentDestinations'
 import type { PaymentQuote } from './paymentQuote'
+import { openAppKitSafely } from './appkitConfig'
 import { resolveActiveMultichainWallet } from './services/payments/checkoutIntentCoordinator'
 import { disconnectWeb3SessionBestEffort } from './services/session/accountSessionIsolation'
 
@@ -74,11 +75,11 @@ export function useWalletSession(): WalletSession {
   }, [appKitDisconnect])
 
   const openModal = useCallback(() => {
-    void open()
+    void openAppKitSafely(undefined, { openModal: open })
   }, [open])
 
   const connect = useCallback(async (): Promise<'connected' | 'rejected' | 'failed' | 'pending'> => {
-    await open()
+    await openAppKitSafely(undefined, { openModal: open })
     return isConnected ? 'connected' : 'pending'
   }, [open, isConnected])
 

@@ -65,7 +65,7 @@ import {
   type PaymentWalletFamily,
   type PendingMethodSelection,
 } from './services/payments/checkoutIntentCoordinator'
-import { appKitModal, appKitNetworks, prepareWagmiEvmSigningProvider } from './appkitConfig'
+import { appKitModal, appKitNetworks, prepareWagmiEvmSigningProvider, sanitizeStaleAppKitConnectionsBeforeOpen } from './appkitConfig'
 
 export type { PostTxPendingState, PackageSnapshot }
 
@@ -1898,7 +1898,10 @@ export function WalletPaymentCheckout({
                   type="button"
                   className="button button-primary checkout-action-btn"
                   style={{ width: '100%', marginBottom: 16 }}
-                  onClick={() => openAppKit()}
+                  onClick={() => {
+                    sanitizeStaleAppKitConnectionsBeforeOpen()
+                    openAppKit()
+                  }}
                 >
                   Conectar Billetera
                 </button>
@@ -1930,7 +1933,7 @@ export function WalletPaymentCheckout({
                           className="button button-secondary"
                           style={{ fontSize: 11, padding: '4px 10px' }}
                           disabled={paying || cancelling || hasBroadcastTxLock}
-                          onClick={() => { void openAppKit() }}
+                          onClick={() => { sanitizeStaleAppKitConnectionsBeforeOpen(); void openAppKit() }}
                         >
                           Cambiar billetera
                         </button>
@@ -2170,6 +2173,7 @@ export function WalletPaymentCheckout({
                       className="button button-primary checkout-action-btn"
                       disabled={paying || cancelling || hasBroadcastTxLock}
                       onClick={() => {
+                        sanitizeStaleAppKitConnectionsBeforeOpen({ namespace: getAppKitNamespaceForFamily(selectedNetworkFamily) })
                         void openAppKit({ namespace: getAppKitNamespaceForFamily(selectedNetworkFamily) })
                       }}
                     >

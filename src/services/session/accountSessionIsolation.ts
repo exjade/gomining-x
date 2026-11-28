@@ -9,10 +9,19 @@ export type EvmRequestArgs = {
   params?: unknown[]
 }
 
+export type AppKitResidualCleanupNamespace = 'eip155' | 'solana' | 'tron'
+
+export type AppKitResidualCleanupDeps = {
+  setConnections?: (connections: never[], namespace: AppKitResidualCleanupNamespace) => unknown
+  removeConnectorId?: (namespace: AppKitResidualCleanupNamespace) => unknown
+  clearWagmiConnections?: () => unknown
+}
+
 export type DisconnectWeb3Deps = {
   disconnectAppKit?: () => unknown | Promise<unknown>
   disconnectWagmi?: () => unknown | Promise<unknown>
   requestEvmProvider?: (args: EvmRequestArgs) => unknown | Promise<unknown>
+  appKitCleanup?: AppKitResidualCleanupDeps
   storage?: StorageLike | null
   timeoutMs?: number
   clearOwnerStorage?: boolean
@@ -263,8 +272,34 @@ export async function disconnectWeb3SessionBestEffort(deps: DisconnectWeb3Deps =
     (step): step is () => unknown | Promise<unknown> => step !== null,
   )
 
+  const isRealBrowserDom = isBrowser && typeof document !== 'undefined'
+  const shouldClearResidualAppKit = Boolean(deps.appKitCleanup) || isRealBrowserDom
+
   try {
     await Promise.allSettled(steps.map((step) => runBoundedStep(step, timeoutMs)))
+    // Clear residual Reown ConnectionController / ConnectorController / wagmi state after disconnect settles
+    if (shouldClearResidualAppKit) {
+      await runBoundedStep(async () => {
+        let cleanup = deps.appKitCleanup
+        if (!cleanup) {
+          const [{ ConnectionController, ConnectorController }, { wagmiAdapter }] = await Promise.all([
+            import('@reown/appkit-controllers'),
+            import('../../appkitConfig'),
+          ])
+          cleanup = {
+            setConnections: (connections, ns) => ConnectionController.setConnections(connections, ns),
+            removeConnectorId: (ns) => ConnectorController.removeConnectorId(ns),
+            clearWagmiConnections: () =>
+              (wagmiAdapter as unknown as { clearConnections?: (emit?: boolean) => void }).clearConnections?.(),
+          }
+        }
+        for (const namespace of ['eip155', 'solana', 'tron'] as const) {
+          cleanup.setConnections?.([], namespace)
+          cleanup.removeConnectorId?.(namespace)
+        }
+        cleanup.clearWagmiConnections?.()
+      }, timeoutMs)
+    }
   } finally {
     if (deps.clearOwnerStorage !== false) {
       clearStoredWalletOwnerUid(deps.storage)

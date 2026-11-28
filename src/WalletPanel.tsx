@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAppKit, useAppKitAccount, useAppKitNetwork, useDisconnect } from '@reown/appkit/react'
 import { useAccount, useBalance } from 'wagmi'
 import { useAuth } from './AuthContext'
+import { openAppKitSafely } from './appkitConfig'
 import { ClientPaymentHistory } from './components/payments/ClientPaymentHistory'
 import { resolveActiveMultichainWallet } from './services/payments/checkoutIntentCoordinator'
 import { disconnectWeb3SessionBestEffort } from './services/session/accountSessionIsolation'
@@ -89,7 +90,7 @@ export function WalletPanel({ session }: { session?: WalletSession }) {
             <button
               type="button"
               className="button button-primary"
-              onClick={() => open()}
+              onClick={() => openAppKitSafely(undefined, { openModal: open })}
             >
               Conectar Wallet
             </button>
@@ -137,14 +138,14 @@ export function WalletPanel({ session }: { session?: WalletSession }) {
             <button
               type="button"
               className="button button-secondary"
-              onClick={() => open({ view: 'Networks' })}
+              onClick={() => openAppKitSafely({ view: 'Networks' }, { openModal: open })}
             >
               Cambiar de Red
             </button>
             <button
               type="button"
               className="button button-outline"
-              onClick={() => open()}
+              onClick={() => openAppKitSafely(undefined, { openModal: open })}
             >
               Gestionar Wallet
             </button>
@@ -180,7 +181,7 @@ export function WalletPanel({ session }: { session?: WalletSession }) {
           type="button"
           className="button button-primary"
           style={{ whiteSpace: 'nowrap' }}
-          onClick={() => open()}
+          onClick={() => openAppKitSafely(undefined, { openModal: open })}
         >
           {isConnected ? 'Gestionar Billetera' : 'Conectar Billetera'}
         </button>
