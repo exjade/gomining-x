@@ -48,6 +48,7 @@ import {
   isWalletFamilyCompatibleWithNetwork,
   readBroadcastTxLock,
   resolveActiveMultichainWallet,
+  resolveAutoAlignedNetworkOnWalletSwitch,
   resolveNetworkSelectionUseUsdt,
   resolvePendingMethodSyncKey,
   runDeduplicatedIntentInit,
@@ -525,6 +526,7 @@ export function WalletPaymentCheckout({
       : isSolanaWallet
         ? 'solana'
         : null
+  const prevWalletFamilyRef = useRef<PaymentWalletFamily | null>(connectedWalletFamily)
   const isWrongWalletFamily = Boolean(
     isWalletConnected &&
     !isWalletFamilyCompatibleWithNetwork({
@@ -762,23 +764,41 @@ export function WalletPaymentCheckout({
 
   // Step 2: Transition OPEN -> AWAITING when wallet connects, or sync senderWallet in-place on AWAITING
   useEffect(() => {
-    if (!isAuthenticated || !intent || !isWalletConnected || hasBroadcastTxLock || loadingIntent || methodUpdating || paying || cancelling || retryingVerification || methodInFlightRef.current) {
+    if (!isWalletConnected) {
+      prevWalletFamilyRef.current = null
+      return
+    }
+    if (!isAuthenticated || !intent || loadingIntent || methodUpdating || paying || cancelling || retryingVerification || methodInFlightRef.current) {
+      return
+    }
+
+    const prevWalletFamily = prevWalletFamilyRef.current
+    if (!hasBroadcastTxLock) {
+      prevWalletFamilyRef.current = connectedWalletFamily
+    }
+    const alignedNet = resolveAutoAlignedNetworkOnWalletSwitch({
+      prevWalletFamily,
+      nextWalletFamily: connectedWalletFamily,
+      currentNetworkId: effectiveNetworkId,
+      hasBroadcastTxLock,
+      intentStatus: intent.status,
+      hasManualNetworkSelection: hasManualNetworkSelectionRef.current,
+    })
+    if (alignedNet) {
+      hasManualNetworkSelectionRef.current = false
+      setNetworkId(alignedNet)
+      setUseUsdt(Boolean(getPaymentNetworkConfig(alignedNet, intent.networkMode).usdtContractAddress))
+      if (!isTerminalIntent) {
+        setError('')
+      }
+      return
+    }
+
+    if (hasBroadcastTxLock) {
       return
     }
 
     if (isWrongWalletFamily) {
-      if (intent.status === 'OPEN' && !hasManualNetworkSelectionRef.current) {
-        const alignedNet: PaymentNetworkId | null = isSolanaWallet
-          ? 'solana'
-          : isTronWallet
-            ? 'tron'
-            : null
-        if (alignedNet && alignedNet !== effectiveNetworkId) {
-          setNetworkId(alignedNet)
-          setUseUsdt(Boolean(getPaymentNetworkConfig(alignedNet, intent.networkMode).usdtContractAddress))
-          setError('')
-        }
-      }
       return
     }
 
@@ -848,9 +868,11 @@ export function WalletPaymentCheckout({
     intent?.expiresAt,
     intent?.isExpired,
     isIntentExpired,
+    isTerminalIntent,
     hasNetworkSelectionMismatch,
     hasBroadcastTxLock,
     isWalletConnected,
+    connectedWalletFamily,
     isEvmWallet,
     isSolanaWallet,
     isTronWallet,
@@ -1706,7 +1728,7 @@ export function WalletPaymentCheckout({
                         <button
                           type="button"
                           className={`currency-pill-btn ${useUsdt ? 'currency-pill-active' : ''}`}
-                          disabled={loadingIntent || methodUpdating || paying || cancelling || retryingVerification || hasBroadcastTxLock}
+                          disabled={loadingIntent || methodUpdating || paying || cancelling || retryingVerification || hasBroadcastTxLock || isWrongWalletFamily}
                           onClick={() => void handleSelectNetworkOrAsset(effectiveNetworkId, true)}
                         >
                           <CryptoIcon symbol="USDT" size="sm" />
@@ -1725,7 +1747,7 @@ export function WalletPaymentCheckout({
                         <button
                           type="button"
                           className={`currency-pill-btn ${!useUsdt ? 'currency-pill-active' : ''}`}
-                          disabled={loadingIntent || methodUpdating || paying || cancelling || retryingVerification || hasBroadcastTxLock}
+                          disabled={loadingIntent || methodUpdating || paying || cancelling || retryingVerification || hasBroadcastTxLock || isWrongWalletFamily}
                           onClick={() => void handleSelectNetworkOrAsset(effectiveNetworkId, false)}
                         >
                           <CryptoIcon symbol={NATIVE_SYMBOL_BY_NETWORK[effectiveNetworkId] as CryptoSymbol} size="sm" />
@@ -1866,6 +1888,7 @@ export function WalletPaymentCheckout({
                       type="button"
                       data-testid="checkout-switch-wallet-family-btn"
                       className="button button-primary checkout-action-btn"
+                      disabled={paying || cancelling || hasBroadcastTxLock}
                       onClick={() => {
                         void openAppKit({ namespace: getAppKitNamespaceForFamily(selectedNetworkFamily) })
                       }}

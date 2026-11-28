@@ -200,6 +200,38 @@ export function resolveNetworkSelectionUseUsdt(input: {
   return input.currentUseUsdt && input.hasTargetUsdtContract
 }
 
+export function resolveAutoAlignedNetworkOnWalletSwitch(input: {
+  prevWalletFamily: PaymentWalletFamily | null
+  nextWalletFamily: PaymentWalletFamily | null
+  currentNetworkId: PaymentNetworkId
+  hasBroadcastTxLock: boolean
+  intentStatus?: PaymentIntentStatus | null
+  hasManualNetworkSelection: boolean
+}): PaymentNetworkId | null {
+  if (
+    input.hasBroadcastTxLock ||
+    !input.nextWalletFamily ||
+    input.intentStatus === 'SETTLED' ||
+    input.intentStatus === 'PROCESSING'
+  ) {
+    return null
+  }
+  if (getPaymentNetworkFamily(input.currentNetworkId) === input.nextWalletFamily) return null
+  if (input.prevWalletFamily !== input.nextWalletFamily) {
+    const isActiveSwitch = input.prevWalletFamily !== null
+    const isInitialOpenConnect =
+      input.prevWalletFamily === null &&
+      input.intentStatus === 'OPEN' &&
+      !input.hasManualNetworkSelection
+    if (isActiveSwitch || isInitialOpenConnect) {
+      if (input.nextWalletFamily === 'solana') return 'solana'
+      if (input.nextWalletFamily === 'tron') return 'tron'
+      return 'bnb'
+    }
+  }
+  return null
+}
+
 const DISCONNECTED_WALLET: ResolvedMultichainWallet = {
   activeAddress: '',
   isWalletConnected: false,

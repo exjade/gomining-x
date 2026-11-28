@@ -139,6 +139,101 @@ describe('POUW Checkout: All Enabled Networks, 1-Click Wallet Switch & PouwMiner
         )
       }
     })
+
+    it('resolves auto-aligned network on wallet-family switch and initial OPEN connect while respecting F-01 lock and manual picks', () => {
+      const api = coordinator as unknown as {
+        resolveAutoAlignedNetworkOnWalletSwitch?: (input: {
+          prevWalletFamily: 'evm' | 'solana' | 'tron' | null
+          nextWalletFamily: 'evm' | 'solana' | 'tron' | null
+          currentNetworkId: PaymentNetworkId
+          hasBroadcastTxLock: boolean
+          intentStatus?: 'OPEN' | 'AWAITING' | 'PROCESSING' | 'SETTLED' | 'UNDERPAID' | 'FAILED' | 'EXPIRED' | 'CANCELLED' | null
+          hasManualNetworkSelection: boolean
+        }) => PaymentNetworkId | null
+      }
+      assert.equal(
+        typeof api.resolveAutoAlignedNetworkOnWalletSwitch,
+        'function',
+        'must export resolveAutoAlignedNetworkOnWalletSwitch',
+      )
+      const resolve = api.resolveAutoAlignedNetworkOnWalletSwitch!
+
+      // Active wallet-family switches -> default network of new family
+      assert.equal(
+        resolve({ prevWalletFamily: 'evm', nextWalletFamily: 'solana', currentNetworkId: 'bnb', hasBroadcastTxLock: false, intentStatus: 'AWAITING', hasManualNetworkSelection: false }),
+        'solana',
+      )
+      assert.equal(
+        resolve({ prevWalletFamily: 'solana', nextWalletFamily: 'evm', currentNetworkId: 'solana', hasBroadcastTxLock: false, intentStatus: 'AWAITING', hasManualNetworkSelection: true }),
+        'bnb',
+      )
+      assert.equal(
+        resolve({ prevWalletFamily: 'evm', nextWalletFamily: 'tron', currentNetworkId: 'polygon', hasBroadcastTxLock: false, intentStatus: 'AWAITING', hasManualNetworkSelection: true }),
+        'tron',
+      )
+      assert.equal(
+        resolve({ prevWalletFamily: 'tron', nextWalletFamily: 'evm', currentNetworkId: 'tron', hasBroadcastTxLock: false, intentStatus: 'AWAITING', hasManualNetworkSelection: false }),
+        'bnb',
+      )
+      assert.equal(
+        resolve({ prevWalletFamily: 'solana', nextWalletFamily: 'tron', currentNetworkId: 'solana', hasBroadcastTxLock: false, intentStatus: 'AWAITING', hasManualNetworkSelection: false }),
+        'tron',
+      )
+      assert.equal(
+        resolve({ prevWalletFamily: 'tron', nextWalletFamily: 'solana', currentNetworkId: 'tron', hasBroadcastTxLock: false, intentStatus: 'AWAITING', hasManualNetworkSelection: false }),
+        'solana',
+      )
+
+      // Initial connection from disconnected on OPEN without manual network selection (covers EVM, Solana, TRON)
+      assert.equal(
+        resolve({ prevWalletFamily: null, nextWalletFamily: 'evm', currentNetworkId: 'solana', hasBroadcastTxLock: false, intentStatus: 'OPEN', hasManualNetworkSelection: false }),
+        'bnb',
+      )
+      assert.equal(
+        resolve({ prevWalletFamily: null, nextWalletFamily: 'solana', currentNetworkId: 'bnb', hasBroadcastTxLock: false, intentStatus: 'OPEN', hasManualNetworkSelection: false }),
+        'solana',
+      )
+      assert.equal(
+        resolve({ prevWalletFamily: null, nextWalletFamily: 'tron', currentNetworkId: 'bnb', hasBroadcastTxLock: false, intentStatus: 'OPEN', hasManualNetworkSelection: false }),
+        'tron',
+      )
+
+      // Initial connection respects manual network selection and non-OPEN status
+      assert.equal(
+        resolve({ prevWalletFamily: null, nextWalletFamily: 'evm', currentNetworkId: 'solana', hasBroadcastTxLock: false, intentStatus: 'OPEN', hasManualNetworkSelection: true }),
+        null,
+      )
+      assert.equal(
+        resolve({ prevWalletFamily: null, nextWalletFamily: 'solana', currentNetworkId: 'bnb', hasBroadcastTxLock: false, intentStatus: 'AWAITING', hasManualNetworkSelection: false }),
+        null,
+      )
+
+      // Same wallet family after manual incompatible network pick + modal cancel -> null (keeps warning + CTA)
+      assert.equal(
+        resolve({ prevWalletFamily: 'evm', nextWalletFamily: 'evm', currentNetworkId: 'solana', hasBroadcastTxLock: false, intentStatus: 'AWAITING', hasManualNetworkSelection: true }),
+        null,
+      )
+
+      // Already compatible target network (user clicked Solana chip first, then switched to Solana wallet) -> null
+      assert.equal(
+        resolve({ prevWalletFamily: 'evm', nextWalletFamily: 'solana', currentNetworkId: 'solana', hasBroadcastTxLock: false, intentStatus: 'AWAITING', hasManualNetworkSelection: true }),
+        null,
+      )
+
+      // F-01 broadcast lock dominance & disconnected state -> always null
+      assert.equal(
+        resolve({ prevWalletFamily: 'evm', nextWalletFamily: 'solana', currentNetworkId: 'bnb', hasBroadcastTxLock: true, intentStatus: 'AWAITING', hasManualNetworkSelection: false }),
+        null,
+      )
+      assert.equal(
+        resolve({ prevWalletFamily: null, nextWalletFamily: 'tron', currentNetworkId: 'bnb', hasBroadcastTxLock: true, intentStatus: 'OPEN', hasManualNetworkSelection: false }),
+        null,
+      )
+      assert.equal(
+        resolve({ prevWalletFamily: 'evm', nextWalletFamily: null, currentNetworkId: 'bnb', hasBroadcastTxLock: false, intentStatus: 'AWAITING', hasManualNetworkSelection: false }),
+        null,
+      )
+    })
   })
 
   describe('Block 1.2: WalletPaymentCheckout.tsx all enabled networks, mismatch guards & 1-click wallet switch', () => {
@@ -198,13 +293,13 @@ describe('POUW Checkout: All Enabled Networks, 1-Click Wallet Switch & PouwMiner
       )
       assert.match(
         step2Src,
-        /intent\.status === 'OPEN'[\s\S]*?!hasManualNetworkSelectionRef\.current/,
-        'Step 2 must auto-align OPEN intent when user opened disconnected and connects Solana/TRON without manual network pick',
+        /resolveAutoAlignedNetworkOnWalletSwitch\(\{[\s\S]*?prevWalletFamily[\s\S]*?nextWalletFamily:\s*connectedWalletFamily[\s\S]*?currentNetworkId:\s*effectiveNetworkId[\s\S]*?hasBroadcastTxLock[\s\S]*?intentStatus:\s*intent\.status[\s\S]*?hasManualNetworkSelection:\s*hasManualNetworkSelectionRef\.current/,
+        'Step 2 must delegate wallet-switch and OPEN auto-alignment to resolveAutoAlignedNetworkOnWalletSwitch before isWrongWalletFamily guard',
       )
       assert.match(
         step2Src,
-        /\[[^\]]*isWrongWalletFamily[^\]]*effectiveNetworkId[^\]]*\]/,
-        'Step 2 deps must include isWrongWalletFamily and effectiveNetworkId so OPEN auto-alignment immediately triggers selectPaymentMethod',
+        /\[[^\]]*connectedWalletFamily[^\]]*isWrongWalletFamily[^\]]*effectiveNetworkId[^\]]*\]/,
+        'Step 2 deps must include connectedWalletFamily, isWrongWalletFamily, and effectiveNetworkId so wallet switches and OPEN auto-alignment immediately trigger selectPaymentMethod',
       )
 
       // Review Focus #3: handleSelectNetworkOrAsset updates visual state only on mismatch and restores matching active quote without duplicates
@@ -362,6 +457,105 @@ describe('POUW Checkout: All Enabled Networks, 1-Click Wallet Switch & PouwMiner
       assert.ok(
         src.includes('resolveNetworkSelectionUseUsdt('),
         'WalletPaymentCheckout.tsx must use resolveNetworkSelectionUseUsdt on network chip click',
+      )
+    })
+
+    it('hardens wallet-switch auto-alignment via prevWalletFamilyRef, disables .currency-pill-btn on isWrongWalletFamily, and enforces disabled parity on checkout-switch-wallet-family-btn', () => {
+      const src = readText('src/WalletPaymentCheckout.tsx')
+
+      // prevWalletFamilyRef tracking & reset on disconnect + alignment reset of hasManualNetworkSelectionRef
+      assert.match(
+        src,
+        /const prevWalletFamilyRef = useRef<PaymentWalletFamily \| null>\(connectedWalletFamily\)/,
+        'WalletPaymentCheckout must declare prevWalletFamilyRef initialized to connectedWalletFamily',
+      )
+      assert.ok(
+        src.includes('prevWalletFamilyRef.current = null'),
+        'WalletPaymentCheckout must reset prevWalletFamilyRef.current = null when wallet disconnects',
+      )
+      assert.ok(
+        src.includes('prevWalletFamilyRef.current = connectedWalletFamily'),
+        'WalletPaymentCheckout must advance prevWalletFamilyRef.current = connectedWalletFamily',
+      )
+      assert.match(
+        src,
+        /if \(alignedNet\) \{[\s\S]*?hasManualNetworkSelectionRef\.current = false[\s\S]*?setNetworkId\(alignedNet\)[\s\S]*?setUseUsdt\(Boolean\(getPaymentNetworkConfig\(alignedNet, intent\.networkMode\)\.usdtContractAddress\)\)[\s\S]*?setError\(''\)/,
+        'Applying alignedNet must reset hasManualNetworkSelectionRef, update networkId/useUsdt, and clear error',
+      )
+
+      // checkout-switch-wallet-family-btn disabled parity with header checkout-switch-wallet-btn
+      const familyBtnIdx = src.indexOf('data-testid="checkout-switch-wallet-family-btn"')
+      assert.notEqual(familyBtnIdx, -1, 'Expected checkout-switch-wallet-family-btn')
+      const familyBtnEnd = src.indexOf('</button>', familyBtnIdx)
+      const familyBtn = src.slice(familyBtnIdx, familyBtnEnd)
+      assert.match(
+        familyBtn,
+        /disabled=\{paying \|\| cancelling \|\| hasBroadcastTxLock\}/,
+        'checkout-switch-wallet-family-btn must match checkout-switch-wallet-btn disabled={paying || cancelling || hasBroadcastTxLock}',
+      )
+
+      // Both .currency-pill-btn buttons disabled during isWrongWalletFamily
+      const currencySectionStart = src.indexOf('2. Moneda de pago')
+      const quoteCardStart = src.indexOf('<div className="checkout-quote-card">')
+      assert.ok(currencySectionStart > 0 && quoteCardStart > currencySectionStart)
+      const currencySection = src.slice(currencySectionStart, quoteCardStart)
+      const pillMatches = [...currencySection.matchAll(/className=\{`currency-pill-btn[^`]*`\}[\s\S]*?disabled=\{([^}]+)\}/g)]
+      assert.equal(pillMatches.length, 2, 'Expected exactly 2 .currency-pill-btn buttons in 2. Moneda de pago')
+      for (const match of pillMatches) {
+        assert.match(
+          match[1],
+          /\bisWrongWalletFamily\b/,
+          `Each .currency-pill-btn must include isWrongWalletFamily in disabled={...}, got: ${match[1]}`,
+        )
+      }
+    })
+
+    it('Review Fix #1/#2: freezes prevWalletFamilyRef while F-01 lock is active, blocks auto-align on SETTLED/PROCESSING, and preserves terminal error banners', () => {
+      const api = coordinator as unknown as {
+        resolveAutoAlignedNetworkOnWalletSwitch?: (input: {
+          prevWalletFamily: 'evm' | 'solana' | 'tron' | null
+          nextWalletFamily: 'evm' | 'solana' | 'tron' | null
+          currentNetworkId: PaymentNetworkId
+          hasBroadcastTxLock: boolean
+          intentStatus?: 'OPEN' | 'AWAITING' | 'PROCESSING' | 'SETTLED' | 'UNDERPAID' | 'FAILED' | 'EXPIRED' | 'CANCELLED' | null
+          hasManualNetworkSelection: boolean
+        }) => PaymentNetworkId | null
+      }
+      const resolve = api.resolveAutoAlignedNetworkOnWalletSwitch!
+
+      // Important #2: never mutate selection on SETTLED or PROCESSING intents
+      assert.equal(
+        resolve({ prevWalletFamily: 'evm', nextWalletFamily: 'solana', currentNetworkId: 'bnb', hasBroadcastTxLock: false, intentStatus: 'SETTLED', hasManualNetworkSelection: false }),
+        null,
+      )
+      assert.equal(
+        resolve({ prevWalletFamily: 'evm', nextWalletFamily: 'tron', currentNetworkId: 'bnb', hasBroadcastTxLock: false, intentStatus: 'PROCESSING', hasManualNetworkSelection: false }),
+        null,
+      )
+      // Regenerable terminal statuses still auto-align so "Generar nueva cotización" binds cleanly
+      assert.equal(
+        resolve({ prevWalletFamily: 'evm', nextWalletFamily: 'solana', currentNetworkId: 'bnb', hasBroadcastTxLock: false, intentStatus: 'EXPIRED', hasManualNetworkSelection: false }),
+        'solana',
+      )
+
+      const src = readText('src/WalletPaymentCheckout.tsx')
+      const step2Start = src.indexOf('// Step 2:')
+      const step2End = src.indexOf('// Real TTL countdown timer')
+      assert.ok(step2Start > 0 && step2End > step2Start)
+      const step2Src = src.slice(step2Start, step2End)
+
+      // Important #1: prevWalletFamilyRef advances ONLY when !hasBroadcastTxLock
+      assert.match(
+        step2Src,
+        /if \(!hasBroadcastTxLock\)\s*\{\s*prevWalletFamilyRef\.current = connectedWalletFamily\s*\}/,
+        'Step 2 must only advance prevWalletFamilyRef.current when !hasBroadcastTxLock so clearing a failed F-01 lock still auto-aligns',
+      )
+
+      // Important #2: preserve regeneration error banners on terminal views
+      assert.match(
+        step2Src,
+        /if \(alignedNet\) \{[\s\S]*?if \(!isTerminalIntent\)\s*\{\s*setError\(''\)\s*\}/,
+        'Step 2 must gate setError(\'\') on !isTerminalIntent when alignedNet updates state',
       )
     })
   })
