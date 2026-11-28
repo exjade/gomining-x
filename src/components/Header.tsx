@@ -23,7 +23,8 @@ import {
   Server,
   Share2,
   ShoppingCart,
-  ArrowDownRight
+  ArrowDownRight,
+  Mail
 } from 'lucide-react';
 import type { FleetSummary, AppSettings, KryptexPoolInfo, SaladBalanceInfo } from '../types/minerx';
 
@@ -140,6 +141,7 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'admin_referrals', label: 'Referidos', icon: Share2 },
     { id: 'admin_ledger', label: 'Ledger', icon: DollarSign },
     { id: 'admin_users', label: 'Usuarios', icon: Users },
+    { id: 'admin_leads', label: 'Leads', icon: Mail },
     { id: 'admin_promos', label: 'Promos', icon: Sparkles },
     { id: 'admin_audit', label: 'Auditoría', icon: ShieldCheck },
   ];

@@ -19,6 +19,7 @@ import { ContractsAllocationView } from './components/admin/ContractsAllocationV
 import { VirtualWorkersView } from './components/admin/VirtualWorkersView';
 import { LedgerView } from './components/admin/LedgerView';
 import { UserManagementView } from './components/admin/UserManagementView';
+import { LeadsView } from './components/admin/LeadsView';
 import { PromotionsManagerView } from './components/admin/PromotionsManagerView';
 import { AuditLogsView } from './components/admin/AuditLogsView';
 import { ReferralsView } from './components/admin/ReferralsView';
@@ -1714,6 +1715,12 @@ export const App: React.FC = () => {
 
           {activeTab === 'admin_users' && (
             <UserManagementView
+              isDarkTheme={themeMode === 'dark'}
+            />
+          )}
+
+          {activeTab === 'admin_leads' && (
+            <LeadsView
               isDarkTheme={themeMode === 'dark'}
             />
           )}

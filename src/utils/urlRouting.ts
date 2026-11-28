@@ -10,6 +10,9 @@ export function resolveTabFromUrl(search: string, pathname: string): { tab: stri
       if (lower === 'users' || lower === 'usuarios' || lower === 'admin_users') {
         return { tab: 'admin_users', suite: 'admin' };
       }
+      if (lower === 'leads' || lower === 'admin_leads') {
+        return { tab: 'admin_leads', suite: 'admin' };
+      }
       if (lower === 'packages' || lower === 'paquetes' || lower === 'admin_packages') {
         return { tab: 'admin_packages', suite: 'admin' };
       }
@@ -27,6 +30,9 @@ export function resolveTabFromUrl(search: string, pathname: string): { tab: stri
     const path = pathname.toLowerCase();
     if (path.includes('/users') || path.includes('/usuarios')) {
       return { tab: 'admin_users', suite: 'admin' };
+    }
+    if (path.includes('/leads')) {
+      return { tab: 'admin_leads', suite: 'admin' };
     }
     if (path.includes('/packages') || path.includes('/paquetes')) {
       return { tab: 'admin_packages', suite: 'admin' };

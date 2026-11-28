@@ -14,6 +14,7 @@ import { FirebaseAdminCatalogStoreAdapter } from './services/firebaseAdminCatalo
 import { firebaseAdminAuthAdapter } from './services/firebaseAdminAuthAdapter.js';
 import { firebaseAdminAllowlistAdapter } from './services/firebaseAdminAllowlistAdapter.js';
 import { platformBalancePurchaseService } from './services/platformBalancePurchaseService.js';
+import { LeadsService } from './services/leadsService.js';
 import { createWithdrawalConfigQuoteRouter } from './services/withdrawalConfigQuoteRouter.js';
 import { createAdminWithdrawalsRouter } from './services/adminWithdrawalsRouter.js';
 import { createAdminWithdrawalWorkflowRouter } from './services/adminWithdrawalWorkflowRouter.js';
@@ -95,6 +96,8 @@ export const getHistoryFile = () => path.join(getDataDir(), 'telemetry_history.j
 if (!fs.existsSync(getDataDir())) {
   fs.mkdirSync(getDataDir(), { recursive: true });
 }
+
+export const leadsService = new LeadsService(getDataDir);
 
 export const LEGACY_PACKAGES: any[] = [
   {
@@ -984,6 +987,35 @@ app.post(['/api/packages', '/api/commercial-packages'], async (req, res) => {
 
   writePackages(packages);
   res.json({ success: true, package: saved, isLegacy: true });
+});
+
+// =========================================================================
+// EMBUDO-F4-LEADS-REGLA-B (SCRUM-336): Leads Collection & Email Marketing Guard
+// =========================================================================
+app.post('/api/leads/capture', (req, res) => {
+  const result = leadsService.captureLead(req.body || {});
+  if (!result.captured) {
+    if (result.reason === 'INVALID_EMAIL') {
+      return res.status(400).json({ captured: false, reason: result.reason });
+    }
+    // Regla B: no communication consent -> gracefully ignored without error or marketing trigger
+    return res.status(200).json({ captured: false, reason: result.reason });
+  }
+  return res.status(201).json(result);
+});
+
+app.get('/api/admin/leads', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+  const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+  const search = typeof req.query.search === 'string' ? req.query.search : undefined;
+  return res.json(leadsService.listLeads({ status, search }));
+});
+
+app.post('/api/admin/leads/process-recovery', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+  return res.json(leadsService.processPendingRecoveryEmails());
 });
 
 // 2b. Admin Contracts Endpoints (Server-Authoritative via Firebase Admin SDK — SCRUM-370)
