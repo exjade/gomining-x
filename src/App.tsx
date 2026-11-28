@@ -22,12 +22,20 @@ import { fetchStorefrontCatalog, clearCatalogCache, TAB_TO_SECTION, SECTION_TO_T
 import { useRealtimeUserMiners } from './userMinersStore'
 import { MinerCreationScreen } from './components/miner-builder/MinerCreationScreen'
 import { CreateMinerModal } from './components/miner-builder/CreateMinerModal'
+import { BuilderSkinShowcase, resolveBuilderDesignSpec } from './components/miner-builder/BuilderSkinShowcase'
 import { MinerOptionList } from './components/miner-builder/MinerOptionList'
 import { MinerTabs, type MinerCategoryTab } from './components/miner-builder/MinerTabs'
 import { PowerSlider } from './components/miner-builder/PowerSlider'
 import { RewardsCalculator, type RewardPeriod } from './components/miner-builder/RewardsCalculator'
 import { PaymentTimingOptions, type MaintenanceToken } from './components/miner-builder/PaymentOptions'
 import { customMinerEconomics } from './components/miner-builder/customMinerEconomics'
+import {
+  PRESALE_CUSTOM_ONLY_MODE,
+  PRESALE_FREE_SKIN_COPY,
+  resolveInitialMinerBuilderConfig,
+  resolvePresaleReviewModalityLabel,
+  resolvePresaleStorefrontSections,
+} from './components/miner-builder/presaleCustomOnlyPolicy'
 import { BitcoinMiningCalculator } from './BitcoinMiningCalculator'
 import { calculateMiningSettlement, REFERRAL_LEVEL_WEIGHTS } from './miningEconomics'
 import { resetMiningConfig, updateMiningConfig, useMiningConfig } from './miningConfig'
@@ -35,6 +43,19 @@ import { fetchPrlDailyRevenue, formatUsd, KRYPTEX_PRL_STATS_URL, PEARL_PRL_EXPLO
 import { fetchPoolPayouts, getPoolPayoutStatus, type PoolPayoutPage } from './poolPayouts'
 import { AuthProvider, useAuth } from './AuthContext'
 import { AuthModal } from './AuthModal'
+import {
+  EmbudoFunnelProgress,
+  EmbudoPresaleSkinNotice,
+  advanceEmbudoF1Stage,
+  hasEmbudoF1QueryFlag,
+  readBuilderSelectedDesign,
+  readEmbudoF1State,
+  readEmbudoPresaleSelection,
+  returnEmbudoF1ToRegister,
+  saveBuilderSelectedDesign,
+  saveEmbudoPresaleSelection,
+  startEmbudoF1Registration,
+} from './components/embudo-f1'
 import { ProfilePage } from './ProfilePage'
 import { SubscriptionsPage } from './SubscriptionsPage'
 import { LandingPage } from './LandingPage'
@@ -103,7 +124,7 @@ function AppContent() {
   const location = useLocation()
   const navigate = useNavigate()
   const screen = getScreen(location.pathname)
-  const { user, profile, loading, isEmailVerified, openAuthModal } = useAuth()
+  const { user, profile, loading, isEmailVerified, authModalOpen, openAuthModal } = useAuth()
   const isAuthenticated = Boolean(user && !user.isAnonymous)
   const activeUid = isAuthenticated && user ? user.uid : null
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
@@ -113,7 +134,18 @@ function AppContent() {
   const [purchaseOpen, setPurchaseOpen] = useState(false)
   const [topUpOpen, setTopUpOpen] = useState(false)
   const [minerBuilderOpen, setMinerBuilderOpen] = useState(false)
-  const [walletCheckout, setWalletCheckout] = useState<{ productName: string; amount: number; currency: PaymentCurrency; packageId?: string; purchaseMode?: 'once' | 'monthly'; networkId?: PaymentNetworkId; walletId?: WalletId; minerId?: string; intentId?: string } | null>(null)
+  const [selectedSkin, setSelectedSkin] = useState<string>(() => readEmbudoPresaleSelection().designSlug || readBuilderSelectedDesign())
+
+  useEffect(() => {
+    if (minerBuilderOpen) {
+      const saved = readEmbudoPresaleSelection()
+      if (saved.designSlug) {
+        setSelectedSkin(saved.designSlug)
+      }
+    }
+  }, [minerBuilderOpen])
+
+  const [walletCheckout, setWalletCheckout] = useState<{ productName: string; amount: number; currency: PaymentCurrency; packageId?: string; purchaseMode?: 'once' | 'monthly'; networkId?: PaymentNetworkId; walletId?: WalletId; minerId?: string; intentId?: string; selectedSkin?: string } | null>(null)
   const [paymentReceipts, setPaymentReceipts] = useState<PaymentReceipt[]>([])
   const prevAuthUidRef = useRef<string | null>(activeUid)
   const paidRedirectTimerRef = useRef<number | null>(null)
@@ -343,6 +375,20 @@ function AppContent() {
     return () => window.removeEventListener('storage', handleStorage)
   }, [resetAccountTransientUiState, disconnectAllWagmiConnectors])
 
+  useEffect(() => {
+    if (!isAuthenticated || loading || walletCheckout) return
+    const funnelState = readEmbudoF1State()
+    if (funnelState.revisitingRegister) return
+    if (funnelState.stage === 'configuring' && location.pathname === '/home') {
+      const params = new URLSearchParams(location.search)
+      if (params.get('modal') !== 'paywall-create') {
+        params.set('modal', 'paywall-create')
+        params.set('embudo', 'f1')
+        navigate({ pathname: '/home', search: `?${params.toString()}` }, { replace: true })
+      }
+    }
+  }, [isAuthenticated, loading, authModalOpen, location.pathname, location.search, walletCheckout, navigate])
+
   if (loading) {
     if (isPublicAppRoute(location.pathname) || !isAuthenticated) {
       return <div className="min-h-screen bg-[#050505]" style={{ minHeight: '100vh', background: '#050505' }} aria-busy="true" />
@@ -353,8 +399,13 @@ function AppContent() {
   const authRedirect = getAuthRouteRedirect(location.pathname, isAuthenticated)
   if (authRedirect) {
     const query = authRedirect === '/home' ? location.search : ''
+    const funnelState = readEmbudoF1State()
+    if (authRedirect === '/home' && !funnelState.revisitingRegister && (funnelState.stage === 'registering' || funnelState.stage === 'configuring')) {
+      return <Navigate to="/home?modal=paywall-create&embudo=f1" replace />
+    }
     return <Navigate to={`${authRedirect}${query}`} replace />
   }
+
 
   const cleanPath = location.pathname.split('?')[0].split('#')[0].replace(/\/+$/, '').toLowerCase() || '/'
   const aliasTarget = routeAliases[cleanPath]
@@ -390,6 +441,7 @@ function AppContent() {
   const openMinerBuilder = () => {
     if (!user) {
       setToast('Inicia sesión o crea una cuenta para personalizar mineros.')
+      startEmbudoF1Registration('app')
       openAuthModal('register')
       return
     }
@@ -672,8 +724,26 @@ function AppContent() {
       {minerBuilderOpen && <MinerBuilderDialog
         balance={user && !user.isAnonymous ? (profile?.balance ?? 0) : demo.balance}
         isAuth={Boolean(user && !user.isAnonymous)}
+        isEmbudoF1={hasEmbudoF1QueryFlag(location.search) || readEmbudoF1State().active}
+        isEmailVerified={isEmailVerified}
+        onPostPaymentVerifyEmail={(minerId?: string) => {
+          advanceEmbudoF1Stage('verify-email', undefined, minerId ? { lastMinerId: minerId } : undefined)
+          navigate('/home', { replace: true })
+          openAuthModal('verify-email')
+        }}
         walletSession={effectiveWalletSession}
+        selectedSkin={selectedSkin}
+        onSelectSkin={(nextSkin) => {
+          setSelectedSkin(nextSkin)
+          saveBuilderSelectedDesign(nextSkin)
+        }}
         onClose={closeMinerBuilder}
+        onBackToRegister={() => {
+          returnEmbudoF1ToRegister()
+          setMinerBuilderOpen(false)
+          navigate('/home', { replace: true })
+          openAuthModal('register')
+        }}
         onPayWithWallet={(productName, amount, currency, packageId, purchaseMode) => {
         if (!user || user.isAnonymous) {
           closeMinerBuilder()
@@ -681,10 +751,15 @@ function AppContent() {
           openAuthModal('register')
           return
         }
+        const resolvedSkin = resolveBuilderDesignSpec(selectedSkin || readBuilderSelectedDesign()).slug
+        saveBuilderSelectedDesign(resolvedSkin)
+        if (hasEmbudoF1QueryFlag(location.search) || readEmbudoF1State().active) {
+          advanceEmbudoF1Stage('paying')
+        }
         closeMinerBuilder()
         setMinerBuilderOpen(false)
         const prep = prepareWalletMinerPurchase({ name: productName, powerTh: parseMinerPowerTh(productName, amount), efficiency: 15, price: amount, purchaseMode: purchaseMode ?? 'once', packageId })
-        setWalletCheckout({ ...createWalletCheckoutState(productName, amount, currency, packageId, purchaseMode), minerId: prep.id })
+        setWalletCheckout({ ...createWalletCheckoutState(productName, amount, currency, packageId, purchaseMode), minerId: prep.id, selectedSkin: resolvedSkin })
       }} onComplete={async (input) => {
         const canonicalPackageId = input.packageId?.trim()
         const lowerPkg = canonicalPackageId?.toLowerCase() || ''
@@ -1865,25 +1940,75 @@ function DemoProductGrid({ products, addProduct }: { products: DemoProduct[]; ad
   </div>
 }
 
-function MinerBuilderDialog({ balance, isAuth = false, walletSession, onClose, onPayWithWallet, onComplete, onDefer }: {
+function MinerBuilderDialog({
+  balance,
+  isAuth = false,
+  isEmbudoF1 = false,
+  isEmailVerified = true,
+  onPostPaymentVerifyEmail,
+  onBackToRegister,
+  selectedSkin: selectedSkinProp,
+  onSelectSkin,
+  walletSession,
+  onClose,
+  onPayWithWallet,
+  onComplete,
+  onDefer,
+}: {
   balance: number
   isAuth?: boolean
+  isEmbudoF1?: boolean
+  isEmailVerified?: boolean
+  onPostPaymentVerifyEmail?: (minerId?: string) => void
+  onBackToRegister?: () => void
+  selectedSkin?: string
+  onSelectSkin?: (skin: string) => void
   walletSession: ReturnType<typeof useWalletSession>
   onClose: () => void
   onPayWithWallet: (productName: string, amount: number, currency: PaymentCurrency, packageId?: string, purchaseMode?: 'once' | 'monthly') => void
-  onComplete: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; packageId?: string; durationDays?: number; purchaseId?: string }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
+  onComplete: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; packageId?: string; durationDays?: number; purchaseId?: string; selectedSkin?: string }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
   onDefer: (input: { name: string; powerTh: number; efficiency: number; price: number; currency: PaymentCurrency; purchaseMode: 'once' | 'monthly'; packageId?: string; durationDays?: number; purchaseId?: string }) => Promise<{ ok: boolean; message?: string; receipt?: DemoReceipt }>
 }) {
-  const [storefrontSections, setStorefrontSections] = useState<StorefrontSectionsConfig>(DEFAULT_STOREFRONT_SECTIONS)
+  const initialBuilderConfig = resolveInitialMinerBuilderConfig({
+    customOnly: PRESALE_CUSTOM_ONLY_MODE,
+    isEmbudoF1,
+  })
+  const [storefrontSections, setStorefrontSections] = useState<StorefrontSectionsConfig>(() =>
+    resolvePresaleStorefrontSections(DEFAULT_STOREFRONT_SECTIONS),
+  )
   const [stablePurchaseId] = useState(() => `pb_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`)
-  const [categoryTab, setCategoryTab] = useState<MinerCategoryTab>('packages')
-  const [presetId, setPresetId] = useState<string>('presale-1')
-  const [isCustomEditorOpen, setIsCustomEditorOpen] = useState(false)
-  const [customPowerIndex, setCustomPowerIndex] = useState(0)
+  const [categoryTab, setCategoryTab] = useState<MinerCategoryTab>(initialBuilderConfig.categoryTab)
+  const [presetId, setPresetId] = useState<string>(initialBuilderConfig.presetId)
+  const [isCustomEditorOpen, setIsCustomEditorOpen] = useState(initialBuilderConfig.isCustomEditorOpen)
+  const [customPowerIndex, setCustomPowerIndex] = useState<number>(() => readEmbudoPresaleSelection().tierIndex)
+  const [localSelectedSkin, setLocalSelectedSkin] = useState<string>(() => {
+    const saved = readEmbudoPresaleSelection()
+    return selectedSkinProp ?? saved.designSlug ?? readBuilderSelectedDesign()
+  })
+  const selectedSkin = selectedSkinProp ?? localSelectedSkin
+  const selectedDesign = useMemo(() => resolveBuilderDesignSpec(selectedSkin), [selectedSkin])
+
+  const handleSelectSkin = (skinSlug: string) => {
+    setLocalSelectedSkin(skinSlug)
+    onSelectSkin?.(skinSlug)
+    saveBuilderSelectedDesign(skinSlug)
+  }
+
+  useEffect(() => {
+    saveBuilderSelectedDesign(selectedDesign.slug)
+    saveEmbudoPresaleSelection({
+      tierIndex: customPowerIndex,
+      designSlug: selectedDesign.slug,
+      designName: selectedDesign.name,
+      skinCode: selectedDesign.skinCode,
+    })
+  }, [customPowerIndex, selectedDesign.name, selectedDesign.skinCode, selectedDesign.slug])
   const [maintenanceToken, setMaintenanceToken] = useState<MaintenanceToken>('PEARL')
   const [roiPeriod, setRoiPeriod] = useState<RewardPeriod>('monthly')
   const [promoCode, setPromoCode] = useState('')
-  const [stage, setStage] = useState<'configure' | 'review' | 'receipt'>('configure')
+  const [stage, setStage] = useState<'configure' | 'review' | 'receipt'>(() =>
+    isEmbudoF1 && readEmbudoF1State().stage === 'paying' ? 'review' : 'configure',
+  )
   const [accepted, setAccepted] = useState(false)
   const [receipt, setReceipt] = useState<DemoReceipt | null>(null)
   const [feedback, setFeedback] = useState('')
@@ -1915,7 +2040,7 @@ function MinerBuilderDialog({ balance, isAuth = false, walletSession, onClose, o
 
   useEffect(() => {
     const unsubscribe = subscribeToStorefrontSections((cfg) => {
-      if (cfg) setStorefrontSections(cfg)
+      if (cfg) setStorefrontSections(resolvePresaleStorefrontSections(cfg))
     })
     return () => {
       if (unsubscribe) unsubscribe()
@@ -2038,6 +2163,7 @@ function MinerBuilderDialog({ balance, isAuth = false, walletSession, onClose, o
       packageId,
       purchaseId: stablePurchaseId,
       durationDays: purchaseMode === 'monthly' ? 30 : undefined,
+      selectedSkin: selectedDesign.slug,
     }
     try {
       const result = await (kind === 'buy' ? onComplete(input) : onDefer(input))
@@ -2057,6 +2183,12 @@ function MinerBuilderDialog({ balance, isAuth = false, walletSession, onClose, o
 
   return (
     <CreateMinerModal variant={modalVariant} onClose={onClose}>
+      {isEmbudoF1 && (
+        <EmbudoFunnelProgress
+          currentStep={stage === 'review' ? 'paying' : stage === 'receipt' ? (isEmailVerified ? 'dashboard' : 'verify-email') : 'configuring'}
+          variant="builder"
+        />
+      )}
 
         {stage === 'receipt' && receipt ? (
           <>
@@ -2073,146 +2205,233 @@ function MinerBuilderDialog({ balance, isAuth = false, walletSession, onClose, o
               <div className="simulation-warning"><span>i</span><span>Esta acción afecta tu sesión local y activa el worker correspondiente en tu panel de minería.</span></div>
             )}
             <div className="purchase-modal-actions">
-              <button className="button button-primary" onClick={onClose}>Listo <span>✓</span></button>
+              <button
+                className="button button-primary"
+                onClick={() => {
+                  onClose()
+                  if (!isEmailVerified && !receiptIsPending && onPostPaymentVerifyEmail) {
+                    onPostPaymentVerifyEmail(receipt.id)
+                  }
+                }}
+              >
+                Listo <span>✓</span>
+              </button>
             </div>
           </>
         ) : stage === 'review' ? (
           <>
             <p className="eyebrow">PASO 2 DE 2 · CONFIRMAR COMPRA</p>
             <h2 id="miner-builder-title">Revisa tu minero</h2>
-            <div className="builder-review-grid">
-              <div><span>Potencia</span><strong>{powerTh.toFixed(2)} TH</strong></div>
-              <div><span>Eficiencia</span><strong>15 W/TH</strong></div>
-              <div><span>Modalidad</span><strong>{categoryTab === 'presale' ? 'Preventa (Edición limitada)' : categoryTab === 'monthly' ? 'Mensual · 30 días' : categoryTab === 'packages' ? 'Paquetes MinerX' : 'Lanzamiento · Propiedad'}</strong></div>
-              <div><span>Token de mantenimiento</span><strong>{maintenanceToken} {maintenanceToken === 'PEARL' ? '(-20% dto)' : ''}</strong></div>
-            </div>
-            <div className="purchase-total">
-              <span>Precio total</span>
-              <strong>{formatCatalogPrice(total, 'USD')}</strong>
-            </div>
-            <div className="checkout-payment">
-              <span className="checkout-payment-icon">◉</span>
-              <div>
-                <strong>{walletSession.connection ? `Wallet detectada · ${walletSession.connection.name}` : 'Conecta tu wallet para pagar'}</strong>
-                <small>{walletSession.connection ? `${walletSession.connection.shortAddress} · lista para pagar en USD` : 'Al continuar podrás elegir una wallet compatible.'}</small>
+            <div className="builder-workflow-scroll">
+              <div className="builder-review-grid">
+                <div><span>Potencia</span><strong>{powerTh.toFixed(2)} TH</strong></div>
+                <div><span>Eficiencia</span><strong>15 W/TH</strong></div>
+                <div><span>Modalidad</span><strong>{resolvePresaleReviewModalityLabel(isCustom, categoryTab)}</strong></div>
+                <div><span>Token de mantenimiento</span><strong>{maintenanceToken} {maintenanceToken === 'PEARL' ? '(-20% dto)' : ''}</strong></div>
+                {isCustom && (
+                  <div>
+                    <span>{PRESALE_FREE_SKIN_COPY.reviewSkinLabel}</span>
+                    <strong className="builder-review-skin-badge" data-testid="review-selected-skin">
+                      <img
+                        src={selectedDesign.thumbnailPath}
+                        alt={selectedDesign.name}
+                        className="builder-review-skin-thumb"
+                      />
+                      {selectedDesign.name} · {PRESALE_FREE_SKIN_COPY.reviewSkinValue}
+                    </strong>
+                  </div>
+                )}
               </div>
-              <span className={walletSession.connection ? 'wallet-read-badge' : 'checkout-local-badge'}>
-                {walletSession.connection ? 'LISTA' : 'CONECTAR'}
-              </span>
+              <div className="purchase-total">
+                <span>Precio total</span>
+                <strong>{formatCatalogPrice(total, 'USD')}</strong>
+              </div>
+              <div className="checkout-payment">
+                <span className="checkout-payment-icon">◉</span>
+                <div>
+                  <strong>{walletSession.connection ? `Wallet detectada · ${walletSession.connection.name}` : 'Conecta tu wallet para pagar'}</strong>
+                  <small>{walletSession.connection ? `${walletSession.connection.shortAddress} · lista para pagar en USD` : 'Al continuar podrás elegir una wallet compatible.'}</small>
+                </div>
+                <span className={walletSession.connection ? 'wallet-read-badge' : 'checkout-local-badge'}>
+                  {walletSession.connection ? 'LISTA' : 'CONECTAR'}
+                </span>
+              </div>
+              <div className="simulation-warning">
+                <span>i</span>
+                <span>Catálogo observado el {observedAtLabel}. Todos los precios están expresados en USD. La tesorería del protocolo recibe los fondos y se genera un comprobante con hash verificable.</span>
+              </div>
+              <label className="simulation-consent">
+                <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
+                <span>Revisaré la red, importe en USD y el destino en mi wallet antes de aprobar.</span>
+              </label>
+              {feedback && <small className="inline-feedback" role="status">{feedback}</small>}
+              {isAuth ? (
+                <div className="miner-platform-balance-section" style={{ marginTop: '8px' }}>
+                  <p>Saldo en plataforma disponible: {formatDemoCurrency(balance)}.</p>
+                  <div className="purchase-modal-actions purchase-modal-actions-inline">
+                    <button className="button button-secondary" disabled={!accepted} onClick={() => void runDemoAction('buy')}>Comprar con saldo <span>✓</span></button>
+                  </div>
+                </div>
+              ) : (
+                <details className="miner-demo-payment" style={{ marginTop: '8px' }}>
+                  <summary>Otras opciones de simulación local</summary>
+                  <p>Saldo local disponible: {formatDemoCurrency(balance)}.</p>
+                  <div className="purchase-modal-actions purchase-modal-actions-inline">
+                    <button className="button button-secondary" disabled={!accepted} onClick={() => void runDemoAction('buy')}>Añadir con saldo local <span>✓</span></button>
+                    <button className="button button-quiet" disabled={!accepted} onClick={() => void runDemoAction('defer')}>Guardar pedido pendiente</button>
+                  </div>
+                </details>
+              )}
             </div>
-            <div className="simulation-warning">
-              <span>i</span>
-              <span>Catálogo observado el {observedAtLabel}. Todos los precios están expresados en USD. La tesorería del protocolo recibe los fondos y se genera un comprobante con hash verificable.</span>
-            </div>
-            <label className="simulation-consent">
-              <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
-              <span>Revisaré la red, importe en USD y el destino en mi wallet antes de aprobar.</span>
-            </label>
-            {feedback && <small className="inline-feedback" role="status">{feedback}</small>}
-            <div className="purchase-modal-actions">
+            <div className="purchase-modal-actions builder-workflow-footer">
               <button className="button button-quiet" onClick={() => { setAccepted(false); setStage('configure') }}>Volver</button>
-              <button className="button button-primary" disabled={!accepted} onClick={() => onPayWithWallet(productName, total, 'USD', packageId, purchaseMode)}>
+              <button
+                className="button button-primary"
+                disabled={!accepted}
+                onClick={() => {
+                  onPayWithWallet(productName, total, 'USD', packageId, purchaseMode)
+                }}
+              >
                 {walletSession.connection ? `Pagar con ${walletSession.connection.name}` : 'Conectar wallet y pagar'} <span>↗</span>
               </button>
             </div>
-            {isAuth ? (
-              <div className="miner-platform-balance-section" style={{ marginTop: '12px' }}>
-                <p>Saldo en plataforma disponible: {formatDemoCurrency(balance)}.</p>
-                <div className="purchase-modal-actions">
-                  <button className="button button-secondary" disabled={!accepted} onClick={() => void runDemoAction('buy')}>Comprar con saldo <span>✓</span></button>
-                </div>
-              </div>
-            ) : (
-              <details className="miner-demo-payment" style={{ marginTop: '12px' }}>
-                <summary>Otras opciones de simulación local</summary>
-                <p>Saldo local disponible: {formatDemoCurrency(balance)}.</p>
-                <div className="purchase-modal-actions">
-                  <button className="button button-secondary" disabled={!accepted} onClick={() => void runDemoAction('buy')}>Añadir con saldo local <span>✓</span></button>
-                  <button className="button button-quiet" disabled={!accepted} onClick={() => void runDemoAction('defer')}>Guardar pedido pendiente</button>
-                </div>
-              </details>
-            )}
           </>
         ) : (
           <>
             {isCustomEditor ? (
-              <MinerCreationScreen customMode onBack={() => setIsCustomEditorOpen(false)}>
-                <div className="miner-custom-card-list">
-                  <section className="miner-custom-card miner-custom-power-card">
-                  <div className="panel-toolbar">
-                    <div>
-                      <h3>Ajuste personalizado</h3>
-                      <p>Precio exacto por nivel · $12.99/TH base</p>
+              <MinerCreationScreen
+                customMode
+                hideBackButton={PRESALE_CUSTOM_ONLY_MODE && !isEmbudoF1}
+                eyebrow={PRESALE_CUSTOM_ONLY_MODE ? PRESALE_FREE_SKIN_COPY.eyebrow : undefined}
+                backLabel={isEmbudoF1 ? '← Atrás' : '‹'}
+                backAriaLabel={isEmbudoF1 ? 'Volver al paso anterior (Registro)' : 'Volver a los paquetes'}
+                onBack={() => {
+                  if (isEmbudoF1 && onBackToRegister) {
+                    onBackToRegister()
+                  } else {
+                    setIsCustomEditorOpen(false)
+                  }
+                }}
+              >
+                <div className="builder-cockpit-scroll">
+                  <div className="builder-cockpit-grid">
+                    {/* Left Column: Strictly 2D Skin Selector (10 presale skins v01-scorpion..v10-nova) */}
+                    <div className="builder-cockpit-col">
+                      <BuilderSkinShowcase
+                        selectedSkin={selectedDesign.slug}
+                        powerTh={powerTh}
+                        priceUsd={total}
+                        productName={productName}
+                        onSelectDesign={(design) => {
+                          handleSelectSkin(design.slug)
+                          if (isEmbudoF1) {
+                            advanceEmbudoF1Stage('configuring', undefined, { selectedDesignSlug: design.slug })
+                          }
+                        }}
+                      />
                     </div>
-                    <span className="miner-option-badge">USD</span>
-                  </div>
-                  <PowerSlider
-                    value={customPowerIndex}
-                    tiers={customMinerPriceTiers}
-                    valueLabel={`${customTier.powerTh.toLocaleString('es-MX')} TH · ${formatCatalogPrice(customTier.priceUsd, 'USD')}`}
-                    onChange={setCustomPowerIndex}
-                  />
-                  <div className="miner-energy-efficiency">
-                    <div className="miner-section-heading">Eficiencia energética <span className="miner-info-icon" aria-hidden="true">i</span></div>
-                    <div className="miner-efficiency-chip"><span className="miner-efficiency-mark" aria-hidden="true">⚡</span><strong>15 W/TH</strong></div>
-                  </div>
-                  <div className="miner-power-range-control">
-                    <label className="miner-power-range-label" htmlFor="custom-power-range">Potencia personalizada</label>
-                    <input
-                      id="custom-power-range"
-                      className="miner-power-range"
-                      type="range"
-                      min="0"
-                      max={customMinerPriceTiers.length - 1}
-                      step="1"
-                      value={customPowerIndex}
-                      aria-label="Nivel y Potencia"
-                      onChange={(event) => setCustomPowerIndex(Number(event.target.value))}
-                    />
-                  </div>
-                  </section>
 
-                  <section className="miner-custom-card miner-custom-rewards-card">
-                  <RewardsCalculator
-                    roiPeriod={roiPeriod}
-                    setRoiPeriod={setRoiPeriod}
-                    maintenanceToken={maintenanceToken}
-                    setMaintenanceToken={setMaintenanceToken}
-                    btcPriceUsd={btcPriceUsd}
-                    poolPayoutUsd={poolPayoutUsd}
-                    periodBtcEstimate={periodBtcEstimate}
-                    periodMaintenanceUsd={periodMaintenanceUsd}
-                    periodMaintenanceTokenAmount={periodMaintenanceTokenAmount}
-                    netRewardUsd={netRewardUsd}
-                    displayRoi={displayRoi}
-                    showCurrencySelector
-                  />
-                  </section>
+                    {/* Right Column: Power Slider (22 Tiers) + Calculator + Summary */}
+                    <div className="builder-cockpit-col">
+                      <EmbudoPresaleSkinNotice />
+                      <div className="miner-custom-card-list">
+                        <section className="miner-custom-card miner-custom-power-card">
+                          <div className="panel-toolbar">
+                            <div>
+                              <h3>Ajuste personalizado</h3>
+                              <p>Precio exacto por nivel · $12.99/TH base · 22 niveles</p>
+                            </div>
+                            <span className="miner-option-badge">USD</span>
+                          </div>
+                          <div className="builder-power-hero-readout">
+                            <span className="builder-power-hero-th">
+                              {customTier.powerTh.toLocaleString('es-MX')}
+                              <small>TH/s</small>
+                            </span>
+                            <span className="builder-power-hero-price">
+                              {formatCatalogPrice(customTier.priceUsd, 'USD')}
+                            </span>
+                          </div>
+                          <PowerSlider
+                            value={customPowerIndex}
+                            tiers={customMinerPriceTiers}
+                            valueLabel={`${customTier.powerTh.toLocaleString('es-MX')} TH · ${formatCatalogPrice(customTier.priceUsd, 'USD')}`}
+                            onChange={setCustomPowerIndex}
+                          />
+                          <div className="miner-energy-efficiency">
+                            <div className="miner-section-heading">Eficiencia energética <span className="miner-info-icon" aria-hidden="true">i</span></div>
+                            <div className="miner-efficiency-chip"><span className="miner-efficiency-mark" aria-hidden="true">⚡</span><strong>15 W/TH</strong></div>
+                          </div>
+                        </section>
 
-                  <div className="miner-custom-card miner-custom-traits-row" aria-label="Rasgos del minero">
-                    <span className="miner-traits-thumbnail" aria-hidden="true" />
-                    <span className="miner-custom-traits-copy">
-                      <strong>Rasgos del minero</strong>
-                      <small>{customTier.powerTh.toFixed(2)} TH · 15 W/TH</small>
-                    </span>
-                    <span className="miner-custom-traits-chevron" aria-hidden="true">›</span>
-                  </div>
+                        <section className="miner-custom-card miner-custom-rewards-card">
+                          <RewardsCalculator
+                            roiPeriod={roiPeriod}
+                            setRoiPeriod={setRoiPeriod}
+                            maintenanceToken={maintenanceToken}
+                            setMaintenanceToken={setMaintenanceToken}
+                            btcPriceUsd={btcPriceUsd}
+                            poolPayoutUsd={poolPayoutUsd}
+                            periodBtcEstimate={periodBtcEstimate}
+                            periodMaintenanceUsd={periodMaintenanceUsd}
+                            periodMaintenanceTokenAmount={periodMaintenanceTokenAmount}
+                            netRewardUsd={netRewardUsd}
+                            displayRoi={displayRoi}
+                            showCurrencySelector
+                          />
+                        </section>
 
-                  <section className="miner-custom-card miner-custom-payment-card">
-                  <PaymentTimingOptions />
-                  <div className="miner-config-summary">
-                    <span>Precio total <strong>{formatCatalogPrice(total, 'USD')}</strong></span>
-                    <span>Catálogo <strong>{new Date(MINER_CATALOG_OBSERVED_AT).toLocaleDateString('es-MX')}</strong></span>
+                        <div className="miner-custom-card miner-custom-traits-row" aria-label={PRESALE_FREE_SKIN_COPY.skinTitle}>
+                          <span className="miner-custom-traits-copy">
+                            <strong>{PRESALE_FREE_SKIN_COPY.skinTitle} · {selectedDesign.name}</strong>
+                            <small>{PRESALE_FREE_SKIN_COPY.skinSubtitlePrefix} · {customTier.powerTh.toFixed(2)} TH · 15 W/TH</small>
+                          </span>
+                          <span className="miner-option-badge">$0</span>
+                        </div>
+
+                        <section className="miner-custom-card miner-custom-payment-card">
+                          <PaymentTimingOptions />
+                          <div className="miner-config-summary">
+                            <span>Precio total <strong>{formatCatalogPrice(total, 'USD')}</strong></span>
+                            <span>Catálogo <strong>{new Date(MINER_CATALOG_OBSERVED_AT).toLocaleDateString('es-MX')}</strong></span>
+                          </div>
+                          <label className="builder-promo miner-promo">
+                            <span>Código promocional</span>
+                            <input value={promoCode} onChange={(event) => setPromoCode(event.target.value)} placeholder="Añadir código opcional" />
+                          </label>
+                        </section>
+                      </div>
+                    </div>
                   </div>
-                  <label className="builder-promo miner-promo">
-                    <span>Código promocional</span>
-                    <input value={promoCode} onChange={(event) => setPromoCode(event.target.value)} placeholder="Añadir código opcional" />
-                  </label>
-                  </section>
                 </div>
-                <div className="purchase-modal-actions">
-                  <button className="button button-primary" onClick={() => { setAccepted(false); setStage('review') }}>
-                    Continuar a la compra <span>→</span>
+                <div className="purchase-modal-actions builder-footer-actions">
+                  <button
+                    type="button"
+                    className="builder-back-step-btn"
+                    data-testid="builder-back-btn"
+                    onClick={() => {
+                      if (isEmbudoF1 && onBackToRegister) {
+                        onBackToRegister()
+                      } else {
+                        onClose()
+                      }
+                    }}
+                  >
+                    {isEmbudoF1 ? '← Atrás (Registro)' : '← Regresar'}
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-primary"
+                    onClick={() => {
+                      saveBuilderSelectedDesign(selectedDesign.slug)
+                      if (isEmbudoF1) {
+                        advanceEmbudoF1Stage('paying', undefined, { selectedDesignSlug: selectedDesign.slug })
+                      }
+                      setAccepted(false)
+                      setStage('review')
+                    }}
+                  >
+                    Continuar a la compra · {formatCatalogPrice(total, 'USD')} <span>→</span>
                   </button>
                 </div>
               </MinerCreationScreen>

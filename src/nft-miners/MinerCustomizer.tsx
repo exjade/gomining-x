@@ -6,6 +6,12 @@ import { usePersonalization } from '../personalization'
 import { subscribeToSingleMinerDoc } from '../userMinersStore'
 import { LockedTraitModal } from './LockedTraitModal'
 import { MinerAppearancePreview } from './MinerAppearancePreview'
+import {
+  TeardownMinerPreview,
+  TeardownSkinDesignPicker,
+  resolveDesignSpecFromSkin,
+  type TeardownDesignSpec,
+} from '../components/teardown-miner-preview'
 import { derivedDemoBlockedDetail } from './derived-demo-recolor'
 import { getActiveProgressProvider, getDevUnlockRules, type PieceAccessRule } from './unlock-engine'
 import { EXPLICIT_NONE_APPEARANCE, getTraitAccess } from './appearance'
@@ -127,7 +133,12 @@ function MinerDetails({ miner, catalog }: { miner: MinerCustomizationMiner; cata
       <Link className="pwm-back-link" to="/nft-miners"><span aria-hidden="true">‹</span> {t('common.back').replace(/^←\s*/, '')}</Link>
       <div className="pwm-miner-detail-layout">
         <div className="pwm-detail-art-panel">
-          <MinerAppearancePreview miner={miner} appearanceOverride={appearanceDraftFromSaved(miner.appearance)} catalogOverride={catalog} />
+          <TeardownMinerPreview
+            miner={miner}
+            appearanceOverride={appearanceDraftFromSaved(miner.appearance)}
+            catalogOverride={catalog}
+            designId={resolveDesignSpecFromSkin({ appearance: miner.appearance }).slug}
+          />
           <div className="pwm-detail-art-actions">
             <Link className="pwm-button pwm-button-primary" to={`/nft-miners/${encodeURIComponent(miner.id)}/customize`}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5M4 20l4.2-1 10.4-10.4a2.1 2.1 0 0 0-3-3L5.2 16 4 20Zm9.6-13.6 3 3M3 5h4M5 3v4" /></svg>{t('minerCustomization.customize')}</Link>
             <button className="pwm-button pwm-button-muted" type="button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 14.4 5l3.5-.1.4 3.5 2.8 2.1-1.5 3.2 1.1 3.4-3.2 1.4-1.7 3.1-3.4-1.1-3.4 1.1-1.7-3.1-3.2-1.4 1.1-3.4-1.5-3.2 2.8-2.1.4-3.5 3.5.1L12 2.5Z"/><path d="m9 15 6-6m-4.7.2h.1m2.4 5.6h.1" /></svg>{t('minerCustomization.applyPromoCode')}</button>
@@ -320,6 +331,13 @@ function CustomizeMiner({ miner, catalog, saveAppearance }: { miner: MinerCustom
     chooseCategory(appearanceCategories[nextIndex].id, nextIndex)
   }
 
+  const activeDesign = resolveDesignSpecFromSkin({ appearance: draft })
+  const handleSelectPresaleDesign = (design: TeardownDesignSpec) => {
+    setDraft((current) =>
+      selectAppearanceTrait(current, 'wall', design.skinTraitId, progress, miner, unlockRules, appearanceCategories),
+    )
+  }
+
   return (
     <section className="pwm-miner-flow pwm-customizer-flow">
       <header className="pwm-customizer-header">
@@ -331,7 +349,16 @@ function CustomizeMiner({ miner, catalog, saveAppearance }: { miner: MinerCustom
       </header>
 
       <div className="pwm-customizer-column">
-        <MinerAppearancePreview miner={miner} appearanceOverride={draft} catalogOverride={catalog} />
+        <TeardownMinerPreview
+          miner={miner}
+          appearanceOverride={draft}
+          catalogOverride={catalog}
+          designId={activeDesign.slug}
+        />
+        <TeardownSkinDesignPicker
+          activeDesign={activeDesign}
+          onSelectDesign={handleSelectPresaleDesign}
+        />
         <section className="pwm-customizer-card" aria-label={t('minerCustomization.customizerLabel')}>
           <div className="pwm-customizer-tabs" role="tablist" aria-label={t('minerCustomization.categories')}>
             {appearanceCategories.map((item, index) => (
