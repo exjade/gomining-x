@@ -15,10 +15,16 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { useAuth } from './AuthContext'
-import { findUserByReferralCode } from './firebase'
+import {
+  applyEmailVerificationActionCode,
+  findUserByReferralCode,
+  useFirebaseEmulators,
+} from './firebase'
 import { usePersonalization } from './personalization'
 import {
   decrementResendCooldown,
+  extractVerificationOobCode,
+  shouldShowEmulatorVerifyDevTools,
   validateForgotPasswordEmail,
   validateLoginFields,
   validateRegisterStep2,
@@ -45,6 +51,7 @@ export function AuthModal() {
     user,
     authModalOpen,
     authMode,
+    verifyEmailLocked,
     referralCodeFromUrl,
     closeAuthModal,
     login,
@@ -74,6 +81,7 @@ export function AuthModal() {
   const [info, setInfo] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [resendCooldown, setResendCooldown] = useState(0)
+  const [emulatorOobInput, setEmulatorOobInput] = useState('')
   const [embudoF1Active, setEmbudoF1Active] = useState(false)
   const [preloadedConfig, setPreloadedConfig] = useState<EmbudoPresaleSelection>(() =>
     readEmbudoPresaleSelection(),
@@ -114,15 +122,16 @@ export function AuthModal() {
     }
   }, [authMode, authModalOpen])
 
+  const isVerifyGateLocked = Boolean(verifyEmailLocked && mode === 'verify-email')
 
   useEffect(() => {
     if (!authModalOpen) return
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeAuthModal()
+      if (event.key === 'Escape' && !isVerifyGateLocked) closeAuthModal()
     }
     window.addEventListener('keydown', handleEscape)
     return () => window.removeEventListener('keydown', handleEscape)
-  }, [authModalOpen, closeAuthModal])
+  }, [authModalOpen, isVerifyGateLocked, closeAuthModal])
 
   useEffect(() => {
     if (referralCodeFromUrl && !referralCode) {
@@ -295,9 +304,14 @@ export function AuthModal() {
     setSubmitting(true)
     setError('')
     try {
+      const funnelBeforeCheck = readEmbudoF1State()
       const verified = await checkVerification()
       if (verified) {
-        setMode('email-verified')
+        if (funnelBeforeCheck.active) {
+          advanceEmbudoF1Stage('dashboard')
+        }
+        setEmulatorOobInput('')
+        navigate('/home', { replace: true })
       } else {
         setError(
           language === 'en'
@@ -307,6 +321,49 @@ export function AuthModal() {
       }
     } catch (err: any) {
       setError(err?.message || (language === 'en' ? 'Error checking email status.' : 'Error al verificar el estado del correo.'))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleApplyEmulatorVerification = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    setError('')
+    setInfo('')
+    const extracted = extractVerificationOobCode(emulatorOobInput)
+    if (!extracted) {
+      setError(
+        language === 'en'
+          ? 'Paste a valid verification link or oobCode from the Firebase Emulator logs.'
+          : 'Pega un enlace de verificación o código oobCode válido desde los logs del emulador.'
+      )
+      return
+    }
+    setSubmitting(true)
+    try {
+      const funnelBeforeCheck = readEmbudoF1State()
+      await applyEmailVerificationActionCode(extracted)
+      const verified = await checkVerification()
+      if (verified) {
+        if (funnelBeforeCheck.active) {
+          advanceEmbudoF1Stage('dashboard')
+        }
+        setEmulatorOobInput('')
+        navigate('/home', { replace: true })
+      } else {
+        setError(
+          language === 'en'
+            ? 'Action code applied, please click check verification status again.'
+            : 'Código aplicado; pulsa nuevamente "Ya verifiqué mi correo" para actualizar el estado.'
+        )
+      }
+    } catch (err: any) {
+      setError(
+        err?.message ||
+          (language === 'en'
+            ? 'Invalid or expired emulator verification code.'
+            : 'El enlace o código oobCode del emulador es inválido o ya fue usado.')
+      )
     } finally {
       setSubmitting(false)
     }
@@ -360,8 +417,9 @@ export function AuthModal() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              onClick={closeAuthModal}
+              onClick={isVerifyGateLocked ? undefined : closeAuthModal}
               className="pouw-auth-modal-backdrop"
+              data-testid="auth-modal-backdrop"
             />
 
             {/* Modal Box — Compact Dark Obsidian Surface */}
@@ -381,14 +439,23 @@ export function AuthModal() {
                 <span className="auth-brand inline-flex items-center gap-2 text-white">
                   PouwMiner <span className="auth-brand-tag text-white/45 uppercase pl-2 border-l border-white/15">Auth</span>
                 </span>
-                <button
-                  type="button"
-                  onClick={closeAuthModal}
-                  className="auth-close rounded-lg flex items-center justify-center text-white/45 hover:text-white hover:bg-white/[0.08] transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.97]"
-                  aria-label={t('common.close')}
-                >
-                  <X className="w-4 h-4" />
-                </button>
+                {isVerifyGateLocked ? (
+                  <span
+                    data-testid="verify-gate-locked-badge"
+                    className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-400/25 text-emerald-300"
+                  >
+                    {language === 'en' ? 'Verification required' : 'Verificación requerida'}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={closeAuthModal}
+                    className="auth-close rounded-lg flex items-center justify-center text-white/45 hover:text-white hover:bg-white/[0.08] transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.97]"
+                    aria-label={t('common.close')}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
 
               {/* FOMO Live Countdown Banner — Single-line: PREVENTA TITAN + Countdown */}
@@ -926,6 +993,50 @@ export function AuthModal() {
                         : (language === 'en' ? 'Resend verification link' : 'Reenviar enlace de verificación')}
                     </button>
                   </div>
+
+                  {shouldShowEmulatorVerifyDevTools(useFirebaseEmulators) && (
+                    <div
+                      data-testid="verify-emulator-devtools"
+                      className="mt-3.5 p-3 rounded-xl bg-emerald-500/[0.06] border border-emerald-400/25 text-left space-y-2"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-300">
+                          {language === 'en' ? 'DEV · Firebase Emulators' : 'DEV · Emulador Firebase'}
+                        </span>
+                        <span className="text-[11px] font-mono text-white/45">UI :4000 → Logs</span>
+                      </div>
+                      <p className="text-xs text-white/60 leading-relaxed">
+                        {language === 'en'
+                          ? 'Open the Emulator UI (:4000 → Logs), copy the verification link or oobCode emitted by Auth (:9099), and paste it below:'
+                          : 'Abre la UI del emulador (:4000 → Logs), copia el enlace de verificación o el oobCode emitido por Auth (:9099) y pégalo aquí:'}
+                      </p>
+                      <div className="space-y-2">
+                        <label htmlFor="verify-emulator-oob" className="block text-[11px] font-medium text-white/70">
+                          {language === 'en' ? 'Verification link or oobCode' : 'Enlace de verificación o código oobCode'}
+                        </label>
+                        <input
+                          id="verify-emulator-oob"
+                          data-testid="verify-emulator-oob-input"
+                          type="text"
+                          value={emulatorOobInput}
+                          onChange={(e) => setEmulatorOobInput(e.target.value)}
+                          placeholder="http://127.0.0.1:9099/emulator/action?mode=verifyEmail&oobCode=..."
+                          className="auth-input w-full px-3 rounded-xl bg-white/[0.04] border border-white/[0.14] text-white text-xs font-mono focus:border-emerald-400/70 focus:outline-none transition-[border-color,background-color] duration-150 placeholder:text-white/30"
+                        />
+                        <button
+                          type="button"
+                          data-testid="verify-emulator-apply-btn"
+                          disabled={submitting || !emulatorOobInput.trim()}
+                          onClick={() => void handleApplyEmulatorVerification()}
+                          className="w-full py-2 px-3.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-[#050505] text-xs font-semibold flex items-center justify-center gap-1.5 transition-[background-color,transform,opacity] duration-150 ease-out active:scale-[0.97] disabled:opacity-45"
+                        >
+                          {submitting
+                            ? (language === 'en' ? 'Applying code...' : 'Aplicando código...')
+                            : (language === 'en' ? 'Verify with emulator link / oobCode' : 'Verificar con enlace / oobCode del emulador')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="auth-footer mt-3.5 pt-3 border-t border-white/[0.07] text-center">
                     <button

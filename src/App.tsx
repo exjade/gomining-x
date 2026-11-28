@@ -47,6 +47,7 @@ import {
   EmbudoFunnelProgress,
   EmbudoPresaleSkinNotice,
   advanceEmbudoF1Stage,
+  hasCompletedPurchaseOrFunnelReceipt,
   hasEmbudoF1QueryFlag,
   readBuilderSelectedDesign,
   readEmbudoF1State,
@@ -54,6 +55,7 @@ import {
   returnEmbudoF1ToRegister,
   saveBuilderSelectedDesign,
   saveEmbudoPresaleSelection,
+  shouldLockHomeForEmailVerification,
   startEmbudoF1Registration,
 } from './components/embudo-f1'
 import { ProfilePage } from './ProfilePage'
@@ -124,9 +126,22 @@ function AppContent() {
   const location = useLocation()
   const navigate = useNavigate()
   const screen = getScreen(location.pathname)
-  const { user, profile, loading, isEmailVerified, authModalOpen, openAuthModal } = useAuth()
+  const {
+    user,
+    profile,
+    profileError,
+    loading,
+    isEmailVerified,
+    authModalOpen,
+    authMode,
+    setVerifyEmailLocked,
+    openAuthModal,
+    refreshProfile,
+    logout,
+  } = useAuth()
   const isAuthenticated = Boolean(user && !user.isAnonymous)
   const activeUid = isAuthenticated && user ? user.uid : null
+  const { miners: realMiners } = useRealtimeUserMiners(isAuthenticated ? user?.uid : undefined)
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
   const [toast, setToast] = useState('')
   const [sessionEvents, setSessionEvents] = useState<string[]>([])
@@ -389,6 +404,49 @@ function AppContent() {
     }
   }, [isAuthenticated, loading, authModalOpen, location.pathname, location.search, walletCheckout, navigate])
 
+  const funnelSnapshotForGate = readEmbudoF1State()
+  const urlParamsForGate = new URLSearchParams(location.search)
+  const isCheckoutOrBuilderOpen =
+    minerBuilderOpen ||
+    Boolean(walletCheckout) ||
+    urlParamsForGate.get('modal') === 'paywall-create' ||
+    urlParamsForGate.get('gmPay') === '1'
+  const hasCompletedPurchaseForGate = hasCompletedPurchaseOrFunnelReceipt({
+    funnelState: funnelSnapshotForGate,
+    purchasesCount: profile?.purchasesCount ?? 0,
+    realMinersCount: realMiners.length,
+    paymentReceiptsCount: paymentReceipts.length,
+  })
+  const isHomeVerifyEmailGateLocked = shouldLockHomeForEmailVerification({
+    isAuthenticated,
+    isEmailVerified,
+    funnelState: funnelSnapshotForGate,
+    purchasesCount: profile?.purchasesCount ?? 0,
+    realMinersCount: realMiners.length,
+    paymentReceiptsCount: paymentReceipts.length,
+    isCheckoutOrBuilderOpen,
+  })
+
+  useEffect(() => {
+    if (loading) return
+    setVerifyEmailLocked(isHomeVerifyEmailGateLocked)
+    if (
+      isHomeVerifyEmailGateLocked &&
+      location.pathname === '/home' &&
+      (!authModalOpen || authMode !== 'verify-email')
+    ) {
+      openAuthModal('verify-email')
+    }
+  }, [
+    loading,
+    isHomeVerifyEmailGateLocked,
+    location.pathname,
+    authModalOpen,
+    authMode,
+    setVerifyEmailLocked,
+    openAuthModal,
+  ])
+
   if (loading) {
     if (isPublicAppRoute(location.pathname) || !isAuthenticated) {
       return <div className="min-h-screen bg-[#050505]" style={{ minHeight: '100vh', background: '#050505' }} aria-busy="true" />
@@ -404,6 +462,15 @@ function AppContent() {
       return <Navigate to="/home?modal=paywall-create&embudo=f1" replace />
     }
     return <Navigate to={`${authRedirect}${query}`} replace />
+  }
+
+  const verifyGateRedirect = getAuthRouteRedirect(location.pathname, isAuthenticated, {
+    hasCompletedPurchase: hasCompletedPurchaseForGate,
+    isEmailVerified,
+    isCheckoutOrBuilderOpen,
+  })
+  if (verifyGateRedirect) {
+    return <Navigate to={verifyGateRedirect} replace />
   }
 
 
@@ -663,10 +730,49 @@ function AppContent() {
           <div key={location.pathname} className="route-transition">
           {location.pathname === '/' ? (
             <LandingPage openAuthModal={openAuthModal} />
+          ) : isAuthenticated && !profile ? (
+            <section
+              className="profile-missing-error-card"
+              data-testid="profile-missing-error"
+              role="alert"
+            >
+              <div className="profile-missing-error-copy">
+                <p className="eyebrow">{language === 'en' ? 'PROFILE SYNC ERROR' : 'ERROR DE PERFIL EN FIRESTORE'}</p>
+                <h1>
+                  {language === 'en'
+                    ? 'Could not verify your account profile'
+                    : 'No se pudo verificar tu perfil de usuario'}
+                </h1>
+                <p>
+                  {profileError ||
+                    (language === 'en'
+                      ? 'Your Firestore profile (/users) could not be loaded or initialized. Access with an in-memory profile is blocked.'
+                      : 'No se pudo cargar ni inicializar tu documento en Firestore (/users). El acceso con perfil en memoria está bloqueado.')}
+                </p>
+              </div>
+              <div className="profile-missing-error-actions">
+                <button
+                  type="button"
+                  className="button button-primary"
+                  data-testid="profile-missing-retry-btn"
+                  onClick={() => void refreshProfile()}
+                >
+                  {language === 'en' ? 'Retry profile load' : 'Reintentar carga de perfil'}
+                </button>
+                <button
+                  type="button"
+                  className="button button-secondary"
+                  data-testid="profile-missing-logout-btn"
+                  onClick={() => void logout()}
+                >
+                  {language === 'en' ? 'Sign out' : 'Cerrar sesión'}
+                </button>
+              </div>
+            </section>
           ) : ((location.pathname.startsWith('/miners/') || location.pathname.startsWith('/nft-miners/')) && (location.pathname.endsWith('/customize') || /^\/nft-miners\/[^/]+$/.test(location.pathname))) ? (
             <MinerCustomizer />
           ) : screen ? (
-          <Page isAuthenticated={isAuthenticated} screen={screen} pathname={location.pathname} openAction={openAction} addProduct={addProduct} openMinerBuilder={openMinerBuilder} openTopUp={() => setTopUpOpen(true)} onPayWithWallet={(productName, amount, currency = 'USD') => {
+          <Page isAuthenticated={isAuthenticated} isVerifyEmailGateLocked={isHomeVerifyEmailGateLocked} screen={screen} pathname={location.pathname} openAction={openAction} addProduct={addProduct} openMinerBuilder={openMinerBuilder} openTopUp={() => setTopUpOpen(true)} onPayWithWallet={(productName, amount, currency = 'USD') => {
             if (!user || user.isAnonymous) {
               openAuthModal('register')
               return
@@ -915,6 +1021,7 @@ function CartGlyph() {
 
 function Page({
   isAuthenticated,
+  isVerifyEmailGateLocked = false,
   screen,
   pathname,
   openAction,
@@ -927,6 +1034,7 @@ function Page({
   paymentReceipts,
 }: {
   isAuthenticated: boolean
+  isVerifyEmailGateLocked?: boolean
   screen: ScreenDefinition
   pathname: string
   openAction: (title: string, detail?: string) => void
@@ -973,7 +1081,27 @@ function Page({
   return (
     <>
       {screen.mode === 'dashboard' && pathname === '/home' ? (
-        <HomeDashboard openMinerBuilder={openMinerBuilder} openTopUp={openTopUp} />
+        isVerifyEmailGateLocked ? (
+          <section
+            className="home-verify-email-gate"
+            data-testid="home-verify-email-gate"
+            aria-live="polite"
+          >
+            <p className="eyebrow">{isEn ? 'EMAIL VERIFICATION REQUIRED' : 'VERIFICACIÓN DE CORREO REQUERIDA'}</p>
+            <h1>
+              {isEn
+                ? 'Confirm your email address to unlock your dashboard'
+                : 'Confirma tu correo electrónico para entrar a tu dashboard'}
+            </h1>
+            <p>
+              {isEn
+                ? 'Your miner purchase is recorded. Complete email verification in the active dialog to access your farm and rewards.'
+                : 'Tu compra de minero ya quedó registrada. Completa la verificación de correo en el diálogo activo para acceder a tu granja y recompensas.'}
+            </p>
+          </section>
+        ) : (
+          <HomeDashboard openMinerBuilder={openMinerBuilder} openTopUp={openTopUp} />
+        )
       ) : (
         <>
           {pathname !== '/profile' && pathname !== '/subscriptions' && (

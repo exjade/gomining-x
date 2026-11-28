@@ -18,7 +18,7 @@ import {
   reloadCurrentUser,
   updateUserProfile,
   getUserProfile,
-  ensureUserProfile,
+  resolveAuthenticatedUserProfile,
   cleanupUserMinersSubscription,
   type UserProfile,
 } from './firebase'
@@ -26,10 +26,13 @@ import {
 interface AuthContextType {
   user: User | null
   profile: UserProfile | null
+  profileError: string | null
   loading: boolean
   isEmailVerified: boolean
   authModalOpen: boolean
   authMode: 'login' | 'register' | 'verify-email'
+  verifyEmailLocked: boolean
+  setVerifyEmailLocked: (locked: boolean) => void
   referralCodeFromUrl: string
   openAuthModal: (mode?: 'login' | 'register' | 'verify-email') => void
   closeAuthModal: () => void
@@ -47,10 +50,13 @@ const AuthContext = createContext<AuthContextType | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  const [emailVerifiedConfirmed, setEmailVerifiedConfirmed] = useState(false)
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [profileError, setProfileError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [authMode, setAuthMode] = useState<'login' | 'register' | 'verify-email'>('register')
+  const [verifyEmailLocked, setVerifyEmailLocked] = useState(false)
   const [referralCodeFromUrl, setReferralCodeFromUrl] = useState('')
 
   // Capture ?ref= query parameter from URL on load and store in localStorage
@@ -97,24 +103,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       if (isRegisteredUser(currentUser)) {
         setUser(currentUser)
-        // If logged in, fetch profile (ensure profile exists if missing)
+        setEmailVerifiedConfirmed(Boolean(currentUser.emailVerified))
+        // If logged in, fetch persisted profile (propagate failure — never use an in-memory fallback)
         try {
-          let p = await getUserProfile(currentUser.uid)
-          if (profileLoadSeqRef.current !== seq) return
-          if (!p) {
-            p = await ensureUserProfile(currentUser)
-          }
+          const p = await resolveAuthenticatedUserProfile(currentUser)
           if (profileLoadSeqRef.current !== seq) return
           setProfile(p)
-        } catch {
-          // ignore
+          setProfileError(null)
+        } catch (err) {
+          if (profileLoadSeqRef.current !== seq) return
+          const code = (err as { code?: string })?.code || 'firestore/profile-unavailable'
+          console.error(`[AuthContext][onAuthStateChanged] Profile load failed [${code}]:`, err)
+          setProfile(null)
+          setProfileError(
+            (err as Error)?.message || `No se pudo cargar tu perfil en Firestore (${code}).`,
+          )
         }
       } else {
         cleanupUserMinersSubscription()
         setUser(null)
+        setEmailVerifiedConfirmed(false)
         setProfile(null)
+        setProfileError(null)
+        setVerifyEmailLocked(false)
       }
-      setLoading(false)
+      if (profileLoadSeqRef.current === seq) {
+        setLoading(false)
+      }
     })
 
     return () => unsubscribeAuth()
@@ -127,6 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribeSnapshot = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         setProfile(docSnap.data() as UserProfile)
+        setProfileError(null)
       }
     }, (err) => {
       console.warn('Profile snapshot error:', err)
@@ -143,9 +159,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const reloaded = await reloadCurrentUser()
         if (reloaded && reloaded.emailVerified) {
-          setUser({ ...reloaded } as User)
+          setUser(reloaded)
+          setEmailVerifiedConfirmed(true)
           const p = await getUserProfile(reloaded.uid)
-          setProfile(p)
+          if (p) {
+            setProfile(p)
+            setProfileError(null)
+          }
+          setVerifyEmailLocked(false)
           if (authMode === 'verify-email') {
             setAuthModalOpen(false)
           }
@@ -176,6 +197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const closeAuthModal = () => {
+    if (verifyEmailLocked) return
     setAuthModalOpen(false)
   }
 
@@ -184,18 +206,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profileLoadSeqRef.current += 1
     const loggedUser = await loginWithEmail(email, pass)
     if (authActionEpochRef.current !== epoch) return
-    setUser(loggedUser)
-    let prof = await getUserProfile(loggedUser.uid)
-    if (authActionEpochRef.current !== epoch) return
-    if (!prof) {
-      prof = await ensureUserProfile(loggedUser)
+    let prof: UserProfile
+    try {
+      prof = await resolveAuthenticatedUserProfile(loggedUser)
+    } catch (err) {
+      const code = (err as { code?: string })?.code || 'firestore/profile-unavailable'
+      console.error(`[AuthContext][login] Profile initialization failed [${code}]:`, err)
+      const visibleMessage = `No se pudo cargar ni inicializar tu perfil de usuario (${code}). Intenta nuevamente.`
+      setProfile(null)
+      setProfileError(visibleMessage)
+      await logoutUser().catch(() => {})
+      setUser(null)
+      throw Object.assign(new Error(visibleMessage), { code })
     }
     if (authActionEpochRef.current !== epoch) return
+    setUser(loggedUser)
+    setEmailVerifiedConfirmed(Boolean(loggedUser.emailVerified))
     setProfile(prof)
+    setProfileError(null)
     if (!loggedUser.emailVerified) {
       setAuthMode('verify-email')
       setAuthModalOpen(true)
     } else {
+      setVerifyEmailLocked(false)
       setAuthModalOpen(false)
     }
   }
@@ -207,7 +240,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await registerWithEmail(email, pass, code)
     if (authActionEpochRef.current !== epoch) return
     setUser(res.user)
+    setEmailVerifiedConfirmed(Boolean(res.user.emailVerified))
     setProfile(res.profile)
+    setProfileError(null)
     setAuthMode('verify-email')
     setAuthModalOpen(true)
   }
@@ -240,6 +275,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Ensure local auth state still clears if signOut transiently fails.
           }
           if (authActionEpochRef.current === epoch) {
+            setVerifyEmailLocked(false)
+            setEmailVerifiedConfirmed(false)
+            setProfileError(null)
             setUser(null)
             setProfile(null)
             setAuthModalOpen(false)
@@ -266,10 +304,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkVerification = async (): Promise<boolean> => {
     const reloaded = await reloadCurrentUser()
     if (reloaded) {
-      setUser({ ...reloaded } as User)
+      setUser(reloaded)
       if (reloaded.emailVerified) {
+        setEmailVerifiedConfirmed(true)
         const prof = await getUserProfile(reloaded.uid)
-        setProfile(prof)
+        if (prof) {
+          setProfile(prof)
+          setProfileError(null)
+        }
+        setVerifyEmailLocked(false)
         setAuthModalOpen(false)
         return true
       }
@@ -289,21 +332,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshProfile = async () => {
     if (!user) return
-    const p = await getUserProfile(user.uid)
-    setProfile(p)
+    try {
+      const p = await resolveAuthenticatedUserProfile(user)
+      setProfile(p)
+      setProfileError(null)
+    } catch (err) {
+      const code = (err as { code?: string })?.code || 'firestore/profile-unavailable'
+      console.error(`[AuthContext][refreshProfile] Failed [${code}]:`, err)
+      setProfile(null)
+      setProfileError(
+        (err as Error)?.message || `No se pudo cargar tu perfil en Firestore (${code}).`,
+      )
+    }
   }
 
-  const isEmailVerified = Boolean(user && user.emailVerified)
+  const isEmailVerified = Boolean(user && (user.emailVerified || emailVerifiedConfirmed))
 
   return (
     <AuthContext.Provider
       value={{
         user,
         profile,
+        profileError,
         loading,
         isEmailVerified,
         authModalOpen,
         authMode,
+        verifyEmailLocked,
+        setVerifyEmailLocked,
         referralCodeFromUrl,
         openAuthModal,
         closeAuthModal,

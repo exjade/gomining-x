@@ -410,6 +410,36 @@ export function resolvePostRegisterTransition(input: {
   }
 }
 
+export interface HomeVerificationGateInput {
+  isAuthenticated: boolean
+  isEmailVerified: boolean
+  funnelState?: Pick<EmbudoF1State, 'active' | 'stage' | 'lastMinerId'> | null
+  purchasesCount?: number | null
+  realMinersCount?: number | null
+  paymentReceiptsCount?: number | null
+  isCheckoutOrBuilderOpen?: boolean
+}
+
+export function hasCompletedPurchaseOrFunnelReceipt(
+  input: Omit<HomeVerificationGateInput, 'isAuthenticated' | 'isEmailVerified' | 'isCheckoutOrBuilderOpen'>,
+): boolean {
+  const funnelPaid = Boolean(
+    input.funnelState?.active &&
+      (input.funnelState.stage === 'verify-email' || Boolean(input.funnelState.lastMinerId)),
+  )
+  return (
+    funnelPaid ||
+    (input.purchasesCount ?? 0) > 0 ||
+    (input.realMinersCount ?? 0) > 0 ||
+    (input.paymentReceiptsCount ?? 0) > 0
+  )
+}
+
+export function shouldLockHomeForEmailVerification(input: HomeVerificationGateInput): boolean {
+  if (!input.isAuthenticated || input.isEmailVerified) return false
+  if (input.isCheckoutOrBuilderOpen) return false
+  return hasCompletedPurchaseOrFunnelReceipt(input)
+}
 
 export function resolvePostPaymentTransition(input: {
   isFunnelActive: boolean
@@ -425,15 +455,15 @@ export function resolvePostPaymentTransition(input: {
       toastMessage: '',
     }
   }
-  if (input.isFunnelActive) {
-    if (!input.isEmailVerified) {
-      return {
-        destination: '/home',
-        openVerifyEmailModal: true,
-        nextStage: 'verify-email',
-        toastMessage: '¡Pago verificado y enviado on-chain! Confirma tu correo para completar la activación.',
-      }
+  if (!input.isEmailVerified) {
+    return {
+      destination: '/home',
+      openVerifyEmailModal: true,
+      nextStage: 'verify-email',
+      toastMessage: '¡Pago verificado y enviado on-chain! Confirma tu correo para completar la activación.',
     }
+  }
+  if (input.isFunnelActive) {
     return {
       destination: '/home',
       openVerifyEmailModal: false,
