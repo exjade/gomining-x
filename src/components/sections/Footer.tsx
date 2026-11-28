@@ -1,6 +1,7 @@
 import { ShieldCheck, FileText, ArrowUpRight } from 'lucide-react';
 import { PowMinerLogo } from '../ui/PowMinerLogo';
 import type { LegalMode } from '../ui/Navbar';
+import { SHOW_CALCULATOR_SECTION } from '../../LandingPage';
 
 interface FooterProps {
   onOpenLegal?: (mode: LegalMode) => void;
@@ -50,11 +51,13 @@ export function Footer({ onOpenLegal }: FooterProps) {
                   Hardware 3D Despiezado
                 </a>
               </li>
-              <li>
-                <a href="#calculadora" className="hover:text-white transition-colors">
-                  Calculadora de Potencia
-                </a>
-              </li>
+              {SHOW_CALCULATOR_SECTION && (
+                <li>
+                  <a href="#calculadora" className="hover:text-white transition-colors">
+                    Calculadora de Potencia
+                  </a>
+                </li>
+              )}
               <li>
                 <a href="#preventa" className="hover:text-white transition-colors">
                   Preventa Titan Series

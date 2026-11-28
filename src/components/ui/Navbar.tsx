@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X, ArrowRight, User, Shield, FileText } from 'lucide-react';
 import { PowMinerLogo } from './PowMinerLogo';
+import { SHOW_CALCULATOR_SECTION } from '../../LandingPage';
 
 export type AuthMode = 'login' | 'register';
 export type LegalMode = 'terms' | 'security';
@@ -37,7 +38,7 @@ export function Navbar({ onOpenAuth, onOpenLegal }: NavbarProps) {
     { num: '01', label: 'Inicio', href: '#hero' },
     { num: '02', label: 'Cómo Funciona', href: '#como-funciona' },
     { num: '03', label: 'Hardware 3D', href: '#producto' },
-    { num: '04', label: 'Calculadora de Rendimiento', href: '#calculadora' },
+    ...(SHOW_CALCULATOR_SECTION ? [{ num: '04', label: 'Calculadora de Rendimiento', href: '#calculadora' }] : []),
     { num: '05', label: 'Preventa Titan Series', href: '#preventa', badge: '15d' },
     { num: '06', label: 'Membresías PouwMiner', href: '#membresias' },
     { num: '07', label: 'Web3 Checkout', href: '#web3' },
